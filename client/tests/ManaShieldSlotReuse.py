@@ -26,7 +26,7 @@ using DWORD=std::uint32_t;
 #define __cdecl
 #endif
 struct OBJECT{char bytes[444];};
-struct CHARACTER;struct PART_t;
+struct CHARACTER{OBJECT Object;char beforeKey[32];unsigned short Key;char tail[438];};struct PART_t;
 CHARACTER* AsCharacter(void* p){return reinterpret_cast<CHARACTER*>(p);}
 OBJECT* AsObject(void* p){return static_cast<OBJECT*>(p);}
 struct JOINT{unsigned char Live;int Type,SubType;OBJECT* Target;};
