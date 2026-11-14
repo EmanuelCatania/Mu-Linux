@@ -1,4 +1,5 @@
-#include "MapInfo.h"
+﻿#include "MapInfo.h"
+#include "Utf8Path.h"
 #include "MapSpawns.h"
 
 #include <algorithm>
@@ -21,10 +22,10 @@ static const char* const kPkNames[] = { "allowed", "disabled", "no_outlaws" };
 
 static fs::path MapsDir(const std::string& dataDir)
 {
-	return fs::u8path(dataDir) / "Maps";
+	return Utf8Path(dataDir) / "Maps";
 }
 
-// Carpetas de mapa por número; con `withFile`, sólo las que tienen ese archivo.
+// Carpetas de mapa por nÃºmero; con `withFile`, sÃ³lo las que tienen ese archivo.
 // Falla si dos carpetas dicen ser el mismo mapa.
 static bool ListFolders(const std::string& dataDir, const char* withFile, std::map<int, fs::path>& out, std::string& error)
 {
@@ -42,7 +43,7 @@ static bool ListFolders(const std::string& dataDir, const char* withFile, std::m
 			continue;
 		}
 
-		std::string folder = entry.path().filename().u8string();
+		std::string folder = PathToUtf8(entry.path().filename());
 
 		int map = MapSpawns_FolderMap(folder);
 
@@ -53,7 +54,7 @@ static bool ListFolders(const std::string& dataDir, const char* withFile, std::m
 
 		if (out.count(map) != 0)
 		{
-			error = "dos carpetas para el mapa " + std::to_string(map) + ": '" + out[map].filename().u8string() + "' y '" + folder + "'";
+			error = "dos carpetas para el mapa " + std::to_string(map) + ": '" + PathToUtf8(out[map].filename()) + "' y '" + folder + "'";
 
 			return false;
 		}
@@ -70,7 +71,7 @@ bool MapInfo_HasData(const std::string& dataDir)
 
 	std::string error;
 
-	// Con carpetas repetidas también hay datos: que MapInfo_Load lo reporte en
+	// Con carpetas repetidas tambiÃ©n hay datos: que MapInfo_Load lo reporte en
 	// vez de caer en silencio al .txt.
 	return !ListFolders(dataDir, "Map.toml", folders, error) || !folders.empty();
 }
@@ -83,10 +84,10 @@ std::string MapInfo_Path(const std::string& dataDir, int map, const std::string&
 
 	if (ListFolders(dataDir, nullptr, folders, error) && folders.count(map) != 0)
 	{
-		return (folders[map] / "Map.toml").u8string();
+		return PathToUtf8((folders[map] / "Map.toml"));
 	}
 
-	return (MapsDir(dataDir) / fs::u8path(MapSpawns_FolderName(map, name)) / "Map.toml").u8string();
+	return PathToUtf8((MapsDir(dataDir) / Utf8Path(MapSpawns_FolderName(map, name)) / "Map.toml"));
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +141,7 @@ static bool ReadBool(const toml::table& table, const char* key, int& out, std::s
 
 static bool LoadMapFile(const fs::path& path, int map, MapInfoDef& def, std::string& error)
 {
-	std::string file = path.u8string();
+	std::string file = PathToUtf8(path);
 
 	toml::parse_result result = toml::parse_file(file);
 
@@ -202,7 +203,7 @@ static bool LoadMapFile(const fs::path& path, int map, MapInfoDef& def, std::str
 
 		if (def.NonPK == -2)
 		{
-			error = file + ":" + std::to_string(pk->source().begin.line) + ": 'pk' vale \"allowed\", \"disabled\" o \"no_outlaws\" (sin 'pk', lo que diga NonPK en la configuración del server)";
+			error = file + ":" + std::to_string(pk->source().begin.line) + ": 'pk' vale \"allowed\", \"disabled\" o \"no_outlaws\" (sin 'pk', lo que diga NonPK en la configuraciÃ³n del server)";
 
 			return false;
 		}
@@ -228,7 +229,7 @@ static bool LoadMapFile(const fs::path& path, int map, MapInfoDef& def, std::str
 
 		if (!valid)
 		{
-			error = file + ":" + std::to_string(music->source().begin.line) + ": 'music' es el nombre de un mp3 de Data/Music del cliente, sin la extensión (letras, números, '_' y '-', hasta 27), o \"*\" para el del cliente";
+			error = file + ":" + std::to_string(music->source().begin.line) + ": 'music' es el nombre de un mp3 de Data/Music del cliente, sin la extensiÃ³n (letras, nÃºmeros, '_' y '-', hasta 27), o \"*\" para el del cliente";
 
 			return false;
 		}
@@ -281,7 +282,7 @@ bool MapInfo_Load(const std::string& dataDir, std::vector<MapInfoDef>& out, std:
 
 bool MapInfo_LoadLegacy(const std::string& path, std::vector<MapInfoDef>& out, std::string& error)
 {
-	std::ifstream file(fs::u8path(path), std::ios::binary);
+	std::ifstream file(Utf8Path(path), std::ios::binary);
 
 	if (!file)
 	{
@@ -387,7 +388,7 @@ bool MapInfo_LoadLegacy(const std::string& path, std::vector<MapInfoDef>& out, s
 
 			if (t.empty() || *end != '\0')
 			{
-				error = where + ": '" + t + "' no es un número";
+				error = where + ": '" + t + "' no es un nÃºmero";
 
 				return false;
 			}
@@ -418,7 +419,7 @@ bool MapInfo_LoadLegacy(const std::string& path, std::vector<MapInfoDef>& out, s
 
 		if (def.Index < 0 || def.Index > 255)
 		{
-			error = where + ": el número de mapa va de 0 a 255";
+			error = where + ": el nÃºmero de mapa va de 0 a 255";
 
 			return false;
 		}
@@ -441,7 +442,7 @@ bool MapInfo_LoadLegacy(const std::string& path, std::vector<MapInfoDef>& out, s
 		{
 			if (other.Index == def.Index)
 			{
-				error = where + ": el mapa " + std::to_string(def.Index) + " ya está en " + other.Source;
+				error = where + ": el mapa " + std::to_string(def.Index) + " ya estÃ¡ en " + other.Source;
 
 				return false;
 			}
@@ -479,9 +480,9 @@ bool MapInfo_WriteToml(const std::string& path, const MapInfoDef& def, std::stri
 {
 	std::error_code ec;
 
-	fs::create_directories(fs::u8path(path).parent_path(), ec);
+	fs::create_directories(Utf8Path(path).parent_path(), ec);
 
-	std::ofstream file(fs::u8path(path), std::ios::binary);
+	std::ofstream file(Utf8Path(path), std::ios::binary);
 
 	if (!file)
 	{
@@ -494,16 +495,16 @@ bool MapInfo_WriteToml(const std::string& path, const MapInfoDef& def, std::stri
 		<< "#\n"
 		<< "# name                nombre del mapa en los avisos del server\n"
 		<< "# pk                  \"allowed\", \"disabled\" o \"no_outlaws\"; sin pk, lo que\n"
-		<< "#                     diga NonPK en la configuración del server\n"
+		<< "#                     diga NonPK en la configuraciÃ³n del server\n"
 		<< "# view_range          tiles que ve un jugador (sin la clave, 15)\n"
 		<< "# experience_rate     % de experiencia (sin la clave, 100)\n"
 		<< "# item_drop_rate      % de drop de items (sin la clave, 100)\n"
 		<< "# exc_item_drop_rate  % de items excelentes (sin la clave, 0)\n"
 		<< "# dead_gate           gate (Gate.txt) al que se va al morir\n"
-		<< "# respawn_in_place    revivir donde se murió en vez de en dead_gate\n"
+		<< "# respawn_in_place    revivir donde se muriÃ³ en vez de en dead_gate\n"
 		<< "# flying_dragons      salen los dragones voladores del evento\n"
 		<< "# music               tema del cliente: nombre de un mp3 de Data/Music sin la\n"
-		<< "#                     extensión (\"Pub\" = Data/Music/Pub.mp3); \"*\" o sin la\n"
+		<< "#                     extensiÃ³n (\"Pub\" = Data/Music/Pub.mp3); \"*\" o sin la\n"
 		<< "#                     clave, el del cliente (el del juego o un mp3 con el\n"
 		<< "#                     nombre del mapa)\n"
 		<< "\n"
@@ -561,11 +562,11 @@ bool MapInfo_Equal(const std::vector<MapInfoDef>& a, const std::vector<MapInfoDe
 
 		std::string field;
 
-		// Los valores sin sentido (-1 en un número) se escriben sin clave y se
-		// leen como -1; los dos flags sólo importan como cero o distinto de cero.
+		// Los valores sin sentido (-1 en un nÃºmero) se escriben sin clave y se
+		// leen como -1; los dos flags sÃ³lo importan como cero o distinto de cero.
 		auto num = [](int v) { return v < 0 ? -1 : v; };
 
-		if (x.Index != y.Index) field = "número de mapa";
+		if (x.Index != y.Index) field = "nÃºmero de mapa";
 		else if (x.Name != y.Name) field = "name";
 		else if (x.NonPK != y.NonPK) field = "pk";
 		else if (num(x.ViewRange) != num(y.ViewRange)) field = "view_range";

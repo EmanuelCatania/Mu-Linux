@@ -1,4 +1,5 @@
-#include "MapZones.h"
+﻿#include "MapZones.h"
+#include "Utf8Path.h"
 #include "MapSpawns.h"
 
 #include <algorithm>
@@ -20,10 +21,10 @@ static const char* const kFile = "Zones.toml";
 
 static fs::path MapsDir(const std::string& dataDir)
 {
-	return fs::u8path(dataDir) / "Maps";
+	return Utf8Path(dataDir) / "Maps";
 }
 
-// Carpetas de mapa por número; con `withFile`, sólo las que tienen Zones.toml.
+// Carpetas de mapa por nÃºmero; con `withFile`, sÃ³lo las que tienen Zones.toml.
 // Falla si dos carpetas dicen ser el mismo mapa.
 static bool ListFolders(const std::string& dataDir, bool withFile, std::map<int, fs::path>& out, std::string& error)
 {
@@ -41,7 +42,7 @@ static bool ListFolders(const std::string& dataDir, bool withFile, std::map<int,
 			continue;
 		}
 
-		std::string folder = entry.path().filename().u8string();
+		std::string folder = PathToUtf8(entry.path().filename());
 
 		int map = MapSpawns_FolderMap(folder);
 
@@ -52,7 +53,7 @@ static bool ListFolders(const std::string& dataDir, bool withFile, std::map<int,
 
 		if (out.count(map) != 0)
 		{
-			error = "dos carpetas para el mapa " + std::to_string(map) + ": '" + out[map].filename().u8string() + "' y '" + folder + "'";
+			error = "dos carpetas para el mapa " + std::to_string(map) + ": '" + PathToUtf8(out[map].filename()) + "' y '" + folder + "'";
 
 			return false;
 		}
@@ -80,10 +81,10 @@ std::string MapZones_Path(const std::string& dataDir, int map, const std::string
 
 	if (ListFolders(dataDir, false, folders, error) && folders.count(map) != 0)
 	{
-		return (folders[map] / kFile).u8string();
+		return PathToUtf8((folders[map] / kFile));
 	}
 
-	return (MapsDir(dataDir) / fs::u8path(MapSpawns_FolderName(map, mapName)) / kFile).u8string();
+	return PathToUtf8((MapsDir(dataDir) / Utf8Path(MapSpawns_FolderName(map, mapName)) / kFile));
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +153,7 @@ static bool LoadRects(const toml::table& table, const char* key, const std::stri
 
 	if (array == nullptr)
 	{
-		error = file + ":" + std::to_string(list->source().begin.line) + ": '" + key + "' es una lista de rectángulos [x, y, tx, ty]";
+		error = file + ":" + std::to_string(list->source().begin.line) + ": '" + key + "' es una lista de rectÃ¡ngulos [x, y, tx, ty]";
 
 		return false;
 	}
@@ -246,7 +247,7 @@ static bool LoadNpcMoves(const toml::table& table, const std::string& file, int 
 
 		if (!entry->contains("npc"))
 		{
-			why = "falta 'npc' (el número de Monster.txt)";
+			why = "falta 'npc' (el nÃºmero de Monster.txt)";
 
 			ok = false;
 		}
@@ -307,7 +308,7 @@ bool MapZones_Load(const std::string& dataDir, MapZonesData& out, std::string& e
 
 	for (const auto& [map, folder] : folders)
 	{
-		std::string file = (folder / kFile).u8string();
+		std::string file = PathToUtf8((folder / kFile));
 
 		toml::parse_result result = toml::parse_file(file);
 
@@ -328,7 +329,7 @@ bool MapZones_Load(const std::string& dataDir, MapZonesData& out, std::string& e
 
 			if (k != "safe" && k != "pk_free" && k != "npc_move")
 			{
-				error = file + ":" + std::to_string(value.source().begin.line) + ": sección desconocida '" + std::string(k) + "' (valen safe, pk_free y npc_move)";
+				error = file + ":" + std::to_string(value.source().begin.line) + ": secciÃ³n desconocida '" + std::string(k) + "' (valen safe, pk_free y npc_move)";
 
 				return false;
 			}
@@ -346,18 +347,18 @@ bool MapZones_Load(const std::string& dataDir, MapZonesData& out, std::string& e
 // ---------------------------------------------------------------------------
 // Los .txt de Data/Custom
 
-// Lee las líneas de un .txt: tokens (con `*` = -1) y el comentario de `//`.
-// Un archivo que no existe cuenta como vacío.
+// Lee las lÃ­neas de un .txt: tokens (con `*` = -1) y el comentario de `//`.
+// Un archivo que no existe cuenta como vacÃ­o.
 static bool ReadLegacyLines(const std::string& path, size_t columns, const char* header, std::vector<std::vector<int>>& rows, std::vector<std::string>& comments, std::vector<std::string>& sources, std::string& error)
 {
 	std::error_code ec;
 
-	if (!fs::exists(fs::u8path(path), ec))
+	if (!fs::exists(Utf8Path(path), ec))
 	{
 		return true;
 	}
 
-	std::ifstream file(fs::u8path(path), std::ios::binary);
+	std::ifstream file(Utf8Path(path), std::ios::binary);
 
 	if (!file)
 	{
@@ -432,7 +433,7 @@ static bool ReadLegacyLines(const std::string& path, size_t columns, const char*
 
 			if (*end != '\0' || v < -1)
 			{
-				error = where + ": '" + t + "' no es un número válido (* o >= 0)";
+				error = where + ": '" + t + "' no es un nÃºmero vÃ¡lido (* o >= 0)";
 
 				return false;
 			}
@@ -595,9 +596,9 @@ bool MapZones_WriteToml(const std::string& path, int map, const std::string& map
 {
 	std::error_code ec;
 
-	fs::create_directories(fs::u8path(path).parent_path(), ec);
+	fs::create_directories(Utf8Path(path).parent_path(), ec);
 
-	std::ofstream file(fs::u8path(path), std::ios::binary);
+	std::ofstream file(Utf8Path(path), std::ios::binary);
 
 	if (!file)
 	{
@@ -608,11 +609,11 @@ bool MapZones_WriteToml(const std::string& path, int map, const std::string& map
 
 	file << "# " << mapName << " (mapa " << map << "): zonas.\n"
 		<< "#\n"
-		<< "# safe      [x, y, tx, ty] donde nadie recibe daño\n"
+		<< "# safe      [x, y, tx, ty] donde nadie recibe daÃ±o\n"
 		<< "# pk_free   [x, y, tx, ty] donde matar no te vuelve PK\n"
 		<< "# npc_move  hablar con el NPC `npc` parado en `at` = [x, y] lleva a\n"
-		<< "#           `to` = [mapa, x, y]. Opcionales: level y reset = [mínimo,\n"
-		<< "#           máximo] (-1 = sin límite), account (nivel de cuenta mínimo)\n"
+		<< "#           `to` = [mapa, x, y]. Opcionales: level y reset = [mÃ­nimo,\n"
+		<< "#           mÃ¡ximo] (-1 = sin lÃ­mite), account (nivel de cuenta mÃ­nimo)\n"
 		<< "#           y pk_move (si pueden usarlo los PK; sin la clave, no)\n";
 
 	WriteRects(file, "safe", map, data.Safe);

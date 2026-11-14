@@ -1,4 +1,5 @@
-#include "MapGates.h"
+﻿#include "MapGates.h"
+#include "Utf8Path.h"
 #include "MapSpawns.h"
 
 #include <algorithm>
@@ -23,10 +24,10 @@ static const char* const kTypeNames[3] = { "destination", "entrance", "exit" };
 
 static fs::path MapsDir(const std::string& dataDir)
 {
-	return fs::u8path(dataDir) / "Maps";
+	return Utf8Path(dataDir) / "Maps";
 }
 
-// Carpetas de mapa por número; con `withFile`, sólo las que tienen Gates.toml.
+// Carpetas de mapa por nÃºmero; con `withFile`, sÃ³lo las que tienen Gates.toml.
 // Falla si dos carpetas dicen ser el mismo mapa.
 static bool ListFolders(const std::string& dataDir, bool withFile, std::map<int, fs::path>& out, std::string& error)
 {
@@ -44,7 +45,7 @@ static bool ListFolders(const std::string& dataDir, bool withFile, std::map<int,
 			continue;
 		}
 
-		std::string folder = entry.path().filename().u8string();
+		std::string folder = PathToUtf8(entry.path().filename());
 
 		int map = MapSpawns_FolderMap(folder);
 
@@ -55,7 +56,7 @@ static bool ListFolders(const std::string& dataDir, bool withFile, std::map<int,
 
 		if (out.count(map) != 0)
 		{
-			error = "dos carpetas para el mapa " + std::to_string(map) + ": '" + out[map].filename().u8string() + "' y '" + folder + "'";
+			error = "dos carpetas para el mapa " + std::to_string(map) + ": '" + PathToUtf8(out[map].filename()) + "' y '" + folder + "'";
 
 			return false;
 		}
@@ -83,10 +84,10 @@ std::string MapGates_Path(const std::string& dataDir, int map, const std::string
 
 	if (ListFolders(dataDir, false, folders, error) && folders.count(map) != 0)
 	{
-		return (folders[map] / kFile).u8string();
+		return PathToUtf8((folders[map] / kFile));
 	}
 
-	return (MapsDir(dataDir) / fs::u8path(MapSpawns_FolderName(map, mapName)) / kFile).u8string();
+	return PathToUtf8((MapsDir(dataDir) / Utf8Path(MapSpawns_FolderName(map, mapName)) / kFile));
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +145,7 @@ static bool ReadList(const toml::table& t, const char* key, size_t count, int mi
 
 static bool LoadGateFile(const fs::path& path, int map, std::vector<GateDef>& out, std::string& error)
 {
-	std::string file = path.u8string();
+	std::string file = PathToUtf8(path);
 
 	toml::parse_result result = toml::parse_file(file);
 
@@ -163,7 +164,7 @@ static bool LoadGateFile(const fs::path& path, int map, std::vector<GateDef>& ou
 	{
 		if (key.str() != "gate")
 		{
-			error = file + ":" + std::to_string(value.source().begin.line) + ": sección desconocida '" + std::string(key.str()) + "' (vale gate)";
+			error = file + ":" + std::to_string(value.source().begin.line) + ": secciÃ³n desconocida '" + std::string(key.str()) + "' (vale gate)";
 
 			return false;
 		}
@@ -230,7 +231,7 @@ static bool LoadGateFile(const fs::path& path, int map, std::vector<GateDef>& ou
 
 		if (!entry->contains("index"))
 		{
-			why = "falta 'index' (el número de la gate, el mismo del cliente)";
+			why = "falta 'index' (el nÃºmero de la gate, el mismo del cliente)";
 
 			ok = false;
 		}
@@ -291,7 +292,7 @@ static bool CheckUnique(std::vector<GateDef>& gates, std::string& error)
 	{
 		if (gates[n].Index == gates[n - 1].Index)
 		{
-			error = gates[n].Source + ": la gate " + std::to_string(gates[n].Index) + " ya está en " + gates[n - 1].Source;
+			error = gates[n].Source + ": la gate " + std::to_string(gates[n].Index) + " ya estÃ¡ en " + gates[n - 1].Source;
 
 			return false;
 		}
@@ -327,7 +328,7 @@ bool MapGates_Load(const std::string& dataDir, std::vector<GateDef>& out, std::s
 
 bool MapGates_LoadLegacy(const std::string& path, std::vector<GateDef>& out, std::string& error)
 {
-	std::ifstream file(fs::u8path(path), std::ios::binary);
+	std::ifstream file(Utf8Path(path), std::ios::binary);
 
 	if (!file)
 	{
@@ -400,7 +401,7 @@ bool MapGates_LoadLegacy(const std::string& path, std::vector<GateDef>& out, std
 
 			if (*end != '\0')
 			{
-				error = where + ": '" + tokens[n] + "' no es un número";
+				error = where + ": '" + tokens[n] + "' no es un nÃºmero";
 
 				return false;
 			}
@@ -418,7 +419,7 @@ bool MapGates_LoadLegacy(const std::string& path, std::vector<GateDef>& out, std
 
 		std::string why;
 
-		if (g.Index < 0 || g.Index > 65535) why = "el número de gate va de 0 a 65535";
+		if (g.Index < 0 || g.Index > 65535) why = "el nÃºmero de gate va de 0 a 65535";
 		else if (g.Flag < 0 || g.Flag > 2) why = "Flag vale 0, 1 o 2";
 		else if (g.Map < 0 || g.Map > 255) why = "el mapa va de 0 a 255";
 		else if (g.X < 0 || g.X > 255 || g.Y < 0 || g.Y > 255 || g.TX < 0 || g.TX > 255 || g.TY < 0 || g.TY > 255) why = "las coordenadas van de 0 a 255";
@@ -445,9 +446,9 @@ bool MapGates_WriteToml(const std::string& path, int map, const std::string& map
 {
 	std::error_code ec;
 
-	fs::create_directories(fs::u8path(path).parent_path(), ec);
+	fs::create_directories(Utf8Path(path).parent_path(), ec);
 
-	std::ofstream file(fs::u8path(path), std::ios::binary);
+	std::ofstream file(Utf8Path(path), std::ios::binary);
 
 	if (!file)
 	{
@@ -458,16 +459,16 @@ bool MapGates_WriteToml(const std::string& path, int map, const std::string& map
 
 	file << "# " << mapName << " (mapa " << map << "): gates.\n"
 		<< "#\n"
-		<< "# index    número de la gate. No se cambia: lo usan el cliente (Gate.bmd),\n"
+		<< "# index    nÃºmero de la gate. No se cambia: lo usan el cliente (Gate.bmd),\n"
 		<< "#          Move.txt y el dead_gate de los Map.toml\n"
 		<< "# type     \"entrance\" (pisarla lleva a `target`), \"exit\" (donde aparece\n"
-		<< "#          quien llega) o \"destination\" (sólo destino: /move, revivir)\n"
+		<< "#          quien llega) o \"destination\" (sÃ³lo destino: /move, revivir)\n"
 		<< "# area     [x, y, tx, ty]\n"
 		<< "# target   gate a la que lleva una entrada\n"
-		<< "# dir      hacia dónde mira el personaje al llegar (0 a 7)\n"
-		<< "# level    [mínimo, máximo] de nivel para usarla; -1 = sin límite\n"
-		<< "# reset    [mínimo, máximo] de resets; sin la clave, sin límite\n"
-		<< "# account  nivel de cuenta mínimo; sin la clave, 0\n"
+		<< "# dir      hacia dÃ³nde mira el personaje al llegar (0 a 7)\n"
+		<< "# level    [mÃ­nimo, mÃ¡ximo] de nivel para usarla; -1 = sin lÃ­mite\n"
+		<< "# reset    [mÃ­nimo, mÃ¡ximo] de resets; sin la clave, sin lÃ­mite\n"
+		<< "# account  nivel de cuenta mÃ­nimo; sin la clave, 0\n"
 		<< "\ngate = [\n";
 
 	for (const GateDef& g : gates)

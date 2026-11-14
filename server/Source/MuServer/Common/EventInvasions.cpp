@@ -1,4 +1,5 @@
-#include "EventInvasions.h"
+﻿#include "EventInvasions.h"
+#include "Utf8Path.h"
 
 #include <cctype>
 #include <cstdint>
@@ -18,14 +19,14 @@ namespace fs = std::filesystem;
 
 std::string EventInvasions_Path(const std::string& dataDir)
 {
-	return (fs::u8path(dataDir) / "Events" / "Invasions" / "Invasions.toml").u8string();
+	return PathToUtf8((Utf8Path(dataDir) / "Events" / "Invasions" / "Invasions.toml"));
 }
 
 bool EventInvasions_HasData(const std::string& dataDir)
 {
 	std::error_code ec;
 
-	return fs::is_regular_file(fs::u8path(EventInvasions_Path(dataDir)), ec);
+	return fs::is_regular_file(Utf8Path(EventInvasions_Path(dataDir)), ec);
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +247,7 @@ static bool ReadGroup(const toml::table& table, InvasionGroup& group, const std:
 
 		if (map.Map < 0 || map.Map > 255)
 		{
-			error = at + "cada mapa es un número (0 a 255) o { map = N, value = N }";
+			error = at + "cada mapa es un nÃºmero (0 a 255) o { map = N, value = N }";
 
 			return false;
 		}
@@ -279,7 +280,7 @@ static bool ReadGroup(const toml::table& table, InvasionGroup& group, const std:
 
 		if (monster.Monster < 0 || monster.Monster > 65535)
 		{
-			error = at + "cada monstruo es un número o { monster = N, regen_type = N, regen_time = segundos }";
+			error = at + "cada monstruo es un nÃºmero o { monster = N, regen_type = N, regen_time = segundos }";
 
 			return false;
 		}
@@ -441,7 +442,7 @@ bool EventInvasions_Load(const std::string& path, std::vector<InvasionDef>& out,
 	{
 		if (key.str() != "invasion")
 		{
-			error = Where(path, node) + "sección desconocida '" + std::string(key.str()) + "' (vale [[invasion]])";
+			error = Where(path, node) + "secciÃ³n desconocida '" + std::string(key.str()) + "' (vale [[invasion]])";
 
 			return false;
 		}
@@ -468,7 +469,7 @@ bool EventInvasions_Load(const std::string& path, std::vector<InvasionDef>& out,
 
 		if (table == nullptr)
 		{
-			error = Where(path, item) + "cada invasión es una tabla [[invasion]]";
+			error = Where(path, item) + "cada invasiÃ³n es una tabla [[invasion]]";
 
 			return false;
 		}
@@ -480,7 +481,7 @@ bool EventInvasions_Load(const std::string& path, std::vector<InvasionDef>& out,
 
 		if (byIndex.count(def.Index) != 0)
 		{
-			error = def.Source + ": el índice " + std::to_string(def.Index) + " ya lo usa " + byIndex[def.Index].Source;
+			error = def.Source + ": el Ã­ndice " + std::to_string(def.Index) + " ya lo usa " + byIndex[def.Index].Source;
 
 			return false;
 		}
@@ -511,7 +512,7 @@ namespace
 
 static bool Tokenize(const std::string& path, std::vector<DatToken>& tokens, std::string& error)
 {
-	std::ifstream file(fs::u8path(path), std::ios::binary);
+	std::ifstream file(Utf8Path(path), std::ios::binary);
 
 	if (!file)
 	{
@@ -613,7 +614,7 @@ bool EventInvasions_LoadLegacy(const std::string& path, std::vector<InvasionDef>
 		return false;
 	}
 
-	// Columnas de cada tabla, contando el índice.
+	// Columnas de cada tabla, contando el Ã­ndice.
 	const size_t columns[4] = { 8, 10, 4, 5 };
 
 	std::map<int, InvasionDef> byIndex;
@@ -635,7 +636,7 @@ bool EventInvasions_LoadLegacy(const std::string& path, std::vector<InvasionDef>
 
 		if (!DatNumber(tokens[pos], section) || section < 0 || section > 3)
 		{
-			return fail(pos, "se esperaba el número de tabla (0 a 3)");
+			return fail(pos, "se esperaba el nÃºmero de tabla (0 a 3)");
 		}
 
 		pos++;
@@ -669,7 +670,7 @@ bool EventInvasions_LoadLegacy(const std::string& path, std::vector<InvasionDef>
 
 				if (name ? !tokens[pos + c].Quoted : !DatNumber(tokens[pos + c], v[c]))
 				{
-					return fail(pos + c, name ? "el nombre va entre comillas" : "se esperaba un número");
+					return fail(pos + c, name ? "el nombre va entre comillas" : "se esperaba un nÃºmero");
 				}
 
 				if (tokens[pos + c].Line != line)
@@ -680,7 +681,7 @@ bool EventInvasions_LoadLegacy(const std::string& path, std::vector<InvasionDef>
 
 			if (v[0] < 0 || v[0] >= EVENT_INVASION_MAX)
 			{
-				return fail(pos, "índice de invasión fuera de rango (0 a " + std::to_string(EVENT_INVASION_MAX - 1) + ")");
+				return fail(pos, "Ã­ndice de invasiÃ³n fuera de rango (0 a " + std::to_string(EVENT_INVASION_MAX - 1) + ")");
 			}
 
 			InvasionDef& def = byIndex[v[0]];
@@ -796,7 +797,7 @@ static std::string ScheduleText(const InvasionSchedule& s)
 
 bool EventInvasions_WriteToml(const std::string& path, const std::vector<InvasionDef>& defs, std::string& error)
 {
-	std::ofstream file(fs::u8path(path), std::ios::binary);
+	std::ofstream file(Utf8Path(path), std::ios::binary);
 
 	if (!file)
 	{
@@ -805,24 +806,24 @@ bool EventInvasions_WriteToml(const std::string& path, const std::vector<Invasio
 		return false;
 	}
 
-	file << "# Invasiones: cuándo salen, cuánto duran y qué monstruos traen.\n"
+	file << "# Invasiones: cuÃ¡ndo salen, cuÃ¡nto duran y quÃ© monstruos traen.\n"
 		<< "#\n"
-		<< "# index      número de la invasión (el de /invasionstart)\n"
+		<< "# index      nÃºmero de la invasiÃ³n (el de /invasionstart)\n"
 		<< "# schedule   horarios \"HH:MM:SS\" (con * para cualquiera), o\n"
-		<< "#            { time = \"HH:MM:SS\", dow, day, month, year } para fijar el día;\n"
-		<< "#            dow: 1 = domingo ... 7 = sábado\n"
+		<< "#            { time = \"HH:MM:SS\", dow, day, month, year } para fijar el dÃ­a;\n"
+		<< "#            dow: 1 = domingo ... 7 = sÃ¡bado\n"
 		<< "# duration   minutos que dura; warning: minutos de aviso antes de empezar\n"
 		<< "# effect     1 = dragones rojos volando, 3 = dragones dorados\n"
 		<< "# boss       monstruo jefe (su muerte manda el mensaje `boss`)\n"
-		<< "# messages   números de mensaje de Message_*.txt (sin uno, no se avisa)\n"
-		<< "# groups     al empezar, de cada grupo se elige un mapa al azar y salen ahí\n"
-		<< "#            todos sus monstruos. Un mapa es un número o { map, value }:\n"
-		<< "#            `value` elige qué puntos de Spawns.toml usa en ese mapa. Un\n"
-		<< "#            monstruo es un número o { monster, regen_type, regen_time }:\n"
+		<< "# messages   nÃºmeros de mensaje de Message_*.txt (sin uno, no se avisa)\n"
+		<< "# groups     al empezar, de cada grupo se elige un mapa al azar y salen ahÃ­\n"
+		<< "#            todos sus monstruos. Un mapa es un nÃºmero o { map, value }:\n"
+		<< "#            `value` elige quÃ© puntos de Spawns.toml usa en ese mapa. Un\n"
+		<< "#            monstruo es un nÃºmero o { monster, regen_type, regen_time }:\n"
 		<< "#            con regen_type 0 no reaparece hasta el final; si no, reaparece\n"
-		<< "#            regen_time segundos después de morir.\n"
+		<< "#            regen_time segundos despuÃ©s de morir.\n"
 		<< "#\n"
-		<< "# Dónde aparece cada monstruo está en Spawns.toml, en esta misma carpeta.\n";
+		<< "# DÃ³nde aparece cada monstruo estÃ¡ en Spawns.toml, en esta misma carpeta.\n";
 
 	for (const InvasionDef& def : defs)
 	{
@@ -942,7 +943,7 @@ bool EventInvasions_WriteToml(const std::string& path, const std::vector<Invasio
 }
 
 // ---------------------------------------------------------------------------
-// Comparación
+// ComparaciÃ³n
 
 bool EventInvasions_Equal(const std::vector<InvasionDef>& a, const std::vector<InvasionDef>& b, std::string& diff)
 {
@@ -959,7 +960,7 @@ bool EventInvasions_Equal(const std::vector<InvasionDef>& a, const std::vector<I
 
 		const InvasionDef& y = b[i];
 
-		std::string at = "invasión " + std::to_string(x.Index) + " (" + x.Source + " / " + y.Source + "): ";
+		std::string at = "invasiÃ³n " + std::to_string(x.Index) + " (" + x.Source + " / " + y.Source + "): ";
 
 		auto field = [&](const char* name, int p, int q)
 		{

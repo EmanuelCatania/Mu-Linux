@@ -17,26 +17,7 @@
 
 namespace fs = std::filesystem;
 
-// Keep paths crossing the string-based server APIs in UTF-8. In C++20,
-// filesystem::path::u8string() uses char8_t, while these APIs use std::string.
-static fs::path Utf8Path(const std::string& value)
-{
-#if defined(__cpp_char8_t)
-	return fs::path(std::u8string(reinterpret_cast<const char8_t*>(value.data()), value.size()));
-#else
-	return fs::u8path(value);
-#endif
-}
-
-static std::string PathToUtf8(const fs::path& path)
-{
-	auto value = path.u8string();
-#if defined(__cpp_char8_t)
-	return std::string(reinterpret_cast<const char*>(value.data()), value.size());
-#else
-	return value;
-#endif
-}
+#include "Utf8Path.h"
 
 static const char* const kSectionNames[MAP_SPAWN_SECTIONS] = { "npc", "area", "spot", "invasion", "event" };
 

@@ -1,4 +1,5 @@
-#include "ItemDrops.h"
+﻿#include "ItemDrops.h"
+#include "Utf8Path.h"
 #include "MapSpawns.h"
 
 #include <algorithm>
@@ -36,15 +37,15 @@ static int OptionValue(const ItemDropDef& d, int n)
 
 static fs::path MapsDir(const std::string& dataDir)
 {
-	return fs::u8path(dataDir) / "Maps";
+	return Utf8Path(dataDir) / "Maps";
 }
 
 std::string ItemDrops_GlobalPath(const std::string& dataDir)
 {
-	return (fs::u8path(dataDir) / "Items" / kFile).u8string();
+	return PathToUtf8((Utf8Path(dataDir) / "Items" / kFile));
 }
 
-// Carpetas de mapa por número; con `withFile`, sólo las que tienen ese archivo.
+// Carpetas de mapa por nÃºmero; con `withFile`, sÃ³lo las que tienen ese archivo.
 // Falla si dos carpetas dicen ser el mismo mapa.
 static bool ListFolders(const std::string& dataDir, bool withFile, std::map<int, fs::path>& out, std::string& error)
 {
@@ -62,7 +63,7 @@ static bool ListFolders(const std::string& dataDir, bool withFile, std::map<int,
 			continue;
 		}
 
-		std::string folder = entry.path().filename().u8string();
+		std::string folder = PathToUtf8(entry.path().filename());
 
 		int map = MapSpawns_FolderMap(folder);
 
@@ -73,7 +74,7 @@ static bool ListFolders(const std::string& dataDir, bool withFile, std::map<int,
 
 		if (out.count(map) != 0)
 		{
-			error = "dos carpetas para el mapa " + std::to_string(map) + ": '" + out[map].filename().u8string() + "' y '" + folder + "'";
+			error = "dos carpetas para el mapa " + std::to_string(map) + ": '" + PathToUtf8(out[map].filename()) + "' y '" + folder + "'";
 
 			return false;
 		}
@@ -92,7 +93,7 @@ bool ItemDrops_HasData(const std::string& dataDir)
 
 	std::error_code ec;
 
-	return fs::is_regular_file(fs::u8path(ItemDrops_GlobalPath(dataDir)), ec) || !ListFolders(dataDir, true, folders, error) || !folders.empty();
+	return fs::is_regular_file(Utf8Path(ItemDrops_GlobalPath(dataDir)), ec) || !ListFolders(dataDir, true, folders, error) || !folders.empty();
 }
 
 std::string ItemDrops_MapPath(const std::string& dataDir, int map, const std::string& mapName)
@@ -103,10 +104,10 @@ std::string ItemDrops_MapPath(const std::string& dataDir, int map, const std::st
 
 	if (ListFolders(dataDir, false, folders, error) && folders.count(map) != 0)
 	{
-		return (folders[map] / kFile).u8string();
+		return PathToUtf8((folders[map] / kFile));
 	}
 
-	return (MapsDir(dataDir) / fs::u8path(MapSpawns_FolderName(map, mapName)) / kFile).u8string();
+	return PathToUtf8((MapsDir(dataDir) / Utf8Path(MapSpawns_FolderName(map, mapName)) / kFile));
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +173,7 @@ static bool ReadPair(const toml::table& t, const char* key, bool required, int m
 
 static bool LoadDropFile(const fs::path& path, int map, std::vector<ItemDropDef>& out, std::string& error)
 {
-	std::string file = path.u8string();
+	std::string file = PathToUtf8(path);
 
 	toml::parse_result result = toml::parse_file(file);
 
@@ -191,7 +192,7 @@ static bool LoadDropFile(const fs::path& path, int map, std::vector<ItemDropDef>
 	{
 		if (key.str() != "drop")
 		{
-			error = file + ":" + std::to_string(value.source().begin.line) + ": sección desconocida '" + std::string(key.str()) + "' (vale drop)";
+			error = file + ":" + std::to_string(value.source().begin.line) + ": secciÃ³n desconocida '" + std::string(key.str()) + "' (vale drop)";
 
 			return false;
 		}
@@ -221,7 +222,7 @@ static bool LoadDropFile(const fs::path& path, int map, std::vector<ItemDropDef>
 
 		if (entry == nullptr)
 		{
-			error = where + ": cada elemento de 'drop' es una tabla { item = [sección, índice], ... }";
+			error = where + ": cada elemento de 'drop' es una tabla { item = [secciÃ³n, Ã­ndice], ... }";
 
 			return false;
 		}
@@ -252,7 +253,7 @@ static bool LoadDropFile(const fs::path& path, int map, std::vector<ItemDropDef>
 
 		if (ok && d.Section > 15)
 		{
-			why = "la sección del item va de 0 a 15";
+			why = "la secciÃ³n del item va de 0 a 15";
 
 			ok = false;
 		}
@@ -295,7 +296,7 @@ static bool LoadDropFile(const fs::path& path, int map, std::vector<ItemDropDef>
 
 				if (n == 5)
 				{
-					why = "opción desconocida '" + std::string(k) + "' (valen level, skill, luck, add y exc)";
+					why = "opciÃ³n desconocida '" + std::string(k) + "' (valen level, skill, luck, add y exc)";
 
 					ok = false;
 				}
@@ -325,7 +326,7 @@ bool ItemDrops_Load(const std::string& dataDir, std::vector<ItemDropDef>& out, s
 
 	std::error_code ec;
 
-	fs::path global = fs::u8path(ItemDrops_GlobalPath(dataDir));
+	fs::path global = Utf8Path(ItemDrops_GlobalPath(dataDir));
 
 	if (fs::is_regular_file(global, ec) && !LoadDropFile(global, -1, out, error))
 	{
@@ -355,7 +356,7 @@ bool ItemDrops_Load(const std::string& dataDir, std::vector<ItemDropDef>& out, s
 
 bool ItemDrops_LoadLegacy(const std::string& path, std::vector<ItemDropDef>& out, std::string& error)
 {
-	std::ifstream file(fs::u8path(path), std::ios::binary);
+	std::ifstream file(Utf8Path(path), std::ios::binary);
 
 	if (!file)
 	{
@@ -387,7 +388,7 @@ bool ItemDrops_LoadLegacy(const std::string& path, std::vector<ItemDropDef>& out
 			raw.erase(slash);
 		}
 
-		// "12,015" es sección e índice: la coma separa igual que un espacio.
+		// "12,015" es secciÃ³n e Ã­ndice: la coma separa igual que un espacio.
 		std::replace(raw.begin(), raw.end(), ',', ' ');
 
 		std::istringstream in(raw);
@@ -413,7 +414,7 @@ bool ItemDrops_LoadLegacy(const std::string& path, std::vector<ItemDropDef>& out
 
 		if (tokens.size() != 14)
 		{
-			error = where + ": se esperan 14 columnas (Sección,Índice Level Grade Level Skill Luck Option Exe MapNum Monster MonsterLvlMin MonsterLvlMax Rate)";
+			error = where + ": se esperan 14 columnas (SecciÃ³n,Ãndice Level Grade Level Skill Luck Option Exe MapNum Monster MonsterLvlMin MonsterLvlMax Rate)";
 
 			return false;
 		}
@@ -437,7 +438,7 @@ bool ItemDrops_LoadLegacy(const std::string& path, std::vector<ItemDropDef>& out
 
 			if (*end != '\0')
 			{
-				error = where + ": '" + t + "' no es un número";
+				error = where + ": '" + t + "' no es un nÃºmero";
 
 				return false;
 			}
@@ -500,7 +501,7 @@ bool ItemDrops_LoadLegacy(const std::string& path, std::vector<ItemDropDef>& out
 			{
 				ok = false;
 
-				why = "los índices de ItemOptionRate van de 0 a 255 (o *)";
+				why = "los Ã­ndices de ItemOptionRate van de 0 a 255 (o *)";
 			}
 		}
 
@@ -575,9 +576,9 @@ bool ItemDrops_WriteToml(const std::string& path, int map, const std::string& ma
 {
 	std::error_code ec;
 
-	fs::create_directories(fs::u8path(path).parent_path(), ec);
+	fs::create_directories(Utf8Path(path).parent_path(), ec);
 
-	std::ofstream file(fs::u8path(path), std::ios::binary);
+	std::ofstream file(Utf8Path(path), std::ios::binary);
 
 	if (!file)
 	{
@@ -593,21 +594,21 @@ bool ItemDrops_WriteToml(const std::string& path, int map, const std::string& ma
 	}
 	else
 	{
-		file << "# " << mapName << " (mapa " << map << "): drops especiales que caen sólo en este mapa.\n";
+		file << "# " << mapName << " (mapa " << map << "): drops especiales que caen sÃ³lo en este mapa.\n";
 	}
 
 	file << "#\n"
-		<< "# item           [sección, índice] del item (Item.txt)\n"
+		<< "# item           [secciÃ³n, Ã­ndice] del item (Item.txt)\n"
 		<< "# level          nivel del item (+N); sin la clave, 0\n"
 		<< "# grade          opciones excelentes fijas, si `exc` no da ninguna\n"
-		<< "# options        índices de ItemOptionRate.txt para level, skill, luck,\n"
-		<< "#                add y exc; sin la clave, esa opción no sale\n"
-		<< "# monster        sólo ese monstruo (Monster.txt); sin la clave, cualquiera\n"
-		<< "# monster_level  [mínimo, máximo] del nivel del monstruo; -1 = sin límite\n"
+		<< "# options        Ã­ndices de ItemOptionRate.txt para level, skill, luck,\n"
+		<< "#                add y exc; sin la clave, esa opciÃ³n no sale\n"
+		<< "# monster        sÃ³lo ese monstruo (Monster.txt); sin la clave, cualquiera\n"
+		<< "# monster_level  [mÃ­nimo, mÃ¡ximo] del nivel del monstruo; -1 = sin lÃ­mite\n"
 		<< "# rate           chance de 1.000.000 por monstruo muerto; -1 = siempre\n"
 		<< "#\n"
 		<< "# Se prueban antes que el drop normal del monstruo (un item al azar de\n"
-		<< "# nivel cercano al suyo): si cae uno de estos, el monstruo no tira nada más.\n"
+		<< "# nivel cercano al suyo): si cae uno de estos, el monstruo no tira nada mÃ¡s.\n"
 		<< "\ndrop = [\n";
 
 	for (const ItemDropDef& d : drops)
