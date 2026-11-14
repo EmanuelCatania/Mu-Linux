@@ -25,8 +25,8 @@
 #include <vector>
 
 int DAT_083a412c=0;
-char DAT_083a411c=0,DAT_083a411d=0,DAT_083a4125=0,DAT_083a411e=0,DAT_083a42ea=0;
-DWORD DAT_083a42e8=0,DAT_00561574=0xffffffffu;
+char CullFaceEnable=0,AlphaTestEnable=0,TextureEnable=0,DepthTestEnable=0,FogEnable=0;
+DWORD DepthMaskEnable=0,DAT_00561574=0xffffffffu;
 char* g_BitmapsRaw=ResourceTables::TextureBase();
 static std::vector<std::string> diagnostics;
 extern "C" void DbgLogPublic(const char* text){
@@ -77,9 +77,9 @@ void MatrixCases(){
         BMDDevice::EndModel();assert(initial==CurrentMatrix());
     }
     for(int physical=0;physical<2;++physical)for(int cache=0;cache<2;++cache){
-        Gfx::SetEnabled(Gfx::Cap::CullFace,physical!=0);DAT_083a411c=char(cache);
-        {BMDDevice::MeshScope scope(true);BMDDevice::Select({BMDDevice::Pass::Color});assert(!Gfx::IsEnabled(Gfx::Cap::CullFace)&&DAT_083a411c==0);{BMDDevice::MeshScope nestedScope(true);BMDDevice::Select({BMDDevice::Pass::Glow});assert(!Gfx::IsEnabled(Gfx::Cap::CullFace));}}
-        assert(Gfx::IsEnabled(Gfx::Cap::CullFace)==(physical!=0)&&DAT_083a411c==physical);
+        Gfx::SetEnabled(Gfx::Cap::CullFace,physical!=0);CullFaceEnable=char(cache);
+        {BMDDevice::MeshScope scope(true);BMDDevice::Select({BMDDevice::Pass::Color});assert(!Gfx::IsEnabled(Gfx::Cap::CullFace)&&CullFaceEnable==0);{BMDDevice::MeshScope nestedScope(true);BMDDevice::Select({BMDDevice::Pass::Glow});assert(!Gfx::IsEnabled(Gfx::Cap::CullFace));}}
+        assert(Gfx::IsEnabled(Gfx::Cap::CullFace)==(physical!=0)&&CullFaceEnable==physical);
         assert((glIsEnabled(GL_CULL_FACE)!=0)==(physical!=0));
     }
     assert(glGetError()==GL_NO_ERROR);std::puts("BMD: pila de matrices en CPU y culling anidado correctos");
@@ -100,7 +100,7 @@ void SetupView(int view,bool alpha,unsigned texture){
     if(view%2){Gfx::Translate(.07f,.12f,0);const float scale[16]{.8f,0,0,0, 0,.7f,0,0, 0,0,1,0, 0,0,0,1};RenderState::MultiplyMatrix(scale);}
     Gfx::MatrixMode(Gfx::Matrix::ModelView);
     Gfx::ClearColor(.1f,.2f,.3f,.4f);Gfx::Clear(Gfx::ClearColorBuffer|Gfx::ClearDepthBuffer);
-    DAT_083a412c=alpha?2:0;DAT_083a411c=alpha?0:1;DAT_083a411d=alpha?1:0;DAT_083a4125=1;DAT_083a411e=1;DAT_083a42e8=1;DAT_083a42ea=0;
+    DAT_083a412c=alpha?2:0;CullFaceEnable=alpha?0:1;AlphaTestEnable=alpha?1:0;TextureEnable=1;DepthTestEnable=1;DepthMaskEnable=1;FogEnable=0;
 }
 void CheckCoreProgram(){
     int program=0;glGetIntegerv(GL_CURRENT_PROGRAM,&program);assert(program);unsigned shaders[2]{};int count=0;glGetAttachedShaders(unsigned(program),2,&count,shaders);assert(count==2);
