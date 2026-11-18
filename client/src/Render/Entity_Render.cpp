@@ -8,7 +8,7 @@
 //
 // ── ENTITY ARRAY ─────────────────────────────────────────────────────────────
 //
-//   Base:   DAT_07e12945
+//   Base:   PlayerSpritePoolBase
 //   Stride: 0x204 bytes per entry (512 bytes)
 //   Count:  ends when pointer > 0x7e908e5
 //     → 500 entities: (0x7e908e5 - 0x07e12945) / 0x204 ≈ 500
@@ -32,8 +32,8 @@
 //
 // ── GLOBALS ───────────────────────────────────────────────────────────────────
 //
-//   DAT_05828d58  — sprite model table base (model entries at base + class * 0xbc)
-//   DAT_07abf5d8  — local player entity (stride 0x394); byte+0x1bc & 7 = equipped weapon slot
+//   ModelsBase  — sprite model table base (model entries at base + class * 0xbc)
+//   Hero  — local player entity (stride 0x394); byte+0x1bc & 7 = equipped weapon slot
 //   World  — World (== 10 → apply Z oscillation)
 //   WorldTime  — frame oscillation counter (for Z bob)
 //   local_9c      — running counter incremented each active entity
@@ -41,7 +41,7 @@
 //
 // ── MAIN LOOP ─────────────────────────────────────────────────────────────────
 //
-//   puVar9 = &DAT_07e12945
+//   puVar9 = &PlayerSpritePoolBase
 //   do {
 //     if puVar9[-0x105] == '\0': goto next_entity
 //
@@ -62,7 +62,7 @@
 //       if sub == 2: iVar7 = 0x3b4
 //     // else: iVar7 = sVar6 (use class code directly as model index)
 //
-//     this = (void*)(DAT_05828d58 + iVar7 * 0xbc)  // model data for class
+//     this = (void*)(ModelsBase + iVar7 * 0xbc)  // model data for class
 //
 //     // Set model fields from entity
 //     this[+0xa0] = 0
@@ -88,7 +88,7 @@
 //     if sVar6 == 0x35f:
 //       n = ftol(sqrt(cantidad de Zen) / 2)  acotado a [3, 80]
 //       for i in 1..n:
-//         // desplazamiento en círculo tomado de RandomTable (DAT_055c9e58)
+//         // desplazamiento en círculo tomado de RandomTable (RandomTable)
 //         local_60 = {random_angle, 0, 0}
 //         local_3c = {random_radius, 0, 0}
 //         Matrix_BuildFromEuler(local_60, local_3c+3) → Matrix_FromEuler
@@ -104,7 +104,7 @@
 //
 //     // Z oscillation (when World == 10)
 //     if World == 10:
-//       puVar9[-0xed] += sin(local_98 + WorldTime) * _DAT_00552488
+//       puVar9[-0xed] += sin(local_98 + WorldTime) * 10.0f
 //
 //     // World-to-screen projection for UI (HP bars, name tags)
 //     Camera_ProjectWorldToScreen(&pos, (int*)local_68, (int*)local_64)
@@ -119,7 +119,7 @@
 //     local_98 += 0x4d5
 //   } while puVar9 < 0x7e908e5
 //
-// ── MODEL TABLE (DAT_05828d58) ────────────────────────────────────────────────
+// ── MODEL TABLE (ModelsBase) ────────────────────────────────────────────────
 //
 //   Stride: 0xbc (188 bytes) per class entry
 //   Indexed by iVar7 (class code or remapped code):
@@ -145,10 +145,10 @@
 //   Camera_ProjectWorldToScreen  → World_ToScreen(pos[3], out_x, out_y)
 //   Matrix_BuildFromEuler  → Matrix_FromEuler(angles[3], out_mat[12])
 //   Vector_Rotate  → Matrix_TransformPoint(pt, mat, out)
-//   DAT_055c9e58  → RandomTable (100 ints; reparte en círculo las monedas del Zen)
+//   RandomTable  → RandomTable (100 ints; reparte en círculo las monedas del Zen)
 //   WorldTime  → frame oscillation counter (for Z bob in sub-state 10)
-//   DAT_0055284c  → Z bob amplitude constant
-//   DAT_00552488  → Z oscillation scale factor
+//   30.0f  → Z bob amplitude constant
+//   10.0f  → Z oscillation scale factor
 
 #include "stdafx.h"
 #include "Model/ModelTypes.h"
@@ -185,7 +185,7 @@ void __cdecl MoveCharacterClient(float *param_1)
   undefined2 uVar1;
 
   if (*(char *)param_1 != '\0') {
-    uVar1 = TestFrustrum2D(param_1[4] * _DAT_005524f8,param_1[5] * _DAT_005524f8,-20.0);
+    uVar1 = TestFrustrum2D(param_1[4] * 0.01f,param_1[5] * 0.01f,-20.0);
     AsObject(param_1)->Visible = (BYTE)uVar1;
     MoveMonsterClient(AsCharacter(param_1), AsObject(param_1));
     MoveCharacter((intptr_t)param_1);
@@ -206,12 +206,12 @@ void Entity_RenderAll_3D(void)
   undefined4 *puVar4;
 
   iVar3 = 0;
-  DAT_07abf5d4 = 0;
-  _DAT_07abf5e8 = 0;
+  VisibleEntityCount = 0;
+  RenderExtraFlag = 0;
   iVar2 = 0;
   do {
-    pcVar1 = (char *)(DAT_07abf5d0 + iVar3);
-    if (((pcVar1 == DAT_07abf5d8) && ((DAT_07abf5d8[EntityOffset(0x1c0)] & 4U) != 0)) && (SceneFlag == 5)) {
+    pcVar1 = (char *)(CharactersClient + iVar3);
+    if (((pcVar1 == Hero) && ((Hero[EntityOffset(0x1c0)] & 4U) != 0)) && (SceneFlag == 5)) {
       pcVar1[EntityOffset(0x130)] = '\0';
       pcVar1[EntityOffset(0x131)] = '\0';
       pcVar1[EntityOffset(0x132)] = 'z';
@@ -230,7 +230,7 @@ void Entity_RenderAll_3D(void)
       pcVar1[EntityOffset(0x13f)] = '?';
     }
     else if ((*pcVar1 != '\0') && (pcVar1[EntityOffset(0x160)] != '\0')) {
-      DAT_07abf5d4 = DAT_07abf5d4 + 1;
+      VisibleEntityCount = VisibleEntityCount + 1;
       if ((iVar2 == SelectedCharacter) || (iVar2 == SelectedNpc)) {
         puVar4 = (undefined4 *)0x1;
       }
@@ -248,7 +248,7 @@ void Entity_RenderAll_3D(void)
 
 
 // RenderBugs — RenderBugs (Entity_VisibilityCheckAll)
-// Itera el pool de butterflies/effect-entities (DAT_083a1218, 10 entries × 0x1BC).
+// Itera el pool de butterflies/effect-entities (ButterflyObjectPool, 10 entries × 0x1BC).
 // Por cada entry activo: frustum test, si visible y (owner es player o type==0x330)
 // llama a Entity_PrepareRender (render). Type 0x330 además spawnea sparkle.
 //
@@ -267,7 +267,7 @@ uint RenderBugs(void)
 {
     // Port FIEL de IDA RenderBugs (0x00500970).
     //
-    // Pool: DAT_083a1218 (10 entries × 0x1BC = 4440 bytes).
+    // Pool: ButterflyObjectPool (10 entries × 0x1BC = 4440 bytes).
     // Slot layout:
     //   +0     active flag (byte)
     //   +2     type code (WORD): 195=elf-bug, 267=MG fire, 816=butterfly, 0x330=special
@@ -285,7 +285,7 @@ uint RenderBugs(void)
     // Draw_RenderObject.
     if (!(SceneFlag == 5 || SceneFlag == 4 || SceneFlag == 2)) return 0;
 
-    char* base = (char*)&DAT_083a1218[0];
+    char* base = (char*)&ButterflyObjectPool[0];
     for (int i = 0; i < 10; ++i) {
         char* slot = base + i * OBJECT_STRIDE;
         if (slot[0] == 0) continue;            // not active
@@ -351,22 +351,22 @@ void __cdecl Entity_RenderSlotWith(void *param_1,void *param_2_v,int param_3,cha
   // con el color de BodyLight (dorado). En x64 el offset crudo caía dentro de
   // un puntero del modelo y el contorno salía iluminado (plateado).
   AsModel(param_1)->LightEnable = 0;
-  // _DAT_005597c8 is float; param_5 is a float passed as undefined4. Reinterpret
+  // EntityLodScale is float; param_5 is a float passed as undefined4. Reinterpret
   // the bit pattern (cast through uint) so we don't do an int→float conversion.
-  *(unsigned int *)&_DAT_005597c8 = (unsigned int)param_5;
+  *(unsigned int *)&EntityLodScale = (unsigned int)param_5;
   if (*(char *)&AsObject(param_2)->EnableBoneMatrix == '\x01') {
     puVar1 = *(undefined **)(param_2 + EntityOffset(0x114));
   }
   else {
     param_4 = '\0';
-    puVar1 = (undefined*)&DAT_06970a9c;
+    puVar1 = (undefined*)&BoneScratchRoot;
   }
   Skeleton_Transform(param_1,reinterpret_cast<float*>(puVar1),(float *)(param_2 + EntityOffset(0x118)),(float *)(param_2 + EntityOffset(0x124)),
                (float *)(param_2 + EntityOffset(0x130)),param_4);
   BMD__RenderBody(param_1,(uint)param_3,AsObject(param_2)->Alpha,AsObject(param_2)->BlendMesh,
                AsObject(param_2)->BlendMeshLight,AsObject(param_2)->BlendMeshTexCoordU,AsObject(param_2)->BlendMeshTexCoordV,
                AsObject(param_2)->HiddenMesh,0xffffffff);
-  _DAT_005597c8 = 1.0f;   // reset LOD scale
+  EntityLodScale = 1.0f;   // reset LOD scale
   return;
 }
 
@@ -385,7 +385,7 @@ RenderPartObject(intptr_t param_1,int param_2,const PART_t* param_3,float *param
   uint uVar1;
   undefined *puVar2;
 
-  if (_DAT_005524f8 < param_5) {
+  if (0.01f < param_5) {
     if (param_2 == 0x35c) {
       uVar1 = (int)param_6 >> 3 & 0xf;
       if (uVar1 == 0) {
@@ -395,7 +395,7 @@ RenderPartObject(intptr_t param_1,int param_2,const PART_t* param_3,float *param
         param_2 = 0x3b4;
       }
     }
-    this_ = (void *)(DAT_05828d58 + param_2 * BMD_STRIDE);
+    this_ = (void *)(ModelsBase + param_2 * BMD_STRIDE);
     *(undefined1 *)&((BMD*)(uintptr_t)(this_))->HideSkin = param_9;
     *(undefined4 *)&((BMD*)(uintptr_t)(this_))->BodyScale = *(undefined4 *)(param_1 + 0xc);
     *(undefined1 *)&((BMD*)(uintptr_t)(this_))->ContrastEnable = *(undefined1 *)(param_1 + 0xe4);
@@ -403,12 +403,12 @@ RenderPartObject(intptr_t param_1,int param_2,const PART_t* param_3,float *param
     *(undefined4 *)&((BMD*)(uintptr_t)(this_))->BodyOrigin[0] = *(undefined4 *)(param_1 + 0x10);
     *(undefined4 *)&((BMD*)(uintptr_t)(this_))->BodyOrigin[1] = *(undefined4 *)(param_1 + 0x14);
     *(undefined4 *)&((BMD*)(uintptr_t)(this_))->BodyOrigin[2] = *(undefined4 *)(param_1 + 0x18);
-    _DAT_005597c8 = 1.0f;
+    EntityLodScale = 1.0f;
     if (param_11 == 3) {
-      _DAT_005597c8 = 1.4f;
+      EntityLodScale = 1.4f;
     }
     else if (param_11 == 2) {
-      _DAT_005597c8 = 1.2f;
+      EntityLodScale = 1.2f;
     }
     else if (param_11 == 1) {
       if (*(char *)(param_1 + 0x84) == '\x04') {
@@ -437,7 +437,7 @@ RenderPartObject(intptr_t param_1,int param_2,const PART_t* param_3,float *param
       puVar2 = *(undefined **)&((OBJECT*)(uintptr_t)(param_1))->BoneMatrices;
     }
     else {
-      puVar2 = (undefined*)&DAT_06970a9c;
+      puVar2 = (undefined*)&BoneScratchRoot;
     }
     Skeleton_Transform(this_,reinterpret_cast<float*>(puVar2),(float *)(param_1 + EntityOffset(0x118)),(float *)(param_1 + EntityOffset(0x124)),
                  (float *)(param_1 + EntityOffset(0x130)),param_10);

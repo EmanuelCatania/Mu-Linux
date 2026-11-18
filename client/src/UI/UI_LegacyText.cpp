@@ -94,21 +94,22 @@ void __cdecl RenderCenterText(int x, int y, char *text) {
     RenderText(x - halfWidth, y, text, 0, 0, NULL);
 }
 
-// FUN_0051d740 — NOT a real function entry (falls mid-CreateOkMessageBox @ 0x0051D6F0)
+// ClearNoticeStub — NOT a real function entry (falls mid-CreateOkMessageBox @ 0x0051D6F0)
 // Kept as no-op stub; real init logic is in CreateOkMessageBox/InitGame.
-void __cdecl FUN_0051d740(void) {}
+void __cdecl ClearNoticeStub(void) {}
 
-// FUN_00482350 — NOT a real function entry (falls mid-FUN_004824c0 item slot lookup)
+// ClearWhisperIDStub — NOT a real function entry (falls mid-FUN_004824c0 item slot lookup)
 // Kept as no-op stub; address was incorrectly identified as function start.
-void __cdecl FUN_00482350(void) {}
+void __cdecl ClearWhisperIDStub(void) {}
 
-// FUN_004827a0 — NOT a real function entry (also mid-FUN_004824c0)
+// ItemSlotLookup_MidFunctionStub - NOT a real function entry (also mid-FUN_004824c0)
 // Kept as no-op stub.
-void __cdecl FUN_004827a0(void) {}
+// IDA: Fn_004827a0
+void __cdecl ItemSlotLookup_MidFunctionStub(void) {}
 
-// FUN_00433830 — NOT a real function entry (falls mid-ReceiveTradeExit @ 0x004337F0)
+// InitPartyListStub — NOT a real function entry (falls mid-ReceiveTradeExit @ 0x004337F0)
 // Kept as no-op stub.
-void __cdecl FUN_00433830(void) {}
+void __cdecl InitPartyListStub(void) {}
 
 // RenderText @ 0x0047F650 — same address as UI_RenderText (Chat_DrawEntry).
 // IDA's canonical name for that function IS "RenderText"; our codebase

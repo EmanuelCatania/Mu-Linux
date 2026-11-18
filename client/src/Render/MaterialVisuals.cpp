@@ -44,8 +44,8 @@ void MaterialVisuals_Prepare(MaterialVisualSample &sample, int model, bool attri
     }
     // IDA: BMD_SetupRenderByType (0x00504130), UV V antes que U.
     if (draw && (model==607 || model==608)) {
-        sample.v=(float)(rand()%10)*_DAT_005524f4;
-        sample.u=(float)(rand()%10)*_DAT_005524f4;
+        sample.v=(float)(rand()%10)*0.1f;
+        sample.u=(float)(rand()%10)*0.1f;
     }
 }
 void MaterialVisuals_PrepareObject(const void *owner, int model, bool attributes, bool draw) {
@@ -57,7 +57,7 @@ void MaterialVisuals_PrepareWeaponObject(OBJECT* entity, int model) {
     auto &sample=objects[entity].sample;
     const float alpha=o.Alpha;
     const BYTE action=o.CurrentAction;
-    MaterialVisuals_Prepare(sample,model,true,alpha>_DAT_005524f8);
+    MaterialVisuals_Prepare(sample,model,true,alpha>0.01f);
     sample.alpha=alpha; sample.action=action;
     // IDA: 239/244 usaban el slot como arma y dejaban estos resets publicados.
     // DESVIACION: publicar una vez por paso, conservando alpha/acción del draw.
@@ -71,8 +71,8 @@ void MaterialVisuals_PrepareWeaponObject(OBJECT* entity, int model) {
 }
 void MaterialVisuals_TickObjectDraw(const OBJECT* entity) {
     const OBJECT &o=*entity;
-    if (gMapManager.GetCurrentMap()!=4 || o.Alpha<_DAT_005524f8 ||
-        o.RenderType==0x80 || (DAT_07e11d30==0 && o.HiddenMesh==-2)) return;
+    if (gMapManager.GetCurrentMap()!=4 || o.Alpha<0.01f ||
+        o.RenderType==0x80 || (EditFlag==0 && o.HiddenMesh==-2)) return;
     if (o.Type==23 || o.Type==19 || o.Type==20 || o.Type==3 || o.Type==4)
         rand(); // IDA: Draw_RenderObject (0x004FAE00), muestra descartada.
 }
@@ -80,8 +80,8 @@ void MaterialVisuals_PrepareUiItem(int itemType, int level) {
     int drawLevel=level;
     const int model=ItemMaterials_ResolvePreviewModel(itemType,level,&drawLevel);
     if (wingPlanning ? model!=790 : !RandomMaterial(model)) return;
-    if (!DAT_05828d58) return;
-    const char *bmd=(const char *)DAT_05828d58+model* BMD_STRIDE;
+    if (!ModelsBase) return;
+    const char *bmd=(const char *)ModelsBase+model* BMD_STRIDE;
     const short meshes=*(const short *)(bmd+0x24);
     const auto meshBase=(uintptr_t)((BMD*)(uintptr_t)(bmd))->Meshs;
     // El mismo guard de RenderItem3D, antes de crear su objeto local.
@@ -127,9 +127,9 @@ void MaterialVisuals_TickWingPreviews() {
 }
 
 void MaterialVisuals_TickUi() {
-    const bool ready=SceneFlag==2 ? DAT_083a7c49!=0 :
-        SceneFlag==4 ? CharSelectSceneInitialized && DAT_05826cb0>50 :
-        SceneFlag==5 && DAT_083a7c10 && DAT_07e11d1c<=30;
+    const bool ready=SceneFlag==2 ? InitLogIn!=0 :
+        SceneFlag==4 ? CharSelectSceneInitialized && CurrentProtocolState>50 :
+        SceneFlag==5 && EnableMainRender && InputCooldownTicks<=30;
     if (!ready) return;
     if (SceneFlag==5 && !gUserSettings.GetAntilag(ANTILAG_INTERFACE)) {
         ItemMaterials_PrepareQuestUi();
@@ -143,16 +143,16 @@ void MaterialVisuals_TickUi() {
             if (WarehouseOpened) PrepareGrid(OffsetWarehouseItems,120);
             if (ChaosMixOpened) PrepareGrid(OffsetMixItems,32);
             if (EventWindowOpened) PrepareGrid(OffsetMixItems,32);
-            if (DAT_07e91388>0 && !DAT_07eaa13c && *(short *)DAT_07e91350>=0)
-                MaterialVisuals_PrepareUiItem(*(short *)DAT_07e91350,*(int *)(DAT_07e91350+4));
+            if (ItemPickedFlag>0 && !ItemActionMode && *(short *)PickedItemData>=0)
+                MaterialVisuals_PrepareUiItem(*(short *)PickedItemData,*(int *)(PickedItemData+4));
             for (int slot=0; slot<3; ++slot) {
                 const int index=Item_FindQuickSlotByCategory(slot);
                 if (index!=-1) MaterialVisuals_PrepareUiItem(*(short *)(OffsetInventoryItems+index*68),*(int *)(OffsetInventoryItems+index*68+4));
             }
         }
     }
-    if (DAT_083a7c24==0x97 && DAT_07eaa13c==1)
-        MaterialVisuals_PrepareUiItem(*(short *)DAT_07e91350,*(int *)(DAT_07e91350+4));
-    else if (DAT_083a7c24==0x99)
-        MaterialVisuals_PrepareUiItem(*(short *)DAT_07ea5240,*(int *)(DAT_07ea5240+4));
+    if (InGameUiState==0x97 && ItemActionMode==1)
+        MaterialVisuals_PrepareUiItem(*(short *)PickedItemData,*(int *)(PickedItemData+4));
+    else if (InGameUiState==0x99)
+        MaterialVisuals_PrepareUiItem(*(short *)PreviewItemData,*(int *)(PreviewItemData+4));
 }

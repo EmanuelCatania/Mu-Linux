@@ -36,24 +36,24 @@
 //   GL_EndOpenGL → EndOpengl()                   — pop MV + pop PROJ (balancea BeginOpengl)
 //
 // ── GLOBALS ───────────────────────────────────────────────────────────────────
-//   DAT_083a7c49   — InitLogIn (guard)
-//   DAT_083a7c14   — login sub-state
-//   DAT_083a42ea   — FogEnable
-//   DAT_07e11d6e   — byte flag reset
-//   DAT_00559c8c   — InputTextWidth
-//   DAT_00559c78   — m_dwTextColor
+//   InitLogIn   — InitLogIn (guard)
+//   LoginSubState   — login sub-state
+//   FogEnable   — FogEnable
+//   HudTextVisibleFlag   — byte flag reset
+//   LegacyInputTextWidth   — InputTextWidth
+//   m_dwTextColor   — m_dwTextColor
 //   SetBackgroundTextColor   — m_dwBackColor
 //   DAT_055c9fec   — m_hFontDC (HDC usado para GetTextExtentPointA)
 //   DAT_055ca00c   — g_hFont
-//   DAT_005616a4   — base Y panel credenciales
-//   DAT_083a427c/4278 — MouseX/MouseY
-//   DAT_083a7ac8   — tick base progress bar
-//   DAT_083a7af4   — fade state
-//   DAT_005615e8   — fade counter
+//   AnimatedDialogY   — base Y panel credenciales
+//   MouseX/4278 — MouseX/MouseY
+//   ConnectStartTick   — tick base progress bar
+//   CameraWalkCut   — fade state
+//   CurrentCameraCount   — fade counter
 //   DAT_0056156c   — WindowWidth
 //   g_bUseChatListBox   — g_bUseChatListBox
 //   SceneFlag   — SceneFlag
-//   DAT_083a4320   — retry counter
+//   LoginRetryCount   — retry counter
 
 #include "stdafx.h"
 #include "Render/Gfx.h"
@@ -78,11 +78,11 @@ uint Scene_Login(void)
     tagSIZE  tStack_74, tStack_6c;
     char     acStack_64[100];
 
-    if (DAT_083a7c49 == '\0')
+    if (InitLogIn == '\0')
         return 0;
 
-    DAT_083a42ea = 0;
-    DAT_07e11d6e = 0;
+    FogEnable = 0;
+    HudTextVisibleFlag = 0;
     Gfx::ClearColor(0, 0, 0, 1.0f);
     GL_BeginViewport(0, 0x50, 0x280, 0x140);   // BeginOpengl(0, 80, 640, 320)
 
@@ -100,24 +100,24 @@ uint Scene_Login(void)
     GL_Begin2D();    // BeginBitmap — setup 2D ortho
 
     // ── Font / color setup ────────────────────────────────────────────────────
-    DAT_00559c8c = 0x77;                  // InputTextWidth = 119
+    LegacyInputTextWidth = 0x77;                  // InputTextWidth = 119
     GL_SetBlendSrcOver('\x01');                 // EnableAlphaTest(1)
     Gfx::Color3f(1.0f, 1.0f, 1.0f);
-    DAT_00559c78 = 0xffd2e6ff;            // m_dwTextColor
+    m_dwTextColor = 0xffd2e6ff;            // m_dwTextColor
     SetBackgroundTextColor = 0;                     // m_dwBackColor
     gFont.SelectFont((HDC)(uintptr_t)gFont.GetTextDC(), (HGDIOBJ)gFont.GetFont(FONT_NORMAL));
 
     // ── Credential input panel (sub-states 2..3) ─────────────────────────────
-    iVar3 = DAT_005616a4;
-    if ((1 < DAT_083a7c14) && (DAT_083a7c14 < 4)) {
-        tStack_74.cx = DAT_005616a4;
-        GL_DrawTexture(0xc, 195.0f, (float)DAT_005616a4, 250.0f, 216.0f,
+    iVar3 = AnimatedDialogY;
+    if ((1 < LoginSubState) && (LoginSubState < 4)) {
+        tStack_74.cx = AnimatedDialogY;
+        GL_DrawTexture(0xc, 195.0f, (float)AnimatedDialogY, 250.0f, 216.0f,
                      0.0f, 0.0f, 0.9765625f, 0.84375f, '\x01', '\x01');
         // Username field
         // IDA 0x521630 L57-60: RenderText(227, y, GlobalText[450]) y [451] son
-        // las etiquetas "Cuenta"/"Contrasena".  El port pasaba (LPCSTR)DAT_07d4ac7c,
+        // las etiquetas "Cuenta"/"Contrasena".  El port pasaba (LPCSTR)LegacyUsernameDispBuf,
         // o sea el VALOR del global como puntero en vez de la direccion del buffer
-        // (DAT_07d4ac7c = GlobalText[450]; DAT_07d4b4b0 = [457] ya estaba mapeado y
+        // (LegacyUsernameDispBuf = GlobalText[450]; LegacyChatFilterWords = [457] ya estaba mapeado y
         // 0x07d4b4b0 - 0x07d4ac7c = 2100 = 7*300).
         UI_RenderText(0xe3, iVar3 + 0x32, GlobalText[450], (LPSIZE)0x0, '\0', 0);
         UI_RenderInputField(0x127, iVar3 + 0x32, 0);
@@ -127,42 +127,42 @@ uint Scene_Login(void)
 
         // OK button hit-test
         tStack_74.cx = iVar3 + 0x5f;
-        if ((0x142 < DAT_083a427c) &&
-            ((DAT_083a427c < 0x189) && (tStack_74.cx <= DAT_083a4278)) &&
-            (DAT_083a4278 < iVar3 + 0x72))
+        if ((0x142 < MouseX) &&
+            ((MouseX < 0x189) && (tStack_74.cx <= MouseY)) &&
+            (MouseY < iVar3 + 0x72))
         {
             GL_DrawTexture(0xd, 323.0f, (float)tStack_74.cx, 70.0f, 19.0f,
                          0.0f, 0.0f, 0.546875f, 0.59375f, '\x01', '\x01');
         }
         ptVar10 = &tStack_74;
-        iVar2 = Platform::TextLength((LPCSTR)lpString_07d4aed4);
-        gFont.MeasureText(gFont.GetTextDC(), (LPCSTR)lpString_07d4aed4, iVar2, ptVar10);
+        iVar2 = Platform::TextLength((LPCSTR)BtnTextOk);
+        gFont.MeasureText(gFont.GetTextDC(), (LPCSTR)BtnTextOk, iVar2, ptVar10);
         UI_RenderText(0x165 - ((uint)(tStack_74.cx * 0x280) / gWindow.GetWidth() >> 1),
-                     iVar3 + 100, (LPCSTR)lpString_07d4aed4, (LPSIZE)0x0, '\0', 0);
+                     iVar3 + 100, (LPCSTR)BtnTextOk, (LPSIZE)0x0, '\0', 0);
 
         // Exit/Cancel button hit-test
         tStack_74.cx = iVar3 + 0xb4;
-        if (((0x11c < DAT_083a427c) && (DAT_083a427c < 0x163)) &&
-            ((tStack_74.cx <= DAT_083a4278) && (DAT_083a4278 < iVar3 + 200)))
+        if (((0x11c < MouseX) && (MouseX < 0x163)) &&
+            ((tStack_74.cx <= MouseY) && (MouseY < iVar3 + 200)))
         {
             GL_DrawTexture(0xe, 285.0f, (float)tStack_74.cx, 70.0f, 20.0f,
                          0.0f, 0.0f, 0.546875f, 0.625f, '\x01', '\x01');
         }
         ptVar10 = &tStack_74;
-        iVar2 = Platform::TextLength((LPCSTR)lpString_07d4b000);
-        gFont.MeasureText(gFont.GetTextDC(), (LPCSTR)lpString_07d4b000, iVar2, ptVar10);
+        iVar2 = Platform::TextLength((LPCSTR)BtnTextExit);
+        gFont.MeasureText(gFont.GetTextDC(), (LPCSTR)BtnTextExit, iVar2, ptVar10);
         UI_RenderText(0x13f - ((uint)(tStack_74.cx * 0x280) / gWindow.GetWidth() >> 1),
-                     iVar3 + 0xb9, (LPCSTR)lpString_07d4b000, (LPSIZE)0x0, '\0', 0);
+                     iVar3 + 0xb9, (LPCSTR)BtnTextExit, (LPSIZE)0x0, '\0', 0);
     }
 
     // ── Version strings (bottom of screen) ───────────────────────────────────
-    DAT_00559c8c = 0x100;                 // InputTextWidth = 256
+    LegacyInputTextWidth = 0x100;                 // InputTextWidth = 256
     Gfx::Color3f(0.8f, 0.7f, 0.6f);
     uVar6 = 0xffffffff;
-    DAT_00559c78 = 0xffffffff;
+    m_dwTextColor = 0xffffffff;
 
     // Version string 1 (memcpy loop generado por MSVC)
-    pcVar8 = &DAT_07d4b12c;
+    pcVar8 = &LegacyVersionStr1;
     do {
         pcVar9 = pcVar8;
         if (uVar6 == 0) break;
@@ -191,7 +191,7 @@ uint Scene_Login(void)
 
     // GlobalText[455] = ' Todos los derechos reservados.' (arranca en x=335)
     uVar6  = 0xffffffff;
-    pcVar8 = &DAT_07d4b258;
+    pcVar8 = &LegacyVersionStr2;
     do {
         pcVar9 = pcVar8;
         if (uVar6 == 0) break;
@@ -225,7 +225,7 @@ uint Scene_Login(void)
     // "Version: %s - by kayito" tomaba basura del stack.  m_ExeVersion es
     // ConfigLoginVersion, que Config_Load llena desde config.ini [LOGIN]/Version;
     // si esa clave no existe queda vacio, que es lo fiel.
-    crt_sprintf(acStack_64, &DAT_07d4b384, ConfigLoginVersion);
+    crt_sprintf(acStack_64, &LegacyVersionStr3Fmt, ConfigLoginVersion);
     ptVar10 = &tStack_6c;
     iVar3   = Platform::TextLength(acStack_64);
     gFont.MeasureText(gFont.GetTextDC(), acStack_64, iVar3, ptVar10);
@@ -234,10 +234,10 @@ uint Scene_Login(void)
                  acStack_64, (LPSIZE)0x0, '\0', 0);
 
     // ── Sub-state dispatch ────────────────────────────────────────────────────
-    if (DAT_083a7c14 == 0)
+    if (LoginSubState == 0)
         Scene_Login_ServerSelect();
 
-    if ((DAT_083a7c14 == 1) || (DAT_083a7c14 == 0xc)) {
+    if ((LoginSubState == 1) || (LoginSubState == 0xc)) {
         // Connecting / Timeout: progress bar + cancel button
         Gfx::Color3f(0.5f, 0.5f, 0.5f);
         GL_DrawTexture(0xf0, 213.0f, 228.0f, 213.0f, 64.0f,
@@ -251,21 +251,21 @@ uint Scene_Login(void)
 
         // Progress bar fill
         DVar4 = Platform::GetTimer().Ticks();
-        if (DVar4 - DAT_083a7ac8 < 15000) {
+        if (DVar4 - ConnectStartTick < 15000) {
             DVar4 = Platform::GetTimer().Ticks();
-            iVar3 = DVar4 - DAT_083a7ac8;
+            iVar3 = DVar4 - ConnectStartTick;
         } else {
             iVar3 = 15000;
         }
         tStack_74.cx = (LONG)(float)(((uint)(iVar3 * 200) / 75000) * 5);
         GL_DrawTexture(0x14, 220.0f, 240.0f, (float)tStack_74.cx, 16.0f,
-                     0.0f, 0.0f, (float)tStack_74.cx * _DAT_00552b7c, 1.0f, '\x01', '\x01');
+                     0.0f, 0.0f, (float)tStack_74.cx * 0.00390625f, 1.0f, '\x01', '\x01');
         GL_ResetState();   // DisableAlphaBlend
 
         // Cancel button (0xf3=normal, 0xf4=highlighted)
-        if (((((DAT_083a427c < 0x11d) || (0x162 < DAT_083a427c)) ||
-              (DAT_083a4278 < 0x106)) || (0x119 < DAT_083a4278)) ||
-            ((DAT_083a7c14 == 0xc) && (DAT_083a4320 < 4)))
+        if (((((MouseX < 0x11d) || (0x162 < MouseX)) ||
+              (MouseY < 0x106)) || (0x119 < MouseY)) ||
+            ((LoginSubState == 0xc) && (LoginRetryCount < 4)))
         {
             iVar3 = 0xf3;
         } else {
@@ -279,7 +279,7 @@ uint Scene_Login(void)
         SetBackgroundTextColor = 0x80000000;
         // IDA 0x00521630 L134-136: these reference GlobalText[471] (localized
         // "Conectando..." status string), not the standalone empty buffer
-        // lpString_07d4c518 that Ghidra emitted.
+        // MsgConnecting that Ghidra emitted.
         iVar3 = Platform::TextLength((LPCSTR)GlobalText[471]);
         gFont.MeasureText(gFont.GetTextDC(), (LPCSTR)GlobalText[471], iVar3, ptVar10);
         UI_RenderText(0x140 - ((uint)(tStack_74.cx * 0x280) / gWindow.GetWidth() >> 1), 0xd0,
@@ -287,12 +287,12 @@ uint Scene_Login(void)
     }
 
     // ── Fade-in effect ────────────────────────────────────────────────────────
-    if (DAT_083a7af4 == 1) {
-        if (DAT_005615e8 < 0x10) {
-            tStack_74.cx = (LONG)((float)(0x10 - DAT_005615e8) * _DAT_005526dc);
-            Gfx::Color3f((float)tStack_74.cx, (float)tStack_74.cx * _DAT_005526e8, (float)tStack_74.cx * _DAT_00552530);
+    if (CameraWalkCut == 1) {
+        if (CurrentCameraCount < 0x10) {
+            tStack_74.cx = (LONG)((float)(0x10 - CurrentCameraCount) * 0.0625f);
+            Gfx::Color3f((float)tStack_74.cx, (float)tStack_74.cx * 0.9f, (float)tStack_74.cx * 0.8f);
         } else {
-            DAT_083a7af4 = 2;
+            CameraWalkCut = 2;
         }
     }
 

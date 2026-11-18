@@ -31,7 +31,7 @@ void Terrain_BeginBufferedPass();
 extern "C" void GuildCreator_CloseFromResult(void);
 
 // Inventory pool bases — defined in src/Render/HUD_Pass3.cpp.
-// Lo usan los llamadores de FUN_004d23b0 de abajo para recorrer los arrays de grilla correctos.
+// Lo usan los llamadores de Inventory_ClickHandler de abajo para recorrer los arrays de grilla correctos.
 extern "C" BYTE OffsetInventoryItems[];
 extern "C" BOOL ChaosBoxRequestClose(void);
 extern "C" BYTE Inventory[];
@@ -58,7 +58,7 @@ void __cdecl CheckGate(void)
         const int heroY = *(const int*)&((CHARACTER*)(uintptr_t)(hero))->PositionY;
         if (heroX < gate[2] || heroY < gate[3] || heroX > gate[4] || heroY > gate[5])
             continue;
-        if (DAT_07e11d1c != 0 || hero[EntityOffset(773)] != 0)          // LoadingWorld
+        if (InputCooldownTicks != 0 || hero[EntityOffset(773)] != 0)          // LoadingWorld
             continue;
 
         // DESVIACION (Fase 5): con gates del server el nivel viene en 16 bits.
@@ -74,9 +74,9 @@ void __cdecl CheckGate(void)
         if ((gateIndex >= 45 && gateIndex <= 49) ||
             (gateIndex >= 55 && gateIndex <= 56)) {
             const WORD helper = (WORD)ItemBehaviorType(*(const short*)((const BYTE*)CharacterMachine + 1080));
-            const WORD picked = (WORD)ItemBehaviorType(*(const short*)DAT_07e91350);
+            const WORD picked = (WORD)ItemBehaviorType(*(const short*)PickedItemData);
             if ((helper >= 418 && helper <= 419) ||
-                (DAT_07e91388 > 0 && picked >= 418 && picked <= 419)) {
+                (ItemPickedFlag > 0 && picked >= 418 && picked <= 419)) {
                 UIChatLogWindow_AddText("", GlobalText[261], 2);
                 continue;
             }
@@ -102,17 +102,17 @@ void __cdecl CheckGate(void)
         }
 
         if (level < requiredLevel) {
-            DAT_07e11d1c = 50;                                  // LoadingWorld
+            InputCooldownTicks = 50;                                  // LoadingWorld
             char message[100];
             Platform::TextFormatSecure(message, GlobalText[350], requiredLevel);
             UIChatLogWindow_AddText("", message, 2);
             continue;
         }
 
-        DAT_07e11d1c = 9999999;                                 // LoadingWorld
-        if (Teleport || DAT_07e11dc4 || Platform::GetTimer().Ticks() - DAT_07e11dc8 < 3000) {
-            DAT_07e11dc4 = 0;
-            DAT_07e11d1c = 0;
+        InputCooldownTicks = 9999999;                                 // LoadingWorld
+        if (Teleport || NpcDialogActiveFlag || Platform::GetTimer().Ticks() - NpcKeepaliveTick < 3000) {
+            NpcDialogActiveFlag = 0;
+            InputCooldownTicks = 0;
             continue;
         }
 
@@ -127,7 +127,7 @@ void __cdecl CheckGate(void)
         SelectedCharacter = -1;
         SelectedOperate = -1;
         Attacking = -1;                                      // Attacking
-        DAT_07e11dc4 = 1;
-        DAT_07e11db8 = 0;
+        NpcDialogActiveFlag = 1;
+        MoveStepCounter = 0;
     }
 }

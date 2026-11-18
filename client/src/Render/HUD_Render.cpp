@@ -27,9 +27,9 @@
 //       GL_SetBlendAdditive();                 // Frame_UpdateTimer()
 //       glColor3f(0.3, 0.3, 0.25);
 //       // Scroll layer 1: tex 0x494 fullscreen, UV scrolled by ftol()%100000 * scale
-//       FUN_005128c0(0x494, 0.0, 0.0, 640.0, 435.0, (float)(ftol()%100000)*_DAT_00552b88, 0,2,3);
+//       FUN_005128c0(0x494, 0.0, 0.0, 640.0, 435.0, (float)(ftol()%100000)*ScrollWaveFreq, 0,2,3);
 //       // Scroll layer 2: tex 0x495 fullscreen, UV scrolled diferente rate
-//       FUN_005128c0(0x495, 0.0, 0.0, 640.0, 435.0, (float)(ftol()%100000)*_DAT_00552500,  0,3,2);
+//       FUN_005128c0(0x495, 0.0, 0.0, 640.0, 435.0, (float)(ftol()%100000)*SinFreqWorldTime,  0,3,2);
 //     }
 //     glColor3f(1.0, 1.0, 1.0);
 //
@@ -43,7 +43,7 @@
 //     Render_MapLoadText();        // texto de carga de mapa (sub 10..16)
 //     Render_FloatingText();       // floating damage/heal numbers
 //     Render_QuickButtons();       // botones de acción rápida
-//     (**(code**)(*DAT_055c9ff0 + 0x10))(); // vtable call (menu/inventory?)
+//     (**(code**)(*ChatHistoryWidget + 0x10))(); // vtable call (menu/inventory?)
 //     Render_BottomHUD();          // barra inferior (HP/MP/SP + hotbar)
 //     Render_ChatBox();            // caja de chat
 //     AntiTamper_HashMaintain_B(); // anti-tamper
@@ -65,44 +65,44 @@
 //     GL_ResetState();   // GL_ResetBlend()
 //     SetBackgroundTextColor = 0x80000000;
 //
-//     // BLOQUE 1: buff activo (DAT_05826d30 != '\0' && entity[0x1da] != -1)
-//     if (DAT_05826d30 != '\0' && *(short*)(DAT_07abf5d8+0x1da) != -1) {
+//     // BLOQUE 1: buff activo (LegacyTradeActive != '\0' && entity[0x1da] != -1)
+//     if (LegacyTradeActive != '\0' && *(short*)(Hero+0x1da) != -1) {
 //       GL_SetBlendSrcOver('\x01');   // GL_SetMode(1)
 //       iVar3 = GetScreenWidth(); // Screen_GetWidth()
-//       fVar2 = (float)iVar3 * 0.5f - _DAT_005524fc;   // X centrado
+//       fVar2 = (float)iVar3 * 0.5f - 20.0f;   // X centrado
 //       gFont.SelectFont(DC, font_small);
-//       // Color según DAT_05826d32:
-//       DAT_00559c78 = DAT_05826d32 ? 0x005901 : 0xffc301;   // verde o amarillo
-//       CreateGuildMark((int)*(short*)(DAT_07abf5d8+0x1da), '\x01'); // compone el mark propio
+//       // Color según LegacyTradeParam:
+//       m_dwTextColor = LegacyTradeParam ? 0x005901 : 0xffc301;   // verde o amarillo
+//       CreateGuildMark((int)*(short*)(Hero+0x1da), '\x01'); // compone el mark propio
 //       Texture_Draw2D(0x22, fVar2, 4.0, 8.0, 8.0, 0,0,1,1, '\x01', '\x01');
-//       crt_sprintf(local_64, &DAT_00559ef0);   // format buff name
+//       crt_sprintf(local_64, &BuffNameFmt);   // format buff name
 //       DrawText(ftol()+0xd, 4, local_64, 0, 1, 0);
-//       // Buscar nombre del buff en tabla DAT_07e919bc (stride 0x50)
-//       lpString = &DAT_07e919bc + *(short*)(DAT_07abf5d8+0x1da) * 0x50;
+//       // Buscar nombre del buff en tabla GuildInfoTable (stride 0x50)
+//       lpString = &GuildInfoTable + *(short*)(Hero+0x1da) * 0x50;
 //       DrawText(ftol()+0x1e, 4, lpString, 0, 1, 0);
 //
-//       // Buscar icono del buff (search en tabla &DAT_07e919bc..0x7ea51ec stride 0x50)
-//       // comparando con &lpString_05826bfc
+//       // Buscar icono del buff (search en tabla &GuildInfoTable..0x7ea51ec stride 0x50)
+//       // comparando con &GuildNameCacheA
 //       // Color hover: 0xff00a6ff o 0x9600
 //       CreateGuildMark(found_idx, '\x01');   // compone el mark encontrado
 //       Texture_Draw2D(0x22, fVar2, 19.0, 8.0, 8.0, ...);
-//       crt_sprintf(local_64, &DAT_00559ef4);   // segundo stat
+//       crt_sprintf(local_64, &BuffStatFmt2);   // segundo stat
 //       DrawText(ftol()+0xd, 0x13, local_64, 0, 1, 0);
-//       DrawText(ftol()+0x1e, 0x13, &lpString_05826bfc, 0, 1, 0);
+//       DrawText(ftol()+0x1e, 0x13, &GuildNameCacheA, 0, 1, 0);
 //     }
 //
-//     // BLOQUE 2: segundo buff (DAT_05826d33 != '\0')
-//     if (DAT_05826d33 != '\0') {
+//     // BLOQUE 2: segundo buff (SoccerObserver != '\0')
+//     if (SoccerObserver != '\0') {
 //       // color 0xff003cff (rojo)
-//       // buscar &lpString_05826cc0 en tabla, mostrar similar a bloque 1
-//       // DAT_00559ef8/ef4/efc → formatos para tercer/cuarto stat
-//       // &lpString_05826cc9 → nombre del buff 2
+//       // buscar &GuildNameCacheB en tabla, mostrar similar a bloque 1
+//       // BuffStatFmt3/ef4/efc → formatos para tercer/cuarto stat
+//       // &GuildNameCacheC → nombre del buff 2
 //     }
 //
-//     // BLOQUE 3: kill counter (DAT_05826c08 > 0)
-//     if (0 < DAT_05826c08) {
-//       crt_sprintf(local_64, "%d/%d");   // s__d__d_00559f00
-//       DAT_00559c78 = 0xff968cff;        // lavanda
+//     // BLOQUE 3: kill counter (SoccerTime > 0)
+//     if (0 < SoccerTime) {
+//       crt_sprintf(local_64, "%d/%d");   // Fmt_IntSlashInt
+//       m_dwTextColor = 0xff968cff;        // lavanda
 //       // Dibujar en (x, y+100): &lpString_00559f08
 //       // Dibujar en (x, y+0xd): local_64
 //     }
@@ -110,12 +110,12 @@
 //
 //   Entity offsets relevantes:
 //   entity + 0x1da  → short: buff slot activo (-1 = ninguno)
-//   DAT_07e919bc    → tabla de buffs (stride 0x50 bytes)
-//   lpString_05826bfc → nombre buff actual
-//   lpString_05826cc0 → nombre buff 2
-//   lpString_05826cc9 → nombre buff 2b
-//   DAT_05826d30..d33 → flags de buff activo
-//   DAT_05826c08    → kill counter
+//   GuildInfoTable    → tabla de buffs (stride 0x50 bytes)
+//   GuildNameCacheA → nombre buff actual
+//   GuildNameCacheB → nombre buff 2
+//   GuildNameCacheC → nombre buff 2b
+//   LegacyTradeActive..d33 → flags de buff activo
+//   SoccerTime    → kill counter
 //
 // ══════════════════════════════════════════════════════════════════════════════
 // Render_HPBars @ 87 líneas, COMPLETO
@@ -125,19 +125,19 @@
 //
 //   void Render_HPBars(void)
 //   {
-//     if (DAT_07eaa0e0 <= 0) return;
-//     // Array: &DAT_07e11e98, stride 0x24, count=DAT_07eaa0e0
+//     if (PartyNumber <= 0) return;
+//     // Array: &PartyHPBarsTable, stride 0x24, count=PartyNumber
 //     // Offset +4: entity index (-1 = vacío)
 //     // Offset +0: HP percentage (0..10, capped a 10)
 //     for each entry (entity_idx != -1):
 //       pos = entity[entity_idx][+0x10..+0x18] (world pos)
-//       z_offset = entity[entity_idx][+300] + entity[entity_idx][+0x18] + _DAT_005524f0
+//       z_offset = entity[entity_idx][+300] + entity[entity_idx][+0x18] + GridToWorldScale
 //       Camera_ProjectWorldToScreen(&pos, &screenX, &screenY);  // World_ToScreen
 //       screenX -= 0x13;
 //       // Tooltip si mouse sobre barra:
 //       if (screenX <= mouse_x < screenX+bar_w && screenY-2 <= mouse_y < screenY+6):
 //         crt_sprintf(local_64, "HP [  %d0]");
-//         DAT_00559c7c = 0xffd2e6ff;
+//         LegacySetTextColor0 = 0xffd2e6ff;
 //         DrawText(screenX, screenY-6, local_64, ...)
 //       // Dibuja barra:
 //       GL_SetMode(1);
@@ -160,8 +160,8 @@
 //   }
 //
 //   Globals:
-//   DAT_07eaa0e0    — count de barras activas
-//   &DAT_07e11e98   — array de barras (stride 0x24)
+//   PartyNumber    — count de barras activas
+//   &PartyHPBarsTable   — array de barras (stride 0x24)
 //
 // ══════════════════════════════════════════════════════════════════════════════
 // Render_BottomHUD @ 200 líneas, COMPLETO
@@ -172,8 +172,8 @@
 //   void Render_BottomHUD(void)
 //   {
 //     GL_SetMode(1);
-//     DAT_07e11d6e = 0;
-//     DAT_00559c78 = 0xffffffff;
+//     HudTextVisibleFlag = 0;
+//     m_dwTextColor = 0xffffffff;
 //     SetBackgroundTextColor = 0xff000000;
 //     // Esquinas del HUD inferior
 //     Texture_Draw2D(0xe9, 0,   387, 108, 45, 0,0,0.844,0.703, '\x01', '\x01');  // izq
@@ -182,7 +182,7 @@
 //     // Barras de HP/MP/SP
 //     Texture_Draw2D(0xe6, 0,   432, 256, 48, 0,0,1.0,0.75, '\x01', '\x01');  // left panel
 //     // [HashTable anti-tamper block 1: ~60 líneas omitidas]
-//     crt_sprintf(local_68, "%d/%d");   // s__d__d_00559f1c (HP/MaxHP)
+//     crt_sprintf(local_68, "%d/%d");   // Fmt_HpSlashMaxHp (HP/MaxHP)
 //     // [HashTable anti-tamper block 2: ~40 líneas omitidas]
 //     Texture_Draw2D(0xe7, 256, 432, 128, 48, 0,0,1.0,0.75, '\x01', '\x01');  // center panel
 //     Texture_Draw2D(0xe8, 384, 432, 256, 48, 0,0,1.0,0.75, '\x01', '\x01');  // right panel
@@ -199,47 +199,47 @@
 // Render_ChatBox @ 54 líneas, COMPLETO
 // ══════════════════════════════════════════════════════════════════════════════
 //
-//   Renderiza la caja de chat (si DAT_00559c84 || DAT_07e11d71).
+//   Renderiza la caja de chat (si InputEnable || ImeModeFlag).
 //
 //   void Render_ChatBox(void)
 //   {
 //     glColor3f(1,1,1);
 //     gFont.SelectFont(DC, font_normal);
-//     if (DAT_00559c84 != '\0' || DAT_07e11d71 != '\0') {
+//     if (InputEnable != '\0' || ImeModeFlag != '\0') {
 //       GL_ResetBlend();
 //       Texture_Draw2D(0xf8, 186, 415, 134, 29, 0,0,0.520,0.906, ...); // input bg left
 //       Texture_Draw2D(0xf9, 320, 415, 134, 29, 0,0,0.520,0.906, ...); // input bg right
 //       GL_SetMode(1);
 //       // Font size proporcional al ancho de pantalla
-//       DAT_00559c8c = min((DAT_0056156c * 180) / 640, 0x100);
+//       LegacyInputTextWidth = min((DAT_0056156c * 180) / 640, 0x100);
 //       DrawInputCaret(0xbf, 0x1a6, 0);   // cursor en el input box de chat
-//       DAT_00559c8c = (DAT_0056156c * 50) / 640;
+//       LegacyInputTextWidth = (DAT_0056156c * 50) / 640;
 //       DrawInputCaret(0x178, 0x1a6, 1);
-//       DAT_00559c8c = 0x100;
-//       DAT_00559c78 = 0xffc8c8c8;   // gris claro
+//       LegacyInputTextWidth = 0x100;
+//       m_dwTextColor = 0xffc8c8c8;   // gris claro
 //       SetBackgroundTextColor = 0x64000000;   // transparente
-//       // Iterar historial de chat (array en &DAT_07e113e4, stride 0x100)
+//       // Iterar historial de chat (array en &ChatHistoryBuffer, stride 0x100)
 //       iVar2 = 0;
-//       lpString = &DAT_07e113e4;
-//       iVar1 = DAT_00559cc4;   // offset del mensaje más reciente
+//       lpString = &ChatHistoryBuffer;
+//       iVar1 = ChatHistoryIndex;   // offset del mensaje más reciente
 //       do {
 //         if (iVar2 != iVar1):
 //           DrawText(0x178, (iVar2-iVar1)*15 + 0x1a6, lpString, 0,1,0)
 //         lpString += 0x100;
 //         iVar2++;
 //       } while (lpString < 0x7e118e4);
-//       // Ícono de susurros activados (if m_bBlockWhisper = DAT_00559bf0)
-//       if (DAT_00559bf0 != '\0'):
+//       // Ícono de susurros activados (if m_bBlockWhisper = WhisperMuteFlag)
+//       if (WhisperMuteFlag != '\0'):
 //         Texture_Draw2D(0xef, 432, 420, 15, 16, 0,0,0.9375,1.0, ...);
 //     }
 //   }
 //
 //   Globals:
-//   DAT_00559c84   — chat input visible flag
-//   DAT_07e11d71   — chat overlay flag
-//   DAT_07e113e4   — chat history buffer (stride 0x100, ~10 entradas hasta 0x7e118e4)
-//   DAT_00559cc4   — índice del mensaje más reciente
-//   DAT_00559bf0   — m_bBlockWhisper: interruptor de susurros (F3)
+//   InputEnable   — chat input visible flag
+//   ImeModeFlag   — chat overlay flag
+//   ChatHistoryBuffer   — chat history buffer (stride 0x100, ~10 entradas hasta 0x7e118e4)
+//   ChatHistoryIndex   — índice del mensaje más reciente
+//   WhisperMuteFlag   — m_bBlockWhisper: interruptor de susurros (F3)
 //   0xf8/0xf9     → background del chat input box
 //   0xef          → ícono de desconexión
 //
@@ -251,42 +251,42 @@
 //
 //   void Render_MacroTimer(void)
 //   {
-//     // Barra de macro activo (DAT_07e11d7c > 0)
-//     if (0 < DAT_07e11d7c) {
+//     // Barra de macro activo (MacroCooldown > 0)
+//     if (0 < MacroCooldown) {
 //       iVar2 = Screen_GetWidth();
-//       iVar5 = DAT_07e11d7c * 50;   // progress en pixels
-//       fVar1 = ((float)iVar2 - _DAT_00552598) * 0.5f;
+//       iVar5 = MacroCooldown * 50;   // progress en pixels
+//       fVar1 = ((float)iVar2 - 50.0f) * 0.5f;
 //       GL_SetMode(1);
-//       DrawText(ftol(), 0x188, "Macro Time", 0,1,0);   // s_Macro_Time_00559f30
+//       DrawText(ftol(), 0x188, "Macro Time", 0,1,0);   // Txt_MacroTime
 //       FUN_004bbdd0(fVar1, 404.0, 50.0, 2.0, (float)(iVar5/100), '\0', '\x01');
 //       // FUN_004bbdd0 = DrawProgressBar(x, y, max_w, h, pct, ?, filled)
 //     }
 //     glColor3f(1,1,1);
 //
-//     // Notificación de skill (DAT_07e11d8c > 0)
-//     if (0 < DAT_07e11d8c) {
+//     // Notificación de skill (SkillNotifyType > 0)
+//     if (0 < SkillNotifyType) {
 //       DVar3 = GetTickCount();
-//       if (DVar3 - DAT_07e11d90 > 30000):   // expirado (30s)
-//         DAT_07e11d8c = 0; return;
+//       if (DVar3 - SkillNotifyStartTick > 30000):   // expirado (30s)
+//         SkillNotifyType = 0; return;
 //       GL_ResetBlend();
 //       GL_SetMode('\0');
 //       SetBackgroundTextColor = 0x80000000;
-//       DAT_00559c78 = 0xffff8080;   // rojo claro
+//       m_dwTextColor = 0xffff8080;   // rojo claro
 //       // Skill name por índice (0..3 y 8+: &DAT_07d589f8, 4..7: &DAT_07d65e14, stride 300)
-//       if (DAT_07e11d8c < 4 || DAT_07e11d8c > 7):
-//         pCVar4 = &DAT_07d589f8 + DAT_07e11d8c * 300;
+//       if (SkillNotifyType < 4 || SkillNotifyType > 7):
+//         pCVar4 = &DAT_07d589f8 + SkillNotifyType * 300;
 //       else:
-//         pCVar4 = &DAT_07d65e14 + DAT_07e11d8c * 300;
+//         pCVar4 = &DAT_07d65e14 + SkillNotifyType * 300;
 //       // Mostrar "SkillName (%d)" con segundos restantes
-//       Platform::TextFormat(local_100, pCVar4, 30 - (DVar3-DAT_07e11d90)/1000);
+//       Platform::TextFormat(local_100, pCVar4, 30 - (DVar3-SkillNotifyStartTick)/1000);
 //       DrawText(10, 0x174, local_100, 0,1,0);
 //     }
 //   }
 //
 //   Globals:
-//   DAT_07e11d7c   — macro timer restante (decrementado en Game_MainLoop)
-//   DAT_07e11d8c   — skill notification type (0=ninguno)
-//   DAT_07e11d90   — tick cuando empezó la notificación
+//   MacroCooldown   — macro timer restante (decrementado en Game_MainLoop)
+//   SkillNotifyType   — skill notification type (0=ninguno)
+//   SkillNotifyStartTick   — tick cuando empezó la notificación
 //   DAT_07d589f8   — tabla de nombres skill (stride 300, grupos 0-3 y 8+)
 //   DAT_07d65e14   — tabla de nombres skill (stride 300, grupos 4-7)
 //   FUN_004bbdd0   → DrawProgressBar(x,y,max_w,h,pct,?,filled)
@@ -311,7 +311,7 @@
 //           pfVar5 = (float*)(piVar7+5);   // posición fija
 //         else:
 //           pos.x = entity[+0x10]; pos.y = entity[+0x14];
-//           pos.z = entity[+300] + entity[+0x18] + _DAT_0055290c;
+//           pos.z = entity[+300] + entity[+0x18] + 60.0f;
 //         Camera_ProjectWorldToScreen(pfVar5, &screenX, &screenY);  // World_ToScreen
 //         FloatingLabel_MeasureText((LPCSTR)(piVar7-0x8d));       // MeasureText(str)
 //         piVar7[1] = screenX - (piVar7[3]*640/screen_w)/2;  // X centrado
@@ -323,7 +323,7 @@
 //     // dos loops anidados: si overlap horizontal y vertical → mover el más nuevo
 //
 //     // Pasada 3: dibujar
-//     piVar7 = &DAT_07e01924;
+//     piVar7 = &LegacyBubblePoolOff22c;
 //     do {
 //       if (piVar7[-0x81] > 0 || *piVar7 > 0):
 //         FUN_00480e00(piVar7[3], piVar7[4], (byte*)(piVar7-0x8b));  // DrawFloatLabel(x,y,str)
@@ -349,41 +349,41 @@
 //   {
 //     glColor3f(1,1,1);
 //     GL_ResetBlend();
-//     DAT_00559c78 = 0xffff8080;
+//     m_dwTextColor = 0xffff8080;
 //
-//     // Botón 1 (DAT_07eaa124 != '\0')
-//     if (DAT_07eaa124 != '\0') {
+//     // Botón 1 (GuildCreatorOpened != '\0')
+//     if (GuildCreatorOpened != '\0') {
 //       FUN_004f0480(0x1c2, 0);   // PrepareButton1(state)
 //       glColor3f(1,1,1);
-//       fVar1 = (float)DAT_07ea5b1c + _DAT_005524fc;
-//       fVar2 = (float)DAT_07ea5b20 + _DAT_00552ca4;
+//       fVar1 = (float)HudBtn1PosX + 20.0f;
+//       fVar2 = (float)HudBtn1PosY + 350.0f;
 //       Texture_Draw2D(0x118, fVar1, fVar2, 70, 21, 0,0,2.1875,0.656, ...); // background
 //       // Hit-test mouse → tex 0xf1 (hover) o 0xf2 (normal)
 //       iVar4 = mouse_in_rect(fVar1,fVar2,70,21) ? 0xf2 : 0xf1;
 //       Texture_Draw2D(iVar4, fVar1, fVar2, 70, 21, 0,0,0.547,0.656, ...);
 //       // Botón offset alternativo
-//       fVar1 += _DAT_005524f0;
+//       fVar1 += GridToWorldScale;
 //       Texture_Draw2D(0x118, fVar1, fVar2, 70, 21, ...);
 //       iVar4 = mouse_in_rect(...) ? 0xf4 : 0xf3;
 //       Texture_Draw2D(iVar4, ...);
 //     }
 //
-//     // Botón ícono pequeño 1 (DAT_07eaa114 != '\0')
-//     if (DAT_07eaa114 != '\0') {
+//     // Botón ícono pequeño 1 (GuildOpened != '\0')
+//     if (GuildOpened != '\0') {
 //       FUN_004f0810(0x1c2, 0);   // PrepareIconButton1(state)
 //       glColor3f(1,1,1);
-//       fVar1 = (float)DAT_07e91788 + _DAT_00552464;
-//       fVar2 = (float)DAT_07e91784 + _DAT_0055246c;
+//       fVar1 = (float)GuildListStartXStorage + 25.0f;
+//       fVar2 = (float)GuildListStartYStorage + 395.0f;
 //       Texture_Draw2D(0x118, fVar1, fVar2, 24, 24, 0,0,0.75,0.75, ...);
 //       // Tooltip si hover: DAT_07d39ef4, posición (ftol()-13, ftol())
 //       if (mouse_in_rect(fVar1,fVar2,24,24)):
 //         DrawText(ftol(), ftol()-13, &DAT_07d39ef4, ...);
 //     }
 //
-//     // Botón ícono pequeño 2 (DAT_07eaa116 != '\0')
-//     if (DAT_07eaa116 != '\0') {
+//     // Botón ícono pequeño 2 (CharacterOpened != '\0')
+//     if (CharacterOpened != '\0') {
 //       FUN_004ecc60(0x1c2, 0);   // PrepareIconButton2(state)
-//       // similar al anterior pero con DAT_07ea982c/9830 y tooltip DAT_07d3a14c
+//       // similar al anterior pero con CharacterInfoStartXStorage/9830 y tooltip DAT_07d3a14c
 //     }
 //
 //     FUN_004ef160(0x1c2, 0);   // RenderSkillSlot_0(state)
@@ -394,17 +394,17 @@
 //     FUN_004f3170();           // RenderSkillSlot_5()
 //     FUN_004f3c50();           // RenderSkillSlot_6()
 //     FUN_004f46a0();           // RenderSkillSlot_7()
-//     FUN_00403f30(DAT_00583d8c); // — (vtable?)
+//     Quest_RenderDispatch(g_csQuest); // — (vtable?)
 //     FUN_004f5570();           // RenderSkillSlot_8?
 //   }
 //
 //   Globals:
-//   DAT_07eaa124   — flag botón 1 visible
-//   DAT_07eaa114   — flag icono 1 visible
-//   DAT_07eaa116   — flag icono 2 visible
-//   DAT_07ea5b1c/20 — posición X/Y botón 1
-//   DAT_07e91788/84 — posición X/Y icono 1
-//   DAT_07ea982c/30 — posición X/Y icono 2
+//   GuildCreatorOpened   — flag botón 1 visible
+//   GuildOpened   — flag icono 1 visible
+//   CharacterOpened   — flag icono 2 visible
+//   HudBtn1PosX/20 — posición X/Y botón 1
+//   GuildListStartXStorage/84 — posición X/Y icono 1
+//   CharacterInfoStartXStorage/30 — posición X/Y icono 2
 //   DAT_07d39ef4   — tooltip string icono 1
 //   DAT_07d3a14c   — tooltip string icono 2
 //   0x118         → textura background botones
@@ -424,26 +424,26 @@
 //     glPushMatrix();
 //     glLoadIdentity();
 //     GL_SetViewport(0, 0, DAT_0056156c, DAT_00561570);    // gluPerspective(fov, aspect, ...)
-//     GL_SetPerspective(1.0, DAT_0056156c/DAT_00561570, DAT_0056154c, DAT_00561550); // near/far
+//     GL_SetPerspective(1.0, DAT_0056156c/DAT_00561570, CameraViewNearStorage, CameraViewFarStorage); // near/far
 //     glMatrixMode(GL_MODELVIEW);
 //     glPushMatrix();
 //     glLoadIdentity();
 //     GL_GetModelViewMatrix(&CameraMatrix);   // LoadCameraMatrix(mat_4x4)
 //     GL_EnableDepthTest();                // EnableDepthTest()
 //     GL_EnableDepthWrites();                // EnableDepthWrite()
-//     FUN_00403150(DAT_00583d8c, '\x01', '\0');  // ObjPool_SetFlag(pool, true, false)
+//     Quest_RenderItemList(g_csQuest, '\x01', '\0');  // ObjPool_SetFlag(pool, true, false)
 //
 //     // Según modo de vista (GoldenArcherOpenType):
 //     if (GoldenArcherOpenType == 0 || GoldenArcherOpenType == 3):
-//       FUN_004f5ce0();    // Skill_RenderEffects()
-//       if (DAT_07e91388 > 0 && DAT_07eaa13c == 0):
-//         FUN_004f6420();  // TeleportEffect_Render()
+//       Skill_RenderEffects();    // Skill_RenderEffects()
+//       if (ItemPickedFlag > 0 && ItemActionMode == 0):
+//         TeleportEffect_Render();  // TeleportEffect_Render()
 //       // Renderizar skill hotbar (items con cooldown):
 //       for i in 0..N:
 //         iVar1 = Item_FindQuickSlotByCategory(i);   // GetHotbarItem(i)
 //         if iVar1 != -1:
 //           RenderItem3D((float)local_14, 454.0, 20.0, 20.0,
-//                        (&DAT_07ea8410)[iVar1*0x22], (&DAT_07ea8414)[iVar1*0x11], 0, '\0');
+//                        (&LegacyInventoryItems)[iVar1*0x22], (&LegacyInventoryLevels)[iVar1*0x11], 0, '\0');
 //                        // DrawItemIcon(x, y, w, h, item_id, count, ?, ?)
 //         local_14 += 0x1f;   // siguiente slot (X+31)
 //       // X inicial = 0xd0 (208)
@@ -452,7 +452,7 @@
 //
 //     // Reset camera para 2D
 //     glLoadIdentity();
-//     glTranslatef(-_DAT_083a42d4, -_DAT_083a42d8, -_DAT_083a42dc);
+//     glTranslatef(-CameraPositionX, -CameraPositionY, -CameraPositionZ);
 //     GL_GetModelViewMatrix(&CameraMatrix);
 //     Camera_BuildMouseRay(100, 100, local_c);   // Camera_SetupHUD(x,y,out)
 //     glPopMatrix();
@@ -464,17 +464,17 @@
 //   CameraMatrix   — camera matrix (4×4 floats)
 //   DAT_0056156c   — screen_width
 //   DAT_00561570   — screen_height
-//   DAT_0056154c   — near_clip
-//   DAT_00561550   — far_clip
-//   DAT_083a42d4/d8/dc — camera world position (X/Y/Z)
+//   CameraViewNearStorage   — near_clip
+//   CameraViewFarStorage   — far_clip
+//   CameraPositionXBits/d8/dc — camera world position (X/Y/Z)
 //   GoldenArcherOpenType   — view mode (0=normal, 3=?, otras=PvP?)
-//   DAT_07e91388   — teleport effect active
-//   DAT_07eaa13c   — teleport flag
-//   DAT_07ea8410   — hotbar item array (stride 0x22*2 = item_id)
-//   DAT_07ea8414   — hotbar count array (stride 0x11*4)
+//   ItemPickedFlag   — teleport effect active
+//   ItemActionMode   — teleport flag
+//   LegacyInventoryItems   — hotbar item array (stride 0x22*2 = item_id)
+//   LegacyInventoryLevels   — hotbar count array (stride 0x11*4)
 //   RenderItem3D   → DrawItemIcon(x,y,w,h,item_id,count,?,shadow)
-//   FUN_004f5ce0   → Skill_RenderEffects()
-//   FUN_004f6420   → TeleportEffect_Render()
+//   Skill_RenderEffects   → Skill_RenderEffects()
+//   TeleportEffect_Render   → TeleportEffect_Render()
 //   Item_FindQuickSlotByCategory   → GetHotbarItem(slot_idx) → item_idx
 //   GL_GetModelViewMatrix   → LoadCameraMatrix(mat_ptr)
 //   GL_EnableDepthTest   → EnableDepthTest()
@@ -490,40 +490,40 @@
 //   int Render_CharPartyInfo(void)
 //   {
 //     int   retY  = 0xf;
-//     float hpOff = (DAT_07eaa0e0 > 0) ? 50.0f : 0.0f;  // margen si hay HP bars
+//     float hpOff = (PartyNumber > 0) ? 50.0f : 0.0f;  // margen si hay HP bars
 //
 //     // Guard: jugador en modo party  (entity[0x2b8] ∈ 0x330..0x333)
-//     if (0x32f < *(short*)(DAT_07abf5d8 + 0x2b8) < 0x334) {
+//     if (0x32f < *(short*)(Hero + 0x2b8) < 0x334) {
 //
 //       int   sw     = GetScreenWidth();   // Screen_GetWidth()
-//       float base_x = ((float)sw - _DAT_00552598) - hpOff - _DAT_00552834;
+//       float base_x = ((float)sw - 50.0f) - hpOff - 15.0f;
 //
 //       // [HashTable anti-tamper ~60 líneas — omitido]
 //
-//       byte bHP = *(byte*)(DAT_07cf1ffc + 0x452);   // HP% del líder (0..255)
+//       byte bHP = *(byte*)(CharacterMachinePtr + 0x452);   // HP% del líder (0..255)
 //       GL_SetBlendSrcOver('\x01');   // SetBlendMode(alpha)
 //
 //       // Icono/nombre del líder según sub-modo de party:
-//       int subMode = *(short*)(DAT_07abf5d8 + 0x2b8);
+//       int subMode = *(short*)(Hero + 0x2b8);
 //       char* pcName = (subMode == 0x332) ? &DAT_07d43d28 :
 //                      (subMode == 0x333) ? &DAT_07d43bfc :
-//                      (char*)((subMode - 400) * 0x40 + DAT_07d78068);  // sprite
+//                      (char*)((subMode - 400) * 0x40 + ItemAttributeBase);  // sprite
 //
 //       // Platform::TextLength(name) + GetTextExtentPointA(g_hDC, name, len, &sz)
 //       // Text_MeasureBox(ftol()+0x32, ftol(), name, 0, '\0', 0)
 //       //   → DrawText(x+50, y, name, shadow=0, italic=0, flags=0)
 //
-//       // FUN_004bbdd0(base_x, (bHP*50/255)+_DAT_00552664, 50.0, 2.0, pct, 0, 1)
+//       // FUN_004bbdd0(base_x, (bHP*50/255)+12.0f, 50.0, 2.0, pct, 0, 1)
 //       //   → DrawHPBar(x, y_scaled, w=50, h=2, fill%, mirror=0, colored=1)
 //
 //       retY = (int)lVar18 + 0x17;   // Y = base + 23 (para name tags encima)
 //     }
 //
-//     // Bloque secundario: barra de party global (DAT_05826d24 = nro de miembros)
-//     if (DAT_05826d24 != 0) {
+//     // Bloque secundario: barra de party global (SummonLife = nro de miembros)
+//     if (SummonLife != 0) {
 //       int sw2     = GetScreenWidth();
-//       int bar_w   = DAT_05826d24 * 0x32;   // member_count × 50
-//       float base2 = ((float)sw2 - _DAT_00552598) - _DAT_0055297c;
+//       int bar_w   = SummonLife * 0x32;   // member_count × 50
+//       float base2 = ((float)sw2 - 50.0f) - 150.0f;
 //       GL_SetBlendSrcOver('\x01');
 //       // Text_MeasureBox(ftol()+0x32, 4, &DAT_07d43e54, 0, '\0', 0)  // label "Party"
 //       // FUN_004bbdd0(base2, 16.0, 50.0, 2.0, bar_w/100, 0, 1)    // barra HP party
@@ -532,14 +532,14 @@
 //   }
 //
 //   Globals:
-//   DAT_07abf5d8          — player entity ptr (slot 0)
-//   DAT_07eaa0e0          — HP bars visibles (>0 → agregar offset)
-//   DAT_07cf1ffc + 0x452  — HP byte del líder de party (0..255)
-//   DAT_05826d24          — cantidad de miembros de party
-//   _DAT_00552598         — ancho del panel
-//   _DAT_00552834         — margen extra panel
-//   _DAT_00552664         — Y base de la barra HP
-//   _DAT_0055297c         — margen X barra secundaria
+//   Hero          — player entity ptr (slot 0)
+//   PartyNumber          — HP bars visibles (>0 → agregar offset)
+//   CharacterMachinePtr + 0x452  — HP byte del líder de party (0..255)
+//   SummonLife          — cantidad de miembros de party
+//   50.0f         — ancho del panel
+//   15.0f         — margen extra panel
+//   12.0f         — Y base de la barra HP
+//   150.0f         — margen X barra secundaria
 //   DAT_07d43d28          — nombre para modo guild (subMode 0x332)
 //   DAT_07d43bfc          — nombre para modo trade (subMode 0x333)
 //   DAT_07d43e54          — label "Party"
@@ -556,24 +556,24 @@
 //
 //   void __cdecl Render_CharNameTags(int param_1)
 //   {
-//     // [Anti-tamper HashTable sobre DAT_07eaa11b — ~25 líneas, omitido]
-//     char antiFlag = DAT_07eaa11b;
+//     // [Anti-tamper HashTable sobre TradeOpened — ~25 líneas, omitido]
+//     char antiFlag = TradeOpened;
 //
 //     if (antiFlag != '\x01') {   // '\x01' = bloqueado por anti-tamper
 //
-//       float hpOff  = (DAT_07eaa0e0 > 0) ? 50.0f : 0.0f;
+//       float hpOff  = (PartyNumber > 0) ? 50.0f : 0.0f;
 //       glColor3f(1.0, 1.0, 1.0);
 //       GL_SetBlendSrcOver('\x01');        // SetBlendMode(alpha)
 //       int sw      = GetScreenWidth();
-//       float rightX = (float)sw - hpOff - _DAT_00552488;  // límite X derecho
+//       float rightX = (float)sw - hpOff - 10.0f;  // límite X derecho
 //       float idx    = 0.0f;    // offset de byte en lista on-screen (stride 0x44)
 //       int   textY  = 0;       // desplazamiento Y acumulado entre textos
 //
 //       // Loop sobre las 12 ranuras on-screen (0x330 / 0x44 = 12 entidades máx)
 //       do {
 //         // [Anti-tamper HashTable por ranura — omitido]
-//         // array on-screen: DAT_07cf1ffc + 0x218  (stride 0x44)
-//         short entType = *(short*)((int)idx + 0x218 + (int)DAT_07cf1ffc);
+//         // array on-screen: CharacterMachinePtr + 0x218  (stride 0x44)
+//         short entType = *(short*)((int)idx + 0x218 + (int)CharacterMachinePtr);
 //
 //         if (entType == -1) {
 //           // Ranura vacía: HashTable cleanup, continúa
@@ -582,7 +582,7 @@
 //           if (entType != 0x87 && entType != 0x8f &&
 //               !(0x1a0 <= entType && entType <= 0x1a3)) {
 //
-//             int level = CalcMaxDurability(psVar1, entType*0x40+DAT_07d78068, field>>3&0xf);
+//             int level = CalcMaxDurability(psVar1, entType*0x40+ItemAttributeBase, field>>3&0xf);
 //             level &= 0xffff;
 //             if (*psVar1 == 0x1aa) level = 200;  // GM: nivel forzado a 200
 //
@@ -590,18 +590,18 @@
 //             byte hp = entity[+0xd];
 //             if (hp == 0) {
 //               entity[+0x20] = 8;           // muerto
-//               DAT_00559c78  = 0x800a0aff;  // rojo oscuro
+//               m_dwTextColor  = 0x800a0aff;  // rojo oscuro
 //               SetBackgroundTextColor  = 0x800a0aff;
 //             } else {
 //               float hpF = (float)hp;
-//               if      (hpF > (float)level * _DAT_005526e4) { entity[+0x20]=7; DAT_00559c78=0xff0a0aff; }  // rojo
-//               else if (hpF > (float)level * _DAT_005528b8) { entity[+0x20]=6; DAT_00559c78=0xff009cff; }  // naranja
-//               else if (hpF > (float)level * _DAT_00552504) { entity[+0x20]=5; DAT_00559c78=0xff00e4ff; }  // verde
+//               if      (hpF > (float)level * 0.2f) { entity[+0x20]=7; m_dwTextColor=0xff0a0aff; }  // rojo
+//               else if (hpF > (float)level * 0.3f) { entity[+0x20]=6; m_dwTextColor=0xff009cff; }  // naranja
+//               else if (hpF > (float)level * HalfScale) { entity[+0x20]=5; m_dwTextColor=0xff00e4ff; }  // verde
 //               // else hp muy alto → sin cambio de color
 //             }
 //
 //             // Formatear nombre + HP:  crt_sprintf(buf, "%s %d/%d", name, hp, maxhp)
-//             // DAT_07e11d6e = 1  (flag texto visible)
+//             // HudTextVisibleFlag = 1  (flag texto visible)
 //             // Text_MeasureBox(ftol()+textY, ftol(), buf, 0, '\0', 0)
 //             textY += 0x0c;   // siguiente nombre 12px más abajo
 //           }
@@ -614,16 +614,16 @@
 //   }
 //
 //   Globals:
-//   DAT_07eaa11b          — anti-tamper flag ('\x01' → skip toda la función)
-//   DAT_07eaa0e0          — count HP bars (>0 → offset 50px desde derecha)
-//   DAT_07cf1ffc + 0x218  — lista entidades on-screen (stride 0x44, 12 slots)
+//   TradeOpened          — anti-tamper flag ('\x01' → skip toda la función)
+//   PartyNumber          — count HP bars (>0 → offset 50px desde derecha)
+//   CharacterMachinePtr + 0x218  — lista entidades on-screen (stride 0x44, 12 slots)
 //   entity[+0xd]          — HP byte actual (0 = muerto)
 //   entity[+0x20]         — estado visual del name tag (5..8)
-//   DAT_07e11d6e          — flag "texto visible"
-//   DAT_00559c78          — color texto ABGR
+//   HudTextVisibleFlag          — flag "texto visible"
+//   m_dwTextColor          — color texto ABGR
 //   SetBackgroundTextColor          — blend color
-//   _DAT_00552488         — margen X derecho
-//   _DAT_005526e4/_DAT_005528b8/_DAT_00552504 — umbrales HP (alto/medio/bajo)
+//   10.0f         — margen X derecho
+//   0.2f/0.3f/HalfScale — umbrales HP (alto/medio/bajo)
 //   Tipos excluidos de name tags: 0x87=NPC-A, 0x8f=NPC-B, 0x1a0..0x1a3=map objects
 //   GetScreenWidth          → Screen_GetWidth()
 //   CalcMaxDurability          → GetEntityLevel(ptr, spriteData, field) → int
@@ -646,15 +646,15 @@
 //       GL_SetBlendSrcOver('\0');        // SetBlendMode(none)
 //       glColor3f(1.0, 1.0, 1.0);
 //       SetBackgroundTextColor = 0;
-//       DAT_00559c78 = 0xff0096ff; // azul inicial
+//       m_dwTextColor = 0xff0096ff; // azul inicial
 //
 //       // Para tipos 1 (dungeon), 2 (PvP) y 5 (especial):
-//       if ((DAT_07e11d88 < 3 || DAT_07e11d88 == 5) && DAT_00559ccc > 0) {
+//       if ((DAT_07e11d88 < 3 || DAT_07e11d88 == 5) && LegacyMatchTime > 0) {
 //
 //         // Línea 1: "jugadores actuales / máximo" (solo si hay límite)
-//         if (DAT_00559cd0 != 0xffff) {
+//         if (LegacyMaxKillMonster != 0xffff) {
 //           LPCSTR fmt = (DAT_07e11d88 == 5) ? &DAT_07d693fc : &DAT_07d691a4;
-//           Platform::TextFormat(local_100, fmt, DAT_00559cd4, DAT_00559cd0);
+//           Platform::TextFormat(local_100, fmt, LegacyKillMonster, LegacyMaxKillMonster);
 //           gFont.SelectFont(g_hDC, DAT_055ca010);        // fuente bold
 //           FUN_00514270(0x23a, 0x159, local_100);    // DrawTextCenter(570, 345, str)
 //         }
@@ -665,15 +665,15 @@
 //         FUN_00514270(0x23a, (int)__ftol(), local_100);
 //
 //         // Calcular y construir string "MM:SS" mediante strcat inline:
-//         int mins = DAT_00559ccc / 60;
-//         int secs = DAT_00559ccc - mins * 60;
-//         Platform::TextFormat(local_100, s___2d___00559f3c, mins);   // "%2d:"
+//         int mins = LegacyMatchTime / 60;
+//         int secs = LegacyMatchTime - mins * 60;
+//         Platform::TextFormat(local_100, Txt_DashPadR, mins);   // "%2d:"
 //         if (secs >= 0) {
-//           Platform::TextFormat(local_10c, s___2d_00559f44, secs);   // "%2d"
+//           Platform::TextFormat(local_10c, Txt_Dash, secs);   // "%2d"
 //           // strcat(local_100, local_10c) — inline strlen+memcpy
 //         }
 //
-//         if (mins < 5)  DAT_00559c78 = 0xff2020ff;    // rojo (urgente, <5 min)
+//         if (mins < 5)  m_dwTextColor = 0xff2020ff;    // rojo (urgente, <5 min)
 //
 //         if (mins < 15) {
 //           // Parpadeo de segundos: (int)(ftol() % 60)
@@ -692,17 +692,17 @@
 //   Globals:
 //   DAT_07e11d88   — tipo de overlay (0=off, 1=dungeon, 2=PvP, 5=especial)
 //   World   — World (10..16 = loading overlay activo)
-//   DAT_00559ccc   — segundos restantes (int)
-//   DAT_00559cd0   — límite jugadores (0xffff = sin límite)
-//   DAT_00559cd4   — jugadores actuales
+//   LegacyMatchTime   — segundos restantes (int)
+//   LegacyMaxKillMonster   — límite jugadores (0xffff = sin límite)
+//   LegacyKillMonster   — jugadores actuales
 //   DAT_07d691a4   — format "current/max" para tipos 1/2
 //   DAT_07d693fc   — format para tipo 5
 //   DAT_07d692d0   — format timer total
 //   DAT_055ca010   — HFONT bold
 //   DAT_055ca014   — HFONT bold2 (grande, para MM:SS final)
-//   s___2d___00559f3c — "%2d:"  (minutos)
-//   s___2d_00559f44   — "%2d"   (segundos)
-//   s_____2d_00559f4c — ":%2d"  (segundos parpadeo)
+//   Txt_DashPadR — "%2d:"  (minutos)
+//   Txt_Dash   — "%2d"   (segundos)
+//   Txt_DashPadL — ":%2d"  (segundos parpadeo)
 //   FUN_00514270   → DrawTextCenter(x, y, str)
 //   GL_ResetState   → GL_ResetBlend()
 //   GL_SetBlendSrcOver   → SetBlendMode(mode)

@@ -12,7 +12,7 @@ bool __cdecl CheckTarget(CHARACTER* c) {
     // Otherwise: do terrain ray pick to find target position.
     // c = entity base pointer (character struct)
 
-    const std::uintptr_t base = DAT_07abf5d0;
+    const std::uintptr_t base = CharactersClient;
     int selIdx = SelectedCharacter;  // SelectedCharacter
 
     if (selIdx != -1) {
@@ -45,11 +45,11 @@ bool __cdecl CheckTarget(CHARACTER* c) {
     // Terrain pick path
     RenderTerrain('\x01');  // RenderTerrain(true) — init ray cast
 
-    int gridX = (int)*(float*)&DAT_080ab288;     // SelectXF
-    int gridY = (int)*(float*)&DAT_080ab28c;     // SelectYF
+    int gridX = (int)*(float*)&SelectXF;     // SelectXF
+    int gridY = (int)*(float*)&SelectYF;     // SelectYF
     bool hit = (bool)RenderTerrainTile(
-        *(int*)&DAT_080ab288,  // SelectXF as int (float bits)
-        *(int*)&DAT_080ab28c,  // SelectYF as int (float bits)
+        *(int*)&SelectXF,  // SelectXF as int (float bits)
+        *(int*)&SelectYF,  // SelectYF as int (float bits)
         // 0049CAE0: RenderTerrainTile(SelectXF, SelectYF,
         //                             (int)SelectXF, (int)SelectYF, ...).
         // The previous port inverted these integer tile indices, so this
@@ -58,11 +58,11 @@ bool __cdecl CheckTarget(CHARACTER* c) {
     );
 
     if (hit) {
-        AsCharacter(c)->TargetPosition[0] = DAT_083a4130;
-        AsCharacter(c)->TargetPosition[1] = DAT_083a4134;
-        AsCharacter(c)->TargetPosition[2] = DAT_083a4138;
-        TargetX = (DWORD)(int)(DAT_083a4130 * 0.01f);
-        TargetY = (DWORD)(int)(DAT_083a4134 * 0.01f);
+        AsCharacter(c)->TargetPosition[0] = TerrainPickPosX;
+        AsCharacter(c)->TargetPosition[1] = TerrainPickPosY;
+        AsCharacter(c)->TargetPosition[2] = TerrainPickPosZ;
+        TargetX = (DWORD)(int)(TerrainPickPosX * 0.01f);
+        TargetY = (DWORD)(int)(TerrainPickPosY * 0.01f);
         return true;
     }
     return false;

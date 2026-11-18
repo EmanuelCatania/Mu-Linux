@@ -16,7 +16,7 @@ struct PathQueue {
     PathNode* Root;
 };
 
-// IDA: contexto de PATH (0x424 bytes, DAT_05826df4). Los mapas se reservan en
+// IDA: contexto de PATH (0x424 bytes, PathFindContext). Los mapas se reservan en
 // PathFinder_ResetContext. La vtable de la cola no se conserva: sólo tenía GetCount.
 struct PathContext {
     int Width;

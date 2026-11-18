@@ -4,7 +4,7 @@
 
 struct CWaveFile   // 0x2C bytes
 {
-    void**   vtable;           // +0x00  → PTR_FUN_005524c0
+    void**   vtable;           // +0x00  → Vtbl_CWaveFile
     HMMIO    hmmio;            // +0x04
     WORD     wFormatTag;       // +0x08  1=PCM
     WORD     nChannels;        // +0x0A

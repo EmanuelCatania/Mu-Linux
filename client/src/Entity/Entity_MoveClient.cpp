@@ -15,7 +15,7 @@ void __stdcall MoveCharactersClient(void) {
     // Phase 3: Call MoveCharacterClient for each entity, then MoveBlurs
 
     // Phase 1: Clear walk-occupied bit from terrain
-    char* terrainWall = (char*)&DAT_0838bc70;
+    char* terrainWall = (char*)&TerrainWallFlags;
     for (int i = 0; i < 0x10000; i++) {
         if ((terrainWall[i] & 2) == 2) {
             terrainWall[i] = terrainWall[i] - 2;
@@ -24,7 +24,7 @@ void __stdcall MoveCharactersClient(void) {
 
     // Phase 2: Per-entity terrain flag update
     int offset = 0;
-    char* entBase = (char*)(uintptr_t)DAT_07abf5d0;
+    char* entBase = (char*)(uintptr_t)CharactersClient;
     do {
         char* ent = entBase + offset;
         // entity alive check: *(char *)&AsCharacter(ent)->Object.Live != 0, *(char *)&AsCharacter(ent)->Dead == 0, *(char *)&AsCharacter(ent)->Object.Kind != 8
@@ -57,14 +57,14 @@ void __stdcall MoveCharactersClient(void) {
     MoveBlurs();
 }
 
-// FUN_0045fae0 @ 0x0045FAE0 (~175 lines) — hash table: read 1-byte encrypted value
-unsigned char __cdecl FUN_0045fae0(DWORD ecx, unsigned char* param_1) {
+// AE_SkillRead @ 0x0045FAE0 (~175 lines) — hash table: read 1-byte encrypted value
+unsigned char __cdecl AE_SkillRead(DWORD ecx, unsigned char* param_1) {
     // 0x0045FAE0 — anti-tamper hash table: read 1-byte encrypted value
     // Original is __thiscall on the hash table object (ecx = this).
     // Looks up param_1 key in hash table, allocates+decrypts a 1-byte node,
     // writes decrypted value to *param_1, then releases the node.
     //
-    // Decryption: val = ((stored_byte - 0x23) ^ DAT_00559050) + 0xb9
+    // Decryption: val = ((stored_byte - 0x23) ^ LegacyPacketXorKey16) + 0xb9
     //
     // anti-tamper hash table — skipped
     // Since the hash table encrypt/decrypt is anti-tamper obfuscation and not real game logic,

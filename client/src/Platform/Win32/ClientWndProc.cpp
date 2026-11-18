@@ -35,12 +35,12 @@ void Input_OnWindowMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
 //   Recarga uMsg @ 0x0041971a y despacha de nuevo:
 //   uMsg == WM_LBUTTONUP  (0x202) @ 0x00419bf4 — suelta click
 //   uMsg == WM_IME_COMPOSITION (0x10F) @ 0x0041a7bd — Korean DBCS chat input:
-//     DAT_07e11cec[DAT_07e11d78 * 4]   = high byte
-//     DAT_07e11ced[DAT_07e11d78 * 4]   = low byte
-//     DAT_07e11cee[DAT_07e11d78 * 4]   = 0 (null terminator)
+//     DbcsHighBytes[ActiveInputIndex * 4]   = high byte
+//     DAT_07e11ced[ActiveInputIndex * 4]   = low byte
+//     DAT_07e11cee[ActiveInputIndex * 4]   = 0 (null terminator)
 //   uMsg == WM_MOUSEMOVE  (0x200) @ 0x00419816 — normaliza coords a 640×480:
-//     g_MouseX = LOWORD(lParam) * 640 / g_ScreenW  → DAT_083a427c
-//     g_MouseY = HIWORD(lParam) * 480 / g_ScreenH  → DAT_083a4278
+//     g_MouseX = LOWORD(lParam) * 640 / g_ScreenW  → MouseX
+//     g_MouseY = HIWORD(lParam) * 480 / g_ScreenH  → MouseY
 //   uMsg == WM_LBUTTONDOWN (0x201) @ 0x00419859
 //   uMsg - 0x203 in [0..0x7F] → jump table 2 @ 0x41DD88:
 //     WM_RBUTTONDOWN(204), WM_RBUTTONUP(205), WM_MOUSEWHEEL(20A), etc.
@@ -57,10 +57,10 @@ void Input_OnWindowMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
 //     si g_bGameServerConnected != 0 (conectado): envía keep-alive 0xC1/0x0E
 //
 // ── GLOBALS CLAVE ────────────────────────────────────────────────────────────
-//   DAT_083a427c = g_MouseX  (0..639, normalizado 640×480)
-//   DAT_083a4278 = g_MouseY  (0..479)
-//   DAT_083a413c = mouse-moved flag
-//   DAT_083a4299 = flag de ventana activa (0 al desactivarse)
+//   MouseX = g_MouseX  (0..639, normalizado 640×480)
+//   MouseY = g_MouseY  (0..479)
+//   MouseLButtonPop = mouse-moved flag
+//   MouseDblClickFlag = flag de ventana activa (0 al desactivarse)
 // ─────────────────────────────────────────────────────────────────────────────
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -74,7 +74,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         // (OpenGL_Release: DirectSound, contexto OpenGL y modo de video). Sin
         // esto, al cerrar en pantalla completa el escritorio quedaba en la
         // resolución del juego.
-        DAT_055ca018 = 1;                                   // Destroy
+        AppQuitFlag = 1;                                   // Destroy
         CWsctlc_Close(reinterpret_cast<uintptr_t>(SocketClient));
         for (int buffer = 0; buffer < 420; ++buffer)
             Sound_ReleaseBuffer(buffer);
@@ -87,7 +87,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_ACTIVATE:
-        // DAT_083a4299 = (LOWORD(wParam) != WA_INACTIVE) ? 1 : 0;
+        // MouseDblClickFlag = (LOWORD(wParam) != WA_INACTIVE) ? 1 : 0;
         break;
 
     case WM_SETCURSOR:

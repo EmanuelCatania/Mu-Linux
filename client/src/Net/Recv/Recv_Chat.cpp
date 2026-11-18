@@ -30,7 +30,7 @@ void NetRecv_01(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     NetText::FromServer(cmsg, sizeof(cmsg), Msg + 5, clen);
     NetLog("NET:  → 0x01 ChatTarget ent=%d msg='%s'", entIdx, cmsg);
     if (entIdx >= 0 && entIdx < 400 && cmsg[0]) {
-        BYTE* ent = (BYTE*)(uintptr_t)DAT_07abf5d0 + (uintptr_t)entIdx * CHARACTER_STRIDE;
+        BYTE* ent = (BYTE*)(uintptr_t)CharactersClient + (uintptr_t)entIdx * CHARACTER_STRIDE;
         if (ent[0] != 0) {
             // CreateChat(nombre, texto, entidad, 0, -1) — igual que el
             // path de NPC hover (RenderMonsterName).
@@ -49,7 +49,7 @@ void NetRecv_02(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // CommandManager::GCPostMessageGold llegan por este opcode con Size ~30.
     // PORT FIEL de IDA `ReceiveWhisper` @ 0x4278F0 (identificada por
     // disasm: la función sin nombre entre ReceiveChat y ReceiveNotice):
-    //     a0 ac 1d e1 07  mov al, byte_7E11DAC   ; m_bBlockWhisper
+    //     a0 ac 1d e1 07  mov al, WhisperBlockFlag   ; m_bBlockWhisper
     //     84 c0 / 0f 85   test+jnz → descarta el mensaje
     //     8d 4a 03        lea ecx, [edx+3]       ; name  = buf+3
     //     8d 72 0d        lea esi, [edx+0Dh]     ; msg   = buf+13 (0.97.40: +43)
@@ -59,7 +59,7 @@ void NetRecv_02(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // Canal **0** (como IDA) → negro sobre fondo celeste (0x9632C8FF), el look
     // clásico de whisper.
     const int MSG = 3 + (int)NetText::CharacterNameSize;
-    if (Size >= MSG + 1 && DAT_07e11dac == 0) {   // m_bBlockWhisper (toggle F3)
+    if (Size >= MSG + 1 && WhisperBlockFlag == 0) {   // m_bBlockWhisper (toggle F3)
         char wname[NetText::CharacterNameSize + 1] = {0};
         char wmsg[NetText::ChatMessageSize + 1] = {0};
         NetText::FromServer(wname, sizeof(wname), Msg + 3, NetText::CharacterNameSize);
@@ -69,7 +69,7 @@ void NetRecv_02(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         NetText::FromServer(wmsg, sizeof(wmsg), Msg + MSG, wlen);
         // IDA ProtocolCore case 2: RegistWhisperID(10, strID) — con el
         // heroe de nivel < 10 anota al remitente para que despues se le
-        // pueda contestar (ver FUN_0047fed0) — y el sonido SOLO con
+        // pueda contestar (ver Chat_WhisperGate) — y el sonido SOLO con
         // m_bWhisperSound (0x07E11D80).
         RegistWhisperID(10, wname);
         if (m_bWhisperSound)

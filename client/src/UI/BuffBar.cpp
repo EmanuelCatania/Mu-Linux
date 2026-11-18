@@ -126,12 +126,12 @@ void CBuffBar::Render()
 
 void CBuffBar::RenderTooltip(const Buff& buff, int x, int y) const
 {
-    char* line = lpString_07e90798;
+    char* line = TextListStorage;
     int count = 0;
     auto add = [&](int color, int bold, const char* text) {
         Platform::TextFormatSecure(line + count * 100, 100, "%s", text);
-        DAT_07e91708[count] = color;
-        DAT_07ea7b10[count] = bold;
+        TextListColor[count] = color;
+        TextBold[count] = bold;
         ++count;
     };
     // El nombre del skill sale de skill.bmd (traducido); si no hay skill, el

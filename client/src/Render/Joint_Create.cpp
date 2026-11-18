@@ -10,8 +10,8 @@
 // pisan entre si; con capacidad 0 ninguna busqueda se ejecuta.
 #if UINTPTR_MAX != 0xFFFFFFFFu
 static uintptr_t g_JointNoHashCapacity = 0;
-#undef DAT_055c9bd4
-#define DAT_055c9bd4 g_JointNoHashCapacity
+#undef HashTableCapacity
+#define HashTableCapacity g_JointNoHashCapacity
 #endif
 
 
@@ -86,8 +86,8 @@ Joint_Create(int param_1,float *param_2,float *param_3,float *param_4,undefined4
   undefined4 stack0xffffff64 = 0;
   undefined4 stack0xffffff5c = 0;
 
-  pcVar14 = DAT_07b27150;
-  const uintptr_t __jp_end = (uintptr_t)DAT_07b27150 + sizeof(DAT_07b27150);
+  pcVar14 = JointPoolBase;
+  const uintptr_t __jp_end = (uintptr_t)JointPoolBase + sizeof(JointPoolBase);
   while (*pcVar14 != '\0') {
     pcVar14 = pcVar14 + JOINT_STRIDE;
     if ((uintptr_t)pcVar14 >= __jp_end) {
@@ -155,7 +155,7 @@ Joint_Create(int param_1,float *param_2,float *param_3,float *param_4,undefined4
   pcVar14[0x52 + JOINT_FIELD_SHIFT] = '\0';
   pcVar14[0x53 + JOINT_FIELD_SHIFT] = '\0';
   Matrix_BuildFromEuler(pfVar2,local_6c);
-  local_90 = AsJoint(pcVar14)->Scale * _DAT_00552a14;
+  local_90 = AsJoint(pcVar14)->Scale * (-0.5f);
   local_8c = (byte*)0x0;
   local_88 = (byte*)0x0;
   Vector_Rotate(&local_90,local_6c,&local_78);
@@ -164,26 +164,26 @@ Joint_Create(int param_1,float *param_2,float *param_3,float *param_4,undefined4
   local_88 = (byte*)0x0;
   AsJoint(pcVar14)->Tails[0][0][1] = local_74 + AsJoint(pcVar14)->Position[1];
   AsJoint(pcVar14)->Tails[0][0][2] = local_70 + AsJoint(pcVar14)->Position[2];
-  local_90 = AsJoint(pcVar14)->Scale * _DAT_00552504;
+  local_90 = AsJoint(pcVar14)->Scale * HalfScale;
   Vector_Rotate(&local_90,local_6c,&local_78);
   AsJoint(pcVar14)->Tails[0][1][0] = local_78 + *pfVar1;
   local_90 = 0.0f;
   local_8c = (byte*)0x0;
   AsJoint(pcVar14)->Tails[0][1][1] = local_74 + AsJoint(pcVar14)->Position[1];
   AsJoint(pcVar14)->Tails[0][1][2] = local_70 + AsJoint(pcVar14)->Position[2];
-  local_88f = AsJoint(pcVar14)->Scale * _DAT_00552a14;
+  local_88f = AsJoint(pcVar14)->Scale * (-0.5f);
   Vector_Rotate(&local_90,local_6c,&local_78);
   AsJoint(pcVar14)->Tails[0][2][0] = local_78 + *pfVar1;
   local_90 = 0.0f;
   local_8c = (byte*)0x0;
   AsJoint(pcVar14)->Tails[0][2][1] = local_74 + AsJoint(pcVar14)->Position[1];
   AsJoint(pcVar14)->Tails[0][2][2] = local_70 + AsJoint(pcVar14)->Position[2];
-  local_88f = AsJoint(pcVar14)->Scale * _DAT_00552504;
+  local_88f = AsJoint(pcVar14)->Scale * HalfScale;
   Vector_Rotate(&local_90,local_6c,&local_78);
   AsJoint(pcVar14)->Tails[0][3][0] = local_78 + *pfVar1;
   AsJoint(pcVar14)->Tails[0][3][1] = local_74 + AsJoint(pcVar14)->Position[1];
   AsJoint(pcVar14)->Tails[0][3][2] = local_70 + AsJoint(pcVar14)->Position[2];
-  pbVar10 = (byte*)DAT_07cf1ffc;
+  pbVar10 = (byte*)CharacterMachinePtr;
   // 0046D840, Type 1253 / SubType 0 (Evil Spirit): this is the joint
   // initialisation that feeds the per-frame 00470030 branch.  Without these
   // exact counters the slot is allocated but expires as an unconfigured beam.
@@ -196,7 +196,7 @@ Joint_Create(int param_1,float *param_2,float *param_3,float *param_4,undefined4
   }
   if (param_1 < 0x4e9) {
     if (param_1 == 0x4e8) {
-      fVar24 = AsJoint(pcVar14)->TargetPosition[2] + _DAT_00552980;
+      fVar24 = AsJoint(pcVar14)->TargetPosition[2] + 130.0f;
       pcVar14[0xc] = '\0';
       pcVar14[0xd] = '\0';
       pcVar14[0xe] = -0x74;
@@ -246,7 +246,7 @@ Joint_Create(int param_1,float *param_2,float *param_3,float *param_4,undefined4
             pcVar14[0x9b9 + JOINT_FIELD_SHIFT] = '\0';
             pcVar14[0x9ba + JOINT_FIELD_SHIFT] = '\0';
             pcVar14[0x9bb + JOINT_FIELD_SHIFT] = '\0';
-            AsJoint(pcVar14)->Scale = (float)(iVar6 % 0x14) + _DAT_005524fc;
+            AsJoint(pcVar14)->Scale = (float)(iVar6 % 0x14) + 20.0f;
           }
           AsJoint(pcVar14)->TargetPosition[0] = *pfVar1;
           *pfVar3 = 1.0;
@@ -354,7 +354,7 @@ Joint_Create(int param_1,float *param_2,float *param_3,float *param_4,undefined4
           local_94 = (byte *)(iVar6 % 500);
           AsJoint(pcVar14)->Direction[1] = (float)(intptr_t)local_94;
           iVar6 = _rand();
-          AsJoint(pcVar14)->Velocity = (float)(iVar6 % 5) + _DAT_00552660;
+          AsJoint(pcVar14)->Velocity = (float)(iVar6 % 5) + 5.0f;
           break;
         case 4:
           *pfVar3 = 0.4;
@@ -481,9 +481,9 @@ switchD_0046db06_default:
         pcVar14[0x55 + JOINT_FIELD_SHIFT] = '\0';
         pcVar14[0x56 + JOINT_FIELD_SHIFT] = '\0';
         pcVar14[0x57 + JOINT_FIELD_SHIFT] = '\0';
-        AsJoint(pcVar14)->StartPosition[0] = (*param_3 - *pfVar1) * _DAT_00552a00;
-        AsJoint(pcVar14)->StartPosition[1] = (param_3[1] - AsJoint(pcVar14)->Position[1]) * _DAT_00552a00;
-        AsJoint(pcVar14)->StartPosition[2] = (param_3[2] - AsJoint(pcVar14)->Position[2]) * _DAT_00552a00;
+        AsJoint(pcVar14)->StartPosition[0] = (*param_3 - *pfVar1) * JointLerpStep;
+        AsJoint(pcVar14)->StartPosition[1] = (param_3[1] - AsJoint(pcVar14)->Position[1]) * JointLerpStep;
+        AsJoint(pcVar14)->StartPosition[2] = (param_3[2] - AsJoint(pcVar14)->Position[2]) * JointLerpStep;
         Matrix_BuildFromEuler(pfVar2,local_6c);
         iVar6 = 0;
         if (0 < AsJoint(pcVar14)->MaxTails) {
@@ -498,7 +498,7 @@ switchD_0046db06_default:
       default:
         goto switchD_0046dd50_default;
       }
-      fVar24 = param_7 * _DAT_005528f0;
+      fVar24 = param_7 * 1.5f;
       pcVar14[0x9c8 + JOINT_FIELD_SHIFT] = '\0';
       pcVar14[0x9c9 + JOINT_FIELD_SHIFT] = '\0';
       pcVar14[0x9ca + JOINT_FIELD_SHIFT] = '\0';
@@ -517,17 +517,17 @@ switchD_0046dd50_default:
     if (param_1 == 0x4e5) {
       switch(*(undefined4 *)&AsJoint(pcVar14)->SubType) {
       case 0:
-        local_98 = (byte*)DAT_07cf1ffc;
-        local_80 = (byte*)DAT_07cf1ffc;
-        uVar9 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(DAT_07cf1ffc);
+        local_98 = (byte*)CharacterMachinePtr;
+        local_80 = (byte*)CharacterMachinePtr;
+        uVar9 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(CharacterMachinePtr);
         local_98 = (byte *)0x0;
         local_88 = (byte*)0x0;
-        if (DAT_055c9bd4 != 0) {
+        if (HashTableCapacity != 0) {
           do {
             bVar18 = false;
             iVar11 = 0;
             bVar19 = true;
-            local_80 = (byte *)(DAT_055c9bd0 + uVar9 * 4);
+            local_80 = (byte *)(HashTableKeys + uVar9 * 4);
             iVar6 = 4;
             ppbVar15 = &local_98;
             pbVar26 = local_80;
@@ -567,26 +567,26 @@ switchD_0046dd50_default:
               uVar9 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pbVar10);
               local_88 = (byte*)0x0;
               local_8c = (byte*)0x0;
-              if (DAT_055c9bd4 != 0) goto LAB_0046e62c;
+              if (HashTableCapacity != 0) goto LAB_0046e62c;
               goto LAB_0046e687;
             }
-            uVar9 = (uVar9 + 1) % (uint)DAT_055c9bd4;
+            uVar9 = (uVar9 + 1) % (uint)HashTableCapacity;
             local_88 = local_88 + 1;
-          } while ((uint)(uintptr_t)local_88 < DAT_055c9bd4);
+          } while ((uint)(uintptr_t)local_88 < HashTableCapacity);
         }
-        CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+        CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_0046e550:
         local_98 = (byte*)AntiTamper_HashNode();
         local_98[0x584] = 1;
         uVar9 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pbVar10);
         local_84 = (byte *)0x0;
         local_8c = (byte*)0x0;
-        if (DAT_055c9bd4 != 0) {
+        if (HashTableCapacity != 0) {
           do {
             bVar18 = false;
             iVar6 = 0;
             bVar19 = true;
-            local_88 = (byte*)(uintptr_t)(int)(DAT_055c9bd0 + uVar9 * 4);
+            local_88 = (byte*)(uintptr_t)(int)(HashTableKeys + uVar9 * 4);
             iVar11 = 4;
             pbVar26 = (byte*)&stack0xffffff60;
             pbVar8 = local_88;
@@ -603,8 +603,8 @@ LAB_0046e550:
             }
             if (iVar6 == 0) {
 LAB_0046e742:
-              *(byte **)(DAT_055c9bcc + uVar9 * 4) = pbVar10;
-              *(byte **)(DAT_055c9bd0 + uVar9 * 4) = pbVar10;
+              *(byte **)(HashTableValues + uVar9 * 4) = pbVar10;
+              *(byte **)(HashTableKeys + uVar9 * 4) = pbVar10;
               goto LAB_0046e76a;
             }
             iVar11 = 4;
@@ -625,11 +625,11 @@ LAB_0046e742:
               iVar6 = (1 - (uint)bVar18) - (uint)(bVar18 != 0);
             }
             if (iVar6 == 0) goto LAB_0046e742;
-            uVar9 = (uVar9 + 1) % (uint)DAT_055c9bd4;
+            uVar9 = (uVar9 + 1) % (uint)HashTableCapacity;
             local_8c = local_8c + 1;
-          } while ((uint)(uintptr_t)local_8c < DAT_055c9bd4);
+          } while ((uint)(uintptr_t)local_8c < HashTableCapacity);
         }
-        CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______Insert_005580e8);
+        CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullInsert);
         goto LAB_0046e76a;
       case 1:
         pcVar14[0x9c0 + JOINT_FIELD_SHIFT] = '\0';
@@ -727,11 +727,11 @@ LAB_0046e742:
         pcVar14[0x3d] = '\0';
         pcVar14[0x3e] = -0x80;
         pcVar14[0x3f] = '?';
-        AsJoint(pcVar14)->StartPosition[0] = (*param_3 - *pfVar1) * _DAT_00552a00;
+        AsJoint(pcVar14)->StartPosition[0] = (*param_3 - *pfVar1) * JointLerpStep;
         local_90 = AsJoint(pcVar14)->StartPosition[0];
-        AsJoint(pcVar14)->StartPosition[1] = (param_3[1] - AsJoint(pcVar14)->Position[1]) * _DAT_00552a00;
+        AsJoint(pcVar14)->StartPosition[1] = (param_3[1] - AsJoint(pcVar14)->Position[1]) * JointLerpStep;
         local_8c = *(byte **)&AsJoint(pcVar14)->StartPosition[1];
-        local_88f = (param_3[2] - AsJoint(pcVar14)->Position[2]) * _DAT_00552a00;
+        local_88f = (param_3[2] - AsJoint(pcVar14)->Position[2]) * JointLerpStep;
         *(byte **)&AsJoint(pcVar14)->StartPosition[2] = local_88;
         Matrix_BuildFromEuler(pfVar2,local_6c);
         iVar6 = 0;
@@ -757,16 +757,16 @@ LAB_0046e742:
         }
         goto LAB_0046e37e;
       case 5:
-        local_84 = (byte*)DAT_07cf1ffc;
-        local_7c = (byte*)DAT_07cf1ffc;
-        uVar9 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(DAT_07cf1ffc);
+        local_84 = (byte*)CharacterMachinePtr;
+        local_7c = (byte*)CharacterMachinePtr;
+        uVar9 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(CharacterMachinePtr);
         local_98 = (byte *)0x0;
-        if (DAT_055c9bd4 != 0) {
+        if (HashTableCapacity != 0) {
           do {
             bVar18 = false;
             iVar11 = 0;
             bVar19 = true;
-            local_84 = (byte *)(DAT_055c9bd0 + uVar9 * 4);
+            local_84 = (byte *)(HashTableKeys + uVar9 * 4);
             iVar6 = 4;
             pbVar26 = (byte*)&stack0xffffff64;
             pbVar8 = local_84;
@@ -804,26 +804,26 @@ LAB_0046e742:
               local_84 = pbVar10;
               uVar9 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pbVar10);
               pbVar10 = (byte *)0x0;
-              if (DAT_055c9bd4 != 0) goto LAB_0046eb2f;
+              if (HashTableCapacity != 0) goto LAB_0046eb2f;
               goto LAB_0046eb8a;
             }
-            uVar9 = (uVar9 + 1) % (uint)DAT_055c9bd4;
+            uVar9 = (uVar9 + 1) % (uint)HashTableCapacity;
             local_98 = local_98 + 1;
-          } while ((uint)(uintptr_t)local_98 < DAT_055c9bd4);
+          } while ((uint)(uintptr_t)local_98 < HashTableCapacity);
         }
-        CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+        CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_0046ea53:
         local_88 = (byte*)AntiTamper_HashNode();
         local_88[0x584] = 1;
         uVar9 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pbVar10);
         local_84 = (byte *)0x0;
         pbVar26 = (byte *)0x0;
-        if (DAT_055c9bd4 != 0) {
+        if (HashTableCapacity != 0) {
           do {
             bVar18 = false;
             iVar6 = 0;
             bVar19 = true;
-            local_88 = (byte*)(uintptr_t)(int)(DAT_055c9bd0 + uVar9 * 4);
+            local_88 = (byte*)(uintptr_t)(int)(HashTableKeys + uVar9 * 4);
             iVar11 = 4;
             pbVar8 = (byte*)&stack0xffffff60;
             pbVar17 = local_88;
@@ -840,8 +840,8 @@ LAB_0046ea53:
             }
             if (iVar6 == 0) {
 LAB_0046ec45:
-              *(byte **)(DAT_055c9bcc + uVar9 * 4) = local_8c;
-              *(byte **)(DAT_055c9bd0 + uVar9 * 4) = pbVar10;
+              *(byte **)(HashTableValues + uVar9 * 4) = local_8c;
+              *(byte **)(HashTableKeys + uVar9 * 4) = pbVar10;
               goto LAB_0046ec6d;
             }
             iVar11 = 4;
@@ -862,11 +862,11 @@ LAB_0046ec45:
               iVar6 = (1 - (uint)bVar18) - (uint)(bVar18 != 0);
             }
             if (iVar6 == 0) goto LAB_0046ec45;
-            uVar9 = (uVar9 + 1) % (uint)DAT_055c9bd4;
+            uVar9 = (uVar9 + 1) % (uint)HashTableCapacity;
             pbVar26 = pbVar26 + 1;
-          } while ((uint)(uintptr_t)pbVar26 < DAT_055c9bd4);
+          } while ((uint)(uintptr_t)pbVar26 < HashTableCapacity);
         }
-        CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______Insert_005580e8);
+        CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullInsert);
         goto LAB_0046ec6d;
       }
       goto switchD_0046dee7_default;
@@ -883,7 +883,7 @@ LAB_0046ec45:
       pcVar14[0x9b9 + JOINT_FIELD_SHIFT] = '\0';
       pcVar14[0x9ba + JOINT_FIELD_SHIFT] = '\0';
       pcVar14[0x9bb + JOINT_FIELD_SHIFT] = '\0';
-      AsJoint(pcVar14)->Velocity = (float)(iVar6 % 0x14) + _DAT_00552878;
+      AsJoint(pcVar14)->Velocity = (float)(iVar6 % 0x14) + 80.0f;
       AsJoint(pcVar14)->Light[2] = (float)AsJoint(pcVar14)->MaxTails;
       goto LAB_0046e043;
     }
@@ -900,7 +900,7 @@ LAB_0046ec45:
     case 1:
       iVar6 = _rand();
       local_94 = (byte *)(iVar6 % 10);
-      AsJoint(pcVar14)->Velocity = (float)(intptr_t)local_94 + _DAT_005524fc;
+      AsJoint(pcVar14)->Velocity = (float)(intptr_t)local_94 + 20.0f;
       uVar9 = _rand();
       uVar9 = uVar9 & 0x80000007;
       if ((int)uVar9 < 0) {
@@ -925,9 +925,9 @@ LAB_0046ec45:
       local_3c[0] = 0.0;
       local_3c[1] = -150.0;
       local_3c[2] = 0.0;
-      // DAT_05828d58 + 0x11e68 = dirección absoluta 0x0583AB40 (artefacto Ghidra).
+      // ModelsBase + 0x11e68 = dirección absoluta 0x0583AB40 (artefacto Ghidra).
       // TransformPosition con base bogus; omitimos hasta resolver bone matrix real.
-      // BMD_TransformPosition((void *)(DAT_05828d58 + 0x11e68),
+      // BMD_TransformPosition((void *)(ModelsBase + 0x11e68),
       //              (float *)(*(int *)((intptr_t)AsJoint(pcVar14)->Target + 0x114) + 0x630),local_3c,
       //              AsJoint(pcVar14)->TargetPosition,'\x01');
       break;
@@ -994,9 +994,9 @@ LAB_0046ec45:
       AsJoint(pcVar14)->LifeTime = iVar6 % 0x14 + 6;
       iVar6 = _rand();
       local_94 = (byte *)(iVar6 % 10);
-      AsJoint(pcVar14)->Velocity = (float)(intptr_t)local_94 + _DAT_00552834;
+      AsJoint(pcVar14)->Velocity = (float)(intptr_t)local_94 + 15.0f;
       iVar6 = _rand();
-      fVar24 = (float)(iVar6 % 10) * _DAT_00552a48 + _DAT_005524f4;
+      fVar24 = (float)(iVar6 % 10) * 0.0666666701f + 0.1f;
       *pfVar3 = fVar24;
       AsJoint(pcVar14)->Light[1] = fVar24;
       AsJoint(pcVar14)->Light[2] = fVar24;
@@ -1044,9 +1044,9 @@ LAB_0046ec45:
       pcVar14[0x9ba + JOINT_FIELD_SHIFT] = '\0';
       pcVar14[0x9bb + JOINT_FIELD_SHIFT] = '\0';
       local_94 = (byte *)(iVar6 % 0x14);
-      AsJoint(pcVar14)->Velocity = (float)(intptr_t)local_94 + _DAT_00552878;
+      AsJoint(pcVar14)->Velocity = (float)(intptr_t)local_94 + 80.0f;
       iVar6 = _rand();
-      fVar24 = (float)(iVar6 % 10) * _DAT_00552a48 + _DAT_005524f4;
+      fVar24 = (float)(iVar6 % 10) * 0.0666666701f + 0.1f;
       *pfVar3 = fVar24;
       AsJoint(pcVar14)->Light[1] = fVar24;
       AsJoint(pcVar14)->Light[2] = fVar24;
@@ -1084,11 +1084,11 @@ LAB_0046e043:
       pcVar14[0x3d] = '\0';
       pcVar14[0x3e] = -0x80;
       pcVar14[0x3f] = '?';
-      AsJoint(pcVar14)->StartPosition[0] = (*param_3 - *pfVar1) * _DAT_00552a00;
-      AsJoint(pcVar14)->StartPosition[1] = (param_3[1] - AsJoint(pcVar14)->Position[1]) * _DAT_00552a00;
+      AsJoint(pcVar14)->StartPosition[0] = (*param_3 - *pfVar1) * JointLerpStep;
+      AsJoint(pcVar14)->StartPosition[1] = (param_3[1] - AsJoint(pcVar14)->Position[1]) * JointLerpStep;
       local_90 = AsJoint(pcVar14)->StartPosition[0];
       local_8c = *(byte **)&AsJoint(pcVar14)->StartPosition[1];
-      local_88f = (param_3[2] - AsJoint(pcVar14)->Position[2]) * _DAT_00552a00;
+      local_88f = (param_3[2] - AsJoint(pcVar14)->Position[2]) * JointLerpStep;
       *(byte **)&AsJoint(pcVar14)->StartPosition[2] = local_88;
       Matrix_BuildFromEuler(pfVar2,local_6c);
       iVar6 = 0;
@@ -1100,13 +1100,13 @@ LAB_0046e043:
             if ((intptr_t)local_94 < 0) {
               local_94 = (byte *)(((intptr_t)local_94 - 1U | 0xfffffff8) + 1);
             }
-            local_90 = ((float)(int)(intptr_t)local_94 + AsJoint(pcVar14)->StartPosition[0]) - _DAT_00552650;
+            local_90 = ((float)(int)(intptr_t)local_94 + AsJoint(pcVar14)->StartPosition[0]) - 4.0f;
             uVar9 = _rand();
             local_94 = (byte *)(uVar9 & 0x80000007);
             if ((intptr_t)local_94 < 0) {
               local_94 = (byte *)(intptr_t)(int)(((uint)(uintptr_t)(local_94 + -1) | 0xfffffff8) + 1);
             }
-            local_8cf = (local_94f + AsJoint(pcVar14)->StartPosition[1]) - _DAT_00552650;
+            local_8cf = (local_94f + AsJoint(pcVar14)->StartPosition[1]) - 4.0f;
           }
           else {
             uVar9 = _rand();
@@ -1114,13 +1114,13 @@ LAB_0046e043:
             if ((intptr_t)local_94 < 0) {
               local_94 = (byte *)(((intptr_t)local_94 - 1U | 0xfffffff0) + 1);
             }
-            local_90 = ((float)(int)(intptr_t)local_94 + AsJoint(pcVar14)->StartPosition[0]) - _DAT_00552658;
+            local_90 = ((float)(int)(intptr_t)local_94 + AsJoint(pcVar14)->StartPosition[0]) - 8.0f;
             uVar9 = _rand();
             local_94 = (byte *)(uVar9 & 0x8000000f);
             if ((intptr_t)local_94 < 0) {
               local_94 = (byte *)(intptr_t)(int)(((uint)(uintptr_t)(local_94 + -1) | 0xfffffff0) + 1);
             }
-            local_8cf = (local_94f + AsJoint(pcVar14)->StartPosition[1]) - _DAT_00552658;
+            local_8cf = (local_94f + AsJoint(pcVar14)->StartPosition[1]) - 8.0f;
           }
           *pfVar1 = local_90 + *pfVar1;
           AsJoint(pcVar14)->Position[1] = local_8cf + AsJoint(pcVar14)->Position[1];
@@ -1211,11 +1211,11 @@ LAB_0046e043:
       pcVar14[0x3d] = '\0';
       pcVar14[0x3e] = -0x80;
       pcVar14[0x3f] = '?';
-      AsJoint(pcVar14)->StartPosition[0] = (*param_3 - *pfVar1) * _DAT_00552a00;
+      AsJoint(pcVar14)->StartPosition[0] = (*param_3 - *pfVar1) * JointLerpStep;
       local_90 = AsJoint(pcVar14)->StartPosition[0];
-      AsJoint(pcVar14)->StartPosition[1] = (param_3[1] - AsJoint(pcVar14)->Position[1]) * _DAT_00552a00;
+      AsJoint(pcVar14)->StartPosition[1] = (param_3[1] - AsJoint(pcVar14)->Position[1]) * JointLerpStep;
       local_8c = *(byte **)&AsJoint(pcVar14)->StartPosition[1];
-      local_88f = (param_3[2] - AsJoint(pcVar14)->Position[2]) * _DAT_00552a00;
+      local_88f = (param_3[2] - AsJoint(pcVar14)->Position[2]) * JointLerpStep;
       *(byte **)&AsJoint(pcVar14)->StartPosition[2] = local_88;
       Matrix_BuildFromEuler(pfVar2,local_6c);
       iVar6 = 0;
@@ -1597,7 +1597,7 @@ switchD_0046f0e4_caseD_4ed:
     pcVar14[0x9c1 + JOINT_FIELD_SHIFT] = '\0';
     pcVar14[0x9c2 + JOINT_FIELD_SHIFT] = '\0';
     pcVar14[0x9c3 + JOINT_FIELD_SHIFT] = '\0';
-    fVar24 = AsJoint(pcVar14)->Angle[2] + _DAT_0055284c;
+    fVar24 = AsJoint(pcVar14)->Angle[2] + 30.0f;
     AsJoint(pcVar14)->Scale = param_7;
     *(undefined4 *)&AsJoint(pcVar14)->TargetPosition[2] = *(undefined4 *)&AsJoint(pcVar14)->Position[2];
     AsJoint(pcVar14)->Angle[2] = fVar24;
@@ -1648,11 +1648,11 @@ switchD_0046f0e4_caseD_4fd:
       AsJoint(pcVar14)->Scale = param_7;
       iVar6 = _rand();
       local_98 = (byte *)(iVar6 % 0x96);
-      AsJoint(pcVar14)->Direction[2] = (float)(intptr_t)local_98 * _DAT_00552594;
+      AsJoint(pcVar14)->Direction[2] = (float)(intptr_t)local_98 * EffectScaleUnit;
       iVar6 = _rand();
       local_98 = (byte *)(iVar6 % 500 + -0xfa);
       AsJoint(pcVar14)->Direction[1] = (float)(intptr_t)local_98;
-      if (_DAT_00552488 < AsJoint(pcVar14)->Scale) {
+      if (10.0f < AsJoint(pcVar14)->Scale) {
         pcVar14[0x9b8 + JOINT_FIELD_SHIFT] = '2';
         pcVar14[0x9b9 + JOINT_FIELD_SHIFT] = '\0';
         pcVar14[0x9ba + JOINT_FIELD_SHIFT] = '\0';
@@ -1660,7 +1660,7 @@ switchD_0046f0e4_caseD_4fd:
         iVar6 = _rand();
         fVar24 = (float)(iVar6 % 0xfa + 200);
 LAB_0046f54e:
-        AsJoint(pcVar14)->Direction[2] = fVar24 * _DAT_00552594;
+        AsJoint(pcVar14)->Direction[2] = fVar24 * EffectScaleUnit;
       }
 LAB_0046f55a:
       iVar6 = (intptr_t)AsJoint(pcVar14)->Target;
@@ -1673,14 +1673,14 @@ LAB_0046f55a:
         AsJoint(pcVar14)->Scale = param_7;
         iVar6 = _rand();
         local_98 = (byte *)(iVar6 % 0x96);
-        AsJoint(pcVar14)->Direction[2] = (float)(intptr_t)local_98 * _DAT_00552594;
+        AsJoint(pcVar14)->Direction[2] = (float)(intptr_t)local_98 * EffectScaleUnit;
         iVar6 = _rand();
         local_98 = (byte *)(iVar6 % 500 + -0xfa);
         AsJoint(pcVar14)->Direction[1] = (float)(intptr_t)local_98;
         iVar6 = _rand();
         local_98 = (byte *)(iVar6 % 0x32);
         AsJoint(pcVar14)->Position[2] = (float)(intptr_t)local_98 + AsJoint(pcVar14)->Position[2];
-        if (_DAT_00552488 < AsJoint(pcVar14)->Scale) {
+        if (10.0f < AsJoint(pcVar14)->Scale) {
           pcVar14[0x9b8 + JOINT_FIELD_SHIFT] = '2';
           pcVar14[0x9b9 + JOINT_FIELD_SHIFT] = '\0';
           pcVar14[0x9ba + JOINT_FIELD_SHIFT] = '\0';
@@ -1751,9 +1751,9 @@ LAB_0046f55a:
           uVar9 = (uVar9 - 1 | 0xfffffff8) + 1;
         }
         local_98 = (byte *)(uVar9 + 8);
-        CreateSprite(0x4cf,pfVar1,(float)(intptr_t)local_98 * _DAT_005528b8,pfVar22,uVar23,fVar24,uVar25)
+        CreateSprite(0x4cf,pfVar1,(float)(intptr_t)local_98 * 0.3f,pfVar22,uVar23,fVar24,uVar25)
         ;
-        fVar24 = *pfVar2 * _DAT_005526d8;
+        fVar24 = *pfVar2 * (-1.0f);
         *pfVar3 = 1.0;
         pcVar14[0x38] = '\0';
         pcVar14[0x39] = '\0';
@@ -1764,8 +1764,8 @@ LAB_0046f55a:
         pcVar14[0x3e] = -0x80;
         pcVar14[0x3f] = '?';
         *pfVar2 = fVar24;
-        AsJoint(pcVar14)->Angle[1] = AsJoint(pcVar14)->Angle[1] * _DAT_005526d8;
-        AsJoint(pcVar14)->Angle[2] = AsJoint(pcVar14)->Angle[2] * _DAT_005526d8;
+        AsJoint(pcVar14)->Angle[1] = AsJoint(pcVar14)->Angle[1] * (-1.0f);
+        AsJoint(pcVar14)->Angle[2] = AsJoint(pcVar14)->Angle[2] * (-1.0f);
       }
       else if (((iVar6 == 4) || (iVar6 == 6)) || (iVar6 == 0xc)) {
         AsJoint(pcVar14)->Scale = param_7;
@@ -1789,11 +1789,11 @@ LAB_0046f55a:
           pcVar14[0x3f] = '?';
           iVar6 = _rand();
           AsJoint(pcVar14)->Direction[0] = (float)(iVar6 % 0x168);
-          fVar21 = (float10)_DAT_00552a44;
+          fVar21 = (float10)NegDegToRad;
           fVar20 = (float10)fsin((float10)AsJoint(pcVar14)->Angle[2] * fVar21);
-          AsJoint(pcVar14)->Direction[1] = (float)(fVar20 * (float10)_DAT_00552a34);
+          AsJoint(pcVar14)->Direction[1] = (float)(fVar20 * (float10)(-4.0f));
           fVar21 = (float10)fcos((float10)AsJoint(pcVar14)->Angle[2] * fVar21);
-          fVar21 = fVar21 * (float10)_DAT_00552a34;
+          fVar21 = fVar21 * (float10)(-4.0f);
         }
         else {
           if (iVar6 == 6) {
@@ -1831,11 +1831,11 @@ LAB_0046f55a:
           }
           iVar6 = _rand();
           AsJoint(pcVar14)->Direction[0] = (float)(iVar6 % 0x168);
-          fVar21 = (float10)_DAT_00552a44;
+          fVar21 = (float10)NegDegToRad;
           fVar20 = (float10)fsin((float10)AsJoint(pcVar14)->Angle[2] * fVar21);
-          AsJoint(pcVar14)->Direction[1] = (float)(fVar20 * (float10)_DAT_005529ac);
+          AsJoint(pcVar14)->Direction[1] = (float)(fVar20 * (float10)(-2.0f));
           fVar21 = (float10)fcos((float10)AsJoint(pcVar14)->Angle[2] * fVar21);
-          fVar21 = fVar21 * (float10)_DAT_005529ac;
+          fVar21 = fVar21 * (float10)(-2.0f);
         }
         AsJoint(pcVar14)->Direction[2] = (float)fVar21;
       }
@@ -1946,9 +1946,9 @@ LAB_0046f55a:
         pcVar14[0x3d] = '\0';
         pcVar14[0x3e] = -0x80;
         pcVar14[0x3f] = '?';
-        AsJoint(pcVar14)->StartPosition[0] = (*param_3 - *pfVar1) * _DAT_00552a00;
-        AsJoint(pcVar14)->StartPosition[1] = (param_3[1] - AsJoint(pcVar14)->Position[1]) * _DAT_00552a00;
-        AsJoint(pcVar14)->StartPosition[2] = (param_3[2] - AsJoint(pcVar14)->Position[2]) * _DAT_00552a00;
+        AsJoint(pcVar14)->StartPosition[0] = (*param_3 - *pfVar1) * JointLerpStep;
+        AsJoint(pcVar14)->StartPosition[1] = (param_3[1] - AsJoint(pcVar14)->Position[1]) * JointLerpStep;
+        AsJoint(pcVar14)->StartPosition[2] = (param_3[2] - AsJoint(pcVar14)->Position[2]) * JointLerpStep;
         Matrix_BuildFromEuler(pfVar2,local_6c);
         iVar6 = 0;
         if (0 < AsJoint(pcVar14)->MaxTails) {
@@ -1966,11 +1966,11 @@ LAB_0046f55a:
           AsJoint(pcVar14)->Scale = param_7;
           iVar6 = _rand();
           local_98 = (byte *)(iVar6 % 0x96);
-          AsJoint(pcVar14)->Direction[2] = (float)(intptr_t)local_98 * _DAT_00552594;
+          AsJoint(pcVar14)->Direction[2] = (float)(intptr_t)local_98 * EffectScaleUnit;
           iVar6 = _rand();
           local_98 = (byte *)(iVar6 % 500 + -0xfa);
           AsJoint(pcVar14)->Direction[1] = (float)(intptr_t)local_98;
-          if (_DAT_00552488 < AsJoint(pcVar14)->Scale) {
+          if (10.0f < AsJoint(pcVar14)->Scale) {
             pcVar14[0x9b8 + JOINT_FIELD_SHIFT] = '2';
             pcVar14[0x9b9 + JOINT_FIELD_SHIFT] = '\0';
             pcVar14[0x9ba + JOINT_FIELD_SHIFT] = '\0';
@@ -2075,14 +2075,14 @@ switchD_0046dee7_default:
   }
   return (void*)pcVar14;
   while( true ) {
-    uVar9 = (uVar9 + 1) % (uint)DAT_055c9bd4;
+    uVar9 = (uVar9 + 1) % (uint)HashTableCapacity;
     pbVar10 = pbVar10 + 1;
-    if ((uint)(uintptr_t)pbVar10 >= DAT_055c9bd4) break;
+    if ((uint)(uintptr_t)pbVar10 >= HashTableCapacity) break;
 LAB_0046eb2f:
     bVar18 = false;
     iVar11 = 0;
     bVar19 = true;
-    pbVar26 = (byte *)(DAT_055c9bd0 + uVar9 * 4);
+    pbVar26 = (byte *)(HashTableKeys + uVar9 * 4);
 
     iVar6 = 4;
     pbVar8 = (byte*)&stack0xffffff60;
@@ -2117,12 +2117,12 @@ LAB_0046eb2f:
     }
     if (iVar11 == 0) {
       if (uVar9 == 0xffffffff) goto LAB_0046eb9c;
-      puVar13 = *(undefined4 **)(DAT_055c9bcc + uVar9 * 4);
+      puVar13 = *(undefined4 **)(HashTableValues + uVar9 * 4);
       goto LAB_0046eb9e;
     }
   }
 LAB_0046eb8a:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_0046eb9c:
   puVar13 = (undefined4 *)0x0;
 LAB_0046eb9e:
@@ -2163,17 +2163,17 @@ LAB_0046eb9e:
     operator_delete((undefined *)puVar7);
   }
 LAB_0046ec6d:
-  pbVar10 = (byte*)DAT_07cf1ffc;
+  pbVar10 = (byte*)CharacterMachinePtr;
   iVar6 = MAIN_HASH_CLASS;
-  local_8c = (byte*)DAT_07cf1ffc;
-  local_88 = (byte*)DAT_07cf1ffc;
-  *(char *)&AsJoint(pcVar14)->Weapon = ((byte*)DAT_07cf1ffc)[0x580];
+  local_8c = (byte*)CharacterMachinePtr;
+  local_88 = (byte*)CharacterMachinePtr;
+  *(char *)&AsJoint(pcVar14)->Weapon = ((byte*)CharacterMachinePtr)[0x580];
   uVar9 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pbVar10);
   pbVar10 = (byte *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       iVar11 = 4;
-      pbVar26 = (byte *)(DAT_055c9bd0 + uVar9 * 4);
+      pbVar26 = (byte *)(HashTableKeys + uVar9 * 4);
       bVar18 = false;
       iVar6 = 0;
       bVar19 = true;
@@ -2212,22 +2212,22 @@ LAB_0046ec6d:
         local_8c = (byte*)(uintptr_t)(int)local_90;
         uVar9 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))((void*)(uintptr_t)(int)local_90);
         pbVar10 = (byte *)0x0;
-        if (DAT_055c9bd4 != 0) goto LAB_0046ed54;
+        if (HashTableCapacity != 0) goto LAB_0046ed54;
         goto LAB_0046edb0;
       }
-      uVar9 = (uVar9 + 1) % (uint)DAT_055c9bd4;
+      uVar9 = (uVar9 + 1) % (uint)HashTableCapacity;
       pbVar10 = pbVar10 + 1;
-    } while ((uint)(uintptr_t)pbVar10 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)pbVar10 < HashTableCapacity);
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
   goto LAB_0046ee73;
   while( true ) {
-    uVar9 = (uVar9 + 1) % (uint)DAT_055c9bd4;
+    uVar9 = (uVar9 + 1) % (uint)HashTableCapacity;
     pbVar10 = pbVar10 + 1;
-    if ((uint)(uintptr_t)pbVar10 >= DAT_055c9bd4) break;
+    if ((uint)(uintptr_t)pbVar10 >= HashTableCapacity) break;
 LAB_0046ed54:
     iVar11 = 4;
-    pbVar26 = (byte *)(DAT_055c9bd0 + uVar9 * 4);
+    pbVar26 = (byte *)(HashTableKeys + uVar9 * 4);
     bVar18 = false;
     iVar6 = 0;
     bVar19 = true;
@@ -2263,12 +2263,12 @@ LAB_0046ed54:
     }
     if (iVar6 == 0) {
       if (uVar9 == 0xffffffff) goto LAB_0046edc2;
-      puVar13 = *(undefined4 **)(DAT_055c9bcc + uVar9 * 4);
+      puVar13 = *(undefined4 **)(HashTableValues + uVar9 * 4);
       goto LAB_0046edc4;
     }
   }
 LAB_0046edb0:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_0046edc2:
   puVar13 = (undefined4 *)0x0;
 LAB_0046edc4:
@@ -2331,14 +2331,14 @@ LAB_0046ee73:
   pcVar14[0x57 + JOINT_FIELD_SHIFT] = '\0';
   goto switchD_0046dee7_default;
   while( true ) {
-    uVar9 = (uVar9 + 1) % (uint)DAT_055c9bd4;
+    uVar9 = (uVar9 + 1) % (uint)HashTableCapacity;
     local_8c = local_8c + 1;
-    if ((uint)(uintptr_t)local_8c >= DAT_055c9bd4) break;
+    if ((uint)(uintptr_t)local_8c >= HashTableCapacity) break;
 LAB_0046e62c:
     bVar18 = false;
     iVar11 = 0;
     bVar19 = true;
-    pbVar10 = (byte *)(DAT_055c9bd0 + uVar9 * 4);
+    pbVar10 = (byte *)(HashTableKeys + uVar9 * 4);
     iVar6 = 4;
     ppbVar15 = &local_88;
     pbVar26 = pbVar10;
@@ -2372,12 +2372,12 @@ LAB_0046e62c:
     }
     if (iVar11 == 0) {
       if (uVar9 == 0xffffffff) goto LAB_0046e699;
-      puVar13 = *(undefined4 **)(DAT_055c9bcc + uVar9 * 4);
+      puVar13 = *(undefined4 **)(HashTableValues + uVar9 * 4);
       goto LAB_0046e69b;
     }
   }
 LAB_0046e687:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_0046e699:
   puVar13 = (undefined4 *)0x0;
 LAB_0046e69b:
@@ -2428,17 +2428,17 @@ LAB_0046e69b:
     operator_delete((undefined *)puVar7);
   }
 LAB_0046e76a:
-  pbVar10 = (byte*)DAT_07cf1ffc;
+  pbVar10 = (byte*)CharacterMachinePtr;
   iVar6 = MAIN_HASH_CLASS;
-  local_8c = (byte*)DAT_07cf1ffc;
-  local_88 = (byte*)DAT_07cf1ffc;
-  *(char *)&AsJoint(pcVar14)->Weapon = ((byte*)DAT_07cf1ffc)[0x580];
+  local_8c = (byte*)CharacterMachinePtr;
+  local_88 = (byte*)CharacterMachinePtr;
+  *(char *)&AsJoint(pcVar14)->Weapon = ((byte*)CharacterMachinePtr)[0x580];
   uVar9 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pbVar10);
   pbVar10 = (byte *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       iVar11 = 4;
-      pbVar26 = (byte *)(DAT_055c9bd0 + uVar9 * 4);
+      pbVar26 = (byte *)(HashTableKeys + uVar9 * 4);
       bVar18 = false;
       iVar6 = 0;
       bVar19 = true;
@@ -2477,22 +2477,22 @@ LAB_0046e76a:
         local_8c = (byte*)(uintptr_t)(int)local_90;
         uVar9 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))((void*)(uintptr_t)(int)local_90);
         pbVar10 = (byte *)0x0;
-        if (DAT_055c9bd4 != 0) goto LAB_0046e851;
+        if (HashTableCapacity != 0) goto LAB_0046e851;
         goto LAB_0046e8ad;
       }
-      uVar9 = (uVar9 + 1) % (uint)DAT_055c9bd4;
+      uVar9 = (uVar9 + 1) % (uint)HashTableCapacity;
       pbVar10 = pbVar10 + 1;
-    } while ((uint)(uintptr_t)pbVar10 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)pbVar10 < HashTableCapacity);
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
   goto LAB_0046e970;
   while( true ) {
-    uVar9 = (uVar9 + 1) % (uint)DAT_055c9bd4;
+    uVar9 = (uVar9 + 1) % (uint)HashTableCapacity;
     pbVar10 = pbVar10 + 1;
-    if ((uint)(uintptr_t)pbVar10 >= DAT_055c9bd4) break;
+    if ((uint)(uintptr_t)pbVar10 >= HashTableCapacity) break;
 LAB_0046e851:
     iVar11 = 4;
-    pbVar26 = (byte *)(DAT_055c9bd0 + uVar9 * 4);
+    pbVar26 = (byte *)(HashTableKeys + uVar9 * 4);
     bVar18 = false;
     iVar6 = 0;
     bVar19 = true;
@@ -2528,12 +2528,12 @@ LAB_0046e851:
     }
     if (iVar6 == 0) {
       if (uVar9 == 0xffffffff) goto LAB_0046e8bf;
-      puVar13 = *(undefined4 **)(DAT_055c9bcc + uVar9 * 4);
+      puVar13 = *(undefined4 **)(HashTableValues + uVar9 * 4);
       goto LAB_0046e8c1;
     }
   }
 LAB_0046e8ad:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_0046e8bf:
   puVar13 = (undefined4 *)0x0;
 LAB_0046e8c1:

@@ -144,9 +144,9 @@ CreateEffect(int param_1,float *param_2,float *param_3,float *param_4,float *par
   pfVar12 = param_3;
 LAB_00460dd8:
   pfVar8 = (float *)0x0;
-  pfVar17 = (float *)&DAT_07b11670[0];
+  pfVar17 = (float *)&EffectPoolBase[0];
   // El original corta con `if (0x7b2714f < (int)pfVar17)`, una dirección absoluta
-  // del binario. El pool DAT_07b11670 es de kEffectPoolSize slots: se recorre por
+  // del binario. El pool EffectPoolBase es de kEffectPoolSize slots: se recorre por
   // cantidad de iteraciones.
   {
     bool found_slot = false;
@@ -205,21 +205,21 @@ LAB_00460dd8:
     Tamachan_Create((char *)pfVar17);
     return pfVar8;
   }
-  pfVar4 = (float*)DAT_07cf1ffc;
-  pfVar3 = (float*)DAT_07abf5d8;
+  pfVar4 = (float*)CharacterMachinePtr;
+  pfVar3 = (float*)Hero;
   iVar9 = MAIN_HASH_CLASS;
-  fVar27 = _DAT_00552580;
+  fVar27 = FloatZeroB;
   if (0xf6 < param_1) {
     if (param_1 < 0x1f1) {
       if (param_1 == 0x1f0) goto LAB_00464ed8;
       switch(param_1) {
       case 0xf7: case 0xfa:
         *(int*)&pfVar17[EffectLifetimeIndex] = 35;
-        AsObject(pfVar17)->Scale = (float)(int)(short)(uintptr_t)param_7 * _DAT_00552594;
+        AsObject(pfVar17)->Scale = (float)(int)(short)(uintptr_t)param_7 * EffectScaleUnit;
         return (float *)(intptr_t)(short)(uintptr_t)param_7;
       case 0xf8: case 0xfb:
         *(int*)&pfVar17[EffectLifetimeIndex] = param_1 == 0xf8 ? 35 : 40;
-        AsObject(pfVar17)->Scale = (float)(int)(short)(uintptr_t)param_7 * _DAT_00552594;
+        AsObject(pfVar17)->Scale = (float)(int)(short)(uintptr_t)param_7 * EffectScaleUnit;
         *(int*)&pfVar17[EffectBlendMeshIndex] = 0;
         return pfVar8;
       case 0xf9: case 0xfc:
@@ -231,7 +231,7 @@ LAB_00460dd8:
         AsObject(pfVar17)->BlendMeshLight = 1.5;
         AsObject(pfVar17)->Scale = 0.5;
         *(int*)&pfVar17[EffectLifetimeIndex] = 15;
-        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] - _DAT_00552834;
+        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] - 15.0f;
         goto LAB_004658be;
       case 0xfe:
         *(int*)&pfVar17[EffectBlendMeshIndex] = -2;
@@ -288,13 +288,13 @@ LAB_00460dd8:
         uVar10 = _rand() % 128;
         param_8 = (float *)(uVar10 + debris.SpeedBase);
         local_64 = 0.0;
-        local_68 = (float)(int)(intptr_t)param_8 * _DAT_005524f4;
-        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_00552598;
+        local_68 = (float)(int)(intptr_t)param_8 * 0.1f;
+        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + 50.0f;
         uVar10 = _rand() % 16;
         AsObject(pfVar17)->LifeTime = (int)(uVar10 + 0x20);   // lifetime: DWORD, no float
         uVar10 = _rand() % 4;
         param_8 = (float *)(uVar10 + 8);
-        AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * _DAT_005524f4;
+        AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * 0.1f;
         iVar9 = _rand();
         param_8 = (float *)(iVar9 % 0x168);
         AsObject(pfVar17)->Angle[2] = (float)(intptr_t)param_8;
@@ -325,10 +325,10 @@ LAB_00460dd8:
       case 0x10a:
         *(int*)&pfVar17[EffectLifetimeIndex] = 20;
         AsObject(pfVar17)->Scale = 1.5;
-        fVar24 = (float10)fsin((float10)AsObject(pfVar17)->Angle[2] * (float10)_DAT_0055253c);
-        AsObject(pfVar17)->Direction[0] = (float)(fVar24 * (float10)_DAT_00552660);
-        fVar24 = (float10)fcos((float10)AsObject(pfVar17)->Angle[2] * (float10)_DAT_0055253c);
-        AsObject(pfVar17)->Direction[1] = (float)(fVar24 * (float10)_DAT_00552828);
+        fVar24 = (float10)fsin((float10)AsObject(pfVar17)->Angle[2] * (float10)DegToRad);
+        AsObject(pfVar17)->Direction[0] = (float)(fVar24 * (float10)5.0f);
+        fVar24 = (float10)fcos((float10)AsObject(pfVar17)->Angle[2] * (float10)DegToRad);
+        AsObject(pfVar17)->Direction[1] = (float)(fVar24 * (float10)(-5.0f));
         return pfVar8;
       case 0x10c:
         *(int*)&pfVar17[EffectLifetimeIndex] = 1;
@@ -338,7 +338,7 @@ LAB_00460dd8:
         return pfVar8;
       }
 LAB_004649e0:
-      AsObject(pfVar17)->Scale = fVar27 * _DAT_00552594;
+      AsObject(pfVar17)->Scale = fVar27 * EffectScaleUnit;
       *(int*)&pfVar17[EffectBlendMeshIndex] = 0;
       if (param_5 != (float *)0x1) {
         return param_5;
@@ -385,7 +385,7 @@ LAB_004649e0:
         }
         *(int*)&pfVar17[EffectLifetimeIndex] = 60;
         iVar9 = _rand();
-        AsObject(pfVar17)->Scale = (float)(iVar9 % 0x32 + 0x32) * _DAT_0055295c;
+        AsObject(pfVar17)->Scale = (float)(iVar9 % 0x32 + 0x32) * 0.04f;
         return (float *)(iVar9 / 0x32);
       case 0x4f3:
         *(int*)&pfVar17[EffectLifetimeIndex] = 10;
@@ -397,7 +397,7 @@ LAB_004649e0:
           pfVar12 = (float *)Vector_Rotate(&local_6c,local_3c + 3,&local_60);
           AsObject(pfVar17)->Position[0] = local_60 + AsObject(pfVar17)->Position[0];
           AsObject(pfVar17)->Position[1] = local_5c + AsObject(pfVar17)->Position[1];
-          AsObject(pfVar17)->Position[2] = local_58 + AsObject(pfVar17)->Position[2] + _DAT_0055297c;
+          AsObject(pfVar17)->Position[2] = local_58 + AsObject(pfVar17)->Position[2] + 150.0f;
           return pfVar12;
         }
         if (AsObject(pfVar17)->SubType != 1) {
@@ -424,12 +424,12 @@ LAB_004649e0:
         AsObject(pfVar17)->Light[2] = 0.0;
         iVar9 = _rand();
         param_8 = (float *)(iVar9 % 200);
-        AsObject(pfVar17)->Position[0] = ((float)(intptr_t)param_8 + AsObject(pfVar17)->Position[0]) - _DAT_005524f0;
+        AsObject(pfVar17)->Position[0] = ((float)(intptr_t)param_8 + AsObject(pfVar17)->Position[0]) - GridToWorldScale;
         iVar9 = _rand();
         param_8 = (float *)(iVar9 % 200);
-        AsObject(pfVar17)->Position[1] = ((float)(intptr_t)param_8 + AsObject(pfVar17)->Position[1]) - _DAT_005524f0;
-        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_005528e8;
-        fVar27 = AsObject(pfVar17)->Position[0] + _DAT_005524f0;
+        AsObject(pfVar17)->Position[1] = ((float)(intptr_t)param_8 + AsObject(pfVar17)->Position[1]) - GridToWorldScale;
+        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + 500.0f;
+        fVar27 = AsObject(pfVar17)->Position[0] + GridToWorldScale;
         AsObject(pfVar17)->Position[0] = fVar27;
         AsObject(pfVar17)->StartPosition[0] = fVar27;
         AsObject(pfVar17)->StartPosition[1] = AsObject(pfVar17)->Position[1];
@@ -447,7 +447,7 @@ LAB_004649e0:
           return pfVar12;
         }
         *(int*)&pfVar17[EffectLifetimeIndex] = 8;
-        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_0055297c;
+        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + 150.0f;
         return pfVar12;
       case 0x566:
         *(int*)&pfVar17[EffectLifetimeIndex] = 10;
@@ -479,7 +479,7 @@ LAB_004649e0:
           pfVar8 = param_8;
           iVar9 = _rand();
           _param_9 = (float *)(iVar9 % 0x14);
-          local_54 = (float)(int)(intptr_t)_param_9 + *pfVar12 + _DAT_00552660;
+          local_54 = (float)(int)(intptr_t)_param_9 + *pfVar12 + 5.0f;
           local_50 = (float)(int)(intptr_t)param_8 + local_50;
           Joint_Create(0x4e9,&local_48,&local_48,&local_54,1,0,10.0,-1,0);
           param_8 = (float *)((intptr_t)pfVar8 + 0x12);
@@ -499,7 +499,7 @@ LAB_004649e0:
           pfVar8 = param_8;
           iVar9 = _rand();
           _param_9 = (float *)(iVar9 % 0x14);
-          local_54 = (float)(int)(intptr_t)_param_9 + *pfVar12 + _DAT_00552660;
+          local_54 = (float)(int)(intptr_t)_param_9 + *pfVar12 + 5.0f;
           local_50 = (float)(int)(intptr_t)param_8 + local_50;
           pfVar17 = (float *)Joint_Create(0x4e9,&local_48,&local_48,&local_54,1,0,10.0,-1,0);
           param_8 = (float *)((intptr_t)pfVar8 + 0x12);
@@ -521,7 +521,7 @@ LAB_004658be:
       uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar4);
       param_8 = (float *)0x0;
       param_7 = (float *)0x0;
-      if (DAT_055c9bd4 == 0) goto LAB_00465082;
+      if (HashTableCapacity == 0) goto LAB_00465082;
       goto LAB_00465011;
     }
     if (0x498 < param_1) {
@@ -531,7 +531,7 @@ LAB_004658be:
         AsObject(pfVar17)->Direction[0] = 0.0;
         AsObject(pfVar17)->Direction[1] = -60.0;
         AsObject(pfVar17)->Direction[2] = 0.0;
-        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_005524f0;
+        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + GridToWorldScale;
         // IDA 0x460DC0 L2881-2885: `if (SubType == 1) Scale = 1.5; break;`.
         // El port devolvia NULL para cualquier otro subtipo; Energy Ball lo crea
         // con subtipo 0 (MoveCharacter, skill 17).
@@ -554,7 +554,7 @@ LAB_004658be:
         pfVar12 = (float *)Vector_Rotate(&local_6c,local_3c + 3,&local_60);
         AsObject(pfVar17)->Position[0] = local_60 + AsObject(pfVar17)->Position[0];
         AsObject(pfVar17)->Position[1] = local_5c + AsObject(pfVar17)->Position[1];
-        AsObject(pfVar17)->Position[2] = local_58 + AsObject(pfVar17)->Position[2] + _DAT_00552980;
+        AsObject(pfVar17)->Position[2] = local_58 + AsObject(pfVar17)->Position[2] + 130.0f;
         return pfVar12;
       }
     }
@@ -570,13 +570,13 @@ LAB_00464ed8:
           AsObject(pfVar17)->Light[1] = 0.3;
           AsObject(pfVar17)->Light[2] = 0.3;
           iVar9 = _rand();
-          fVar24 = (float10)(iVar9 % 5 + 9) * (float10)_DAT_00552504;
-          fVar25 = (float10)fcos((float10)_DAT_00552968);
-          fVar26 = (float10)fsin((float10)_DAT_00552960);
+          fVar24 = (float10)(iVar9 % 5 + 9) * (float10)HalfScale;
+          fVar25 = (float10)fcos((float10)EffectAngleRadB);
+          fVar26 = (float10)fsin((float10)EffectAngleRadA);
           AsObject(pfVar17)->Direction[0] = (float)(fVar26 * fVar25 * fVar24);
-          fVar26 = (float10)fcos((float10)_DAT_00552960);
+          fVar26 = (float10)fcos((float10)EffectAngleRadA);
           AsObject(pfVar17)->Direction[1] = (float)(fVar26 * fVar25 * fVar24);
-          fVar25 = (float10)fsin((float10)_DAT_00552968);
+          fVar25 = (float10)fsin((float10)EffectAngleRadB);
           AsObject(pfVar17)->Direction[2] = (float)(fVar25 * fVar24);
           AsObject(pfVar17)->Scale = 3.0;
           *(int*)&pfVar17[EffectLifetimeIndex] = 400;
@@ -602,8 +602,8 @@ switchD_00464efe_caseD_4ab:
       *(int*)&pfVar17[EffectLifetimeIndex] = 30;
       *(int*)&pfVar17[EffectBlendMeshIndex] = -2;
       AsObject(pfVar17)->Scale = 1.0;
-      AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_00552970;
-      AsObject(pfVar17)->Angle[0] = AsObject(pfVar17)->Angle[0] + _DAT_005524fc;
+      AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + 280.0f;
+      AsObject(pfVar17)->Angle[0] = AsObject(pfVar17)->Angle[0] + 20.0f;
       AsObject(pfVar17)->Direction[0] = 0.0;
       AsObject(pfVar17)->Direction[1] = -80.0;
       AsObject(pfVar17)->Direction[2] = -10.0;
@@ -612,7 +612,7 @@ switchD_00464efe_caseD_4ab:
     if (param_1 != 0x490) {
       return (float *)0x0;
     }
-    fVar27 = pfVar12[2] + _DAT_00552844;
+    fVar27 = pfVar12[2] + 45.0f;
     *(int*)&pfVar17[EffectLifetimeIndex] = 30;
     AsObject(pfVar17)->Light[0] = 0.8;
     AsObject(pfVar17)->Light[1] = 0.8;
@@ -632,8 +632,8 @@ switchD_00464efe_caseD_4ab:
     *(int*)&pfVar17[EffectLifetimeIndex] = 2;
     *(int*)&pfVar17[EffectBlendMeshIndex] = 0;
     AsObject(pfVar17)->Scale = 10.0;
-    AsObject(pfVar17)->Position[1] = AsObject(pfVar17)->Position[1] + _DAT_0055285c;
-    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] - _DAT_00552974;
+    AsObject(pfVar17)->Position[1] = AsObject(pfVar17)->Position[1] + WeatherMinAltitude;
+    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] - 190.0f;
     AsObject(pfVar17)->LightEnable = 0;
     return pfVar8;
   default:
@@ -691,7 +691,7 @@ switchD_00464efe_caseD_4ab:
     *param_4 = 0.4;
     param_4[1] = 0.3;
     param_4[2] = 0.2;
-    AddTerrainLight(fVar27,AsObject(pfVar17)->Position[1], (float*)param_4,2, (float*)&DAT_081cb608[0]);
+    AddTerrainLight(fVar27,AsObject(pfVar17)->Position[1], (float*)param_4,2, (float*)&PrimaryTerrainLightStorage[0]);
 LAB_00463e3d:
     AsObject(pfVar17)->StartPosition[0] = AsObject(pfVar17)->Position[0];
     AsObject(pfVar17)->StartPosition[1] = AsObject(pfVar17)->Position[1];
@@ -704,14 +704,14 @@ LAB_00463e3d:
       *(int*)&pfVar17[EffectLifetimeIndex] = 40;
       uVar10 = _rand() % 8;
       param_8 = (float *)(uVar10 + 10);
-      AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * _DAT_005524f4;
+      AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * 0.1f;
       uVar10 = _rand() % 32;
     }
     else {
       if (*(int*)&fVar27 == 2) {
         *(int*)&pfVar17[EffectLifetimeIndex] = 40;
         uVar10 = _rand() % 8;
-        AsObject(pfVar17)->Scale = (float)(int)(uVar10 + 10) * _DAT_005524f4;
+        AsObject(pfVar17)->Scale = (float)(int)(uVar10 + 10) * 0.1f;
         AsObject(pfVar17)->Direction[0] = 0.0;
         AsObject(pfVar17)->Direction[1] = 0.0;
         AsObject(pfVar17)->Direction[2] = -50.0;
@@ -729,17 +729,17 @@ LAB_00463e3d:
         *(int*)&pfVar17[EffectLifetimeIndex] = 40;
         iVar9 = _rand();
         param_8 = (float *)(iVar9 % 10 + 0xf);
-        AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * _DAT_005524f4;
+        AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * 0.1f;
         uVar10 = _rand();
         param_8 = (float*)(uVar10 % 32);
-        AsObject(pfVar17)->Position[0] = (float)(intptr_t)param_8 + AsObject(pfVar17)->Position[0] + _DAT_00552980;
-        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_00552850;
+        AsObject(pfVar17)->Position[0] = (float)(intptr_t)param_8 + AsObject(pfVar17)->Position[0] + 130.0f;
+        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + WeatherMaxAltitude;
         AsObject(pfVar17)->Direction[0] = 0.0;
         iVar9 = _rand();
         param_8 = (float *)(iVar9 % 0x14);
-        AsObject(pfVar17)->Direction[1] = -((float)(intptr_t)param_8 + _DAT_00552488);
+        AsObject(pfVar17)->Direction[1] = -((float)(intptr_t)param_8 + 10.0f);
         iVar9 = _rand();
-        AsObject(pfVar17)->Direction[2] = -((float)(iVar9 % 10) + _DAT_005524fc);
+        AsObject(pfVar17)->Direction[2] = -((float)(iVar9 % 10) + 20.0f);
         AsObject(pfVar17)->Angle[0] = 0.0;
         AsObject(pfVar17)->Angle[1] = 20.0;
         AsObject(pfVar17)->Angle[2] = 0.0;
@@ -756,8 +756,8 @@ LAB_00463e3d:
       if (*(int*)&fVar27 != 6) {
         *(int*)&pfVar17[EffectLifetimeIndex] = 60;
         uVar10 = _rand() % 4;
-        AsObject(pfVar17)->Scale = (float)(int)(uVar10 + 8) * _DAT_005524f4;
-        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_00552908;
+        AsObject(pfVar17)->Scale = (float)(int)(uVar10 + 8) * 0.1f;
+        AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + 120.0f;
         AsObject(pfVar17)->Direction[0] = 0.0;
         AsObject(pfVar17)->Direction[1] = -50.0;
         AsObject(pfVar17)->Direction[2] = 0.0;
@@ -766,11 +766,11 @@ LAB_00463e3d:
       *(int*)&pfVar17[EffectLifetimeIndex] = 40;
       uVar10 = _rand() % 8;
       param_8 = (float *)(uVar10 + 0xf);
-      AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * _DAT_005524f4;
+      AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * 0.1f;
       uVar10 = _rand() % 32;
     }
-    AsObject(pfVar17)->Position[0] = (float)(int)uVar10 + AsObject(pfVar17)->Position[0] + _DAT_00552980;
-    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_00552850;
+    AsObject(pfVar17)->Position[0] = (float)(int)uVar10 + AsObject(pfVar17)->Position[0] + 130.0f;
+    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + WeatherMaxAltitude;
     AsObject(pfVar17)->Direction[0] = 0.0;
     AsObject(pfVar17)->Direction[1] = 0.0;
     AsObject(pfVar17)->Direction[2] = -50.0;
@@ -809,7 +809,7 @@ LAB_00463e3d:
     if (AsObject(pfVar17)->SubType == 5) {
       *(int*)&pfVar17[EffectLifetimeIndex] = 60;
       uVar10 = _rand() % 4;
-      AsObject(pfVar17)->Scale = (float)(int)(uVar10 + 8) * _DAT_005524f4;
+      AsObject(pfVar17)->Scale = (float)(int)(uVar10 + 8) * 0.1f;
       return (float *)(uVar10 + 8);
     }
   case 199:
@@ -822,8 +822,8 @@ LAB_00463e3d:
     if ((float*)(uintptr_t)(intptr_t)AsObject(pfVar17)->Owner != pfVar3) {
       return (float*)(uintptr_t)(intptr_t)AsObject(pfVar17)->Owner;
     }
-    pfVar12 = (float*)DAT_07cf1ffc;
-    cVar5 = *(char *)((char*)DAT_07cf1ffc + 0x160);
+    pfVar12 = (float*)CharacterMachinePtr;
+    cVar5 = *(char *)((char*)CharacterMachinePtr + 0x160);
     *(char *)(pfVar17 + 0x22) = cVar5;
     *((char *)pfVar12 + 0x160) = cVar5 + '\x01';
     sVar28 = AsObject(pfVar17)->PKKey;
@@ -868,7 +868,7 @@ LAB_00463e3d:
     }
     else {
       *(int*)&pfVar17[EffectLifetimeIndex] = 30;
-      AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_0055297c;
+      AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + 150.0f;
       AsObject(pfVar17)->Direction[0] = 0.0;
       AsObject(pfVar17)->Direction[1] = -80.0;
       AsObject(pfVar17)->Direction[2] = 0.0;
@@ -883,7 +883,7 @@ LAB_00463e3d:
     return pfVar8;
   case 0xd1:
     *(int*)&pfVar17[EffectLifetimeIndex] = 10;
-    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_00552980;
+    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + 130.0f;
     Matrix_BuildFromEuler(AsObject(pfVar17)->Angle,local_3c + 3);
     local_6c = 0.0;
     local_68 = -60.0;
@@ -891,14 +891,14 @@ LAB_00463e3d:
     pfVar12 = (float *)Vector_Rotate(&local_6c,local_3c + 3,AsObject(pfVar17)->Direction);
     return pfVar12;
   case 0xd2:
-    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_00552598;
+    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + 50.0f;
   case 0xd3:
-    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_005524f0;
+    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + GridToWorldScale;
 switchD_00461001_caseD_e2:
     if (AsObject(pfVar17)->SubType == 5) {
       *(int*)&pfVar17[EffectLifetimeIndex] = 60;
       uVar10 = _rand() % 4;
-      AsObject(pfVar17)->Scale = (float)(int)(uVar10 + 8) * _DAT_005524f4;
+      AsObject(pfVar17)->Scale = (float)(int)(uVar10 + 8) * 0.1f;
       AsObject(pfVar17)->StartPosition[0] = AsObject(pfVar17)->Position[0];
       AsObject(pfVar17)->StartPosition[1] = AsObject(pfVar17)->Position[1];
       AsObject(pfVar17)->StartPosition[2] = AsObject(pfVar17)->Position[2];
@@ -928,8 +928,8 @@ switchD_00461001_caseD_c7:
       local_6c = 0.0;
       uVar10 = _rand() % 256;
       param_8 = (float *)(uVar10 + 0x40);
-      local_68 = (float)(int)(intptr_t)param_8 * _DAT_005524f4;
-      AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_00552598;
+      local_68 = (float)(int)(intptr_t)param_8 * 0.1f;
+      AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + 50.0f;
     }
     else {
       local_6c = 0.0;
@@ -939,7 +939,7 @@ switchD_00461001_caseD_c7:
       else {
         uVar10 = _rand() % 256;
         param_8 = (float *)(uVar10 + 0x40);
-        local_68 = (float)(int)(intptr_t)param_8 * _DAT_005524f4;
+        local_68 = (float)(int)(intptr_t)param_8 * 0.1f;
       }
     }
     local_64 = 0.0;
@@ -947,7 +947,7 @@ switchD_00461001_caseD_c7:
     AsObject(pfVar17)->LifeTime = (int)(uVar10 + 0x20);   // lifetime: DWORD, no float
     uVar10 = _rand() % 4;
     param_8 = (float *)(uVar10 + 8);
-    AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * _DAT_005524f4;
+    AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * 0.1f;
     iVar9 = _rand();
     param_8 = (float *)(iVar9 % 0x168);
     AsObject(pfVar17)->Angle[2] = (float)(intptr_t)param_8;
@@ -974,7 +974,7 @@ switchD_00461001_caseD_c7:
     AsObject(pfVar17)->LifeTime = (int)(uVar10 + 0x18);   // lifetime: DWORD, no float
     uVar10 = _rand() % 8;
     param_8 = (float *)(uVar10 + 6);
-    AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * _DAT_005524f4;
+    AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * 0.1f;
     uVar10 = _rand();
     param_8 = (float*)(uVar10 % 4);
     AsObject(pfVar17)->Gravity = -(float)(intptr_t)param_8;
@@ -1041,7 +1041,7 @@ switchD_00461001_caseD_c7:
       *(float *)&AsObject(pfVar17)->AttackPoint = 0.0;
       AsObject(pfVar17)->Kind = 1;
     }
-    pfVar8 = (float*)DAT_07abf5d8;
+    pfVar8 = (float*)Hero;
     if ((param_1 == 0xd8) && (AsObject(pfVar17)->SubType == 3)) {
       *(int*)&pfVar17[EffectLifetimeIndex] = 40;
       fVar27 = pfVar8[5];
@@ -1051,17 +1051,17 @@ switchD_00461001_caseD_c7:
       AsObject(pfVar17)->StartPosition[2] = fVar2;
       iVar9 = _rand();
       param_8 = (float *)(iVar9 % 0x1e);
-      AsObject(pfVar17)->Direction[1] = -((float)(intptr_t)param_8 + _DAT_0055284c);
+      AsObject(pfVar17)->Direction[1] = -((float)(intptr_t)param_8 + 30.0f);
       iVar9 = _rand();
       param_8 = (float *)(iVar9 % 0x14);
-      *pfVar12 = -((float)(int)(intptr_t)param_8 + _DAT_00552844);
+      *pfVar12 = -((float)(int)(intptr_t)param_8 + 45.0f);
     }
-    pfVar12 = (float*)DAT_07cf1ffc;
-    param_5 = (float*)DAT_07cf1ffc;
-    uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(DAT_07cf1ffc);
+    pfVar12 = (float*)CharacterMachinePtr;
+    param_5 = (float*)CharacterMachinePtr;
+    uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(CharacterMachinePtr);
     param_8 = (float *)0x0;
     param_7 = (float *)0x0;
-    if (DAT_055c9bd4 == 0) goto LAB_00462bfb;
+    if (HashTableCapacity == 0) goto LAB_00462bfb;
     goto LAB_00462b8a;
   }
   case 0xe1:
@@ -1077,11 +1077,11 @@ switchD_00461001_caseD_c7:
   case 0xe6:
     *(int*)&pfVar17[EffectLifetimeIndex] = 100;
     iVar9 = _rand();
-    AsObject(pfVar17)->Scale = (float)(iVar9 % 10 + 4) * _DAT_005524f4;
-    fVar27 = _DAT_00552988;
+    AsObject(pfVar17)->Scale = (float)(iVar9 % 10 + 4) * 0.1f;
+    fVar27 = (-15.0f);
     AsObject(pfVar17)->Direction[0] = 0.0;
     AsObject(pfVar17)->Direction[1] = fVar27 / AsObject(pfVar17)->Scale;
-    AsObject(pfVar17)->Direction[2] = _DAT_00552984 / AsObject(pfVar17)->Scale;
+    AsObject(pfVar17)->Direction[2] = (-30.0f) / AsObject(pfVar17)->Scale;
     *(float *)&AsObject(pfVar17)->SubType = 1.4013e-45;
     return (float *)(iVar9 / 10);
   case 0xe9:
@@ -1112,7 +1112,7 @@ switchD_00461001_caseD_c7:
     uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar4);
     pfVar12 = (float *)0x0;
     param_8 = (float *)0x0;
-    if (DAT_055c9bd4 == 0) goto LAB_0046320b;
+    if (HashTableCapacity == 0) goto LAB_0046320b;
     goto LAB_004631b2;
   case 0xef:
     *(int*)&pfVar17[EffectLifetimeIndex] = 25;
@@ -1120,7 +1120,7 @@ switchD_00461001_caseD_c7:
     uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar4);
     param_8 = (float *)0x0;
     param_7 = (float *)0x0;
-    if (DAT_055c9bd4 == 0) goto LAB_0046371e;
+    if (HashTableCapacity == 0) goto LAB_0046371e;
     goto LAB_004636ad;
   case 0xf0:
     *(int*)&pfVar17[EffectLifetimeIndex] = 30;
@@ -1128,7 +1128,7 @@ switchD_00461001_caseD_c7:
     uVar10 = _rand() % 8;
     param_8 = (float *)(uVar10 + 10);
     pfVar12 = pfVar17 + 4;
-    AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * _DAT_005524f4;
+    AsObject(pfVar17)->Scale = (float)(intptr_t)param_8 * 0.1f;
     iVar9 = _rand();
     param_8 = (float *)(iVar9 % 100 + 200);
     *pfVar12 = (float)(int)(intptr_t)param_8 + *pfVar12;
@@ -1142,7 +1142,7 @@ switchD_00461001_caseD_c7:
     AsObject(pfVar17)->Direction[1] = 0.0;
     iVar9 = _rand();
     param_8 = (float *)(iVar9 % 0x32);
-    AsObject(pfVar17)->Direction[2] = _DAT_0055298c - (float)(intptr_t)param_8;
+    AsObject(pfVar17)->Direction[2] = (-50.0f) - (float)(intptr_t)param_8;
     AsObject(pfVar17)->Angle[0] = 0.0;
     AsObject(pfVar17)->Angle[1] = 20.0;
     AsObject(pfVar17)->Angle[2] = 0.0;
@@ -1150,12 +1150,12 @@ switchD_00461001_caseD_c7:
     pfVar17[0x11] = AsObject(pfVar17)->Position[1];
     pfVar17[0x12] = AsObject(pfVar17)->Position[2];
     Joint_Create(0x4ea,pfVar12,pfVar12,AsObject(pfVar17)->Angle,5,(intptr_t)pfVar17,100.0,-1,0);
-    pfVar12 = (float*)DAT_07cf1ffc;
-    param_5 = (float*)DAT_07cf1ffc;
-    uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(DAT_07cf1ffc);
+    pfVar12 = (float*)CharacterMachinePtr;
+    param_5 = (float*)CharacterMachinePtr;
+    uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(CharacterMachinePtr);
     param_8 = (float *)0x0;
     param_7 = (float *)0x0;
-    if (DAT_055c9bd4 == 0) goto LAB_004611cb;
+    if (HashTableCapacity == 0) goto LAB_004611cb;
     goto LAB_0046115a;
   case 0xf1:
     *(int*)&pfVar17[EffectBlendMeshIndex] = -2;
@@ -1204,29 +1204,29 @@ switchD_00461001_caseD_c7:
       AsObject(pfVar17)->Scale = 0.1;
       AsObject(pfVar17)->Gravity = 0.0;
     }
-    pfVar8 = (float*)DAT_07cf1ffc;
+    pfVar8 = (float*)CharacterMachinePtr;
     // *(float *)&AsObject(pfVar17)->Owner (= slot+252) es el PUNTERO al owner: hay que reinterpretar
     // los bits, no convertir el float (eso destruia el puntero y la comparacion
     // con Hero nunca daba true).
     pfVar12 = (float*)(uintptr_t)(intptr_t)AsObject(pfVar17)->Owner;
-    if (pfVar12 != (float*)DAT_07abf5d8) {
+    if (pfVar12 != (float*)Hero) {
       return pfVar12;
     }
     if (1 < AsObject(pfVar17)->SubType) {                      // SubType (DWORD)
       return pfVar12;
     }
-    param_5 = (float*)DAT_07cf1ffc;
-    uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(DAT_07cf1ffc);
+    param_5 = (float*)CharacterMachinePtr;
+    uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(CharacterMachinePtr);
     param_8 = (float *)0x0;
     param_7 = (float *)0x0;
-    if (DAT_055c9bd4 == 0) goto LAB_00461843;
+    if (HashTableCapacity == 0) goto LAB_00461843;
     goto LAB_004617d3;
   case 0xf2:
     *(int*)&pfVar17[EffectLifetimeIndex] = 30;
     *(int*)&pfVar17[EffectBlendMeshIndex] = -2;
     AsObject(pfVar17)->Scale = 1.0;
     pfVar12 = pfVar17 + 4;
-    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_00552980;
+    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + 130.0f;
     AsObject(pfVar17)->Direction[0] = 0.0;
     AsObject(pfVar17)->Direction[1] = -70.0;
     AsObject(pfVar17)->Direction[2] = 0.0;
@@ -1240,19 +1240,19 @@ switchD_00461001_caseD_c7:
       *(float *)&AsObject(pfVar17)->AttackPoint = 0.0;
       AsObject(pfVar17)->Kind = 1;
     }
-    pfVar12 = (float*)DAT_07cf1ffc;
-    param_5 = (float*)DAT_07cf1ffc;
-    uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(DAT_07cf1ffc);
+    pfVar12 = (float*)CharacterMachinePtr;
+    param_5 = (float*)CharacterMachinePtr;
+    uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(CharacterMachinePtr);
     param_8 = (float *)0x0;
     param_7 = (float *)0x0;
-    if (DAT_055c9bd4 == 0) goto LAB_00461f5f;
+    if (HashTableCapacity == 0) goto LAB_00461f5f;
     goto LAB_00461eee;
   case 0xf3:
     *(int*)&pfVar17[EffectLifetimeIndex] = 30;
     *(int*)&pfVar17[EffectBlendMeshIndex] = -2;
     AsObject(pfVar17)->Scale = 1.0;
     iVar9 = 0;
-    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + _DAT_00552980;
+    AsObject(pfVar17)->Position[2] = AsObject(pfVar17)->Position[2] + 130.0f;
     AsObject(pfVar17)->Direction[0] = 0.0;
     AsObject(pfVar17)->Direction[1] = -30.0;
     AsObject(pfVar17)->Direction[2] = 0.0;
@@ -1274,19 +1274,19 @@ switchD_00461001_caseD_c7:
     pfVar12[2] = AsObject(pfVar17)->Angle[2];
     do {
       Joint_Create(0x4e1,pfVar8,pfVar8,pfVar12,0xb,(intptr_t)pfVar17,50.0,-1,iVar9 == 1);
-      pfVar14 = (float*)DAT_07cf1ffc;
+      pfVar14 = (float*)CharacterMachinePtr;
       iVar9 = iVar9 + 1;
     } while (iVar9 < 4);
-    param_5 = (float*)DAT_07cf1ffc;
-    uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(DAT_07cf1ffc);
+    param_5 = (float*)CharacterMachinePtr;
+    uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(CharacterMachinePtr);
     param_8 = (float *)0x0;
     param_7 = (float *)0x0;
-    if (DAT_055c9bd4 != 0) {
+    if (HashTableCapacity != 0) {
       do {
         bVar22 = false;
         iVar15 = 0;
         bVar23 = true;
-        param_6 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+        param_6 = (float *)(HashTableKeys + uVar10 * 4);
         iVar9 = 4;
         ppfVar18 = &param_8;
         pfVar12 = param_6;
@@ -1325,15 +1325,15 @@ switchD_00461001_caseD_c7:
           uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar14);
           param_8 = (float *)0x0;
           param_7 = (float *)0x0;
-          if (DAT_055c9bd4 == 0) goto LAB_00462722;
+          if (HashTableCapacity == 0) goto LAB_00462722;
           goto LAB_004626bb;
         }
-        uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+        uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
         param_7 = (float *)((intptr_t)param_7 + 1);
-        if (DAT_055c9bd4 <= (uint)(uintptr_t)param_7) break;
+        if (HashTableCapacity <= (uint)(uintptr_t)param_7) break;
       } while( true );
     }
-    CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+    CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_004625aa:
     pvVar7 = AntiTamper_HashNode();
     *(undefined1 *)((intptr_t)pvVar7 + 0x584) = 1;
@@ -1353,19 +1353,19 @@ LAB_004625aa:
     // campo, y MoveEffect lo lee por bits: el angulo de las grietas del
     // suelo (IDA L2095) salia ~1.1e9 en vez de 0..99.
     *(DWORD *)&AsObject(pfVar17)->SubType = (DWORD)(iVar9 % 100);
-    AsObject(pfVar17)->Angle[2] = AsObject(pfVar17)->Angle[2] + _DAT_00552978;
-    AsObject(pfVar17)->HeadAngle[0] = AsObject(pfVar17)->HeadAngle[0] + _DAT_00552878;
-    AsObject(pfVar17)->HeadAngle[2] = AsObject(pfVar17)->HeadAngle[2] + _DAT_005524ec;
+    AsObject(pfVar17)->Angle[2] = AsObject(pfVar17)->Angle[2] + 330.0f;
+    AsObject(pfVar17)->HeadAngle[0] = AsObject(pfVar17)->HeadAngle[0] + 80.0f;
+    AsObject(pfVar17)->HeadAngle[2] = AsObject(pfVar17)->HeadAngle[2] + AngleDeg180;
     AsObject(pfVar17)->Gravity = 50.0;
     break;
   case 0xf5:
     *(int*)&pfVar17[EffectLifetimeIndex] = 35;
-    AsObject(pfVar17)->Scale = (float)(int)(short)(uintptr_t)param_7 * _DAT_00552594;
+    AsObject(pfVar17)->Scale = (float)(int)(short)(uintptr_t)param_7 * EffectScaleUnit;
     *(int*)&pfVar17[EffectBlendMeshIndex] = 0;
     return pfVar8;
   }
-  pfVar12 = (float*)DAT_07cf1ffc;
-  cVar5 = *(char *)((char*)DAT_07cf1ffc + 0x160);
+  pfVar12 = (float*)CharacterMachinePtr;
+  cVar5 = *(char *)((char*)CharacterMachinePtr + 0x160);
   *(char *)(pfVar17 + 0x22) = cVar5;
   *((char *)pfVar12 + 0x160) = cVar5 + '\x01';
   pfVar12 = (float *)STRUCT_ENCRYPT(&MAIN_HASH_CLASS,pfVar12);
@@ -1393,14 +1393,14 @@ switchD_00460f25_caseD_100:
   param_6 = pfVar17;
   goto LAB_00460dd8;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_7 = (float *)((intptr_t)param_7 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_7) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_7) break;
 LAB_00465011:
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    param_6 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+    param_6 = (float *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_8;
     pfVar12 = param_6;
@@ -1439,11 +1439,11 @@ LAB_00465011:
       uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar4);
       param_7 = (float *)0x0;
       param_6 = (float *)0x0;
-      if (DAT_055c9bd4 == 0) goto LAB_004651f7;
+      if (HashTableCapacity == 0) goto LAB_004651f7;
       goto LAB_00465190;
     }  }
 LAB_00465082:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00465094:
   param_4 = (float*)AntiTamper_HashNode();
   *(undefined1 *)(param_4 + 0x161) = 1;
@@ -1451,14 +1451,14 @@ LAB_00465094:
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar4);
   param_5 = (float *)0x0;
   param_6 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       bVar22 = false;
       iVar15 = 0;
       bVar23 = true;
       iVar9 = 4;
       ppfVar18 = &param_7;
-      pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+      pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
       do {
         if (iVar9 == 0) break;
         iVar9 = iVar9 + -1;
@@ -1472,8 +1472,8 @@ LAB_00465094:
       }
       if (iVar15 == 0) {
 LAB_004652b0:
-        *(float **)(DAT_055c9bcc + uVar10 * 4) = param_3;
-        *(float **)(DAT_055c9bd0 + uVar10 * 4) = pfVar4;
+        *(float **)(HashTableValues + uVar10 * 4) = param_3;
+        *(float **)(HashTableKeys + uVar10 * 4) = pfVar4;
         goto LAB_004652dd;
       }
       iVar9 = 4;
@@ -1481,7 +1481,7 @@ LAB_004652b0:
       iVar15 = 0;
       bVar23 = true;
       ppfVar18 = &param_5;
-      pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+      pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
       do {
         if (iVar9 == 0) break;
         iVar9 = iVar9 + -1;
@@ -1494,25 +1494,25 @@ LAB_004652b0:
         iVar15 = (1 - (uint)bVar22) - (uint)(bVar22 != 0);
       }
       if (iVar15 == 0) goto LAB_004652b0;
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       param_6 = (float *)((intptr_t)param_6 + 1);
-    } while ((uint)(uintptr_t)param_6 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)param_6 < HashTableCapacity);
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______Insert_005580e8);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullInsert);
 LAB_004652dd:
-  pfVar12 = (float*)DAT_07cf1ffc;
+  pfVar12 = (float*)CharacterMachinePtr;
   iVar9 = MAIN_HASH_CLASS;
-  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)DAT_07cf1ffc + 0x160);
+  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)CharacterMachinePtr + 0x160);
   param_5 = pfVar12;
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
   param_6 = (float *)0x0;
   param_5 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       bVar22 = false;
       iVar15 = 0;
       bVar23 = true;
-      pfVar8 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+      pfVar8 = (float *)(HashTableKeys + uVar10 * 4);
       iVar9 = 4;
       ppfVar18 = &param_6;
       pfVar17 = pfVar8;
@@ -1555,23 +1555,23 @@ LAB_004652dd:
         uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
         param_5 = (float *)0x0;
         param_4 = (float *)0x0;
-        if (DAT_055c9bd4 == 0) goto LAB_00465448;
+        if (HashTableCapacity == 0) goto LAB_00465448;
         goto LAB_004653e2;
       }
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       param_5 = (float *)((intptr_t)param_5 + 1);
-    } while ((uint)(uintptr_t)param_5 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)param_5 < HashTableCapacity);
   }
   goto LAB_00465388;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_6 = (float *)((intptr_t)param_6 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_6) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_6) break;
 LAB_00465190:
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+    pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_7;
     pbVar21 = pbVar13;
@@ -1605,12 +1605,12 @@ LAB_00465190:
     }
     if (iVar15 == 0) {
       if (uVar10 == 0xffffffff) goto LAB_00465209;
-      puVar19 = *(undefined4 **)(DAT_055c9bcc + uVar10 * 4);
+      puVar19 = *(undefined4 **)(HashTableValues + uVar10 * 4);
       goto LAB_0046520b;
     }
   }
 LAB_004651f7:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00465209:
   puVar19 = (undefined4 *)0x0;
 LAB_0046520b:
@@ -1665,7 +1665,7 @@ LAB_004653e2:
   bVar22 = false;
   iVar15 = 0;
   bVar23 = true;
-  pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+  pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
   ppfVar18 = &param_5;
   pbVar21 = pbVar13;
   do {
@@ -1699,14 +1699,14 @@ LAB_004653e2:
   }
   if (iVar15 == 0) {
     if (uVar10 == 0xffffffff) goto LAB_0046545a;
-    param_4 = *(float **)(DAT_055c9bcc + uVar10 * 4);
+    param_4 = *(float **)(HashTableValues + uVar10 * 4);
     goto LAB_0046546c;
   }
-  uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+  uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
   param_4 = (float *)((intptr_t)param_4 + 1);
-  if (DAT_055c9bd4 <= (uint)(uintptr_t)param_4) {
+  if (HashTableCapacity <= (uint)(uintptr_t)param_4) {
 LAB_00465448:
-    CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108); pbVar13 = NULL;
+    CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex); pbVar13 = NULL;
 LAB_0046545a:
     param_4 = (float *)0x0;
 LAB_0046546c:
@@ -1754,7 +1754,7 @@ LAB_004626bb:
   bVar22 = false;
   iVar15 = 0;
   bVar23 = true;
-  pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+  pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
   iVar9 = 4;
   ppfVar18 = &param_8;
   pbVar21 = pbVar13;
@@ -1788,15 +1788,15 @@ LAB_004626bb:
   }
   if (iVar15 == 0) {
     if (uVar10 == 0xffffffff) goto LAB_00462734;
-    puVar19 = *(undefined4 **)(DAT_055c9bcc + uVar10 * 4);
+    puVar19 = *(undefined4 **)(HashTableValues + uVar10 * 4);
     goto LAB_00462736;
   }
-  uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+  uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
   param_7 = (float *)((intptr_t)param_7 + 1);
-  if (DAT_055c9bd4 <= (uint)(uintptr_t)param_7) goto LAB_00462722;
+  if (HashTableCapacity <= (uint)(uintptr_t)param_7) goto LAB_00462722;
   goto LAB_004626bb;
 LAB_00462722:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00462734:
   puVar19 = (undefined4 *)0x0;
 LAB_00462736:
@@ -1846,20 +1846,20 @@ LAB_00462736:
     operator_delete((undefined *)puVar11);
   }
 LAB_004625ca:
-  pfVar12 = (float*)DAT_07cf1ffc;
+  pfVar12 = (float*)CharacterMachinePtr;
   iVar9 = MAIN_HASH_CLASS;
-  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)DAT_07cf1ffc + 0x160);
+  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)CharacterMachinePtr + 0x160);
   param_6 = pfVar12;
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
   param_6 = (float *)0x0;
   param_5 = (float *)0x0;
-  if (DAT_055c9bd4 == 0) goto LAB_00465388;
+  if (HashTableCapacity == 0) goto LAB_00465388;
   do {
     iVar9 = 4;
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    pfVar8 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+    pfVar8 = (float *)(HashTableKeys + uVar10 * 4);
     ppfVar18 = &param_6;
     pfVar17 = pfVar8;
     do {
@@ -1901,19 +1901,19 @@ LAB_004625ca:
       uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
       param_5 = (float *)0x0;
       param_4 = (float *)0x0;
-      if (DAT_055c9bd4 == 0) goto LAB_00462884;
+      if (HashTableCapacity == 0) goto LAB_00462884;
       break;
     }
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_5 = (float *)((intptr_t)param_5 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_5) goto LAB_00465388;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_5) goto LAB_00465388;
   } while( true );
 LAB_0046281e:
   iVar9 = 4;
   bVar22 = false;
   iVar15 = 0;
   bVar23 = true;
-  pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+  pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
   ppfVar18 = &param_5;
   pbVar21 = pbVar13;
   do {
@@ -1947,23 +1947,23 @@ LAB_0046281e:
   }
   if (iVar15 == 0) {
     if (uVar10 != 0xffffffff) {
-      param_4 = *(float **)(DAT_055c9bcc + uVar10 * 4);
+      param_4 = *(float **)(HashTableValues + uVar10 * 4);
       goto LAB_004628a8;
     }
     goto LAB_00462896;
   }
-  uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+  uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
   param_4 = (float *)((intptr_t)param_4 + 1);
-  if (DAT_055c9bd4 <= (uint)(uintptr_t)param_4) goto LAB_00462884;
+  if (HashTableCapacity <= (uint)(uintptr_t)param_4) goto LAB_00462884;
   goto LAB_0046281e;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_7 = (float *)((intptr_t)param_7 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_7) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_7) break;
 LAB_00461eee:
     bVar22 = false;
     iVar15 = 0;    bVar23 = true;
-    param_6 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+    param_6 = (float *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_8;
     pfVar8 = param_6;
@@ -2002,12 +2002,12 @@ LAB_00461eee:
       uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
       param_7 = (float *)0x0;
       param_6 = (float *)0x0;
-      if (DAT_055c9bd4 == 0) goto LAB_004620d4;
+      if (HashTableCapacity == 0) goto LAB_004620d4;
       goto LAB_0046206d;
     }
   }
 LAB_00461f5f:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00461f71:
   param_4 = (float*)AntiTamper_HashNode();
   *(undefined1 *)(param_4 + 0x161) = 1;
@@ -2015,14 +2015,14 @@ LAB_00461f71:
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
   param_5 = (float *)0x0;
   param_6 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       bVar22 = false;
       iVar15 = 0;
       bVar23 = true;
       iVar9 = 4;
       ppfVar18 = &param_7;
-      pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+      pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
       do {
         if (iVar9 == 0) break;
         iVar9 = iVar9 + -1;
@@ -2036,8 +2036,8 @@ LAB_00461f71:
       }
       if (iVar15 == 0) {
 LAB_0046218d:
-        *(float **)(DAT_055c9bcc + uVar10 * 4) = param_3;
-        *(float **)(DAT_055c9bd0 + uVar10 * 4) = pfVar12;
+        *(float **)(HashTableValues + uVar10 * 4) = param_3;
+        *(float **)(HashTableKeys + uVar10 * 4) = pfVar12;
         goto LAB_004621ba;
       }
       iVar9 = 4;
@@ -2045,7 +2045,7 @@ LAB_0046218d:
       iVar15 = 0;
       bVar23 = true;
       ppfVar18 = &param_5;
-      pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+      pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
       do {
         if (iVar9 == 0) break;
         iVar9 = iVar9 + -1;
@@ -2058,25 +2058,25 @@ LAB_0046218d:
         iVar15 = (1 - (uint)bVar22) - (uint)(bVar22 != 0);
       }
       if (iVar15 == 0) goto LAB_0046218d;
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       param_6 = (float *)((intptr_t)param_6 + 1);
-    } while ((uint)(uintptr_t)param_6 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)param_6 < HashTableCapacity);
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______Insert_005580e8);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullInsert);
 LAB_004621ba:
-  pfVar12 = (float*)DAT_07cf1ffc;
+  pfVar12 = (float*)CharacterMachinePtr;
   iVar9 = MAIN_HASH_CLASS;
-  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)DAT_07cf1ffc + 0x160);
+  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)CharacterMachinePtr + 0x160);
   param_5 = pfVar12;
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
   param_6 = (float *)0x0;
   param_5 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       bVar22 = false;
       iVar15 = 0;
       bVar23 = true;
-      pfVar8 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+      pfVar8 = (float *)(HashTableKeys + uVar10 * 4);
       iVar9 = 4;
       ppfVar18 = &param_6;
       pfVar17 = pfVar8;
@@ -2119,23 +2119,23 @@ LAB_004621ba:
         uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
         param_5 = (float *)0x0;
         param_4 = (float *)0x0;
-        if (DAT_055c9bd4 == 0) goto LAB_00462314;
+        if (HashTableCapacity == 0) goto LAB_00462314;
         goto LAB_004622ae;
       }
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       param_5 = (float *)((intptr_t)param_5 + 1);
-    } while ((uint)(uintptr_t)param_5 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)param_5 < HashTableCapacity);
   }
   goto LAB_00465388;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_6 = (float *)((intptr_t)param_6 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_6) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_6) break;
 LAB_0046206d:
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+    pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_7;
     pbVar21 = pbVar13;
@@ -2169,12 +2169,12 @@ LAB_0046206d:
     }
     if (iVar15 == 0) {
       if (uVar10 == 0xffffffff) goto LAB_004620e6;
-      puVar19 = *(undefined4 **)(DAT_055c9bcc + uVar10 * 4);
+      puVar19 = *(undefined4 **)(HashTableValues + uVar10 * 4);
       goto LAB_004620e8;
     }
   }
 LAB_004620d4:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_004620e6:
   puVar19 = (undefined4 *)0x0;
 LAB_004620e8:
@@ -2229,7 +2229,7 @@ LAB_004622ae:
   bVar22 = false;
   iVar15 = 0;
   bVar23 = true;
-  pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+  pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
   ppfVar18 = &param_5;
   pbVar21 = pbVar13;
   do {
@@ -2263,14 +2263,14 @@ LAB_004622ae:
   }
   if (iVar15 == 0) {
     if (uVar10 == 0xffffffff) goto LAB_00462326;
-    param_4 = *(float **)(DAT_055c9bcc + uVar10 * 4);
+    param_4 = *(float **)(HashTableValues + uVar10 * 4);
     goto LAB_00462338;
   }
-  uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+  uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
   param_4 = (float *)((intptr_t)param_4 + 1);
-  if (DAT_055c9bd4 <= (uint)(uintptr_t)param_4) {
+  if (HashTableCapacity <= (uint)(uintptr_t)param_4) {
 LAB_00462314:
-    CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108); pbVar13 = NULL;
+    CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex); pbVar13 = NULL;
 LAB_00462326:
     param_4 = (float *)0x0;
 LAB_00462338:
@@ -2315,14 +2315,14 @@ LAB_00462338:
   }
   goto LAB_004622ae;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_6 = (float *)((intptr_t)param_6 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_6) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_6) break;
 LAB_00461951:
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+    pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_7;
     pbVar21 = pbVar13;
@@ -2356,12 +2356,12 @@ LAB_00461951:
     }
     if (iVar15 == 0) {
       if (uVar10 == 0xffffffff) goto LAB_004619ca;
-      puVar19 = *(undefined4 **)(DAT_055c9bcc + uVar10 * 4);
+      puVar19 = *(undefined4 **)(HashTableValues + uVar10 * 4);
       goto LAB_004619cc;
     }
   }
 LAB_004619b8:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_004619ca:
   puVar19 = (undefined4 *)0x0;
 LAB_004619cc:
@@ -2412,12 +2412,12 @@ LAB_004619cc:
   }
   goto LAB_00461a9e;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     _param_9 = (float *)((intptr_t)_param_9 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)_param_9) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)_param_9) break;
 LAB_00461ba9:
     iVar15 = 4;
-    pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+    pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
     bVar22 = false;
     iVar9 = 0;
     bVar23 = true;
@@ -2453,12 +2453,12 @@ LAB_00461ba9:
     }
     if (iVar9 == 0) {
       if (uVar10 == 0xffffffff) goto LAB_00461c23;
-      _param_9 = *(float **)(DAT_055c9bcc + uVar10 * 4);
+      _param_9 = *(float **)(HashTableValues + uVar10 * 4);
       goto LAB_00461c25;
     }
   }
 LAB_00461c11:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00461c23:
   _param_9 = (float *)0x0;
 LAB_00461c25:
@@ -2500,14 +2500,14 @@ LAB_00461c25:
   }
   goto LAB_00461ce3;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_7 = (float *)((intptr_t)param_7 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_7) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_7) break;
 LAB_0046115a:
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    param_6 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+    param_6 = (float *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_8;
     pfVar8 = param_6;
@@ -2546,12 +2546,12 @@ LAB_0046115a:
       uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
       param_7 = (float *)0x0;
       param_6 = (float *)0x0;
-      if (DAT_055c9bd4 == 0) goto LAB_00461340;
+      if (HashTableCapacity == 0) goto LAB_00461340;
       goto LAB_004612d9;
     }
   }
 LAB_004611cb:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_004611dd:
   param_4 = (float*)AntiTamper_HashNode();
   *(undefined1 *)(param_4 + 0x161) = 1;
@@ -2559,14 +2559,14 @@ LAB_004611dd:
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
   param_5 = (float *)0x0;
   param_6 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       bVar22 = false;
       iVar15 = 0;
       bVar23 = true;
       iVar9 = 4;
       ppfVar18 = &param_7;
-      pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+      pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
       do {
         if (iVar9 == 0) break;
         iVar9 = iVar9 + -1;
@@ -2580,8 +2580,8 @@ LAB_004611dd:
       }
       if (iVar15 == 0) {
 LAB_004613f9:
-        *(float **)(DAT_055c9bcc + uVar10 * 4) = param_3;
-        *(float **)(DAT_055c9bd0 + uVar10 * 4) = pfVar12;
+        *(float **)(HashTableValues + uVar10 * 4) = param_3;
+        *(float **)(HashTableKeys + uVar10 * 4) = pfVar12;
         goto LAB_00461426;
       }
       iVar9 = 4;
@@ -2589,7 +2589,7 @@ LAB_004613f9:
       iVar15 = 0;
       bVar23 = true;
       ppfVar18 = &param_5;
-      pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+      pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
       do {
         if (iVar9 == 0) break;
         iVar9 = iVar9 + -1;
@@ -2602,24 +2602,24 @@ LAB_004613f9:
         iVar15 = (1 - (uint)bVar22) - (uint)(bVar22 != 0);
       }
       if (iVar15 == 0) goto LAB_004613f9;
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       param_6 = (float *)((intptr_t)param_6 + 1);
-    } while ((uint)(uintptr_t)param_6 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)param_6 < HashTableCapacity);
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______Insert_005580e8);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullInsert);
 LAB_00461426:
-  pfVar12 = (float*)DAT_07cf1ffc;
-  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)DAT_07cf1ffc + 0x160);
+  pfVar12 = (float*)CharacterMachinePtr;
+  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)CharacterMachinePtr + 0x160);
   param_5 = pfVar12;
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
   param_6 = (float *)0x0;
   param_5 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       bVar22 = false;
       iVar15 = 0;
       bVar23 = true;
-      pfVar8 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+      pfVar8 = (float *)(HashTableKeys + uVar10 * 4);
       iVar9 = 4;
       ppfVar18 = &param_6;
       pfVar17 = pfVar8;
@@ -2662,23 +2662,23 @@ LAB_00461426:
         uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
         param_5 = (float *)0x0;
         param_4 = (float *)0x0;
-        if (DAT_055c9bd4 == 0) goto LAB_00461580;
+        if (HashTableCapacity == 0) goto LAB_00461580;
         goto LAB_0046151a;
       }
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       param_5 = (float *)((intptr_t)param_5 + 1);
-    } while ((uint)(uintptr_t)param_5 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)param_5 < HashTableCapacity);
   }
   goto LAB_00465388;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_6 = (float *)((intptr_t)param_6 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_6) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_6) break;
 LAB_004612d9:
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+    pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_7;
     pbVar21 = pbVar13;
@@ -2712,12 +2712,12 @@ LAB_004612d9:
     }
     if (iVar15 == 0) {
       if (uVar10 == 0xffffffff) goto LAB_00461352;
-      puVar19 = *(undefined4 **)(DAT_055c9bcc + uVar10 * 4);
+      puVar19 = *(undefined4 **)(HashTableValues + uVar10 * 4);
       goto LAB_00461354;
     }
   }
 LAB_00461340:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00461352:
   puVar19 = (undefined4 *)0x0;
 LAB_00461354:
@@ -2772,7 +2772,7 @@ LAB_0046151a:
   bVar22 = false;
   iVar15 = 0;
   bVar23 = true;
-  pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+  pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
   ppfVar18 = &param_5;
   pbVar21 = pbVar13;
   do {
@@ -2806,14 +2806,14 @@ LAB_0046151a:
   }
   if (iVar15 == 0) {
     if (uVar10 == 0xffffffff) goto LAB_00461592;
-    param_4 = *(float **)(DAT_055c9bcc + uVar10 * 4);
+    param_4 = *(float **)(HashTableValues + uVar10 * 4);
     goto LAB_004615a4;
   }
-  uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+  uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
   param_4 = (float *)((intptr_t)param_4 + 1);
-  if (DAT_055c9bd4 <= (uint)(uintptr_t)param_4) {
+  if (HashTableCapacity <= (uint)(uintptr_t)param_4) {
 LAB_00461580:
-    CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108); pbVar13 = NULL;
+    CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex); pbVar13 = NULL;
 LAB_00461592:
     param_4 = (float *)0x0;
 LAB_004615a4:
@@ -2858,14 +2858,14 @@ LAB_004615a4:
   }
   goto LAB_0046151a;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_7 = (float *)((intptr_t)param_7 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_7) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_7) break;
 LAB_004636ad:
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    param_6 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+    param_6 = (float *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_8;
     pfVar12 = param_6;
@@ -2904,26 +2904,26 @@ LAB_004636ad:
       uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar4);
       param_8 = (float *)0x0;
       param_7 = (float *)0x0;
-      if (DAT_055c9bd4 == 0) goto LAB_004638a8;
+      if (HashTableCapacity == 0) goto LAB_004638a8;
       goto LAB_00463841;
     }
   }
 LAB_0046371e:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00463730:
   pvVar7 = AntiTamper_HashNode();
   *(undefined1 *)((intptr_t)pvVar7 + 0x584) = 1;
   HashTable_Insert(&MAIN_HASH_CLASS,pvVar7,pfVar4);
   goto LAB_00463750;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_7 = (float *)((intptr_t)param_7 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_7) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_7) break;
 LAB_00463841:
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+    pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_8;
     pbVar21 = pbVar13;
@@ -2957,12 +2957,12 @@ LAB_00463841:
     }
     if (iVar15 == 0) {
       if (uVar10 == 0xffffffff) goto LAB_004638ba;
-      puVar19 = *(undefined4 **)(DAT_055c9bcc + uVar10 * 4);
+      puVar19 = *(undefined4 **)(HashTableValues + uVar10 * 4);
       goto LAB_004638bc;
     }
   }
 LAB_004638a8:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_004638ba:
   puVar19 = (undefined4 *)0x0;
 LAB_004638bc:
@@ -3003,20 +3003,20 @@ LAB_004638bc:
     operator_delete((undefined *)puVar11);
   }
 LAB_00463750:
-  pfVar12 = (float*)DAT_07cf1ffc;
+  pfVar12 = (float*)CharacterMachinePtr;
   iVar9 = MAIN_HASH_CLASS;
-  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)DAT_07cf1ffc + 0x160);
+  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)CharacterMachinePtr + 0x160);
   param_6 = pfVar12;
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
   param_6 = (float *)0x0;
   param_5 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       iVar9 = 4;
       bVar22 = false;
       iVar15 = 0;
       bVar23 = true;
-      pfVar8 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+      pfVar8 = (float *)(HashTableKeys + uVar10 * 4);
       ppfVar18 = &param_6;
       pfVar17 = pfVar8;
       do {
@@ -3058,12 +3058,12 @@ LAB_00463750:
         uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
         param_5 = (float *)0x0;
         param_4 = (float *)0x0;
-        if (DAT_055c9bd4 == 0) goto LAB_00463a0a;
+        if (HashTableCapacity == 0) goto LAB_00463a0a;
         goto LAB_004639a4;
       }
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       param_5 = (float *)((intptr_t)param_5 + 1);
-    } while ((uint)(uintptr_t)param_5 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)param_5 < HashTableCapacity);
   }
   goto LAB_00465388;
 LAB_004639a4:
@@ -3071,7 +3071,7 @@ LAB_004639a4:
   bVar22 = false;
   iVar15 = 0;
   bVar23 = true;
-  pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+  pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
   ppfVar18 = &param_5;
   pbVar21 = pbVar13;
   do {
@@ -3105,14 +3105,14 @@ LAB_004639a4:
   }
   if (iVar15 == 0) {
     if (uVar10 == 0xffffffff) goto LAB_00463a1c;
-    param_4 = *(float **)(DAT_055c9bcc + uVar10 * 4);
+    param_4 = *(float **)(HashTableValues + uVar10 * 4);
     goto LAB_00463a2e;
   }
-  uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+  uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
   param_4 = (float *)((intptr_t)param_4 + 1);
-  if (DAT_055c9bd4 <= (uint)(uintptr_t)param_4) {
+  if (HashTableCapacity <= (uint)(uintptr_t)param_4) {
 LAB_00463a0a:
-    CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108); pbVar13 = NULL;
+    CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex); pbVar13 = NULL;
 LAB_00463a1c:
     param_4 = (float *)0x0;
 LAB_00463a2e:
@@ -3157,14 +3157,14 @@ LAB_00463a2e:
   }
   goto LAB_004639a4;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     pfVar12 = (float *)((intptr_t)pfVar12 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)pfVar12) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)pfVar12) break;
 LAB_004631b2:
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+    pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_8;
     pbVar21 = pbVar13;
@@ -3202,12 +3202,12 @@ LAB_004631b2:
       uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(param_7);
       pfVar12 = (float *)0x0;
       param_7 = (float *)0x0;
-      if (DAT_055c9bd4 == 0) goto LAB_00463363;
+      if (HashTableCapacity == 0) goto LAB_00463363;
       goto LAB_0046330a;
     }
   }
 LAB_0046320b:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_0046321d:
   param_4 = (float*)AntiTamper_HashNode();
   *(undefined1 *)(param_4 + 0x161) = 1;
@@ -3215,12 +3215,12 @@ LAB_0046321d:
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(param_7);
   pfVar12 = (float *)0x0;
   param_5 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       bVar22 = false;
       iVar15 = 0;
       bVar23 = true;
-      pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+      pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
       iVar9 = 4;
       ppfVar18 = &param_7;
       pbVar21 = pbVar13;
@@ -3237,8 +3237,8 @@ LAB_0046321d:
       }
       if (iVar15 == 0) {
 LAB_0046341d:
-        *(float **)(DAT_055c9bcc + uVar10 * 4) = param_3;
-        *(float **)(DAT_055c9bd0 + uVar10 * 4) = param_6;
+        *(float **)(HashTableValues + uVar10 * 4) = param_3;
+        *(float **)(HashTableKeys + uVar10 * 4) = param_6;
         goto LAB_00463451;
       }
       iVar9 = 4;
@@ -3258,26 +3258,26 @@ LAB_0046341d:
         iVar15 = (1 - (uint)bVar22) - (uint)(bVar22 != 0);
       }
       if (iVar15 == 0) goto LAB_0046341d;
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       pfVar12 = (float *)((intptr_t)pfVar12 + 1);
-    } while ((uint)(uintptr_t)pfVar12 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)pfVar12 < HashTableCapacity);
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______Insert_005580e8);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullInsert);
 LAB_00463451:
-  pfVar12 = (float*)DAT_07cf1ffc;
-  param_6 = (float*)DAT_07cf1ffc;
-  param_5 = (float*)DAT_07cf1ffc;
-  *(char *)((char*)DAT_07cf1ffc + 0x160) = *(char *)((char*)DAT_07cf1ffc + 0x160) + '\x01';
+  pfVar12 = (float*)CharacterMachinePtr;
+  param_6 = (float*)CharacterMachinePtr;
+  param_5 = (float*)CharacterMachinePtr;
+  *(char *)((char*)CharacterMachinePtr + 0x160) = *(char *)((char*)CharacterMachinePtr + 0x160) + '\x01';
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
   pfVar12 = (float *)0x0;
   param_6 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       iVar9 = 4;
       bVar22 = false;
       iVar15 = 0;
       bVar23 = true;
-      pfVar8 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+      pfVar8 = (float *)(HashTableKeys + uVar10 * 4);
       ppfVar18 = &param_6;
       pfVar17 = pfVar8;
       do {
@@ -3319,23 +3319,23 @@ LAB_00463451:
         uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(param_5);
         pfVar12 = (float *)0x0;
         param_5 = (float *)0x0;
-        if (DAT_055c9bd4 == 0) goto LAB_0046358c;
+        if (HashTableCapacity == 0) goto LAB_0046358c;
         goto LAB_00463534;
       }
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       pfVar12 = (float *)((intptr_t)pfVar12 + 1);
-    } while ((uint)(uintptr_t)pfVar12 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)pfVar12 < HashTableCapacity);
   }
   goto LAB_00465388;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     pfVar12 = (float *)((intptr_t)pfVar12 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)pfVar12) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)pfVar12) break;
 LAB_0046330a:
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+    pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_7;
     pbVar21 = pbVar13;
@@ -3369,12 +3369,12 @@ LAB_0046330a:
     }
     if (iVar15 == 0) {
       if (uVar10 == 0xffffffff) goto LAB_00463375;
-      pfVar12 = *(float **)(DAT_055c9bcc + uVar10 * 4);
+      pfVar12 = *(float **)(HashTableValues + uVar10 * 4);
       goto LAB_00463377;
     }
   }
 LAB_00463363:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00463375:
   pfVar12 = (float *)0x0;
 LAB_00463377:
@@ -3419,7 +3419,7 @@ LAB_00463534:
   bVar22 = false;
   iVar15 = 0;
   bVar23 = true;
-  pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+  pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
   ppfVar18 = &param_5;
   pbVar21 = pbVar13;
   do {
@@ -3453,14 +3453,14 @@ LAB_00463534:
   }
   if (iVar15 == 0) {
     if (uVar10 == 0xffffffff) goto LAB_0046359e;
-    param_5 = *(float **)(DAT_055c9bcc + uVar10 * 4);
+    param_5 = *(float **)(HashTableValues + uVar10 * 4);
     goto LAB_004635a0;
   }
-  uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+  uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
   pfVar12 = (float *)((intptr_t)pfVar12 + 1);
-  if (DAT_055c9bd4 <= (uint)(uintptr_t)pfVar12) {
+  if (HashTableCapacity <= (uint)(uintptr_t)pfVar12) {
 LAB_0046358c:
-    CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108); pbVar13 = NULL;
+    CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex); pbVar13 = NULL;
 LAB_0046359e:
     param_5 = (float *)0x0;
 LAB_004635a0:
@@ -3505,14 +3505,14 @@ LAB_004635a0:
   }
   goto LAB_00463534;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_6 = (float *)((intptr_t)param_6 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_6) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_6) break;
 LAB_00462d09:
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+    pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_7;
     pbVar21 = pbVar13;
@@ -3546,12 +3546,12 @@ LAB_00462d09:
     }
     if (iVar15 == 0) {
       if (uVar10 == 0xffffffff) goto LAB_00462d82;
-      puVar19 = *(undefined4 **)(DAT_055c9bcc + uVar10 * 4);
+      puVar19 = *(undefined4 **)(HashTableValues + uVar10 * 4);
       goto LAB_00462d84;
     }
   }
 LAB_00462d70:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00462d82:
   puVar19 = (undefined4 *)0x0;
 LAB_00462d84:
@@ -3606,7 +3606,7 @@ LAB_00462f4a:
   bVar22 = false;
   iVar15 = 0;
   bVar23 = true;
-  pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+  pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
   ppfVar18 = &param_5;
   pbVar21 = pbVar13;
   do {
@@ -3640,14 +3640,14 @@ LAB_00462f4a:
   }
   if (iVar15 == 0) {
     if (uVar10 == 0xffffffff) goto LAB_00462fc2;
-    param_4 = *(float **)(DAT_055c9bcc + uVar10 * 4);
+    param_4 = *(float **)(HashTableValues + uVar10 * 4);
     goto LAB_00462fd4;
   }
-  uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+  uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
   param_4 = (float *)((intptr_t)param_4 + 1);
-  if (DAT_055c9bd4 <= (uint)(uintptr_t)param_4) {
+  if (HashTableCapacity <= (uint)(uintptr_t)param_4) {
 LAB_00462fb0:
-    CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108); pbVar13 = NULL;
+    CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex); pbVar13 = NULL;
 LAB_00462fc2:
     param_4 = (float *)0x0;
 LAB_00462fd4:
@@ -3729,8 +3729,8 @@ switchD_00465549_caseD_4ba:
 LAB_00465641:
   Matrix_BuildFromEuler(AsObject(pfVar17)->Angle,local_3c + 3);
   Vector_Rotate(&local_6c,local_3c + 3,AsObject(pfVar17)->Direction);
-  if ((float*)(uintptr_t)(intptr_t)AsObject(pfVar17)->Owner != (float*)DAT_07abf5d8) {
-    return (float*)DAT_07abf5d8;
+  if ((float*)(uintptr_t)(intptr_t)AsObject(pfVar17)->Owner != (float*)Hero) {
+    return (float*)Hero;
   }
   fVar27 = AsObject(pfVar17)->Position[1];
   fVar2 = AsObject(pfVar17)->Position[2];
@@ -3755,7 +3755,7 @@ LAB_00465641:
   } while (iVar9 != 0);
   return pfVar12;
 LAB_00462884:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108); pbVar13 = NULL;
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex); pbVar13 = NULL;
 LAB_00462896:
   param_4 = (float *)0x0;
 LAB_004628a8:
@@ -3798,12 +3798,12 @@ LAB_004628a8:
   operator_delete((undefined *)pfVar14); pfVar12 = NULL;
   return pfVar12;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_7 = (float *)((intptr_t)param_7 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_7) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_7) break;
 LAB_004617d3:
     iVar15 = 4;
-    param_6 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+    param_6 = (float *)(HashTableKeys + uVar10 * 4);
     bVar22 = false;
     iVar9 = 0;
     bVar23 = true;
@@ -3844,12 +3844,12 @@ LAB_004617d3:
       uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar8);
       param_7 = (float *)0x0;
       param_6 = (float *)0x0;
-      if (DAT_055c9bd4 == 0) goto LAB_004619b8;
+      if (HashTableCapacity == 0) goto LAB_004619b8;
       goto LAB_00461951;
     }
   }
 LAB_00461843:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00461855:
   param_4 = (float*)AntiTamper_HashNode();
   *(undefined1 *)(param_4 + 0x161) = 1;
@@ -3857,14 +3857,14 @@ LAB_00461855:
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar8);
   param_5 = (float *)0x0;
   param_6 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       bVar22 = false;
       iVar15 = 0;
       bVar23 = true;
       iVar9 = 4;
       ppfVar18 = &param_7;
-      pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+      pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
       do {
         if (iVar9 == 0) break;
         iVar9 = iVar9 + -1;
@@ -3878,8 +3878,8 @@ LAB_00461855:
       }
       if (iVar15 == 0) {
 LAB_00461a71:
-        *(float **)(DAT_055c9bcc + uVar10 * 4) = param_3;
-        *(float **)(DAT_055c9bd0 + uVar10 * 4) = pfVar8;
+        *(float **)(HashTableValues + uVar10 * 4) = param_3;
+        *(float **)(HashTableKeys + uVar10 * 4) = pfVar8;
         goto LAB_00461a9e;
       }
       iVar9 = 4;
@@ -3887,7 +3887,7 @@ LAB_00461a71:
       iVar15 = 0;
       bVar23 = true;
       ppfVar18 = &param_5;
-      pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+      pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
       do {
         if (iVar9 == 0) break;
         iVar9 = iVar9 + -1;
@@ -3900,26 +3900,26 @@ LAB_00461a71:
         iVar15 = (1 - (uint)bVar22) - (uint)(bVar22 != 0);
       }
       if (iVar15 == 0) goto LAB_00461a71;
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       param_6 = (float *)((intptr_t)param_6 + 1);
-    } while ((uint)(uintptr_t)param_6 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)param_6 < HashTableCapacity);
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______Insert_005580e8);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullInsert);
 LAB_00461a9e:
-  pfVar12 = (float*)DAT_07cf1ffc;
+  pfVar12 = (float*)CharacterMachinePtr;
   iVar9 = MAIN_HASH_CLASS;
-  param_6 = (float*)DAT_07cf1ffc;
-  param_3 = (float*)DAT_07cf1ffc;
-  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)DAT_07cf1ffc + 0x160);
+  param_6 = (float*)CharacterMachinePtr;
+  param_3 = (float*)CharacterMachinePtr;
+  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)CharacterMachinePtr + 0x160);
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
   param_7 = (float *)0x0;
   _param_9 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       bVar22 = false;
       iVar9 = 0;
       bVar23 = true;
-      pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+      pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
       iVar15 = 4;
       ppfVar18 = &param_7;
       pbVar21 = pbVar13;
@@ -3957,14 +3957,14 @@ LAB_00461a9e:
         uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(param_8);
         param_7 = (float *)0x0;
         _param_9 = (float *)0x0;
-        if (DAT_055c9bd4 == 0) goto LAB_00461c11;
+        if (HashTableCapacity == 0) goto LAB_00461c11;
         goto LAB_00461ba9;
       }
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       _param_9 = (float *)((intptr_t)_param_9 + 1);
-    } while ((uint)(uintptr_t)_param_9 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)_param_9 < HashTableCapacity);
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00461ce3:
   sVar28 = AsObject(pfVar17)->PKKey;
   bVar6 = *(byte *)(pfVar17 + 0x22);
@@ -3974,14 +3974,14 @@ LAB_00463ca2:
                                   sVar28);
   return pfVar12;
   while( true ) {
-    uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+    uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
     param_7 = (float *)((intptr_t)param_7 + 1);
-    if (DAT_055c9bd4 <= (uint)(uintptr_t)param_7) break;
+    if (HashTableCapacity <= (uint)(uintptr_t)param_7) break;
 LAB_00462b8a:
     bVar22 = false;
     iVar15 = 0;
     bVar23 = true;
-    param_6 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+    param_6 = (float *)(HashTableKeys + uVar10 * 4);
     iVar9 = 4;
     ppfVar18 = &param_8;
     pfVar8 = param_6;
@@ -4019,12 +4019,12 @@ LAB_00462b8a:
       uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
       param_7 = (float *)0x0;
       param_6 = (float *)0x0;
-      if (DAT_055c9bd4 == 0) goto LAB_00462d70;
+      if (HashTableCapacity == 0) goto LAB_00462d70;
       goto LAB_00462d09;
     }
   }
 LAB_00462bfb:
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00462c0d:
   param_4 = (float*)AntiTamper_HashNode();
   *(undefined1 *)(param_4 + 0x161) = 1;
@@ -4032,14 +4032,14 @@ LAB_00462c0d:
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
   param_5 = (float *)0x0;
   param_6 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       bVar22 = false;
       iVar15 = 0;
       bVar23 = true;
       iVar9 = 4;
       ppfVar18 = &param_7;
-      pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+      pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
       do {
         if (iVar9 == 0) break;
         iVar9 = iVar9 + -1;
@@ -4053,8 +4053,8 @@ LAB_00462c0d:
       }
       if (iVar15 == 0) {
 LAB_00462e29:
-        *(float **)(DAT_055c9bcc + uVar10 * 4) = param_3;
-        *(float **)(DAT_055c9bd0 + uVar10 * 4) = pfVar12;
+        *(float **)(HashTableValues + uVar10 * 4) = param_3;
+        *(float **)(HashTableKeys + uVar10 * 4) = pfVar12;
         goto LAB_00462e56;
       }
       iVar9 = 4;
@@ -4062,7 +4062,7 @@ LAB_00462e29:
       iVar15 = 0;
       bVar23 = true;
       ppfVar18 = &param_5;
-      pbVar13 = (byte *)(DAT_055c9bd0 + uVar10 * 4);
+      pbVar13 = (byte *)(HashTableKeys + uVar10 * 4);
       do {
         if (iVar9 == 0) break;
         iVar9 = iVar9 + -1;
@@ -4075,25 +4075,25 @@ LAB_00462e29:
         iVar15 = (1 - (uint)bVar22) - (uint)(bVar22 != 0);
       }
       if (iVar15 == 0) goto LAB_00462e29;
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       param_6 = (float *)((intptr_t)param_6 + 1);
-    } while ((uint)(uintptr_t)param_6 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)param_6 < HashTableCapacity);
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______Insert_005580e8);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullInsert);
 LAB_00462e56:
-  pfVar12 = (float*)DAT_07cf1ffc;
+  pfVar12 = (float*)CharacterMachinePtr;
   iVar9 = MAIN_HASH_CLASS;
-  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)DAT_07cf1ffc + 0x160);
+  *(undefined1 *)(pfVar17 + 0x22) = *(undefined1 *)((char*)CharacterMachinePtr + 0x160);
   param_5 = pfVar12;
   uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
   param_6 = (float *)0x0;
   param_5 = (float *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       bVar22 = false;
       iVar15 = 0;
       bVar23 = true;
-      pfVar8 = (float *)(DAT_055c9bd0 + uVar10 * 4);
+      pfVar8 = (float *)(HashTableKeys + uVar10 * 4);
       iVar9 = 4;
       ppfVar18 = &param_6;
       pfVar17 = pfVar8;
@@ -4136,16 +4136,16 @@ LAB_00462e56:
         uVar10 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pfVar12);
         param_5 = (float *)0x0;
         param_4 = (float *)0x0;
-        if (DAT_055c9bd4 == 0) goto LAB_00462fb0;
+        if (HashTableCapacity == 0) goto LAB_00462fb0;
         goto LAB_00462f4a;
       }
-      uVar10 = (uVar10 + 1) % (uint)DAT_055c9bd4;
+      uVar10 = (uVar10 + 1) % (uint)HashTableCapacity;
       param_5 = (float *)((intptr_t)param_5 + 1);
-    } while ((uint)(uintptr_t)param_5 < DAT_055c9bd4);
+    } while ((uint)(uintptr_t)param_5 < HashTableCapacity);
   }
 LAB_00465388:
   param_6 = (float *)0x0;
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108); pfVar12 = NULL;
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex); pfVar12 = NULL;
   return pfVar12;
 }
 
@@ -4154,7 +4154,7 @@ LAB_00465388:
 void __cdecl Tamachan_Clear(void)
 {
   for (int i = 0; i < kEffectPoolSize; ++i) {
-    char *o = &DAT_07b11670[i * OBJECT_STRIDE];
+    char *o = &EffectPoolBase[i * OBJECT_STRIDE];
     if (*o && *(short *)(o + 2) == 0xc1) {
       *o = 0;
       *(int *)(o + 96) = -1;
@@ -4175,10 +4175,10 @@ void __cdecl Tamachan_Spawn(void)
   angle[0] = 0.0f;
   angle[1] = 0.0f;
   angle[2] = 0.0f;
-  if (DAT_07abf5d8)   // guard del port: el binario asume Hero
+  if (Hero)   // guard del port: el binario asume Hero
     angle[2] = CreateAngle(16284.0f, 12031.0f,
-                            *(float *)((char *)DAT_07abf5d8 + 16),
-                            *(float *)((char *)DAT_07abf5d8 + 20));
+                            *(float *)((char *)Hero + 16),
+                            *(float *)((char *)Hero + 20));
   CreateEffect(0xc1, pos, angle, angle, (float *)0, (float *)0, (float *)-1,
                 (float *)0, 0);
 }
@@ -4188,7 +4188,7 @@ void __cdecl Tamachan_Spawn(void)
 void __cdecl Tamachan_Dismiss(void)
 {
   for (int i = 0; i < kEffectPoolSize; ++i) {
-    char *o = &DAT_07b11670[i * OBJECT_STRIDE];
+    char *o = &EffectPoolBase[i * OBJECT_STRIDE];
     if (*o && *(short *)(o + 2) == 0xc1) {
       *(int *)(o + 96) = 10;
       o[EntityOffset(260)] = 3;

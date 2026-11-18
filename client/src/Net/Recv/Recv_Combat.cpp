@@ -84,7 +84,7 @@ void ApplyPersistentSkillEffect97k(BYTE* entity, WORD effect, BYTE state)
 // acá no hace falta posicionarlo.
 void CreateMagicShiny97k(BYTE* entity, int hand)
 {
-    if (!entity || hand < 0 || hand > 1 || DAT_05828d58 == 0) return;
+    if (!entity || hand < 0 || hand > 1 || ModelsBase == 0) return;
     const intptr_t bones = *(intptr_t*)&AsObject(entity)->BoneMatrices;
     if (bones == 0) return;
 
@@ -93,7 +93,7 @@ void CreateMagicShiny97k(BYTE* entity, int hand)
     float offset[3] = { 0.0f, 0.0f, 0.0f };
     float position[3];
     float light[3] = { 1.0f, 0.5f, 0.2f };
-    void* const model = (void*)(uintptr_t)(DAT_05828d58 + type * BMD_STRIDE);
+    void* const model = (void*)(uintptr_t)(ModelsBase + type * BMD_STRIDE);
 
     BMD_TransformPosition(model, (float*)(uintptr_t)(bones + bone * 0x30),
                  offset, position, 1);
@@ -178,10 +178,10 @@ void NetRecv_15(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
            targetId, damage, bIgnore, bReflect, bExcellent, bCritical, stunFlag);
 
     // Find target entity slot by entity_id (+0x1dc)
-    BYTE* basePtr = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* basePtr = (BYTE*)(uintptr_t)CharactersClient;
     BYTE* tgtSlot = nullptr;
-    if (targetId == g_HeroKey && DAT_07abf5d8) {
-        tgtSlot = (BYTE*)DAT_07abf5d8;
+    if (targetId == g_HeroKey && Hero) {
+        tgtSlot = (BYTE*)Hero;
     } else {
         for (int s = 0; s < 400; ++s) {
             BYTE* sp = basePtr + s * CHARACTER_STRIDE;
@@ -216,8 +216,8 @@ void NetRecv_15(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
                          *(float*)(tgtSlot + 0x18) };
         float color[3] = { 1.0f, 0.0f, 0.0f };
         CreatePoint(pos, (int)damage, color, 15.0f);
-        if (targetId == g_HeroKey && DAT_07cf1ff4) {
-            WORD* pHP = (WORD*)((BYTE*)(uintptr_t)DAT_07cf1ff4 + 28);
+        if (targetId == g_HeroKey && CharacterAttributePtr) {
+            WORD* pHP = (WORD*)((BYTE*)(uintptr_t)CharacterAttributePtr + 28);
             if (damage < *pHP) *pHP -= damage; else *pHP = 0;
             *(WORD*)(tgtSlot + EntityOffset(760)) = (WORD)damage;
             SyncHeroLife(Msg, Size, pHP);
@@ -226,9 +226,9 @@ void NetRecv_15(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     }
 
     // ── Hero HP decrement ────────────────────────────────────────
-    // CharacterAttribute del héroe en DAT_07cf1ff4; HP en el offset 28 (WORD).
-    if (targetId == g_HeroKey && DAT_07cf1ff4) {
-        WORD* pHP = (WORD*)((BYTE*)(uintptr_t)DAT_07cf1ff4 + 28);
+    // CharacterAttribute del héroe en CharacterAttributePtr; HP en el offset 28 (WORD).
+    if (targetId == g_HeroKey && CharacterAttributePtr) {
+        WORD* pHP = (WORD*)((BYTE*)(uintptr_t)CharacterAttributePtr + 28);
         if (damage < *pHP) *pHP -= damage;
         else *pHP = 0;
         SyncHeroLife(Msg, Size, pHP);
@@ -374,7 +374,7 @@ void NetRecv_18(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // FindCharacterIndex equivalent: walk CharactersClient[400]
     // matching +0x1dc == entityKey. NO hero-key shortcut — el
     // hero es solo otra entity en el pool. Si no hay match, bail.
-    BYTE* basePtr = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* basePtr = (BYTE*)(uintptr_t)CharactersClient;
     BYTE* slot = nullptr;
     int slotIdx = -1;
     for (int s = 0; s < 400; ++s) {
@@ -390,7 +390,7 @@ void NetRecv_18(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // ReceiveAction uses FindCharacterIndex without a Hero
     // excepción: una acción válida para el jugador local tiene que seguir
     // el mismo camino de animación que cualquier otra entidad.
-    const bool isHero = (slot == (BYTE*)DAT_07abf5d8);
+    const bool isHero = (slot == (BYTE*)Hero);
     NetLog("NET:    0x18 RESOLVED key=0x%04x -> slot=%d isHero=%d type=0x%04x",
            entityKey, slotIdx, isHero ? 1 : 0,
            (int)*(WORD *)&AsCharacter(slot)->Object.Type);
@@ -487,7 +487,7 @@ void NetRecv_07(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     const BYTE state = Msg[3];
     const WORD effect = (WORD)(Msg[4] | (Msg[5] << 8));
     const WORD entityKey = (WORD)((Msg[6] << 8) | Msg[7]);
-    BYTE* entityBase = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* entityBase = (BYTE*)(uintptr_t)CharactersClient;
     if (!entityBase) return;
     bool foundEntity = false;
     for (int slotIndex = 0; slotIndex < 400; ++slotIndex) {
@@ -538,7 +538,7 @@ void NetRecv_1E(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (Size < 9) return;
     const WORD casterKey = (WORD)((Msg[4] << 8) | Msg[5]);
     BYTE* caster = nullptr;
-    BYTE* entityBase = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* entityBase = (BYTE*)(uintptr_t)CharactersClient;
     for (int slotIndex = 0; slotIndex < 400; ++slotIndex) {
         BYTE* candidate = entityBase + slotIndex * CHARACTER_STRIDE;
         if (*(WORD*)(candidate + EntityOffset(476)) == casterKey) {
@@ -556,7 +556,7 @@ void NetRecv_1E(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     AsCharacter(caster)->Skill = skill;
     caster[EntityOffset(776)] = Msg[6];
     caster[EntityOffset(777)] = Msg[7];
-    if (caster == (BYTE*)DAT_07abf5d8) {
+    if (caster == (BYTE*)Hero) {
         AsCharacter(caster)->SkillStage = 1;
         *(WORD *)&AsCharacter(caster)->TargetCharacter = 0xFFFF;
         caster[EntityOffset(756)] = 0;
@@ -621,7 +621,7 @@ void NetRecv_1B(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (effectMask == 0) return;
 
     const WORD casterKey = (WORD)((Msg[4] << 8) | Msg[5]);
-    BYTE* entityBase = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* entityBase = (BYTE*)(uintptr_t)CharactersClient;
     for (int slotIndex = 0; slotIndex < 400; ++slotIndex) {
         BYTE* caster = entityBase + slotIndex * CHARACTER_STRIDE;
         if (caster[0] && *(WORD*)(caster + EntityOffset(476)) == casterKey) {
@@ -675,13 +675,13 @@ void NetRecv_16(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
                key & 0x7FFF, index, exp, dmg);
 
         float color[3] = { 1.0f, 0.6f, 0.0f };   // naranja
-        if (index >= 0 && index < 400 && DAT_07abf5d0) {
-            BYTE* c = (BYTE*)(uintptr_t)DAT_07abf5d0 + CHARACTER_STRIDE * index;
+        if (index >= 0 && index < 400 && CharactersClient) {
+            BYTE* c = (BYTE*)(uintptr_t)CharactersClient + CHARACTER_STRIDE * index;
             if (key & 0xFFFF8000) {
                 extern void __cdecl SetPlayerDie(CHARACTER* c_in);   // SetPlayerDie
                 SetPlayerDie(AsCharacter(c));
-            } else if (DAT_07abf5d8) {
-                BYTE* hero = (BYTE*)DAT_07abf5d8;
+            } else if (Hero) {
+                BYTE* hero = (BYTE*)Hero;
                 *(BYTE*) (hero + EntityOffset(756)) = 2;        // gate de las esferas de EXP
                 *(WORD*) (hero + EntityOffset(758)) = (WORD)dmg;
                 *(WORD*) (hero + EntityOffset(784)) = (WORD)index;
@@ -714,10 +714,10 @@ void NetRecv_17(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         return;
     }
     const WORD entityId = (WORD)((Msg[3] << 8) | Msg[4]);
-    BYTE* basePtr = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* basePtr = (BYTE*)(uintptr_t)CharactersClient;
     BYTE* entity = nullptr;
-    if (entityId == g_HeroKey && DAT_07abf5d8) {
-        entity = (BYTE*)DAT_07abf5d8;
+    if (entityId == g_HeroKey && Hero) {
+        entity = (BYTE*)Hero;
     } else if (basePtr) {
         for (int slot = 0; slot < 400; ++slot) {
             BYTE* candidate = basePtr + slot * CHARACTER_STRIDE;
@@ -784,7 +784,7 @@ void NetRecv_17(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             *(int*)(entity + EntityOffset(420)) = *(int *)&AsCharacter(entity)->Object.Position[0];
             *(float*)(entity + 200) = (float)(spin % 45);
         }
-        if (DAT_07abf5d8 && entity == (BYTE*)DAT_07abf5d8) {
+        if (Hero && entity == (BYTE*)Hero) {
             clearMatchInfo();   // clearMatchInfo
         }
     }
@@ -839,14 +839,14 @@ void NetRecv_9C(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
                key & 0x7FFF, index, exp, dmg);
 
         float color[3] = { 1.0f, 0.6f, 0.0f };   // naranja
-        if (index >= 0 && index < 400 && DAT_07abf5d0) {
-            BYTE* c = (BYTE*)(uintptr_t)DAT_07abf5d0 + CHARACTER_STRIDE * index;
+        if (index >= 0 && index < 400 && CharactersClient) {
+            BYTE* c = (BYTE*)(uintptr_t)CharactersClient + CHARACTER_STRIDE * index;
             if (key & 0xFFFF8000) {
                 // Murio un PLAYER (PvP): anim de muerte, sin EXP.
                 extern void __cdecl SetPlayerDie(CHARACTER* c_in);
                 SetPlayerDie(AsCharacter(c));
-            } else if (DAT_07abf5d8) {
-                BYTE* hero = (BYTE*)DAT_07abf5d8;
+            } else if (Hero) {
+                BYTE* hero = (BYTE*)Hero;
                 *(BYTE*) (hero + EntityOffset(756)) = 2;        // gate de las esferas
                 *(WORD*) (hero + EntityOffset(758)) = (WORD)dmg;
                 *(WORD*) (hero + EntityOffset(784)) = (WORD)index;
@@ -884,7 +884,7 @@ void NetRecv_1A(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     NetLog("NET:  → 0x1A MagicPosition caster=%d targets=%d", casterId, count);
 
     // Find caster, set magic-cast animation
-    BYTE* basePtr = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* basePtr = (BYTE*)(uintptr_t)CharactersClient;
     BYTE* caster = nullptr;
     for (int s = 0; s < 400; ++s) {
         BYTE* sp = basePtr + s * CHARACTER_STRIDE;
@@ -907,8 +907,8 @@ void NetRecv_1A(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         for (int i = 0; i < count; ++i) {
             WORD tgtId = ((WORD)Msg[9 + i*2] << 8) | Msg[10 + i*2];
             BYTE* tgt = nullptr;
-            if (tgtId == g_HeroKey && DAT_07abf5d8) {
-                tgt = (BYTE*)DAT_07abf5d8;
+            if (tgtId == g_HeroKey && Hero) {
+                tgt = (BYTE*)Hero;
             } else {
                 for (int s = 0; s < 400; ++s) {
                     BYTE* sp = basePtr + s * CHARACTER_STRIDE;
@@ -936,8 +936,8 @@ void NetRecv_1A(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
                 CreatePoint(pos, (int)dmg, color, 15.0f);
             }
             // Hero damaged: decrement HP
-            if (tgtId == g_HeroKey && DAT_07cf1ff4) {
-                WORD* pHP = (WORD*)((BYTE*)(uintptr_t)DAT_07cf1ff4 + 28);
+            if (tgtId == g_HeroKey && CharacterAttributePtr) {
+                WORD* pHP = (WORD*)((BYTE*)(uintptr_t)CharacterAttributePtr + 28);
                 if (dmg && dmg <= *pHP) *pHP -= dmg;
                 else if (dmg) *pHP = 0;
             }

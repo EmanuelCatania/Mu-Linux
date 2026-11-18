@@ -3,7 +3,7 @@
 
 #include "stdafx.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -46,37 +46,37 @@ extern void MapFileDecrypt(BYTE* buf, int size);
 
 // UI/game helpers
 // Item_ReturnPickedItem @ 0x004CD3B0 — UI_ItemGrid_Fill
-// Fills 2D grid buffers with current item slot data (DAT_07e91350) for equipment display.
-// Dispatches by DAT_07ea9800; each grid entry = 0x11 dwords, selection flag at offset 0x38.
+// Fills 2D grid buffers with current item slot data (PickedItemData) for equipment display.
+// Dispatches by InventoryBasePtr; each grid entry = 0x11 dwords, selection flag at offset 0x38.
 //
 // IDA sub_4CD3B0:
-//   pos = Inventory[32].Type (= DAT_07ea5b18, slot de origen)
-//   pool de origen (dword_7EA9800): trade / baul / mix -> celda = pos
+//   pos = Inventory[32].Type (= SourceInvSlot, slot de origen)
+//   pool de origen (InventoryBasePtr): trade / baul / mix -> celda = pos
 //                                   inventario        -> celda = pos - 12
 //                                   pos < 12          -> slot de equipo
 //   cada celda del footprint = pPickedItem, Key = 1 solo en la primaria
 //   (byte_7E9138E/F = columna/fila de la primaria)
-//   al final: dword_7E91388 = 0; SetCharacterClass(Hero); PlayBuffer(29)
+//   al final: ItemPickedFlag = 0; SetCharacterClass(Hero); PlayBuffer(29)
 // IDA: sub_4CD3B0 (0x004CD3B0)
 void __cdecl Item_ReturnPickedItem(void)
 {
-    if ((int)DAT_07e91388 < 1) return;
+    if ((int)ItemPickedFlag < 1) return;
 
-    const int type = (int)*(short*)DAT_07e91350;           // (std::int16_t)pPickedItem
-    const BYTE* attr = (const BYTE*)(uintptr_t)DAT_07d78068 + type * 0x40;
+    const int type = (int)*(short*)PickedItemData;           // (std::int16_t)pPickedItem
+    const BYTE* attr = (const BYTE*)(uintptr_t)ItemAttributeBase + type * 0x40;
     const int w = attr[0x20];
     const int h = attr[0x21];
-    const int selCol = (int)(BYTE)DAT_07e9138e;
-    const int selRow = (int)(BYTE)DAT_07e9138f;
-    const int pos    = (int)DAT_07ea5b18;
-    BYTE* const src  = DAT_07ea9800;
+    const int selCol = (int)(BYTE)InvGridSelCol;
+    const int selRow = (int)(BYTE)InvGridSelRow;
+    const int pos    = (int)SourceInvSlot;
+    BYTE* const src  = InventoryBasePtr;
 
     auto fill = [&](BYTE* pool, int cell0) {
         const int col0 = cell0 % 8, row0 = cell0 / 8;
         for (int row = row0; row < row0 + h; ++row)
             for (int col = col0; col < col0 + w; ++col) {
                 BYTE* cell = pool + (col + row * 8) * 0x44;
-                memcpy(cell, DAT_07e91350, 0x44);
+                memcpy(cell, PickedItemData, 0x44);
                 *(int*)(cell + 0x38) = (row == selRow && col == selCol) ? 1 : 0;
             }
     };
@@ -86,16 +86,16 @@ void __cdecl Item_ReturnPickedItem(void)
     else if (src == &OffsetMixItems[0])       fill(OffsetMixItems, pos);
     else if (pos >= 12)                       fill(OffsetInventoryItems, pos - 12);
     else if (pos >= 0 && CharacterMachine) {
-        if (pos == 8 && DAT_07abf5d8) {
+        if (pos == 8 && Hero) {
             int bug = (type == 416) ? 816 : (type == 418) ? 195 : (type == 419) ? 267 : 0;
             if (bug)
-                CreateBug(bug, (void*)(DAT_07abf5d8 + 0x10), (void*)DAT_07abf5d8, 0);
+                CreateBug(bug, (void*)(Hero + 0x10), (void*)Hero, 0);
         }
-        memcpy((BYTE*)CharacterMachine + 68 * pos + 536, DAT_07e91350, 0x44);
+        memcpy((BYTE*)CharacterMachine + 68 * pos + 536, PickedItemData, 0x44);
     }
 
-    DAT_07e91388 = 0;
-    if (DAT_07abf5d8) SetCharacterClass(AsCharacter(DAT_07abf5d8));      // SetCharacterClass(Hero)
+    ItemPickedFlag = 0;
+    if (Hero) SetCharacterClass(AsCharacter(Hero));      // SetCharacterClass(Hero)
     PlayBuffer(29, 0, 0);                                  // PlayBuffer(29)
     // (bloques de hash-table anti-tamper omitidos)
 }
@@ -127,10 +127,10 @@ char __cdecl SelectSkillByHotkey(int a1)
 {
     char found = 0;
     char* CA = (char*)CharacterAttribute;
-    char* playerEnt = (char*)DAT_07abf5d8;
+    char* playerEnt = (char*)Hero;
     if (!CA || !playerEnt) return 0;
 
-    const int hero = (int)DAT_005616ac;   // SelectedHero
+    const int hero = (int)SelectedHero;   // SelectedHero
     for (int i = 0; i < 20; i++) {
         if (CA[i + 87] != 0 &&
             (unsigned char)CA[(hero << 6) + i + 215] == (unsigned char)a1) {

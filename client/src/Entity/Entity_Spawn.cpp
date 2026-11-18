@@ -40,7 +40,7 @@ void __cdecl CreateCharacterPointer(unsigned char *param_1, int Type,
 
     // Atributo del terreno en la posición de spawn → SafeZone (+0x34E)
     int terrainAttr = Terrain_GetTileIndex((int)grid_x, (int)grid_y);
-    if ((unsigned char)DAT_0838bc70[terrainAttr] & 1) {
+    if ((unsigned char)TerrainWallFlags[terrainAttr] & 1) {
         c->SafeZone = 1;   // spawn dentro de zona segura
     } else {
         c->SafeZone = 0;
@@ -105,8 +105,8 @@ void __cdecl CreateCharacterPointer(unsigned char *param_1, int Type,
     o->BlendMeshTexCoordV           = 0.0f;
 
     // ── Posición de mundo desde la casilla ───────────────────────────────────
-    o->Position[0] = (float)(int)grid_x * _DAT_005524f0 + _DAT_00552598;
-    o->Position[1] = (float)(int)grid_y * _DAT_005524f0 + _DAT_00552598;
+    o->Position[0] = (float)(int)grid_x * GridToWorldScale + 50.0f;
+    o->Position[1] = (float)(int)grid_y * GridToWorldScale + 50.0f;
 
     // World Z: terrain height + height offset based on entity type / state
     float terrainH = RequestTerrainHeight(o->Position[0], o->Position[1]);
@@ -117,10 +117,10 @@ void __cdecl CreateCharacterPointer(unsigned char *param_1, int Type,
         // Normal spawn
     }
     else if (gMapManager.GetCurrentMap() == 8 || gMapManager.GetCurrentMap() == 10) {
-        terrainH += (float)_DAT_00552848;
+        terrainH += (float)90.0f;
     }
     else {
-        terrainH += (float)_DAT_0055284c;
+        terrainH += (float)30.0f;
     }
     o->Position[2] = terrainH;
 
@@ -197,7 +197,7 @@ void __cdecl CreateCharacterPointer(unsigned char *param_1, int Type,
     }
     {
         short etype     = o->Type;
-        short boneCount = *(short *)(DAT_05828d58 + etype * BMD_STRIDE + 0x22);
+        short boneCount = *(short *)(ModelsBase + etype * BMD_STRIDE + 0x22);
         if (boneCount < 0) boneCount = 0;   // defense: short garbage → signed neg
         void *boneBuf = operator_new((unsigned int)boneCount * 0x30);
         // DESVIACION: IDA 0045ADC0 L710 hace `operator_new` sin inicializar y el buffer

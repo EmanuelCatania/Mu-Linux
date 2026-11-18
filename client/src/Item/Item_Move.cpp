@@ -12,7 +12,7 @@
 // `gNetwork.Send` (Game_SceneUpdate.cpp), el mismo helper que login
 // (F1/01) y combat. Hace:
 //   1. Chain XOR con s_LoginKey (i=3..len)
-//   2. Stomp pkt[1] = DAT_05826ceb++ (serial counter — server valida que sea
+//   2. Stomp pkt[1] = LegacyPacketSerialSend++ (serial counter — server valida que sea
 //      monotónico vía CSerialCheck::CheckSerial)
 //   3. CSimpleModulus encrypt vía CSimpleModulus_Encode
 //   4. C3 wrap: [C3][outerLen][encryptedBlob]
@@ -30,7 +30,7 @@
 //   };
 // Total: 3 + 1 + 1 + 4 + 1 + 1 = 11 bytes.
 //
-// `pItem` (= pPickedItem = DAT_07e91350) es un buffer ITEM 0x44 bytes; los
+// `pItem` (= pPickedItem = PickedItemData) es un buffer ITEM 0x44 bytes; los
 // primeros 4 son el wire format del server (per Recv_Inventory):
 //   pItem[0] = type byte 0
 //   pItem[1] = optByte (level<<3 | skill | luck | options)
@@ -96,7 +96,7 @@ void __cdecl SendRequestEquipmentItem(int srcFlag, int iSrcIndex, ITEM* pItem,
 
     // IDA: sub_4CDC70 y FUN_004D6470 — toda modificación de la oferta local
     // (inventario <-> Trade o Trade <-> Trade) bloquea la confirmación durante
-    // 150 ticks cuando todavía no estaba confirmada. FUN_004EB7F0 descuenta
+    // 150 ticks cuando todavía no estaba confirmada. SecondPassword_ShowCheckBox descuenta
     // m_nMyTradeWait y RenderTrade tiñe la lámpara de rojo mientras dure.
     if ((srcFlag == 1 || dstFlag == 1) && m_bMyConfirm == 0) {
         TradeMyWait = 150;

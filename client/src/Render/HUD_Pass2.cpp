@@ -49,31 +49,30 @@ extern "C" {
     // (so IDA-ported toggle code and render gates share the same byte).
 }
 
-// `SummonLife` es DAT_05826d24 (`ida_xrefs_to("SummonLife")` = 0x05826D24),
+// `SummonLife` es SummonLife (`ida_xrefs_to("SummonLife")` = 0x05826D24),
 // escrita por InitGame, ReceiveRevival (3 sitios) y el F3/0x20 de
-// ProtocolCore, y leída por RenderEquipedHelperLife.  NO es DAT_07e11d28, que
+// ProtocolCore, y leída por RenderEquipedHelperLife.  NO es MoveDebounceCounter, que
 // es el contador de debounce del walker (Player_InputTick.cpp).
 // (Pendiente: portar el F3/0x20 `SummonLife = ReceiveBuffer[4]`, el único
 //  productor del valor; hasta entonces queda en 0 y la barra no se dibuja.)
-#define SummonLife               DAT_05826d24
 #define g_bEventChipDialogEnable _g_bEventChipDialogEnable
-#define byte_7E113E4         (*(char(*)[5][256])&DAT_07e113e4)
-#define flt_7E118E4_PTR      (((char*)&DAT_07e113e4) + 5*256)  // one past last
-#define byte_7E919BC         (*(char(*)[80])&DAT_07e919bc)     // single 80-byte slot view
-// Cosmetico: el nombre correcto es `dword_559CC4` (0x00559CC4 — Player_InputTick
+#define byte_7E113E4         (*(char(*)[5][256])&ChatHistoryBuffer)
+#define flt_7E118E4_PTR      (((char*)&ChatHistoryBuffer) + 5*256)  // one past last
+#define byte_7E919BC         (*(char(*)[80])&GuildInfoTable)     // single 80-byte slot view
+// Cosmetico: el nombre correcto es `ChatHistoryIndex` (0x00559CC4 — Player_InputTick
 // y Chat_InputTick).  0x055C9CC4 no existe en el binario; la direccion del alias
 // siempre estuvo bien, solo el nombre estaba mal tipeado.
-#define dword_55C9CC4        DAT_00559cc4                      // chat scroll cursor
-#define byte_7E11D6E         DAT_07e11d6e
-#define ItemAttribute        ((ITEM_ATTRIBUTE*)DAT_07d78068)
-extern "C" std::uintptr_t DAT_07d78068;     // ItemAttribute base (ITEM_ATTRIBUTE*, stride 64)
+#define dword_55C9CC4        ChatHistoryIndex                      // chat scroll cursor
+#define byte_7E11D6E         HudTextVisibleFlag
+#define ItemAttribute        ((ITEM_ATTRIBUTE*)ItemAttributeBase)
+extern "C" std::uintptr_t ItemAttributeBase;     // ItemAttribute base (ITEM_ATTRIBUTE*, stride 64)
 
 // aTime_0 — string constant.  In IDA it lives in .rdata; replicate.
 static const char aTime_0[] = "Time";
 
-// dword_7EA51EC — end-pointer sentinel for byte_7E919BC name table walk.
+// GuildName — end-pointer sentinel for GuildInfoTable name table walk.
 // El port reserva la tabla original completa: 1000 registros × 80 bytes.
-#define DWORD_7EA51EC_LIMIT  ((char*)&DAT_07e919bc + 80 * 1000)
+#define DWORD_7EA51EC_LIMIT  ((char*)&GuildInfoTable + 80 * 1000)
 
 // RenderInputText / RenderTipText / CreateGuildMark are now ported in
 // src/Render/HUD_Pass4.cpp — forward-declare them here so call sites in
@@ -242,7 +241,7 @@ void Render_ChatBox_(void)
     Gfx::Color3f(1.0f, 1.0f, 1.0f);
     gFont.SelectFont(gFont.GetTextDC(), gFont.GetFont(FONT_NORMAL) ? gFont.GetFont(FONT_NORMAL) : gFont.GetFont(FONT_BOLD));
 
-    if (!(InputEnable || DAT_07e11d71)) { EmojiPicker::OnChatClosed(); return; }
+    if (!(InputEnable || ImeModeFlag)) { EmojiPicker::OnChatClosed(); return; }
 
     GL_ResetState();   // DisableAlphaBlend
     GL_DrawTexture(248, 186.0f, 415.0f, 134.0f, 29.0f, 0.0f, 0.0f, 0.51953125f, 0.90625f, 1, 1);
@@ -262,9 +261,9 @@ void Render_ChatBox_(void)
     m_dwTextColor = (DWORD)-3618616;     // 0xFFC8C8C8 ish
     m_dwBackColor = 1677721600u;          // 0x64000000
 
-    // Walk byte_7E113E4 entries (stride 256 bytes, 5 entries).
+    // Walk ChatHistoryBuffer entries (stride 256 bytes, 5 entries).
     int v1 = 0;
-    char* v2 = (char*)&DAT_07e113e4;
+    char* v2 = (char*)&ChatHistoryBuffer;
     char* end = (char*)flt_7E118E4_PTR;
     while (v2 < end) {
         if (v1 != v0) {
@@ -279,7 +278,7 @@ void Render_ChatBox_(void)
         ++v1;
     }
 
-    if (DAT_00559bf0 != 0) {
+    if (WhisperMuteFlag != 0) {
         GL_DrawTexture(239, 432.0f, 420.0f, 15.0f, 16.0f, 0.0f, 0.0f, 0.9375f, 1.0f, 1, 1);
     }
     // DESVIACION (Fase 4): selector de emojis junto al campo de texto.
@@ -300,17 +299,17 @@ void Render_ChatBox(void) { Render_ChatBox_(); }
 // SoccerObserver=0, SoccerTime=0 by default in our build).
 //
 // Note: the IDA decomp shows several `&dword_7EA51EC` comparisons used to
-// terminate the byte_7E919BC name-table scan.  We approximate with a
+// terminate the GuildInfoTable name-table scan.  We approximate with a
 // 100-name (8000-byte) bound — see DWORD_7EA51EC_LIMIT.
 // =============================================================================
 
 // `SoccerTime` y `SoccerObserver` son 0x05826C08 y 0x05826D33 (`ida_xrefs_to`),
-// NO DAT_07e11e10 / DAT_07e11e14: de 0x07E11E10 el unico xref en todo el
+// NO LegacySoccerTime / LegacySoccerObserver: de 0x07E11E10 el unico xref en todo el
 // binario es sub_494520 (el bloque anti-tamper de IME/RC4).  Los escritores
 // (InitGame y los handlers F3/22 y F3/23) y este lector tienen que usar la
 // misma memoria.
-#define DAT_07e11e10_alias  DAT_05826c08   // SoccerTime
-#define DAT_07e11e14_alias  DAT_05826d33   // SoccerObserver
+#define DAT_07e11e10_alias  SoccerTime   // SoccerTime
+#define DAT_07e11e14_alias  SoccerObserver   // SoccerObserver
 
 extern "C" char __cdecl Render_CharInfoPanel_(void);
 char Render_CharInfoPanel_(void)
@@ -327,7 +326,7 @@ char Render_CharInfoPanel_(void)
         x = 320.0f - 20.0f;
         gFont.SelectFont(gFont.GetTextDC(), gFont.GetFont(FONT_BOLD));
         int v20 = *(short*)((BYTE*)(uintptr_t)Hero + EntityOffset(474));
-        if (v20 < 0 || (size_t)v20 >= sizeof(DAT_07e919bc) / 80) return ret;
+        if (v20 < 0 || (size_t)v20 >= sizeof(GuildInfoTable) / 80) return ret;
         m_dwTextColor = HeroSoccerTeam != 0 ? 0xFFFF5901 : 0xFF008000u;
         CreateGuildMark(v20, 1);
         GL_DrawTexture(34, x, 4.0f, 8.0f, 8.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1, 1);
@@ -426,11 +425,11 @@ int RenderEquipedHelperLife_(bool a2)
     // equipado, no `char_class`.
     int retY = 15;                       // `mov esi, 0Fh` del prologo
 
-    const BYTE* hero = (const BYTE*)DAT_07abf5d8;
+    const BYTE* hero = (const BYTE*)Hero;
     const WORD helperType = hero ? *(const WORD*)(hero + EntityOffset(0x2B8)) : 0;
 
     DWORD backupBgTextColor = SetBackgroundTextColor;
-    DWORD backupTextColor   = DAT_00559c78;
+    DWORD backupTextColor   = m_dwTextColor;
 
     if (helperType >= MODEL_HELPER_ANGEL && helperType <= MODEL_HELPER_DINORANT) {
         const float posY = a2 ? 24.0f : 4.0f;
@@ -463,7 +462,7 @@ int RenderEquipedHelperLife_(bool a2)
         gFont.SelectFont(gFont.GetTextDC(), gFont.GetFont(FONT_NORMAL));
         EnableAlphaTest(true);
         SetBackgroundTextColor = 0x80000000u;
-        DAT_00559c78 = 0xFFFFFFFFu;
+        m_dwTextColor = 0xFFFFFFFFu;
 
         // IDA centra el texto en el rango [x, x+50] (sub_47F6F0 recibe x en st0
         // y x+50 como 2do arg).  Nuestra reimplementacion de esa funcion toma
@@ -490,7 +489,7 @@ int RenderEquipedHelperLife_(bool a2)
         gFont.SelectFont(gFont.GetTextDC(), gFont.GetFont(FONT_NORMAL));
         EnableAlphaTest(true);
         SetBackgroundTextColor = 0x80000000u;
-        DAT_00559c78 = 0xFFFFFFFFu;
+        m_dwTextColor = 0xFFFFFFFFu;
 
         const char* summonText = GlobalText[356] ? GlobalText[356] : "";
         SIZE ts = { 0, 0 };
@@ -505,7 +504,7 @@ int RenderEquipedHelperLife_(bool a2)
     }
 
     SetBackgroundTextColor = backupBgTextColor;
-    DAT_00559c78 = backupTextColor;
+    m_dwTextColor = backupTextColor;
     return retY;
 }
 
@@ -556,12 +555,12 @@ void RenderBrokenItem_(int a1)
         BYTE* v13 = (BYTE*)CharacterMachine + v33 + 536;
 
         if (v12 != 0xFFFF) {
-            // Usar ItemAttribute_Base() para recuperar de corrupción de DAT_07d78068 a 0x1.
+            // Usar ItemAttribute_Base() para recuperar de corrupción de ItemAttributeBase a 0x1.
             // La reserva contiene ITEM_MAX_EX filas mas 0x400 filas de
             // desplazamiento aleatorio (WinMain). Validar antes de calcular
             // v19 o llamar a Item_CalculateMaxDurability, no solo al copiar.
-            const uintptr_t allocation = (uintptr_t)DAT_055c9e44;
-            const uintptr_t attrBase = (uintptr_t)DAT_07d78068;
+            const uintptr_t allocation = (uintptr_t)ItemAttrTableBase;
+            const uintptr_t attrBase = (uintptr_t)ItemAttributeBase;
             if (v12 >= ITEM_MAX_EX || allocation == 0 || attrBase < allocation ||
                 attrBase - allocation > 0x400u * sizeof(ITEM_ATTRIBUTE) ||
                 (attrBase - allocation) % sizeof(ITEM_ATTRIBUTE) != 0) {

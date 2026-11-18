@@ -252,8 +252,8 @@ bool ReadSection(PendingSection& section, const BYTE* msg, int size)
 // CustomMonster: OpenMonsterModel / OpenNpcModel).
 void SetMonsterSpeeds(int slot, bool npc)
 {
-    if (slot < 0 || !DAT_05828d58) return;
-    BYTE* model = (BYTE*)(uintptr_t)DAT_05828d58 + slot * BMD_STRIDE;
+    if (slot < 0 || !ModelsBase) return;
+    BYTE* model = (BYTE*)(uintptr_t)ModelsBase + slot * BMD_STRIDE;
     BYTE* actions = *(BYTE**)&((BMD*)(uintptr_t)(model))->Actions;
     const short count = *(short*)(model + 0x26);
     if (!actions || count <= 0) return;
@@ -612,7 +612,7 @@ void ApplyTexts(ITEM_ATTRIBUTE* attr)
     }
     for (int i = 0; i < MAX_SKILL_NAME; ++i) {
         memcpy(SkillName(SkillAttribute.Raw, i), s_VanillaSkillNames[i], SKILL_NAME_SIZE);
-        memcpy(SkillName((char*)DAT_07cf1ff8, i), s_VanillaSkillNames[i], SKILL_NAME_SIZE);
+        memcpy(SkillName((char*)SkillShadowTable, i), s_VanillaSkillNames[i], SKILL_NAME_SIZE);
     }
     const ITEM_ATTRIBUTE* vanilla = (const ITEM_ATTRIBUTE*)s_VanillaAttributes.data();
     for (int i = 0; i < ITEM_MAX_VANILLA && !s_VanillaAttributes.empty(); ++i)
@@ -640,7 +640,7 @@ void ApplyTexts(ITEM_ATTRIBUTE* attr)
         case Proto::CATALOG_TEXT_SKILL:
             if (row.Index >= MAX_SKILL_NAME) continue;
             NetText::FromServer(SkillName(SkillAttribute.Raw, row.Index), SKILL_NAME_SIZE, row.Text, sizeof(row.Text));
-            NetText::FromServer(SkillName((char*)DAT_07cf1ff8, row.Index), SKILL_NAME_SIZE, row.Text, sizeof(row.Text));
+            NetText::FromServer(SkillName((char*)SkillShadowTable, row.Index), SKILL_NAME_SIZE, row.Text, sizeof(row.Text));
             break;
         case Proto::CATALOG_TEXT_CLIENT:
             if (!gClientText.SetServerText(row.Index, row.Text)) continue;
@@ -719,7 +719,7 @@ void CContentCatalog::Clear()
     if (s_HasVanillaSkillNames) {
         for (int i = 0; i < MAX_SKILL_NAME; ++i) {
             memcpy(SkillName(SkillAttribute.Raw, i), s_VanillaSkillNames[i], SKILL_NAME_SIZE);
-            memcpy(SkillName((char*)DAT_07cf1ff8, i), s_VanillaSkillNames[i], SKILL_NAME_SIZE);
+            memcpy(SkillName((char*)SkillShadowTable, i), s_VanillaSkillNames[i], SKILL_NAME_SIZE);
         }
     }
     // Los modelos y texturas ya cargados se conservan: si el server vuelve a
@@ -928,7 +928,7 @@ void CContentCatalog::ApplyItem(const BYTE* record, int recordSize)
 int CContentCatalog::LoadModel(const char* folder, const char* name, int fixedSlot)
 {
     char sub[96];
-    if (!DAT_05828d58 || !NormalizeFolder(folder, sub, sizeof(sub)) || !ValidName(name)) {
+    if (!ModelsBase || !NormalizeFolder(folder, sub, sizeof(sub)) || !ValidName(name)) {
         Log("ContentCatalog: ruta de modelo inválida '%s' '%s'", folder, name);
         return -1;
     }
@@ -945,7 +945,7 @@ int CContentCatalog::LoadModel(const char* folder, const char* name, int fixedSl
     char dir[128];
     Platform::TextFormatTruncated(dir, sizeof(dir), Platform::TruncateText, "Data\\%s", sub);
     AccessModel(slot, dir, name, -1);
-    const BYTE* model = (const BYTE*)(uintptr_t)DAT_05828d58 + slot * BMD_STRIDE;
+    const BYTE* model = (const BYTE*)(uintptr_t)ModelsBase + slot * BMD_STRIDE;
     if (*(const short*)(model + 0x24) <= 0) {
         Log("ContentCatalog: no se pudo cargar %s%s.bmd", dir, name);
         s_LoadedModels[key] = -1;

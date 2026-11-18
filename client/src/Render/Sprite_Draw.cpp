@@ -7,7 +7,7 @@
 // ── SIGNATURA ─────────────────────────────────────────────────────────────────
 //
 //   void __thiscall BMD_Animation(
-//     void       *this,      // model data ptr (DAT_05828d58 + class*0xbc)
+//     void       *this,      // model data ptr (ModelsBase + class*0xbc)
 //     int         param_1,   // flags: 0x6970a9c = root bone offset constant
 //     float       param_2,   // rotation angle (float, animation frame)
 //     undefined4  param_3,   // pos Y packed
@@ -51,21 +51,21 @@
 //         // Frame-to-frame interpolation (quaternion slerp via QuatSlerp)
 //         iVar7 = piVar2[1] + frame * 0xc       (frame A keyframe offset)
 //         iVar4 = piVar3[1] + sVar10 * 0xc      (frame B keyframe offset)
-//         local_68 = *(float*)(iVar7)    - *param_6 * _DAT_005528b0
-//         local_5c = *(float*)(iVar4)    - *param_6 * _DAT_005528b0
-//         local_60 = *(float*)(iVar7+8)  - param_6[1] * _DAT_005528b0
-//         local_54 = *(float*)(iVar4+8)  - param_6[1] * _DAT_005528b0
+//         local_68 = *(float*)(iVar7)    - *param_6 * DegToRad2
+//         local_5c = *(float*)(iVar4)    - *param_6 * DegToRad2
+//         local_60 = *(float*)(iVar7+8)  - param_6[1] * DegToRad2
+//         local_54 = *(float*)(iVar4+8)  - param_6[1] * DegToRad2
 //         EulerToQuat(&local_68, &local_50)   → Quat_Normalize(q_A, out)
 //         EulerToQuat(&local_5c, &local_40)   → Quat_Normalize(q_B, out)
 //         iVar11 = Terrain_QuadEqual(&local_50, &local_40)  → Quat_Dot(A, B)
 //         if iVar11 == 0: QuatSlerp(&local_50, &local_40, fVar8, pfVar13) → Quat_Slerp
-//         else: pfVar13 = &DAT_05826e18 + bone_idx*0x10; *pfVar13 = local_50 (copy)
+//         else: pfVar13 = &BoneQuaternionScratch + bone_idx*0x10; *pfVar13 = local_50 (copy)
 //       else:
 //         // Sample directly from keyframe arrays (no slerp for non-root bones)
 //         local_50 = piVar2[2][frame*0x10]     (quat A)
 //         local_40 = piVar3[2][sVar10*0x10]    (quat B)
 //
-//       // Blend result stored in DAT_05826e18 (bone result table, stride 0x10)
+//       // Blend result stored in BoneQuaternionScratch (bone result table, stride 0x10)
 //       QuatToMatrix(pfVar13, local_30)     → Quat_ToMatrix(quat, mat3x3)
 //
 //       pfVar13 = piVar2[0] + local_78 * 0xc   (translation keyframe A)
@@ -78,8 +78,8 @@
 //
 // ── GLOBALS ───────────────────────────────────────────────────────────────────
 //
-//   DAT_05826e18  — BoneQuaternion: cuaterniones ya interpolados (stride 0x10, 200 huesos)
-//   DAT_005528b0  — animation blend scale constant
+//   BoneQuaternionScratch  — BoneQuaternion: cuaterniones ya interpolados (stride 0x10, 200 huesos)
+//   DegToRad2Bits  — animation blend scale constant
 //   this[+0x22]   — bone count for this model
 //   this[+0x26]   — total frame count
 //   this[+0x2c]   — bone descriptor array ptr

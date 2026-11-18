@@ -39,7 +39,7 @@ bool __cdecl CheckSpecialText(const byte *param_1)
 }
 
 // CPhysicsManager::Move — advances every registered physics object.
-// Updates the floating-point random key _DAT_00590af0 with a random delta
+// Updates the floating-point random key ClothWindKey with a random delta
 // in ±0.1 range, clamped to [-0.2, 1.0].
 // Then iterates a linked list from *(param_1+8)+8, calling Sound_UpdateChannel3D_Tick
 // on each node until sentinel *(param_1+0xc) is reached.
@@ -50,12 +50,12 @@ void __cdecl CPhysicsManager_Move(void* physics_manager, float fTime)
   int iVar2;
 
   iVar2 = _rand();
-  _DAT_00590af0 = _DAT_00590af0 + (float)(iVar2 % 200 + -100) * _DAT_00552500;
-  if (_DAT_00590af0 < _DAT_00552570) {
-    _DAT_00590af0 = -0.2;
+  ClothWindKey = ClothWindKey + (float)(iVar2 % 200 + -100) * SinFreqWorldTime;
+  if (ClothWindKey < GravityMinClamp) {
+    ClothWindKey = -0.2;
   }
-  else if (_DAT_0055256c <= _DAT_00590af0) {
-    _DAT_00590af0 = 1.0;
+  else if (1.0f <= ClothWindKey) {
+    ClothWindKey = 1.0;
   }
   if (sizeof(void*) != 4) return;   // Lista siempre vacia; sus nodos son de 32 bits.
   puVar1 = *(undefined4 **)(*(int *)(param_1 + 8) + 8);
@@ -149,40 +149,40 @@ undefined4 __cdecl Packet_ParseReceived(void *param_1)
 
 
 // IDA: MoveItems (0x00503760)
-// Recorre el pool de items en el suelo DAT_07e12840 (1000 slots, stride 0x204).
-// Per active slot: advances Z by velocity, decays velocity by _DAT_005527d0. Checks terrain
+// Recorre el pool de items en el suelo GroundItemPool (1000 slots, stride 0x204).
+// Per active slot: advances Z by velocity, decays velocity by ItemVelDecay. Checks terrain
 // height via RequestTerrainHeight; if entity is above terrain + offset, adjusts Y or
 // Z velocity. Calls ItemAngle and Entity_UpdateSparkleEffect (FUN_00503650).
 void MoveItems(void)
 {
   // IDA MoveItems (0x503760) trabaja sobre `v0 = &Items[0][96]` (la Z).  En nuestro
-  // build DAT_07e12840 ES la base del item (como asumen Net_Process y
+  // build GroundItemPool ES la base del item (como asumen Net_Process y
   // Entity_Render), así que los offsets equivalentes desde la base son:
   //   ip+72  active   ·  ip+74  modelo  ·  ip+88/92  X,Y  ·  ip+96  Z
   //   ip+100/104  Angle[0]/Angle[1]     ·  ip+288  velocidad Z
   for (int slotIdx = 0; slotIdx < 1000; ++slotIdx) {
-    unsigned char *ip = (unsigned char *)DAT_07e12840 + slotIdx * GROUND_ITEM_STRIDE;
+    unsigned char *ip = (unsigned char *)GroundItemPool + slotIdx * GROUND_ITEM_STRIDE;
     if (ip[72] == 0) continue;
 
     float *pZ  = (float *)(ip + 96);
     float *pVz = (float *)(ip + 288);
 
     *pZ  = *pVz + *pZ;
-    *pVz = *pVz - _DAT_005527d0;
+    *pVz = *pVz - ItemVelDecay;
 
     float10 fVar3 = (float10)RequestTerrainHeight(*(float *)(ip + 88), *(float *)(ip + 92));
     short  sVar1  = *(short *)(ip + 74);
-    fVar3 = fVar3 + (float10)_DAT_0055284c;
+    fVar3 = fVar3 + (float10)30.0f;
     if ((399 < sVar1) && (sVar1 < 0x250)) {
-      fVar3 = fVar3 + (float10)_DAT_005528e4;
+      fVar3 = fVar3 + (float10)40.0f;
     }
     if (fVar3 < (float10)*pZ) {
       // Todavía en el aire: gira mientras cae.
       if ((sVar1 < 0x250) || (0x26f < sVar1)) {
-        *(float *)(ip + 100) = *pVz * _DAT_00552a28;
+        *(float *)(ip + 100) = *pVz * (-10.0f);
       }
       else {
-        *(float *)(ip + 104) = *pVz * _DAT_00552a28;
+        *(float *)(ip + 104) = *pVz * (-10.0f);
       }
     }
     else {

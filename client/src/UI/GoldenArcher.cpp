@@ -48,23 +48,23 @@ extern "C" { int g_GoldenArcherCustom = 0; }
 #define GA_ChipCount16       (*(short*)&GoldenArcherItemCount)
 #define GA_GiftName          ((char*)GoldenArcherLuckyNumberText)         // g_strGiftName[64]
 #define GA_ScratchTicket     GoldenArcherLuckyNumberTicket                  // g_bScratchTicket
-#define GA_MouseX            ((int)DAT_083a427c)
-#define GA_MouseY            ((int)DAT_083a4278)
-#define GA_MouseLButtonPush  DAT_083a4124
-#define GA_MouseLButtonPop   DAT_083a413c
-#define GA_MouseLButton      DAT_083a42c4
-#define GA_MouseOnWindow     DAT_07d78094
-#define GA_MouseUpdateTime   DAT_07e11d28
-#define GA_MouseUpdateMax    DAT_00559bec
-#define GA_InventoryStartX   (*(int*)&DAT_07ea5288)
-#define GA_InventoryStartY   (*(int*)&DAT_07ea5284)
-#define GA_InputEnable       DAT_00559c84
+#define GA_MouseX            ((int)MouseX)
+#define GA_MouseY            ((int)MouseY)
+#define GA_MouseLButtonPush  MouseLButtonPush
+#define GA_MouseLButtonPop   MouseLButtonPop
+#define GA_MouseLButton      MouseLButton
+#define GA_MouseOnWindow     MouseOnWindowFlag
+#define GA_MouseUpdateTime   MoveDebounceCounter
+#define GA_MouseUpdateMax    MouseUpdateTimeMax
+#define GA_InventoryStartX   (*(int*)&InventoryStartX)
+#define GA_InventoryStartY   (*(int*)&InventoryStartY)
+#define GA_InputEnable       InputEnable
 #define GA_GoldInputEnable   GoldInputEnable
 #define GA_InputGold         InputGold
 #define GA_StorageGoldFlag   StorageGoldFlag
 #define GA_InputNumber       InputNumber
-#define GA_InputTextWidth    DAT_00559c8c
-#define GA_InputIndex        DAT_07e11d78
+#define GA_InputTextWidth    LegacyInputTextWidth
+#define GA_InputIndex        ActiveInputIndex
 #define GA_WindowWidth       ((int)gWindow.GetWidth())
 #define GA_WindowHeight      ((int)gWindow.GetHeight())
 
@@ -129,9 +129,9 @@ static void GA_Ida_RecvInfo(BYTE* Msg, int Size)
     CharacterOpened = 0;
     if (mode == 1 && Size >= 12 &&
         *(short*)(Msg + 6) != -1 && *(short*)(Msg + 8) != -1 && *(short*)(Msg + 10) != -1) {
-        DAT_07e11e20 = *(short*)(Msg + 6);
-        DAT_07e11e22 = *(short*)(Msg + 8);
-        DAT_07e11e24 = *(short*)(Msg + 10);
+        MutoNumber0 = *(short*)(Msg + 6);
+        MutoNumber1 = *(short*)(Msg + 8);
+        MutoNumber2 = *(short*)(Msg + 10);
     }
 }
 
@@ -149,7 +149,7 @@ static void GA_Ida_RecvMuto(BYTE* Msg, int Size)
     if (Size < 10) return;
     const short a = *(short*)(Msg + 4), b = *(short*)(Msg + 6), c = *(short*)(Msg + 8);
     if (a != -1 && b != -1 && c != -1) {
-        DAT_07e11e20 = a; DAT_07e11e22 = b; DAT_07e11e24 = c;
+        MutoNumber0 = a; MutoNumber1 = b; MutoNumber2 = c;
     }
 }
 
@@ -223,7 +223,7 @@ static void GA_Ida_Render(void)
         GA_Ida_ButtonState(GA_In(GA_X(35), 255, 120, 22) && GA_MouseLButtonPush, chips < 10);
         GL_DrawTexture(240, (float)GA_X(35), 255.0f, 120.0f, 22.0f, 0.0f, 0.0f, 0.83203125f, 1.0f, 1, 1);
         RenderCenteredText(GA_X(95), 260, GlobalText[244]);
-        if (DAT_07e11e20 != -1 && DAT_07e11e22 != -1 && DAT_07e11e24 != -1) {
+        if (MutoNumber0 != -1 && MutoNumber1 != -1 && MutoNumber2 != -1) {
             GA_Ida_ButtonState(GA_In(GA_X(35), 202, 120, 22) && GA_MouseLButtonPush, false);
             GL_DrawTexture(240, (float)GA_X(35), 202.0f, 120.0f, 22.0f, 0.0f, 0.0f, 0.83203125f, 1.0f, 1, 1);
             RenderCenteredText(GA_X(95), 207, GlobalText[218]);
@@ -333,10 +333,10 @@ static void GA_Ida_Render(void)
     if (mode != 3 && mode != 4) {
         gFont.SelectFont(gFont.GetTextDC(), gFont.GetFont(FONT_BIG));
         m_dwTextColor = 0xFF0096D4u;
-        if (DAT_07e11e20 == -1 || DAT_07e11e22 == -1 || DAT_07e11e24 == -1)
+        if (MutoNumber0 == -1 || MutoNumber1 == -1 || MutoNumber2 == -1)
             Platform::TextFormatSecure(buffer, "xxx - xxx - xxx");
         else
-            Platform::TextFormatSecure(buffer, "%.3d - %.3d - %.3d", DAT_07e11e20, DAT_07e11e22, DAT_07e11e24);
+            Platform::TextFormatSecure(buffer, "%.3d - %.3d - %.3d", MutoNumber0, MutoNumber1, MutoNumber2);
         if (mode == 1) RenderCenteredText(GA_X(95), 370, buffer);
     }
     Gfx::Color3f(1.0f, 1.0f, 1.0f);
@@ -365,13 +365,13 @@ static void GA_Ida_Check(void)
                 if (GA_In(GA_X(35), 255, 120, 22) && GA_MouseLButtonPop) {
                     GA_MouseLButtonPop = 0;
                     if (GA_CountChips(-1) >= 10 ||
-                        (DAT_07e11e20 != -1 && DAT_07e11e22 != -1 && DAT_07e11e24 != -1))
+                        (MutoNumber0 != -1 && MutoNumber1 != -1 && MutoNumber2 != -1))
                         send = true;
                 }
                 if (send) {
                     const BYTE pkt[3] = { 0xC1, 0x03, 0x96 };
                     gNetwork.SendC1(pkt, sizeof(pkt));
-                } else if (DAT_07e11e20 != -1 && DAT_07e11e22 != -1 && DAT_07e11e24 != -1 &&
+                } else if (MutoNumber0 != -1 && MutoNumber1 != -1 && MutoNumber2 != -1 &&
                            GA_In(GA_X(35), 202, 120, 22) && GA_MouseLButtonPop) {
                     GA_MouseLButtonPop = 0;
                     CreateDialogInterface(713, 5);
@@ -383,7 +383,7 @@ static void GA_Ida_Check(void)
             const int by = GA_InventoryStartY + 290;
             if (GA_In(bx, by, 120, 22) && GA_MouseLButtonPop) {
                 if (GetItemCount(-1, -1)) {
-                    const char* text = DAT_07db8710[GA_InputIndex];
+                    const char* text = InputTextBuffers[GA_InputIndex];
                     BYTE pkt[18] = { 0xC1, 18, 0x9D };
                     memcpy(pkt + 3, text + 0, 4);  pkt[7] = 0;
                     memcpy(pkt + 8, text + 4, 4);  pkt[12] = 0;
@@ -817,7 +817,7 @@ static void RenderLucky(void)
     RenderInputText(x + 40, y + 9, 0);
     GA_InputTextWidth = 256;
     y += 30;
-    RenderBox((float)x + 35, (float)y, 120, 22, GlobalText[906], strlen(DAT_07db8710[GA_InputIndex]) > 0);
+    RenderBox((float)x + 35, (float)y, 120, 22, GlobalText[906], strlen(InputTextBuffers[GA_InputIndex]) > 0);
     if (GA_GiftName[0]) {
         y += 30;
         char lines[7 * 38 + 1] = {};
@@ -843,8 +843,8 @@ static bool CheckLucky(void)
     int y = kStartY + 80;
     if (CheckExplanation(x, y)) return true;
     y += 160;
-    if (strlen(DAT_07db8710[GA_InputIndex]) > 0 && IsWorkZone(x, y, 120, 22)) {
-        if (ConsumeClick()) { PlayBuffer(25, 0, 0); SendExchangeLucky(DAT_07db8710[GA_InputIndex]); }
+    if (strlen(InputTextBuffers[GA_InputIndex]) > 0 && IsWorkZone(x, y, 120, 22)) {
+        if (ConsumeClick()) { PlayBuffer(25, 0, 0); SendExchangeLucky(InputTextBuffers[GA_InputIndex]); }
         return true;
     }
     return false;

@@ -71,7 +71,7 @@ void __cdecl Model_LoadPlayerEquipmentTextures(void)
         OpenTexture(i + 0x60, "Player\\", 0x2600, '\x01');
     }
 
-    DAT_0055a7c4 = 1;
+    g_tex_ext_mode = 1;
 
     // Shadow texture
     OpenTexture(0x187, "Player\\", 0x2600, '\x01');

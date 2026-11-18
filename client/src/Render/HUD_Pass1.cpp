@@ -30,7 +30,7 @@
 
 extern "C" BYTE OffsetInventoryItems[];     // src/Render/HUD_Pass3.cpp
 extern "C" void __cdecl SeedQuickPotionTypesFromInventory(void);
-extern "C" int __cdecl sub_482E40(int a1);
+extern "C" int __cdecl HUD_CountQuickSlotItems(int a1);
 extern "C" void __cdecl RenderTipText(int sx, int sy, const char* Text);
 
 static bool HUD_IsGoldenArcherPanelRuntime(void)
@@ -46,7 +46,7 @@ static bool HUD_IsGoldenArcherPanelRuntime(void)
 //
 // Helpers de hash-table — ya declarados en functions.h con linkage C++; acá no
 // los redeclaramos. RenderMainFrameWindow sólo los llama desde el bloque
-// gateado `if (CharacterMachine && dword_55C9BD4)`, que en nuestro build se saltea,
+// gateado `if (CharacterMachine && HashTableCapacity)`, que en nuestro build se saltea,
 // así que no necesitamos sus referencias al enlazar.
 
 // sub_403150: NO es un "desencriptado de g_csQuest" como decia la nota vieja.
@@ -64,14 +64,14 @@ static bool HUD_IsGoldenArcherPanelRuntime(void)
 // OJO: 0x00561558..0x00561564 es otra cosa (la escribe `BeginOpengl`, 0x5119B0).
 #define ScreenCenterX        ViewportCenterX
 #define ScreenCenterY        ViewportCenterY
-#define PerspectiveX         _DAT_083a42a4
-#define PerspectiveY         _DAT_083a42a8
+#define PerspectiveX         PerspectiveScaleX
+#define PerspectiveY         PerspectiveScaleY
 
-#define byte_7E11D6E         DAT_07e11d6e
+#define byte_7E11D6E         HudTextVisibleFlag
 #define dword_55C9BC8        MAIN_HASH_CLASS
-#define dword_55C9BCC        DAT_055c9bcc
-#define dword_55C9BD0        DAT_055c9bd0
-#define dword_55C9BD4        DAT_055c9bd4
+#define dword_55C9BCC        HashTableValues
+#define dword_55C9BD0        HashTableKeys
+#define dword_55C9BD4        HashTableCapacity
 
 // =============================================================================
 // FloatingLabel_MeasureText — port de sub_480C60. Mide la burbuja de chat (CHAT)
@@ -223,7 +223,7 @@ void Render_HPBars(void) { RenderPartyHP_(); }
 
 // =============================================================================
 // RenderBooleans — sub_4BD090.  Dibuja las burbujas de chat (CHAT, pool de
-// 100 en DAT_07e016f8) sobre los personajes, en tres pasadas:
+// 100 en ChatBubblePool) sobre los personajes, en tres pasadas:
 //   1. Proyecta la posición de mundo del dueño → pantalla, la guarda en x/y, y después
 //      compute label dimensions (sub_480C60).
 //   2. De-overlap pass: for every pair of active entries, shift one out of
@@ -238,8 +238,8 @@ void RenderBooleans_(void)
 
     // IDA recorre el pool con punteros anclados en Owner (pasada 1) y en
     // LifeTime[0] (pasadas 2 y 3); acá se usan los campos de CHAT.
-    CHAT* chats = AsChat(DAT_07e016f8);
-    const int kChats = (int)(sizeof(DAT_07e016f8) / sizeof(CHAT));   // 100
+    CHAT* chats = AsChat(ChatBubblePool);
+    const int kChats = (int)(sizeof(ChatBubblePool) / sizeof(CHAT));   // 100
 
     // Pasada 1: proyecta el dueño (o Position si no hay dueño) y ubica la caja.
     for (int i = 0; i < kChats; ++i) {
@@ -251,7 +251,7 @@ void RenderBooleans_(void)
                 float Position[3];
                 Position[0] = o->Position[0];
                 Position[1] = o->Position[1];
-                Position[2] = o->BoundingBoxMax[2] + o->Position[2] + _DAT_0055290c;
+                Position[2] = o->BoundingBoxMax[2] + o->Position[2] + 60.0f;
                 Projection(Position, &sx, &sy);
             } else {
                 Projection(c->Position, &sx, &sy);
@@ -324,7 +324,7 @@ void Render_FloatingText(void) { RenderBooleans_(); }
 //   a una alocación nueva, lo copia de vuelta y más tarde decrementa.
 //
 // We preserve the anti-tamper structure but it's a no-op when the table is
-// vacía (dword_55C9BD4 == 0) — que es nuestro estado por defecto. Cuando el motor
+// vacía (HashTableCapacity == 0) — que es nuestro estado por defecto. Cuando el motor
 // pueble la tabla más adelante, el camino se va a ejecutar correctamente.
 // =============================================================================
 extern "C" void __cdecl RenderMainFrameWindow_(void);
@@ -332,7 +332,7 @@ void RenderMainFrameWindow_(void)
 {
     Gfx::Color3f(1.0f, 1.0f, 1.0f);
     EnableAlphaTest(true);
-    DAT_07e11d6e = 0;
+    HudTextVisibleFlag = 0;
     m_dwTextColor = 0xFFFFFFFF;
     m_dwBackColor = 0xFF000000;
 
@@ -357,7 +357,7 @@ void RenderMainFrameWindow_(void)
     if (CharacterMachine) {
         void* v0 = CharacterMachine;
         UINT  v6 = HashTable_GetIndex(&MAIN_HASH_CLASS, v0);
-        if (!(v6 != 0xFFFFFFFFu && DAT_055c9bd4)) {
+        if (!(v6 != 0xFFFFFFFFu && HashTableCapacity)) {
             // No encontrado / tabla vacía — inserta una entrada nueva marcada con
             // ref-count = 1 (así el decremento siguiente dispara el encriptado XOR
             // round-trip elsewhere).
@@ -421,16 +421,16 @@ void Render_BottomHUD(void) { RenderMainFrameWindow_(); }
 // =============================================================================
 // Item_FindQuickSlotByCategory, RenderItem3D y Camera_BuildMouseRay ya están declaradas en
 // functions.h (que entra vía stdafx.h).
-extern "C" DWORD DAT_07e91388;
-extern "C" DWORD DAT_07eaa13c;
+extern "C" DWORD ItemPickedFlag;
+extern "C" DWORD ItemActionMode;
 
-// FUN_004f5ce0 (sub_4F5CE0) está portada en HUD_Pass6.cpp como sub_4F5CE0_().
-// FUN_004f6420 (sub_4F6420) está portada en HUD_Pass6.cpp.
+// Skill_RenderEffects (sub_4F5CE0) está portada en HUD_Pass6.cpp como sub_4F5CE0_().
+// TeleportEffect_Render (HUD_RenderPickedItemIcon, IDA: sub_4F6420) está portada en HUD_Pass6.cpp.
 // Las dos tienen declaración en functions.h como `void(int,int,int,int)` — las envolvemos.
 extern "C" char __cdecl sub_4F5CE0_(void);
-extern "C" void __cdecl sub_4F6420(int, int, int, int);
-void __cdecl FUN_004f5ce0(int, int, int, int) { sub_4F5CE0_(); }
-void __cdecl FUN_004f6420(int a, int b, int c, int d) { sub_4F6420(a, b, c, d); }
+extern "C" void __cdecl HUD_RenderPickedItemIcon(int, int, int, int);
+void __cdecl Skill_RenderEffects(int, int, int, int) { sub_4F5CE0_(); }
+void __cdecl TeleportEffect_Render(int a, int b, int c, int d) { HUD_RenderPickedItemIcon(a, b, c, d); }
 
 // alineación del struct OffsetInventoryItems. En IDA el acceso es:
 //   *(&OffsetInventoryItems.Type  + 34*v2)   → 4-byte slot, stride 136 bytes  ←Type
@@ -478,12 +478,12 @@ void Render_HotbarItems3D_(void)
     // RenderItem3D necesita.  Sin la llamada, la ventana de quest mostraba el
     // nombre del item ("Scroll of Emperor x 1", que lo dibuja la otra llamada
     // con a3 = 1 desde sub_403320) pero nunca su modelo.
-    if (g_csQuest) FUN_00403150((void*)(uintptr_t)g_csQuest, 0, 1, 0);
+    if (g_csQuest) Quest_RenderItemList((void*)(uintptr_t)g_csQuest, 0, 1, 0);
 
     if (!HUD_IsGoldenArcherPanelRuntime()) {
-        FUN_004f5ce0(0, 0, 0, 0);
-        if (DAT_07e91388 > 0 && !DAT_07eaa13c) {
-            FUN_004f6420(0, 0, 0, 0);
+        Skill_RenderEffects(0, 0, 0, 0);
+        if (ItemPickedFlag > 0 && !ItemActionMode) {
+            TeleportEffect_Render(0, 0, 0, 0);
         }
 
         int slot_x = 208;

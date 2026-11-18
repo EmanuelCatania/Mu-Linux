@@ -35,7 +35,7 @@ void __cdecl Model_AssignItemTexturePrefixes(void)
     for (int i = 0; i < 2; i++)
         OpenTexture(i + 0x33e, "Item\\", 0x2600, '\x01');
 
-    DAT_0055a7c4 = 1;
+    g_tex_ext_mode = 1;
 
     // Individual item texture slot bindings
     OpenTexture(0x1a1, "Item\\", 0x2600, '\x01');
@@ -52,7 +52,7 @@ void __cdecl Model_AssignItemTexturePrefixes(void)
     OpenTexture(0x23a, "Item\\", 0x2600, '\x01');
     OpenTexture(0x222, "Item\\", 0x2600, '\x01');
 
-    DAT_0055a7c4 = 1;
+    g_tex_ext_mode = 1;
 
     // More individual bindings
     OpenTexture(0x1af, "Item\\", 0x2600, '\x01');

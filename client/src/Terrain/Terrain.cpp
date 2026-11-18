@@ -22,7 +22,7 @@
 //   Tile (0,0) = esquina noroeste; tile (255,255) = sureste
 //
 //   Coordenadas mundo:
-//     world_x = (grid_x + 0.5) * tile_size   (tile_size = DAT_005524f0)
+//     world_x = (grid_x + 0.5) * tile_size   (tile_size = GridToWorldScaleBits)
 //     world_y = (grid_y + 0.5) * tile_size
 //
 //   Tamaño total del mapa: 256 * tile_size unidades de mundo
@@ -34,20 +34,20 @@
 //   TerrainMappingLayer1     | 0x80BB2B4  | byte[65536]    | texture_type_id por tile
 //   TerrainMappingLayer2     | 0x80AB2B4  | byte[65536]    | atributo secundario por tile
 //   TerrainMappingAlpha     | 0x834B608  | float[65536]   | altura por tile (de .att)
-//   DAT_080cb2cc     | 0x80CB2CC  | float[65536]   | altura por tile (de TerrainHeight)
-//   DAT_0838b800     | 0x838B800  | uint[270]      | paleta de texturas (IDs de OZJ)
-//   DAT_07feb288     | 0x7FEB288  | float[3×65536] | normales por tile (XYZ)
-//   DAT_07eeb238     | 0x7EEB238  | float[]        | datos de luz/color ambiental
-//   DAT_0828b608     | 0x828B608  | float[3×65536] | color iluminado por tile
-//   DAT_081cb608     | 0x81CB608  | float[3×?]     | colores tiles visibles (viewport)
-//   DAT_07eab200     | 0x7EAB200  | float[65536]   | offset de ola de agua por tile
-//   DAT_0810b2cc     | 0x810B2CC  | float[65536]   | ruido aleatorio por tile (init)
-//   DAT_081cb2ed     | 0x81CB2ED  | byte[?*8]      | array de objetos de terreno
+//   BackTerrainHeight     | 0x80CB2CC  | float[65536]   | altura por tile (de TerrainHeight)
+//   BmpHeaderBuffer     | 0x838B800  | uint[270]      | paleta de texturas (IDs de OZJ)
+//   TerrainNormalTable     | 0x7FEB288  | float[3×65536] | normales por tile (XYZ)
+//   TerrainLightAmbientBuf     | 0x7EEB238  | float[]        | datos de luz/color ambiental
+//   TerrainLightData     | 0x828B608  | float[3×65536] | color iluminado por tile
+//   PrimaryTerrainLightStorage     | 0x81CB608  | float[3×?]     | colores tiles visibles (viewport)
+//   WaterWaveHeightTable     | 0x7EAB200  | float[65536]   | offset de ola de agua por tile
+//   TerrainNoiseTable     | 0x810B2CC  | float[65536]   | ruido aleatorio por tile (init)
+//   LegacyTerrainObjTable     | 0x81CB2ED  | byte[?*8]      | array de objetos de terreno
 //   DAT_083a021c     | 0x83A021C  | ptr[]          | display list de tiles visibles
-//   DAT_07eab1ec     | 0x7EAB1EC  | uint           | índice tile esquina TL (actual)
-//   DAT_07eab1f0     | 0x7EAB1F0  | uint           | índice tile esquina TR
-//   DAT_07eab1f4     | 0x7EAB1F4  | uint           | índice tile esquina BL
-//   DAT_07eab1f8     | 0x7EAB1F8  | uint           | índice tile esquina BR
+//   TerrainTileIdxTL     | 0x7EAB1EC  | uint           | índice tile esquina TL (actual)
+//   TerrainTileIdxTR     | 0x7EAB1F0  | uint           | índice tile esquina TR
+//   TerrainTileIdxBL     | 0x7EAB1F4  | uint           | índice tile esquina BL
+//   TerrainTileIdxBR     | 0x7EAB1F8  | uint           | índice tile esquina BR
 //
 // ── FORMATO DE ARCHIVO .ATT (terrain.att) ────────────────────────────────────
 //
@@ -61,7 +61,7 @@
 //   0x20001     | 65.536 B | height bytes (256×256) → TerrainMappingAlpha (× height_scale1)
 //
 //   Lectura: loops de 0x4000 dwords (4 bytes por dword = 65536 bytes por sección).
-//   height_scale1 = DAT_00552b70
+//   height_scale1 = HeightNormScaleBits
 //
 // ── FORMATO DE ARCHIVO TERRAINHEIGHT ─────────────────────────────────────────
 //
@@ -70,15 +70,15 @@
 //
 //   Offset      | Tamaño   | Contenido
 //   ────────────┼──────────┼────────────────────────────────────────────────────
-//   0x000       | 0x438 B  | Texture palette: 0x10E dwords → DAT_0838b800[270]
-//   0x438       | 65.536 B | height bytes (256×256) → DAT_080cb2cc (× height_scale2)
+//   0x000       | 0x438 B  | Texture palette: 0x10E dwords → BmpHeaderBuffer[270]
+//   0x438       | 65.536 B | height bytes (256×256) → BackTerrainHeight (× height_scale2)
 //
-//   Si DAT_0055a7c4 != 0: skip 4 bytes al inicio (header comprimido).
-//   Si DAT_0055a7c4 == 0: aplica SaveImage (decompression/CRC).
-//   height_scale2 = DAT_005528f0
+//   Si g_tex_ext_mode != 0: skip 4 bytes al inicio (header comprimido).
+//   Si g_tex_ext_mode == 0: aplica SaveImage (decompression/CRC).
+//   height_scale2 = 1.5f
 //
-//   Path: construido a partir de DAT_0055a79c (prefix) + base_name + DAT_0055a798 (suffix)
-//         o DAT_0055a7a4 (fixed path cuando DAT_0055a7c4 == 0)
+//   Path: construido a partir de DataPathPrefix (prefix) + base_name + TerrainFileSuffix (suffix)
+//         o Data2PathPrefix (fixed path cuando g_tex_ext_mode == 0)
 //
 // ── TERRAIN_GETTILEDINDEX (0x004f6c40) ────────────────────────────────────────
 //
@@ -93,9 +93,9 @@
 //       TerrainMappingLayer1[i] = 0               // attrib1 = 0 (sin textura)
 //       TerrainMappingLayer2[i] = 0xFF            // attrib2 = 0xFF (por defecto)
 //       TerrainMappingAlpha[i] = 0.0f           // height = nivel cero
-//       DAT_0810b2cc[i+1] = (rand() & 3) * DAT_005528dc  // ruido aleatorio
+//       TerrainNoiseTable[i+1] = (rand() & 3) * SpriteSheetColStepBits  // ruido aleatorio
 //
-//   Nota: DAT_0810b2cc se inicializa con 0..3 * scale → variación de textura.
+//   Nota: TerrainNoiseTable se inicializa con 0..3 * scale → variación de textura.
 //
 // ── TERRAIN_LOAD (0x004f6f90) ─────────────────────────────────────────────────
 //
@@ -120,7 +120,7 @@
 //     // Sección 3: heights → float
 //     src = buffer + 0x20001
 //     for cada float en TerrainMappingAlpha (65536 entradas):
-//       TerrainMappingAlpha[i] = (float)*src++ * DAT_00552b70
+//       TerrainMappingAlpha[i] = (float)*src++ * HeightNormScaleBits
 //
 //     delete buffer
 //     return true
@@ -132,7 +132,7 @@
 //     fp = fopen(path, "rb")
 //     if (!fp): MessageBox + error log; return false
 //
-//     if (DAT_0055a7c4 != 0): fseek(fp, 4, SEEK_SET)  // skip compressed header
+//     if (g_tex_ext_mode != 0): fseek(fp, 4, SEEK_SET)  // skip compressed header
 //
 //     buffer = new byte[0x10438]
 //     fread(buffer, 1, 0x10438, fp)
@@ -140,15 +140,15 @@
 //
 //     // Texture palette
 //     src = buffer
-//     for 0x10E veces: DAT_0838b800[i] = *(dword*)src; src += 4
+//     for 0x10E veces: BmpHeaderBuffer[i] = *(dword*)src; src += 4
 //
-//     if (DAT_0055a7c4 == 0): SaveImage(4, DAT_0055a798, param_1, buffer, 0x10438)
+//     if (g_tex_ext_mode == 0): SaveImage(4, TerrainFileSuffix, param_1, buffer, 0x10438)
 //
 //     // Heights → float (256×256 = 65536 entradas)
 //     src = buffer + 0x438
 //     for row in 0..255:
 //       for col in 0..255:
-//         DAT_080cb2cc[row*256 + col] = (float)*src++ * DAT_005528f0
+//         BackTerrainHeight[row*256 + col] = (float)*src++ * 1.5f
 //
 //     delete buffer
 //     return true
@@ -162,11 +162,11 @@
 //       i  = (x & 0xFF) + (y & 0xFF) * 0x100   // tile actual
 //       ir = (x+1 & 0xFF) + (y+1 & 0xFF) * 0x100  // tile diagonal
 //
-//       Toma 3 alturas de esquinas vecinas (DAT_080cb2cc)
+//       Toma 3 alturas de esquinas vecinas (BackTerrainHeight)
 //       Triangle_ComputeNormal(pos_a, pos_b, pos_c, out_normal)  — cross product/normalización
-//       → DAT_07feb288[i*3..i*3+2] = (nx, ny, nz)
+//       → TerrainNormalTable[i*3..i*3+2] = (nx, ny, nz)
 //
-//   DAT_07feb288 = array de normales, float[3] por tile
+//   TerrainNormalTable = array de normales, float[3] por tile
 //   Triangle_ComputeNormal @ 0x004fa4d0 = Vec3_CrossProduct(a, b, c, out)
 //
 // ── TERRAIN_COMPUTELIGHTING (0x004f71c0) ──────────────────────────────────────
@@ -175,25 +175,25 @@
 //     Para cada tile i en 0..65535:
 //       // Dot product de normal con dirección de luz + componente ambiental
 //       light = (normal.x + normal.y) * 0.5f - normal.z * 0.5f + 0.5f
-//       light = clamp(light, DAT_00552580, DAT_0055256c)  // [0.0, 1.0]
+//       light = clamp(light, FloatZeroBBits, 1.0f)  // [0.0, 1.0]
 //
 //       // Multiplica por color del canal de luz
-//       DAT_0828b608[i*3+0] = light * DAT_07eeb238[i*3+0]  // R
-//       DAT_0828b608[i*3+1] = light * DAT_07eeb238[i*3+1]  // G
-//       DAT_0828b608[i*3+2] = light * DAT_07eeb238[i*3+2]  // B
+//       TerrainLightData[i*3+0] = light * TerrainLightAmbientBuf[i*3+0]  // R
+//       TerrainLightData[i*3+1] = light * TerrainLightAmbientBuf[i*3+1]  // G
+//       TerrainLightData[i*3+2] = light * TerrainLightAmbientBuf[i*3+2]  // B
 //
-//   Input: DAT_07feb288 (normales), DAT_07eeb238 (color/dirección de luz)
-//   Output: DAT_0828b608 (color iluminado por tile)
+//   Input: TerrainNormalTable (normales), TerrainLightAmbientBuf (color/dirección de luz)
+//   Output: TerrainLightData (color iluminado por tile)
 //
 // ── TERRAIN_FRAMEUPDATE (0x004f95e0) ──────────────────────────────────────────
 //
 //   void Terrain_FrameUpdate():
 //     // 1. Copia colores iluminados al buffer de viewport actual
 //     Para tiles (x,y) en cámara [FrustrumBoundMinX_1..FrustrumBoundMinY_1+3]:
-//       DAT_081cb608[idx*3..+2] = DAT_0828b608[tile_idx*3..+2]
+//       PrimaryTerrainLightStorage[idx*3..+2] = TerrainLightData[tile_idx*3..+2]
 //
 //     // 2. Calcula ángulo solar (ciclo día/noche)
-//     if (DAT_083a3ff0 == 0):
+//     if (WeatherModeState == 0):
 //       sun_cycle = 720.000 ms total     // día largo
 //     else:
 //       sun_cycle = 36.000 ms total      // día rápido (evento)
@@ -201,13 +201,13 @@
 //
 //     // 3. Anima agua (ondas sinusoidales)
 //     Para tiles visibles en viewport:
-//       DAT_07eab200[tile_idx] = sin(tile_col * DAT_00552660 + sun_angle) * DAT_00552488
-//       (Para World==8 (Devias?): usa DAT_00552598 en vez de DAT_00552660)
+//       WaterWaveHeightTable[tile_idx] = sin(tile_col * 5.0f + sun_angle) * 10.0f
+//       (Para World==8 (Devias?): usa 50.0f en vez de 5.0f)
 //
 //   FrustrumBoundMinX_1  — tile X cámara (columna izquierda visible)
 //   FrustrumBoundMinY_1  — tile Y cámara (fila superior visible)
-//   DAT_083a3ff0  — modo ciclo día/noche (0=normal, 1=rápido)
-//   DAT_07eab200  — water wave offsets (modifica altura Z del vertex de agua)
+//   WeatherModeState  — modo ciclo día/noche (0=normal, 1=rápido)
+//   WaterWaveHeightTable  — water wave offsets (modifica altura Z del vertex de agua)
 //
 // ── TERRAIN_HEIGHATATPOS (0x004f7500) ─────────────────────────────────────────
 //
@@ -218,11 +218,11 @@
 //     frac_x = world_x - col
 //     frac_y = world_y - row
 //
-//     // Lee 4 esquinas del tile (DAT_080cb2cc)
-//     h00 = DAT_080cb2cc[col + row * 256]
-//     h10 = DAT_080cb2cc[(col+1) + row * 256]
-//     h01 = DAT_080cb2cc[col + (row+1) * 256]
-//     h11 = DAT_080cb2cc[(col+1) + (row+1) * 256]
+//     // Lee 4 esquinas del tile (BackTerrainHeight)
+//     h00 = BackTerrainHeight[col + row * 256]
+//     h10 = BackTerrainHeight[(col+1) + row * 256]
+//     h01 = BackTerrainHeight[col + (row+1) * 256]
+//     h11 = BackTerrainHeight[(col+1) + (row+1) * 256]
 //
 //     // Bilinear interpolation
 //     top    = h00 + (h10 - h00) * frac_y
@@ -234,15 +234,15 @@
 // ── TERRAINTILE_RENDER (0x004f7fb0) ───────────────────────────────────────────
 //
 //   void TerrainTile_Render(float tile_x, float tile_y, uint tile_param, uint rand_seed):
-//     // DAT_0838bc44: modo de renderizado (2 = agua, otros = terreno normal)
+//     // TerrainFlag: modo de renderizado (2 = agua, otros = terreno normal)
 //
-//     Si DAT_0838bc44 == 2 (agua):
-//       Si las 4 alturas del tile <= DAT_00552580 (= bajo el agua):
-//         Si DAT_0814b2dc == 0 && no PvP sub-estado:
+//     Si TerrainFlag == 2 (agua):
+//       Si las 4 alturas del tile <= FloatZeroBBits (= bajo el agua):
+//         Si WaterRenderDisableFlag == 0 && no PvP sub-estado:
 //           texture_id = TerrainMappingLayer1[tile_idx] + 0x32  // textura de agua
 //           GL_BindTextureSlot(texture_id)
 //           glTexCoord2f(uv_x, ...)
-//           // Agrega offset de ola (DAT_07eab200) a los vértices Y
+//           // Agrega offset de ola (WaterWaveHeightTable) a los vértices Y
 //           glVertex3fv(vertex + wave_y)
 //           glEnd(GL_QUADS)
 //
@@ -258,7 +258,7 @@
 //
 //       Si World==7 (Atlans bajo el agua) && attrib2==5 && altura>0:
 //         // Renderiza superficie del agua sobre el tile
-//         animated_idx = DAT_0839bc8c + 0x1E  // frame animado (mod 32 + 30)
+//         animated_idx = WaterTextureNumber + 0x1E  // frame animado (mod 32 + 30)
 //         TerrainTile_SetupVertices(animated_idx, ...)
 //         TerrainTile_DrawWater(animated_idx)
 //
@@ -269,40 +269,40 @@
 //         TerrainTile_DrawTransition(texture_id)
 //
 //   TerrainMappingLayer1 tile attrib1 values known:
-//     0..N  = índice de tipo de terreno (referencia a paleta DAT_0838b800)
+//     0..N  = índice de tipo de terreno (referencia a paleta BmpHeaderBuffer)
 //     5     = borde de agua (usa lógica especial)
 //
-//   DAT_0839bc8c = frame index mod 32 (del Game_MainLoop)
+//   WaterTextureNumber = frame index mod 32 (del Game_MainLoop)
 //                → tiles de agua usan índice animado 0x1E..0x3D
 //
 // ── TERRAINTILE_DRAW (0x004f7a90) ─────────────────────────────────────────────
 //
 //   void TerrainTile_Draw(int texture_id):
 //     GL_BindTextureSlot(texture_id + 0x23)   // GL_BindTextureSlot
-//     if (!DAT_0839bc86):                 // no wireframe
+//     if (!TerrainNoDrawFlag):                 // no wireframe
 //       glBegin(GL_QUADS)
 //       for each corner (TL, TR, BR, BL):
-//         glTexCoord2f(DAT_07feb238[corner], DAT_07feb23c[corner])
-//         glColor3fv(&DAT_081cb608[tile_idx * 0xC])  // color iluminado (stride 12 bytes)
-//         glVertex3fv(&DAT_07feb258[corner])          // posición 3D
+//         glTexCoord2f(TerrainUvX[corner], TerrainUvY[corner])
+//         glColor3fv(&PrimaryTerrainLightStorage[tile_idx * 0xC])  // color iluminado (stride 12 bytes)
+//         glVertex3fv(&TilePickMinX[corner])          // posición 3D
 //       glEnd()
 //
 //   Vertex buffer (precomputado por TerrainTile_SetupVertices):
-//     DAT_07feb238/23c/240/244/248/24c/250/254 = UV coords (8 floats)
-//     DAT_07feb258/264/270/27c = vertex positions (4 × vec3 = 12 floats)
+//     TerrainUvX/23c/240/244/248/24c/250/254 = UV coords (8 floats)
+//     TilePickMinX/264/270/27c = vertex positions (4 × vec3 = 12 floats)
 //
 // ── TERRAINOBJECTS_RENDER (0x004f7060) ────────────────────────────────────────
 //
 //   void TerrainObjects_Render():
 //     // Itera array de objetos de terreno (rocks, trees, etc.)
-//     obj_ptr = &DAT_081cb2ed
+//     obj_ptr = &LegacyTerrainObjTable
 //     while (obj_ptr < 0x81cb60d):
 //       if obj_ptr[-5] != 0:    // is_visible flag
 //         RenderTerrainBitmap(
 //           8,                  // tipo de objeto (8 = static prop)
 //           obj_ptr[-1],        // object_type
 //           *obj_ptr,           // object_subtype
-//           (float)obj_ptr[1] * DAT_00552cb0  // scale factor
+//           (float)obj_ptr[1] * ObjectScaleFactor  // scale factor
 //         )
 //       obj_ptr += 8            // stride 8 bytes
 //
@@ -310,7 +310,7 @@
 //     -5: is_visible (byte)
 //     -1: object_type (byte)
 //     +0: object_subtype (byte)
-//     +1: scale (byte) → float × DAT_00552cb0
+//     +1: scale (byte) → float × ObjectScaleFactor
 //
 // ── TERRAIN_RENDER (0x004fd800) ───────────────────────────────────────────────
 //
@@ -345,25 +345,25 @@
 //
 // ── CONSTANTES DE MUNDO ───────────────────────────────────────────────────────
 //
-//   DAT_005524f0  — tile_size (grid→world): world_x = grid_x * tile_size
-//   DAT_00552504  — 0.5f (medio tile, offset de centro)
-//   DAT_00552b70  — height_scale1 (para .att): altura en unidades mundo
-//   DAT_005528f0  — height_scale2 (para TerrainHeight)
-//   DAT_005528dc  — scale_noise (para ruido random, DAT_0810b2cc)
-//   DAT_00552cb0  — scale_objects (para objetos estáticos)
-//   DAT_00552488  — water_amplitude (amplitud de olas sinusoidales)
-//   DAT_00552660  — water_freq (frecuencia de ola, modo normal)
-//   DAT_00552598  — water_freq2 (frecuencia alternativa, World==8)
-//   DAT_00552580  — 0.0f (nivel mínimo / superficie del agua)
-//   DAT_0055256c  — 1.0f (máximo normalizado)
-//   DAT_0055a7c4  — compressed_flag (0=no comprimido, 1=comprimido)
-//   DAT_0055a7a4  — fixed_path (ruta fija cuando no comprimido)
-//   DAT_0055a79c  — world_path_prefix (ej "World1/")
-//   DAT_0055a798  — file_suffix (extensión de archivo)
-//   DAT_0814b2dc  — disable_water_rendering flag
-//   DAT_083a3ff0  — fast_day_cycle flag (0=normal 720s, 1=rápido 36s)
-//   DAT_0839bc86  — wireframe_mode flag
-//   DAT_0838bc44  — tile_render_mode (2=agua surface)
+//   GridToWorldScaleBits  — tile_size (grid→world): world_x = grid_x * tile_size
+//   HalfScaleBits  — 0.5f (medio tile, offset de centro)
+//   HeightNormScaleBits  — height_scale1 (para .att): altura en unidades mundo
+//   1.5f  — height_scale2 (para TerrainHeight)
+//   SpriteSheetColStepBits  — scale_noise (para ruido random, TerrainNoiseTable)
+//   ObjectScaleFactor  — scale_objects (para objetos estáticos)
+//   10.0f  — water_amplitude (amplitud de olas sinusoidales)
+//   5.0f  — water_freq (frecuencia de ola, modo normal)
+//   50.0f  — water_freq2 (frecuencia alternativa, World==8)
+//   FloatZeroBBits  — 0.0f (nivel mínimo / superficie del agua)
+//   1.0f  — 1.0f (máximo normalizado)
+//   g_tex_ext_mode  — compressed_flag (0=no comprimido, 1=comprimido)
+//   Data2PathPrefix  — fixed_path (ruta fija cuando no comprimido)
+//   DataPathPrefix  — world_path_prefix (ej "World1/")
+//   TerrainFileSuffix  — file_suffix (extensión de archivo)
+//   WaterRenderDisableFlag  — disable_water_rendering flag
+//   WeatherModeState  — fast_day_cycle flag (0=normal 720s, 1=rápido 36s)
+//   TerrainNoDrawFlag  — wireframe_mode flag
+//   TerrainFlag  — tile_render_mode (2=agua surface)
 //
 // ── CROSS-REFERENCE ───────────────────────────────────────────────────────────
 //
@@ -404,7 +404,7 @@
 //   TerrainMappingLayer1[i] = 0     (TileTex1 byte)
 //   TerrainMappingLayer2[i] = 0xFF  (TileTex2 byte)
 //   TerrainMappingAlpha[i] = 0.0f  (TerrainHeight)
-//   DAT_0810b2cc[i] = (rand() & 3) * scale  (TerrainNoise per-tile UV jitter)
+//   TerrainNoiseTable[i] = (rand() & 3) * scale  (TerrainNoise per-tile UV jitter)
 // IDA: FUN_004F6C60
 void __cdecl Terrain_Clear(void) {
     for (int i = 0; i < 0x10000; ++i) {
@@ -412,13 +412,13 @@ void __cdecl Terrain_Clear(void) {
         TerrainMappingLayer2[i] = 0xff;
         TerrainMappingAlpha[i] = 0.0f;
         unsigned int uVar1 = (unsigned int)rand() & 3u;     // 0..3
-        DAT_0810b2cc[i]   = (float)(int)uVar1 * _DAT_005528dc;
+        TerrainNoiseTable[i]   = (float)(int)uVar1 * SpriteSheetColStep;
     }
 }
 
 // FUN_004f70b0 @ 0x004F70B0 — CreateTerrainNormal (per IDA decomp).
 // Computes per-vertex normals for a 256x256 terrain grid using face-cross of
-// 3 adjacent height samples; output is DAT_07feb288 (TerrainNormal, vec3 per
+// 3 adjacent height samples; output is TerrainNormalTable (TerrainNormal, vec3 per
 // vertex, 65536 vertices).
 //
 // Desviaciones del decomp: los 9 locals sueltos son arrays vec3 (MSVC no
@@ -426,26 +426,26 @@ void __cdecl Terrain_Clear(void) {
 // comparar contra la dirección absoluta 0x80ab288 (&SelectXF en el binario).
 // IDA: FUN_004F70B0
 void __cdecl CreateTerrainNormal(void) {
-    float *pfVar5 = DAT_07feb288;
+    float *pfVar5 = TerrainNormalTable;
     for (unsigned int yRow = 0; yRow < 256; ++yRow) {
         unsigned int yNext = yRow + 1;
-        float fVar3 = (float)(int)yRow  * _DAT_005524f0;
-        float fVar4 = (float)(int)yNext * _DAT_005524f0;
+        float fVar3 = (float)(int)yRow  * GridToWorldScale;
+        float fVar4 = (float)(int)yNext * GridToWorldScale;
         int iVar6 = (int)(yNext & 0xffu) * 0x100;
         for (unsigned int xCol = 1; xCol <= 256; ++xCol) {
             float p1[3], p2[3], p3[3];
             // p2 = (x_curr, y_curr, height@(x_curr, y_curr))
-            p2[0] = (float)(int)xCol * _DAT_005524f0;
+            p2[0] = (float)(int)xCol * GridToWorldScale;
             p2[1] = fVar4;
-            p2[2] = DAT_080cb2cc[(xCol & 0xffu) + iVar6];
+            p2[2] = BackTerrainHeight[(xCol & 0xffu) + iVar6];
             // p1 = (x_curr, y_prev, height@(x_curr, y_prev))
             p1[0] = p2[0];
             p1[1] = fVar3;
-            p1[2] = DAT_080cb2cc[(xCol & 0xffu) + (yRow & 0xffu) * 0x100];
+            p1[2] = BackTerrainHeight[(xCol & 0xffu) + (yRow & 0xffu) * 0x100];
             // p3 = (x_prev, y_curr, height@(x_prev, y_curr))
-            p3[0] = (float)(int)(xCol - 1) * _DAT_005524f0;
+            p3[0] = (float)(int)(xCol - 1) * GridToWorldScale;
             p3[1] = fVar4;
-            p3[2] = DAT_080cb2cc[((xCol - 1) & 0xffu) + iVar6];
+            p3[2] = BackTerrainHeight[((xCol - 1) & 0xffu) + iVar6];
             Triangle_ComputeNormal(p1, p2, p3, pfVar5);
             pfVar5 += 3;
         }
@@ -453,28 +453,28 @@ void __cdecl CreateTerrainNormal(void) {
 }
 
 // IDA: CreateTerrainLight (0x004F71C0)
-// by lightmap (DAT_07eeb238) and clamps into DAT_0828b608.
+// by lightmap (TerrainLightAmbientBuf) and clamps into TerrainLightData.
 // IDA: FUN_004F71C0
 void __cdecl CreateTerrainLight(void) {
     int iVar4 = 0;
     do {
         int iVar6 = 0x100;
         do {
-            // DAT_07feb288 is float[3*n]: [0]=x,[4]=y(+4),[8]=z(+8) per vertex
+            // TerrainNormalTable is float[3*n]: [0]=x,[4]=y(+4),[8]=z(+8) per vertex
             // Ghidra offsets: +0=x, +4=y (DAT_07feb28c), +8=z (DAT_07feb290)
-            float fVar1 = ((*(float*)((char*)&DAT_07feb288 + iVar4) + *(float*)((char*)&DAT_07feb288 + iVar4 + 8)) *
-                           _DAT_00552504 - *(float*)((char*)&DAT_07feb288 + iVar4 + 4) * _DAT_00552504) + _DAT_00552504;
-            float fVar2 = _DAT_00552580;
-            if (_DAT_00552580 <= fVar1) {
+            float fVar1 = ((*(float*)((char*)&TerrainNormalTable + iVar4) + *(float*)((char*)&TerrainNormalTable + iVar4 + 8)) *
+                           HalfScale - *(float*)((char*)&TerrainNormalTable + iVar4 + 4) * HalfScale) + HalfScale;
+            float fVar2 = FloatZeroB;
+            if (FloatZeroB <= fVar1) {
                 fVar2 = fVar1;
-                if (_DAT_0055256c < fVar1) fVar2 = _DAT_0055256c;
+                if (1.0f < fVar1) fVar2 = 1.0f;
             }
             int iVar5 = 3;
             int iVar3 = iVar4;
             do {
                 iVar4 = iVar3 + 4;
                 iVar5--;
-                *(float*)((char*)&DAT_0828b608 + iVar3) = fVar2 * *(float*)((char*)&DAT_07eeb238 + iVar3);
+                *(float*)((char*)&TerrainLightData + iVar3) = fVar2 * *(float*)((char*)&TerrainLightAmbientBuf + iVar3);
                 iVar3 = iVar4;
             } while (iVar5 != 0);
             iVar6--;
@@ -490,15 +490,15 @@ void __cdecl CreateTerrainLight(void) {
 // `BackTerrainHeight[y*256+x] = byte * 1.5` y guarda el header en BMPHeader.
 //
 // Modos:
-//   - DAT_0055a7c4 == 0 (plain):     "Data2/<filename>"  ej "Data2/World3/TerrainHeight.bmp"
-//   - DAT_0055a7c4 != 0 (compressed): "Data/<name_no_ext>.ozb"
+//   - g_tex_ext_mode == 0 (plain):     "Data2/<filename>"  ej "Data2/World3/TerrainHeight.bmp"
+//   - g_tex_ext_mode != 0 (compressed): "Data/<name_no_ext>.ozb"
 // IDA: FUN_004F7290
 uint __cdecl OpenTerrainHeight(char *filename)
 {
     char FileName[256];
     char Text[256];
 
-    if (DAT_0055a7c4 != '\0') {
+    if (g_tex_ext_mode != '\0') {
         // compressed mode: strip extension into Text, then "Data/<Text>.ozb"
         int v3 = 0;
         int plen = (int)strlen(filename);
@@ -520,28 +520,28 @@ uint __cdecl OpenTerrainHeight(char *filename)
     FILE *fp = Platform::GetFileSystem().Open(FileName, "rb");
     if (!fp) {
         crt_sprintf(Text, "%s file not found.", FileName);
-        CErrorReport_Write(&DAT_055c9bf0, Text);
+        CErrorReport_Write(&ErrorReportCtx, Text);
         if (gWindow.GetHwnd()) {
             Platform::GetWindow().ShowError(Text, nullptr, true, false);
             gWindow.RequestCloseApplication();
         }
         return 0;
     }
-    if (DAT_0055a7c4 != '\0') {
+    if (g_tex_ext_mode != '\0') {
         fseek(fp, 4, SEEK_SET);  // skip 4-byte ozb header
     }
     unsigned char *Buffer = (unsigned char*)operator_new(66616);
     fread(Buffer, 1, 66616, fp);
     fclose(fp);
 
-    // copy 1080-byte BMP header into BMPHeader global (DAT_0838b800)
-    memcpy(DAT_0838b800, Buffer, 1080);
+    // copy 1080-byte BMP header into BMPHeader global (BmpHeaderBuffer)
+    memcpy(BmpHeaderBuffer, Buffer, 1080);
 
     // optional: persist decoded copy in plain mode (not implemented, original
     // calls SaveImage(4, "ozb", filename, Buffer, 66616)).
 
     // convert 256×256 bytes (after the 1080-byte header) to floats * 1.5
-    float *dst = DAT_080cb2cc;
+    float *dst = BackTerrainHeight;
     unsigned char *src = Buffer + 1080;
     for (int i = 0; i < 256 * 256; ++i) {
         dst[i] = (float)src[i] * 1.5f;
@@ -560,21 +560,21 @@ void __cdecl SaveImage(int mode, int ext, int path, int buf)
 
 // Terrain_SetupCulling @ 0x004F9C20 — Terrain_SetupCulling: initialises raycast/frustum globals.
 void __cdecl Terrain_SetupCulling(void) {
-    _DAT_0838b60a = 0x47e;                  // short: horizon value
-    *(DWORD*)&_DAT_0838b614 = 0x41000000u;  // float bits: 8.0f
-    *(DWORD*)&_DAT_0838b710 = 0x3f800000u;  // float bits: 1.0f
+    TerrainHorizonClip = 0x47e;                  // short: horizon value
+    *(DWORD*)&TerrainViewScale = 0x41000000u;  // float bits: 8.0f
+    *(DWORD*)&TerrainLodScale = 0x3f800000u;  // float bits: 1.0f
 }
 
 // OpenJpegBuffer @ 0x00529360 — OpenJpegBuffer / Texture_LoadToBuf
 // Loads OZJ/JPEG file, decompresses, converts each pixel component to float
-// using _DAT_00552b70 (1/255 normalization), stores into float* buffer at dst.
+// using HeightNormScale (1/255 normalization), stores into float* buffer at dst.
 // Output: 3 floats per pixel (R, G, B), rows stored bottom-up (flipped).
 void __cdecl OpenJpegBuffer(char *path, float* dst)
 {
     // --- Path construction (same logic as OpenJPG) ---
     char full_path[256];
-    if (DAT_0055a7c4 == '\0') {
-        strcpy(full_path, (const char*)DAT_0055a7a4);
+    if (g_tex_ext_mode == '\0') {
+        strcpy(full_path, (const char*)Data2PathPrefix);
         strcat(full_path, path);
     } else {
         char basename[256];
@@ -585,9 +585,9 @@ void __cdecl OpenJpegBuffer(char *path, float* dst)
             if (path[i] == '.') { dotPos = i; break; }
         }
         basename[dotPos + 1] = '\0';
-        strcpy(full_path, (const char*)DAT_0055a79c);
+        strcpy(full_path, (const char*)DataPathPrefix);
         strcat(full_path, basename);
-        strcat(full_path, (const char*)DAT_00561b70);
+        strcat(full_path, (const char*)TextureExtJpgStr);
     }
 
     // --- Open file ---
@@ -614,7 +614,7 @@ void __cdecl OpenJpegBuffer(char *path, float* dst)
     for (int y = image.height - 1; y >= 0; --y) {
         const unsigned char* row = image.pixels + y * image.width * 3;
         for (int x = 0; x < image.width * 3; ++x)
-            *outFloat++ = (float)row[x] * _DAT_00552b70;
+            *outFloat++ = (float)row[x] * HeightNormScale;
     }
 
 }
@@ -663,7 +663,7 @@ LABEL_12:
 
 // Entrada legacy para la vtable; la ruta activa de Molt usa su muestra SIM.
 void MoltSilhouette_DrawEdge(void *, float *, float *, float);
-void __cdecl FUN_0040a8f0(void *obj, float *p1, float *p2) {
+void __cdecl Obj_DrawEdge(void *obj, float *p1, float *p2) {
     MoltSilhouette_DrawEdge(obj, p1, p2, (float)((double)(rand() % 100) * 0.0099999998));
 }
 

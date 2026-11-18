@@ -65,7 +65,7 @@ void OpenDialogData()
 // engancha ahí (0x0051AF65) para volver a la lista cuando no hay cartel.
 void COptionsMenu::OnErrorMessageFrame()
 {
-    if (!DAT_083a7c24) m_Page = PAGE_MAIN;   // ErrorMessage
+    if (!InGameUiState) m_Page = PAGE_MAIN;   // ErrorMessage
 }
 
 bool COptionsMenu::Clicked(int x, int y, int width, int height) const
@@ -76,8 +76,8 @@ bool COptionsMenu::Clicked(int x, int y, int width, int height) const
 void COptionsMenu::ConsumeClick() const
 {
     MouseLButtonPush = 0;
-    DAT_07e11d28 = 0;   // MouseUpdateTime
-    DAT_00559bec = 6;   // MouseUpdateTimeMax
+    MoveDebounceCounter = 0;   // MouseUpdateTime
+    MouseUpdateTimeMax = 6;   // MouseUpdateTimeMax
     PlayBuffer(25, 0, 0);
 }
 
@@ -313,8 +313,8 @@ bool COptionsMenu::UpdateMain()
         // DLL CheckClose: ErrorMessage = NextErrorMessage, como el 0.97k.
         ConsumeClick();
         m_Page = PAGE_MAIN;
-        DAT_083a7c24 = DAT_083a7c28;
-        DAT_083a7c28 = 0;
+        InGameUiState = InGameUiStateNext;
+        InGameUiStateNext = 0;
     }
     return true;
 }

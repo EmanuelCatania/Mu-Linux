@@ -17,14 +17,14 @@ std::vector<int> selectBackdropTextures;
 
 const char* SelectBackdropPath()
 {
-  return gWindow.IsWide() ? "Data\\Logo\\Wide\\" : s_Data_Logo__005606a0;
+  return gWindow.IsWide() ? "Data\\Logo\\Wide\\" : Dir_DataLogo;
 }
 }
 
 void Scene_RefreshCharSelectBackdrop()
 {
   if (selectBackdropWide == gWindow.IsWide()) return;
-  BMD* model = AsModel(DAT_05828d58) + 0xa4;
+  BMD* model = AsModel(ModelsBase) + 0xa4;
   // Mantener las texturas de ambas variantes durante esta escena. El modelo
   // comparte texturas con otras mallas y puede alternar repetidas veces.
   const int count = model->NumMeshs;
@@ -40,8 +40,8 @@ void Scene_RefreshCharSelectBackdrop()
   // Las mallas residentes guardan punteros a la topología que se libera.
   MeshDraw::Release();
   BMD__Release(model);
-  AccessModel(0xa4,SelectBackdropPath(),(const char*)&DAT_005606ac,5);
-  OpenTexture(0xa4,s_Logo__00560698,0x2601,'\x01');
+  AccessModel(0xa4,SelectBackdropPath(),(const char*)&ModelBaseNameLogo,5);
+  OpenTexture(0xa4,Dir_Logo,0x2601,'\x01');
   selectBackdropWide = gWindow.IsWide();
 }
 
@@ -57,34 +57,34 @@ void Scene_LoadAccountResources(void)
   int iVar1;
   int iVar2;
 
-  OpenTGA(s_Logo_0Account_new_tga_005607a8,0xc,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_0On_Botton_jpg_00560794,0xd,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_0On_Botton2_jpg_0056077c,0xe,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_0Text_Box_jpg_00560768,0xf,0x2600,0x2900,0,'\x01');
-  OpenTGA(s_Logo_0New_Account01_tga_00560750,0x10,0x2600,0x2900,0,'\x01');
-  OpenTGA(s_Logo_0New_Account02_tga_00560738,0x11,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_0Box_jpg_00560728,0x12,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Interface_Progress_Back_jpg_0056070c,0x13,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Interface_Progress_jpg_005606f4,0x14,0x2600,0x2900,0,'\x01');
-  if (DAT_0055a7c4 == '\0') {
-    OpenModel(0x3c,s_Data2_Object1__0055f120,s_ship_smd_0055ee54);
-    OpenModel(0xa0,s_Data2_Logo__005606dc,(const char*)&DAT_005606e8);
-    OpenModel(0xa1,s_Data2_Logo__005606dc,(const char*)&DAT_005606d0);
-    OpenModel(0xa2,s_Data2_Logo__005606dc,s_mu_smd_005606c8);
-    OpenModel(0xa3,s_Data2_Logo__005606dc,s_sun_smd_005606b4);
+  OpenTGA(Img_LogoAccountNew,0xc,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_LogoOnButton,0xd,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_LogoOnButton2,0xe,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_LogoTextBox,0xf,0x2600,0x2900,0,'\x01');
+  OpenTGA(Img_LogoNewAccount01,0x10,0x2600,0x2900,0,'\x01');
+  OpenTGA(Img_LogoNewAccount02,0x11,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_LogoBox,0x12,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_ProgressBack,0x13,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_Progress,0x14,0x2600,0x2900,0,'\x01');
+  if (g_tex_ext_mode == '\0') {
+    OpenModel(0x3c,Dir_Data2Object1,Smd_Ship);
+    OpenModel(0xa0,Dir_Data2Logo,(const char*)&SmdNameBackground);
+    OpenModel(0xa1,Dir_Data2Logo,(const char*)&SmdNameBackground2);
+    OpenModel(0xa2,Dir_Data2Logo,Smd_Mu);
+    OpenModel(0xa3,Dir_Data2Logo,Smd_Sun);
   }
-  AccessModel(0x3c,s_Data_Object1__0055f360,(const char*)&DAT_0055e834,1);
+  AccessModel(0x3c,Dir_DataObject1,(const char*)&ModelBaseNameShip,1);
   iVar2 = 0xa0;
   do {
-    AccessModel(iVar2,s_Data_Logo__005606a0,(const char*)&DAT_005606ac,iVar2 + -0x9f);
+    AccessModel(iVar2,Dir_DataLogo,(const char*)&ModelBaseNameLogo,iVar2 + -0x9f);
     iVar1 = iVar2 + -0x9f;
     iVar2 = iVar2 + 1;
   } while (iVar1 < 4);
   SetMaxTextures(0x56a);
-  OpenTexture(0x3c,s_Object1__0055f354,0x2601,'\x01');
+  OpenTexture(0x3c,Dir_Object1,0x2601,'\x01');
   iVar2 = 0;
   do {
-    OpenTexture(iVar2 + 0xa0,s_Logo__00560698,0x2601,'\x01');
+    OpenTexture(iVar2 + 0xa0,Dir_Logo,0x2601,'\x01');
     iVar2 = iVar2 + 1;
   } while (iVar2 < 4);
   return;
@@ -95,60 +95,60 @@ void Scene_LoadAccountResources(void)
 // Loads textures and 3D models for the Character Selection screen.
 // Textures: Logo_Interface01–04.tga, New_Character201.tga, etc. (slots 0xc–0x1d).
 // Models: main.smd (0xa4), warrior/fairy/dark/etc. (0xaa–0xad).
-// Also sets scale for character preview models (0xbc–0x2f0) from DAT_05828d58.
+// Also sets scale for character preview models (0xbc–0x2f0) from ModelsBase.
 // IDA: FUN_0050FF50
 void Scene_LoadCharSelectResources(void)
 {
   int iVar1;
   intptr_t iVar2;
 
-  OpenTGA(s_Logo_Interface01_tga_00560a4c,0xc,0x2600,0x2900,0,'\x01');
-  OpenTGA(s_Logo_Interface02_tga_00560a34,0xd,0x2600,0x2900,0,'\x01');
-  OpenTGA(s_Logo_Interface03_tga_00560a1c,0xe,0x2600,0x2900,0,'\x01');
-  OpenTGA(s_Logo_Interface04_tga_00560a04,0xf,0x2600,0x2900,0,'\x01');
-  OpenTGA(s_Logo_New_Character201_tga_005609e8,0x10,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_New_Character202_jpg_005609cc,0x11,0x2600,0x2900,0,'\x01');
-  OpenTGA(s_Logo_Delete01_tga_005609b8,0x12,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_Delete02_jpg_005609a4,0x13,0x2600,0x2900,0,'\x01');
-  OpenTGA(s_Logo_Ok01_tga_00560994,0x14,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_Ok02_jpg_00560984,0x15,0x2600,0x2900,0,'\x01');
-  OpenTGA(s_Logo_New_Character01_tga_00560968,0x16,0x2600,0x2900,0,'\x01');
-  OpenTGA(s_Logo_New_Character02_tga_0056094c,0x17,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_New_Character_Cancel_jpg_0056092c,0x18,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_New_Character_Ok_jpg_00560910,0x19,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_New_Character001_jpg_005608f4,0x1a,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_New_Character002_jpg_005608d8,0x1b,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_New_Character003_jpg_005608bc,0x1c,0x2600,0x2900,0,'\x01');
-  OpenJPG(s_Logo_New_Character004_jpg_005608a0,0x1d,0x2600,0x2900,0,'\x01');
-  if (DAT_0055a7c4 == '\0') {
-    OpenModel(0xa4,s_Data2_Logo__005606dc,s_main_smd_00560894);
-    OpenModel(0xaa,s_Data2_Logo__005606dc,(const char*)&DAT_0056085c);
-    OpenModel(0xab,s_Data2_Logo__005606dc,s_warrior_smd_00560828);
-    OpenModel(0xac,s_Data2_Logo__005606dc,s_fairy_smd_0055c438);
-    OpenModel(0xad,s_Data2_Logo__005606dc,(const char*)&DAT_005607c8);
+  OpenTGA(Img_LogoInterface01,0xc,0x2600,0x2900,0,'\x01');
+  OpenTGA(Img_LogoInterface02,0xd,0x2600,0x2900,0,'\x01');
+  OpenTGA(Img_LogoInterface03,0xe,0x2600,0x2900,0,'\x01');
+  OpenTGA(Img_LogoInterface04,0xf,0x2600,0x2900,0,'\x01');
+  OpenTGA(Img_NewCharacter201,0x10,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_NewCharacter202,0x11,0x2600,0x2900,0,'\x01');
+  OpenTGA(Img_Delete01,0x12,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_Delete02,0x13,0x2600,0x2900,0,'\x01');
+  OpenTGA(Img_Ok01,0x14,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_Ok02,0x15,0x2600,0x2900,0,'\x01');
+  OpenTGA(Img_NewCharacter01,0x16,0x2600,0x2900,0,'\x01');
+  OpenTGA(Img_NewCharacter02,0x17,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_NewCharacterCancel,0x18,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_NewCharacterOk,0x19,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_NewCharacter001,0x1a,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_NewCharacter002,0x1b,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_NewCharacter003,0x1c,0x2600,0x2900,0,'\x01');
+  OpenJPG(Img_NewCharacter004,0x1d,0x2600,0x2900,0,'\x01');
+  if (g_tex_ext_mode == '\0') {
+    OpenModel(0xa4,Dir_Data2Logo,Smd_Main);
+    OpenModel(0xaa,Dir_Data2Logo,(const char*)&SmdNameWizardFace);
+    OpenModel(0xab,Dir_Data2Logo,Smd_Warrior);
+    OpenModel(0xac,Dir_Data2Logo,Smd_Fairy);
+    OpenModel(0xad,Dir_Data2Logo,(const char*)&SmdNameSwordsmanFace);
   }
   // El diorama clásico termina en los bordes del encuadre 4:3. La variante
   // amplia agrega suelo y bosque lateral para el viewport real del mundo.
-  AccessModel(0xa4,SelectBackdropPath(),(const char*)&DAT_005606ac,5);
+  AccessModel(0xa4,SelectBackdropPath(),(const char*)&ModelBaseNameLogo,5);
   selectBackdropWide = gWindow.IsWide();
   iVar2 = 0xaa;
   do {
-    AccessModel(iVar2,s_Data_Logo__005606a0,(const char*)&DAT_005607c0,iVar2 + -0xa9);
+    AccessModel(iVar2,Dir_DataLogo,(const char*)&ModelBaseNameFace,iVar2 + -0xa9);
     iVar1 = iVar2 + -0xa9;
     iVar2 = iVar2 + 1;
   } while (iVar1 < 4);
   SetMaxTextures(0x56a);
-  OpenTexture(0xa4,s_Logo__00560698,0x2601,'\x01');
+  OpenTexture(0xa4,Dir_Logo,0x2601,'\x01');
   iVar2 = 0;
   do {
-    OpenTexture(iVar2 + 0xaa,s_Logo__00560698,0x2600,'\x01');
+    OpenTexture(iVar2 + 0xaa,Dir_Logo,0x2600,'\x01');
     iVar2 = iVar2 + 1;
   } while (iVar2 < 4);
   iVar2 = 0;
   do {
     iVar1 = iVar2 + 0xbc;
-    ModelActionSpeed(AsModel(DAT_05828d58 + BMD_STRIDE * (170 + iVar2 / 0xbc))->Actions, 0) = 0.3f;
-    ModelActionSpeed(AsModel(DAT_05828d58 + BMD_STRIDE * (170 + iVar2 / 0xbc))->Actions, 1) = 0.3f;
+    ModelActionSpeed(AsModel(ModelsBase + BMD_STRIDE * (170 + iVar2 / 0xbc))->Actions, 0) = 0.3f;
+    ModelActionSpeed(AsModel(ModelsBase + BMD_STRIDE * (170 + iVar2 / 0xbc))->Actions, 1) = 0.3f;
     iVar2 = iVar1;
   } while (iVar1 < 0x2f0);
   return;
@@ -203,7 +203,7 @@ void ReleaseCharacterSceneData(void)
   } while (iVar1 < 0x5aa);
   DeleteObjects();
   for (int slot = 0xaa; slot < 0xae; ++slot)
-    BMD__Release(AsModel(DAT_05828d58) + slot);
+    BMD__Release(AsModel(ModelsBase) + slot);
   ClearCharacters(-1);
   return;
 }

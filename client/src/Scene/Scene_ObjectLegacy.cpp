@@ -39,11 +39,11 @@ extern void ClearActionObject(void);
 // 0x004FDC00 — MoveObjects: tick per-frame de cada objeto visible del mundo.
 //
 // Versión mínima DESACTIVADA (IDA_PORT_004FDC00 está definida en globals.h):
-// la copia viva es el port completo de FUN_004fdc00 en Scene_ObjectUpdate.cpp,
+// la copia viva es el port completo de Object_TickUpdate en Scene_ObjectUpdate.cpp,
 // en el orden del binario:
 //   World 9 → World 0/2 toggles → Alpha → early-return → PlayAnimation →
 //   bloque de login (160/161/162) → switch por World.
-void __cdecl FUN_004fdc00(OBJECT* object) {
+void __cdecl Object_TickUpdate(OBJECT* object) {
     if (object == nullptr) return;
     MoveObject_PerWorld(object);
 }

@@ -58,7 +58,7 @@ void WorldEffects_Tick(intptr_t entity) {
     Frame &frame = frames[object];
     frame.generation = SceneObjects::Generation(object);
     frame.type = AsObject(entity)->Type;
-    void *model = (void *)(DAT_05828d58 + frame.type * BMD_STRIDE);
+    void *model = (void *)(ModelsBase + frame.type * BMD_STRIDE);
     EquipmentModelContext savedModel(model);
     ObjectPose_PrepareBounds(AsObject(entity), 0);
     *(float *)&((BMD*)(uintptr_t)(model))->BodyHeight = 0.0f;

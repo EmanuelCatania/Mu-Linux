@@ -29,7 +29,7 @@ int  Config_ReadServerAddr(void* pConfig, char* lpCmdLine, char* outIP, unsigned
 extern DWORD g_SoundOn;    // lpData_055c9fe8  (1 = sound on)
 // Música: gSound.GetMusicEnabled()/SetMusicEnabled().
 extern DWORD g_Resolution; // lpData_055c9e38 (0-4)
-extern DWORD g_TextOut;    // lpData_055ca044
+extern DWORD g_TextOut;    // TextOutMode
 
 // -- Modo ventana (DESVIACION DELIBERADA) ------------------------------------
 // El 0.97k sólo corre a pantalla completa con un modo de video de 16 bits, que en

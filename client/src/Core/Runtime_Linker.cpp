@@ -60,9 +60,9 @@ void __cdecl crt_atexit(void *addr) {
     if (addr) atexit((void (__cdecl *)(void))addr);
 }
 
-// FUN_00543c98 @ 0x00543C98 (58 lines) — CRT free wrapper
+// Crt_Free @ 0x00543C98 (58 lines) — CRT free wrapper
 // Dispatches to SBH/OSBH/HeapFree depending on CRT heap type.
-void __cdecl FUN_00543c98(void *ptr) {
+void __cdecl Crt_Free(void *ptr) {
     // In our build, delegate to standard free
     free(ptr);
 }

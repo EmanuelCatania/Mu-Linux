@@ -15,7 +15,7 @@
 //     float param_5,   // rotation angle (world rot)
 //     uint  param_6,   // state flags
 //     byte  param_7,   // misc byte
-//     char  param_8,   // bone select flag: '\0' → use entity's own bone ptr, else use DAT_06970a9c
+//     char  param_8,   // bone select flag: '\0' → use entity's own bone ptr, else use BoneScratchRoot
 //     byte  param_9,   // extra byte → this[+0x99]
 //     char  param_10,  // passed to Skeleton_Transform and Entity_RenderSlotWith
 //     int   param_11,  // scale mode: 0=1.0, 1=shadow, 2=0.8, 3=1.4
@@ -24,7 +24,7 @@
 //
 // ── GUARD ─────────────────────────────────────────────────────────────────────
 //
-//   if (param_5 <= _DAT_005524f8) return   // cull: rot <= tile_scale → too small/far, skip
+//   if (param_5 <= 0.01f) return   // cull: rot <= tile_scale → too small/far, skip
 //
 // ── CLASS REMAP ───────────────────────────────────────────────────────────────
 //
@@ -32,7 +32,7 @@
 //     sub = (param_6 >> 3) & 0xf
 //     if sub == 0: param_2 = 0x3b3
 //     if sub == 2: param_2 = 0x3b4
-//   this = DAT_05828d58 + param_2 * 0xbc   → sprite model entry
+//   this = ModelsBase + param_2 * 0xbc   → sprite model entry
 //
 // ── COPIA DE ESTADO DESDE ENTIDAD ────────────────────────────────────────────
 //
@@ -43,12 +43,12 @@
 //   this[+0x6c] = entity[+0x10]      (world X)
 //   this[+0x70] = entity[+0x14]      (world Y)
 //   this[+0x74] = entity[+0x18]      (world Z)
-//   DAT_005597c8 = 1.0f              (global scale = 1.0 por defecto)
+//   EntityLodScaleBits = 1.0f              (global scale = 1.0 por defecto)
 //
 // ── SCALE POR PARAM_11 ────────────────────────────────────────────────────────
 //
-//   param_11 == 3 → DAT_005597c8 = 1.4f  (agrandado)
-//   param_11 == 2 → DAT_005597c8 = 1.2f  (ligeramente agrandado)
+//   param_11 == 3 → EntityLodScaleBits = 1.4f  (agrandado)
+//   param_11 == 2 → EntityLodScaleBits = 1.2f  (ligeramente agrandado)
 //   param_11 == 1 → shadow pass:
 //     if entity[+0x84] == '\x04':
 //       this[+0x48] = 0.02f, this[+0x4c] = 0.1f   (shadow color dark)
@@ -66,7 +66,7 @@
 // ── BONE POINTER ──────────────────────────────────────────────────────────────
 //
 //   if param_8 == '\0': puVar2 = *(undefined**)(entity + 0x114)  (hueso propio)
-//   else:               puVar2 = &DAT_06970a9c                   (hueso raíz global)
+//   else:               puVar2 = &BoneScratchRoot                   (hueso raíz global)
 //
 // ── DRAW CALL ─────────────────────────────────────────────────────────────────
 //
@@ -79,14 +79,14 @@
 //
 // ── FUNCIÓN CROSS-REFERENCE ───────────────────────────────────────────────────
 //
-//   DAT_05828d58  → sprite model table (stride 0xbc por clase)
-//   DAT_005524f8  → g_TileScale (culling threshold)
-//   DAT_005597c8  → global sprite scale factor
+//   ModelsBase  → sprite model table (stride 0xbc por clase)
+//   0.01f  → g_TileScale (culling threshold)
+//   EntityLodScaleBits  → global sprite scale factor
 //   Entity_GetLightScale  → Sprite_SetupAnim(entity, model)
 //   Entity_RenderSlotWith  → Sprite_DrawShadow(model, entity, param, blend, alpha)
 //   Skeleton_Transform  → Sprite_DrawBone(model, bone, anim[3], blend)
 //   RenderPartObjectEffect  → Entity_DrawSprite(entity, class, angle_ptr, rot, flags, byte, mode, extra)
-//   DAT_06970a9c  → root bone data (pose matrix, usado como fallback)
+//   BoneScratchRoot  → root bone data (pose matrix, usado como fallback)
 
 #include "stdafx.h"
 #include "Model/ModelTypes.h"
@@ -103,7 +103,7 @@ void __cdecl Entity_DrawAt(intptr_t param_1, int param_2, undefined4 param_3, fl
     uint       uVar1;
     undefined *puVar2;
 
-    if (_DAT_005524f8 >= param_5)   // cull: scale too small
+    if (0.01f >= param_5)   // cull: scale too small
         return;
 
     // Resolve sub-class for DarkKnight (0x35c → 0x3b3/0x3b4)
@@ -113,7 +113,7 @@ void __cdecl Entity_DrawAt(intptr_t param_1, int param_2, undefined4 param_3, fl
         else if (uVar1 == 2) param_2 = 0x3b4;
     }
 
-    pModel = (void *)(DAT_05828d58 + param_2 * BMD_STRIDE);
+    pModel = (void *)(ModelsBase + param_2 * BMD_STRIDE);
 
     // Copy entity fields into model block
     *(undefined1 *)&((BMD*)(uintptr_t)(pModel))->HideSkin = param_9;
@@ -125,13 +125,13 @@ void __cdecl Entity_DrawAt(intptr_t param_1, int param_2, undefined4 param_3, fl
     *(undefined4 *)&((BMD*)(uintptr_t)(pModel))->BodyOrigin[2] = *(undefined4 *)(param_1 + 0x18);   // world Z
 
     // LOD transparency scale
-    // NOTE: _DAT_005597c8 is typed `float` in globals.cpp. Writing the raw
+    // NOTE: EntityLodScale is typed `float` in globals.cpp. Writing the raw
     // bit pattern as integer (0x3f800000) causes an int→float conversion,
     // which stored 1065353216.0f instead of 1.0f → vertex positions
     // scaled by ~1e9. Use float literals directly.
-    _DAT_005597c8 = 1.0f;
-    if      (param_11 == 3) _DAT_005597c8 = 1.4f;
-    else if (param_11 == 2) _DAT_005597c8 = 1.2f;
+    EntityLodScale = 1.0f;
+    if      (param_11 == 3) EntityLodScale = 1.4f;
+    else if (param_11 == 2) EntityLodScale = 1.2f;
     else if (param_11 == 1) {
         // Shadow draw: two-pass with different alpha
         if (*(char *)(param_1 + 0x84) == '\x04') {
@@ -161,7 +161,7 @@ void __cdecl Entity_DrawAt(intptr_t param_1, int param_2, undefined4 param_3, fl
     if (param_8 == '\0')
         puVar2 = *(undefined **)&((OBJECT*)(uintptr_t)(param_1))->BoneMatrices;
     else
-        puVar2 = (undefined*)&DAT_06970a9c;
+        puVar2 = (undefined*)&BoneScratchRoot;
 
     Skeleton_Transform(pModel, reinterpret_cast<float*>(puVar2),
                  (float *)(param_1 + EntityOffset(0x118)),

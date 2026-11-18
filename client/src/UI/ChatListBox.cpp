@@ -1,10 +1,10 @@
 #include <cstdint>
-// ChatListBox.cpp — engine chat-widget object behind dword_55C9FF0.
+// ChatListBox.cpp — engine chat-widget object behind ChatHistoryWidget.
 //
 // What this is
 // ------------
 // Port del objeto C++ que el mu.exe original crea con
-//   operator new(0x5C8) → sub_40C7D0(this) → dword_55C9FF0 = this
+//   operator new(0x5C8) → sub_40C7D0(this) → ChatHistoryWidget = this
 // en WinMain @ 0x41F416-0x41F481. Es un objeto de widget de UI derivado
 // cuya vtable vive en off_5525CC y cuyo constructor encadena a través
 // del ctor base sub_40C5D0. Los dispatches de Render_GameFrame (vtable+0x10)
@@ -28,7 +28,7 @@
 //                                                  GL globals; safe in our
 //                                                  build (deps stubbed)
 //    8    +20  0x403A30   nullsub                 full
-//    9    +24  0x411A20   key-handler            re-uses FUN_00411a20
+//    9    +24  0x411A20   key-handler            re-uses ListBox_HandleInput
 //                                                  (al final de este archivo)
 //   10    +28  0x4118D0   clear list             full
 //   11    +2C  0x410D70   nullsub                 full
@@ -67,7 +67,7 @@
 //
 // Ownership / lifetime
 // --------------------
-// El objeto vive en el heap, y su dueño es `dword_55C9FF0`. El destructor
+// El objeto vive en el heap, y su dueño es `ChatHistoryWidget`. El destructor
 // (sub_40DBA0) se invoca al cerrar el proceso vía el camino de ~Application;
 // nuestro build por ahora lo filtra (el teardown de cierre vanilla no está
 // ported).
@@ -98,11 +98,11 @@ static void ChatLB_DrawButton(int Texture, int hover, float x, float y,
 // extern "C").
 int  __cdecl    ChatListBox_GetFocusState(DWORD* self);                // IDA: FUN_0040c680
 void __fastcall ChatListBox_DequeueFront(DWORD* self); // IDA: ChatListBox_DequeueFront (0x0040C580)
-int  __cdecl    FUN_00411a20(DWORD* self);                            // key-handler (slot 9)
-int  __cdecl    FUN_004119a0(DWORD* self, int v);                     // scroll-up helper
-int  __cdecl    FUN_0040c930(BYTE* slot);                               // ++[slot+0x114]
+int  __cdecl    ListBox_HandleInput(DWORD* self);                            // key-handler (slot 9)
+int  __cdecl    ListBox_ScrollUp(DWORD* self, int v);                     // scroll-up helper
+int  __cdecl    ChatLB_IncSlot114(BYTE* slot);                               // ++[slot+0x114]
 
-// FUN_0040c490 — hit-test de bbox, port de sub_40C490 de IDA (lo referencian
+// Chat_BBoxHit — hit-test de bbox, port de sub_40C490 de IDA (lo referencian
 // muchos helpers de UI). Se define con nombre propio (Chat_BBoxHit) y se
 // expone con el nombre de IDA mediante el #define de abajo.
 static int Chat_BBoxHit(int x, int y, int w, int h, int mode)
@@ -116,12 +116,12 @@ static int Chat_BBoxHit(int x, int y, int w, int h, int mode)
     }
     return 0;
 }
-#define FUN_0040c490(x,y,w,h,m) Chat_BBoxHit((int)(x),(int)(y),(int)(w),(int)(h),(int)(m))
+#define Chat_BBoxHit(x,y,w,h,m) Chat_BBoxHit((int)(x),(int)(y),(int)(w),(int)(h),(int)(m))
 
 // DESVIACION: mientras se escribe, el campo de texto ocupa la franja de los botones
 // del popup (415..444) y el original los ocultaba. Ahora suben 20 px, quedan siempre
 // visibles y siguen respondiendo.
-static bool ChatTyping() { return DAT_00559c84 != 0 || DAT_07e11d71 != 0; }
+static bool ChatTyping() { return InputEnable != 0 || ImeModeFlag != 0; }
 // Los 5 botones del popup (gestos, ver chat, tamano, transparencia, emotes) quedan centrados
 // en la pantalla de 640: el cluster original era de 3 y arrancaba en 295.
 static float ChatButtonsX() { return 320.0f - (4.0f * ChatListBox_TabButtonSpacing + 16.0f) * 0.5f; }
@@ -133,9 +133,9 @@ static float ChatButtonsY()
 // Globals que sólo se usan acá — declarados localmente para no ensanchar globals.h
 // for one-off chat-widget statics.
 extern "C" {
-DWORD g_ChatListBox_NextID    = 0;   // mirror of dword_55C9B78 (incrementing IDs)
-DWORD g_ChatListBox_FocusID_A = 0;   // dword_55C9B7C — focused widget id (capture)
-DWORD g_ChatListBox_FocusID_B = 0;   // dword_55C9B80 — alt focused widget id
+DWORD g_ChatListBox_NextID    = 0;   // mirror of ChatListBoxNextId (incrementing IDs)
+DWORD g_ChatListBox_FocusID_A = 0;   // ChatFocusIdA — focused widget id (capture)
+DWORD g_ChatListBox_FocusID_B = 0;   // ChatFocusIdB — alt focused widget id
 DWORD g_ChatListBox_LockID    = 0;   // dword_55C9B84 — lock guard for listbox iteration
 DWORD g_ChatListBox_ActiveID  = 0;   // dword_55C9B88 — active widget id (keyboard)
 } // extern "C"
@@ -219,7 +219,7 @@ extern "C" { BYTE g_ChatStagingBuf[kChatPayloadSize] = {0}; } // mirror del stag
 #define dword_55C9708  (*(DWORD*)&g_ChatStagingBuf[kChatNodeExtra])
 #define dword_55C970C  (*(DWORD*)&g_ChatStagingBuf[kChatNodeLines])
 
-// En nuestro build dword_55C9B80 ya estaba declarado en globals.cpp (DAT_055c9b80).
+// En nuestro build 0x055C9B80 ya estaba declarado en globals.cpp (ChatFocusIdB).
 // Para no redefinirlo, tratamos el g_ChatListBox_FocusID_B local como un
 // slot separado — los dos arrancan en 0, así que el comportamiento es idéntico para
 // nuestro código, que no lee el original.
@@ -316,7 +316,7 @@ static ChatLBNode* ChatLB_NewListHead(size_t payload)
 // ---------------------------------------------------------------------------
 // Construct — port 1:1 completo de sub_40C7D0(this), que primero llama a sub_40C5D0(this).
 // Entrada pública: produce el objeto ya construido (con su vtable), listo para
-// asignar a dword_55C9FF0.
+// asignar a ChatHistoryWidget.
 // ---------------------------------------------------------------------------
 extern "C" void* ChatListBox_Construct(void)
 {
@@ -389,7 +389,7 @@ extern "C" void* ChatListBox_Construct(void)
 
 // ===========================================================================
 // ChatListBox_ConstructWhisper — port de sub_40E990, el SEGUNDO constructor
-// de widget de chat (objeto más chico en DAT_055c9ff4, se usa para el input
+// de widget de chat (objeto más chico en WhisperChatWidget, se usa para el input
 // de destino de susurro + la lista chica de notificaciones). Misma estructura
 // general que ChatListBox_Construct pero con:
 //   * smaller list node size (0x18 instead of 0x120)
@@ -506,7 +506,7 @@ static int __fastcall ChatLB_setColor2(DWORD* self, int, int a, int b, intptr_t 
 static void __fastcall ChatLB_renderScroll(DWORD* self)
 {
     // El chat clásico sigue el borde incluso al cambiar resolución en Opciones.
-    if (!g_bUseChatListBox && self == (DWORD*)DAT_055c9ff0) {
+    if (!g_bUseChatListBox && self == (DWORD*)ChatHistoryWidget) {
         self[11] = (DWORD)Ui::ClassicChatX(gWindow.GetRightShift());
         self[12] = (DWORD)Ui::ClassicChatY;
     }
@@ -541,11 +541,11 @@ static void __fastcall ChatLB_renderScroll(DWORD* self)
 // vtable methods 24/28/32/36 and walks focus state machine.
 static int __fastcall ChatLB_tick(DWORD* self, int, int v)
 {
-    if (!g_bUseChatListBox && self == (DWORD*)DAT_055c9ff0) {
+    if (!g_bUseChatListBox && self == (DWORD*)ChatHistoryWidget) {
         self[11] = (DWORD)Ui::ClassicChatX(gWindow.GetRightShift());
         self[12] = (DWORD)Ui::ClassicChatY;
     }
-    if (self == (DWORD*)(uintptr_t)DAT_055c9ff4 && GuildOpened)
+    if (self == (DWORD*)(uintptr_t)WhisperChatWidget && GuildOpened)
         self[11] = (DWORD)(gWindow.PanelOrigin(Ui::Guild) + 10);
     typedef int  (__fastcall *FnInt)(DWORD*);
     typedef void (__fastcall *FnVoid)(DWORD*);
@@ -563,7 +563,7 @@ static int __fastcall ChatLB_tick(DWORD* self, int, int v)
 
     if (v == 1) return 0;
 
-    if (!FUN_0040c490(self[11], self[12], self[13], self[14], self[21])) {
+    if (!Chat_BBoxHit(self[11], self[12], self[13], self[14], self[21])) {
         return ((FnInt)vt[7])(self);
     }
     if (!dword_55C9B80) {
@@ -707,7 +707,7 @@ static int __fastcall ChatLB_handleScrollIn(DWORD* self)
         // ── Up arrow button (top of scrollbar) ──
         int btnX = v6 + (int)self[11] + (int)self[13] - 21;
         int btnY = (int)self[12] + (modeFlag != 1 ? 8 : 0) - (int)self[14];
-        if (FUN_0040c490(btnX, btnY, 13, 13, 1)) {
+        if (Chat_BBoxHit(btnX, btnY, 13, 13, 1)) {
             DWORD r = self[42];
             if (r == 0) {
                 ((FnVoidI)vt[12])(self, 0, -1);
@@ -721,7 +721,7 @@ static int __fastcall ChatLB_handleScrollIn(DWORD* self)
         }
         // ── Down arrow button (bottom of scrollbar) ──
         btnY = (int)self[12] - (modeFlag != 1 ? 21 : 13);
-        if (FUN_0040c490(btnX, btnY, 13, 13, 1)) {
+        if (Chat_BBoxHit(btnX, btnY, 13, 13, 1)) {
             DWORD r = self[42];
             if (r == 0) {
                 ((FnVoidI)vt[12])(self, 0, 1);
@@ -745,7 +745,7 @@ static int __fastcall ChatLB_handleScrollIn(DWORD* self)
         int trackX = v6 + (int)self[11] + (int)self[13] - 19;
         int thumbY = (int)fself[38];
         int thumbH = (int)fself[40];
-        if (FUN_0040c490(trackX, thumbY, (int)fself[39], thumbH, 1)) {
+        if (Chat_BBoxHit(trackX, thumbY, (int)fself[39], thumbH, 1)) {
             // Mouse adentro del pulgar — arranca el arrastre si no había uno ya.
             if (!ChatListBox_GetFocusState(self) && !dword_55C9B7C) {
                 dword_55C9B7C = self[7];
@@ -754,7 +754,7 @@ static int __fastcall ChatLB_handleScrollIn(DWORD* self)
             }
         }
         // ── Page-up band (above thumb) ──
-        else if (FUN_0040c490(trackX, (int)fself[36], (int)fself[39],
+        else if (Chat_BBoxHit(trackX, (int)fself[36], (int)fself[39],
                               (int)(fself[38] - fself[36]), 1)) {
             DWORD r = self[43];
             if (r == 0) {
@@ -767,7 +767,7 @@ static int __fastcall ChatLB_handleScrollIn(DWORD* self)
             }
         }
         // ── Page-down band (below thumb) ──
-        else if (FUN_0040c490(trackX, (int)(fself[40] + fself[38]), (int)fself[39],
+        else if (Chat_BBoxHit(trackX, (int)(fself[40] + fself[38]), (int)fself[39],
                               (int)(fself[37] - fself[38] - fself[40]), 1)) {
             DWORD r = self[43];
             if (r == 0) {
@@ -851,8 +851,8 @@ LABEL_53:
     return v17;
 }
 
-// slot 9 — sub_411A20 — reusa FUN_00411a20, definida al final de este archivo.
-static int __fastcall ChatLB_keyHandler(DWORD* self) { return FUN_00411a20(self); }
+// slot 9 — sub_411A20 — reusa ListBox_HandleInput, definida al final de este archivo.
+static int __fastcall ChatLB_keyHandler(DWORD* self) { return ListBox_HandleInput(self); }
 
 // slot 10 — sub_4118D0 — wipe entire list, decrement count per node.
 static void __fastcall ChatLB_clearList(DWORD* self)
@@ -1009,7 +1009,7 @@ static int __fastcall ChatLB_countVisible(DWORD* self)
     void** vt = ChatWidget_GetVTable(self);
 
     int v1 = 0;
-    if (!DAT_00559bf1 || g_bUseChatListBox) {
+    if (!ChatDisplayToggle || g_bUseChatListBox) {
         ChatLBNode* v3 = ChatWidget_Pointers(self).list2;
         ChatLBNode* v4 = v3->next;
         if (v4 != v3) {
@@ -1058,11 +1058,11 @@ static int __fastcall ChatLB_advanceCursor(DWORD* self)
 //
 // flt_5590B0/B4/B8 son ChatListBox_TabButtonsX/Y/Spacing (globals.cpp, leídos
 // del binario = 295 / 417 / 18).
-// InputText/InputLength alias DAT_07db8710 / DAT_07d780a8
+// InputText/InputLength alias InputTextBuffers / InputTextLengths
 // (ver HUD_Pass4.cpp). Usamos los mismos #define acá para compartir el storage
 // with WM_CHAR + RenderInputText.
-#define InputText   DAT_07db8710
-#define InputLength ((int*)(void*)DAT_07d780a8)
+#define InputText   InputTextBuffers
+#define InputLength ((int*)(void*)InputTextLengths)
 
 static int __fastcall ChatLB_hitTestInput(DWORD* self)
 {
@@ -1077,7 +1077,7 @@ static int __fastcall ChatLB_hitTestInput(DWORD* self)
     ptrs.selected = ptrs.list2;
 
     // Toggle "input dialog active" flag based on mouse Y band.
-    if (ChatTyping() || EmoteMenu::AnyOpen() || FUN_0040c490(160, 436, 320, 50, 1)) {
+    if (ChatTyping() || EmoteMenu::AnyOpen() || Chat_BBoxHit(160, 436, 320, 50, 1)) {
         self[48] = 1;
     } else if ((int)MouseY < 416) {
         self[48] = 0;
@@ -1085,15 +1085,15 @@ static int __fastcall ChatLB_hitTestInput(DWORD* self)
 
     // Condición de retorno #1: mouse adentro de la tira del botón de cerrar, en el borde
     // derecho (this[13]+this[11]-30, this[12]-6, 33, this[14]-2 con modo 2).
-    if (FUN_0040c490((int)self[13] + (int)self[11] - 30, (int)self[12] - 6,
+    if (Chat_BBoxHit((int)self[13] + (int)self[11] - 30, (int)self[12] - 6,
                      33, (int)self[14] - 2, 2)) {
         return 1;
     }
     // Return condition #2 — IDA:
-    //   this[48] == 1 && sub_40C490((std::int64_t)flt_5590B0, (std::int64_t)flt_5590B4,
-    //                               (std::int64_t)(flt_5590B8 * 3.0), 16, 1)
+    //   this[48] == 1 && sub_40C490((std::int64_t)ChatListBox_TabButtonsX, (std::int64_t)ChatListBox_TabButtonsY,
+    //                               (std::int64_t)(ChatListBox_TabButtonSpacing * 3.0), 16, 1)
     // = la franja COMPLETA de los 3 botones: x∈[295, 349), y∈[417, 433).
-    if (self[48] == 1 && FUN_0040c490((int)ChatButtonsX(), (int)ChatButtonsY(),
+    if (self[48] == 1 && Chat_BBoxHit((int)ChatButtonsX(), (int)ChatButtonsY(),
                                       (int)(ChatListBox_TabButtonSpacing * 5.0f), 16, 1)) {
         return 1;
     }
@@ -1114,7 +1114,7 @@ static int __fastcall ChatLB_hitTestInput(DWORD* self)
 //     build).
 // Incrementa self[46] (contador de frames) al final, para el parpadeo del cursor del slot 23.
 //
-// Las constantes de borde (flt_552644..flt_552664 y flt_55256C) son las del
+// Las constantes de borde (VertexWaveAmplitude..flt_552664 y ImpulseScaleBaseB) son las del
 // binario; ver la tabla dentro de la función.
 extern "C" SIZE* __cdecl Text_MeasureBox(int x, int y, const char* lpString,
                                       int boxWidth, char style, int extraSize);
@@ -1122,7 +1122,7 @@ static int __fastcall ChatLB_renderBg(DWORD* self)
 {
     // ── PORT FIEL de IDA sub_40CE20 ──────────────────────────────────────────
     // Constantes leídas del binario en 0x552644..0x552664 y 0x55256C:
-    //   flt_552644=28  552648=7  55264C=2  552650=4  552654=21
+    //   VertexWaveAmplitude=28  552648=7  55264C=2  552650=4  552654=21
     //   552658=8       55265C=22 552660=5  552664=12 55256C=1.0
     // Texturas: 252=Message_box2, 1280=nis_rsframe (grip), 1281=nis_vframe
     //   (bordes), 1282=nis_bar (thumb), 1283=nis_back (riel), 1284=nis_btnarrow.
@@ -1170,13 +1170,13 @@ static int __fastcall ChatLB_renderBg(DWORD* self)
 
         // ── Hover: 1=flecha arriba, 2=flecha abajo, 3=thumb del scroll ──────
         int hov = 0;
-        if (FUN_0040c490((int)self[11] + (int)self[13] - 21,
+        if (Chat_BBoxHit((int)self[11] + (int)self[13] - 21,
                          (int)self[12] - (int)self[14] + 8, 13, 13, 1)) {
             hov = 1;
-        } else if (FUN_0040c490((int)self[11] + (int)self[13] - 21,
+        } else if (Chat_BBoxHit((int)self[11] + (int)self[13] - 21,
                                 (int)self[12] - 21, 13, 13, 1)) {
             hov = 2;
-        } else if (FUN_0040c490((int)self[11] + (int)self[13] - 19,
+        } else if (Chat_BBoxHit((int)self[11] + (int)self[13] - 19,
                                 (int)*(float*)&self[38],
                                 (int)*(float*)&self[39],
                                 (int)*(float*)&self[40], 1)) {
@@ -1299,7 +1299,7 @@ static int __fastcall ChatLB_renderBg(DWORD* self)
 //
 // Tipo de mensaje en nodo+276: 0 chat, 1 sistema, 2 GM, 3 susurro, 4 party,
 // 5 guild.  nodo+284 = cuantas lineas extra ocupa el mensaje (lo incrementa
-// FUN_0040c930); fuera del modo lista desplaza la fila y corta si no entra.
+// ChatLB_IncSlot114); fuera del modo lista desplaza la fila y corta si no entra.
 //
 // Devuelve 1 si dibujo; RenderScroll usa el valor para ajustar la fila.
 static int __fastcall ChatLB_renderLine(DWORD* self, int /*edx*/, int row)
@@ -1311,7 +1311,7 @@ static int __fastcall ChatLB_renderLine(DWORD* self, int /*edx*/, int row)
         v5 = row + 1;
         if (row + 1 >= (int)self[35]) return (int)g_bUseChatListBox;
     }
-    if (!DAT_00559bf1 && *(DWORD*)(ChatLBNode_Data(ChatWidget_Pointers(self).cursor) + kChatNodeKind) == 3) return 0;
+    if (!ChatDisplayToggle && *(DWORD*)(ChatLBNode_Data(ChatWidget_Pointers(self).cursor) + kChatNodeKind) == 3) return 0;
     // DESVIACION (Fase 4): los avisos del sistema (tipos 1 y 2, y todo mensaje
     // sin remitente) van sólo a la zona de arriba (UI_RenderChatLogOverlay) y
     // este recuadro queda para el chat: normal, susurro, party y guild. El
@@ -1414,7 +1414,7 @@ static void ChatLB_DrawButton(int Texture, int hover, float x, float y,
     // a float rompería el flip (1.0f tiene bits 0x3F800000, y 1 es un denormal).
 
     if (hover == 1) {
-        if (MouseLButton) {                        // DAT_083a42c4 — botón izq. mantenido
+        if (MouseLButton) {                        // MouseLButton — botón izq. mantenido
             // Apretado: sprite gris corrido 1px, UV 1px más chico.
             Gfx::Color4f(0.8f, 0.8f, 0.8f, alpha);
             float vOff   = 0.0f;
@@ -1456,7 +1456,7 @@ static void ChatLB_DrawButton(int Texture, int hover, float x, float y,
 //   2) Si alpha > 0 y no estamos escribiendo (!InputEnable), dibuja los tres
 //      botones de 16x16 en (295,417) (313,417) (331,417) y, si hay hover,
 //      el tooltip GlobalText[750..752] arriba del botón.
-//   3) Botón 1: si DAT_00559bf1 (ver-chat) está ON usa el sprite normal; si
+//   3) Botón 1: si ChatDisplayToggle (ver-chat) está ON usa el sprite normal; si
 //      está OFF dibuja la versión "apagada" gris al 0.7 corrida 1px.
 static void __fastcall ChatLB_renderFooter(DWORD* self)
 {
@@ -1479,14 +1479,14 @@ static void __fastcall ChatLB_renderFooter(DWORD* self)
     const float chatX = bx + gap, sizeX = bx + 2 * gap, alphaX = bx + 3 * gap, emoteX = bx + 4 * gap;
 
     int hovered = 0;          // 1 ver chat, 2 tamano, 3 transparencia, 4 emotes, 5 gestos
-    if      (FUN_0040c490(chatX,  by, 16, 16, 1)) hovered = 1;
-    else if (FUN_0040c490(sizeX,  by, 16, 16, 1)) hovered = 2;
-    else if (FUN_0040c490(alphaX, by, 16, 16, 1)) hovered = 3;
-    else if (FUN_0040c490(emoteX, by, 16, 16, 1)) hovered = 4;
-    else if (FUN_0040c490(bx,     by, 16, 16, 1)) hovered = 5;
+    if      (Chat_BBoxHit(chatX,  by, 16, 16, 1)) hovered = 1;
+    else if (Chat_BBoxHit(sizeX,  by, 16, 16, 1)) hovered = 2;
+    else if (Chat_BBoxHit(alphaX, by, 16, 16, 1)) hovered = 3;
+    else if (Chat_BBoxHit(emoteX, by, 16, 16, 1)) hovered = 4;
+    else if (Chat_BBoxHit(bx,     by, 16, 16, 1)) hovered = 5;
 
     // Botón 1 — ver chat on/off (textura 1285 = Interface/nis_btnchat).
-    if (DAT_00559bf1) {
+    if (ChatDisplayToggle) {
         ChatLB_DrawButton(1285, hovered == 1, chatX, by, 16.0f, 16.0f, *pAlpha, 0);
     } else {
         Gfx::Color4f(0.7f, 0.7f, 0.7f, *pAlpha);
@@ -1527,7 +1527,7 @@ static int __fastcall ChatLB_lineHover(DWORD* self, int, int row)
         v4 = row + 1;
         if (row + 1 >= (int)self[35]) return g_bUseChatListBox;
     }
-    if (!DAT_00559bf1 && *(DWORD*)(ChatLBNode_Data(ChatWidget_Pointers(self).cursor) + kChatNodeKind) == 3) return 0;
+    if (!ChatDisplayToggle && *(DWORD*)(ChatLBNode_Data(ChatWidget_Pointers(self).cursor) + kChatNodeKind) == 3) return 0;
     if (g_bUseChatListBox) {
         int v5 = *(int*)(ChatLBNode_Data(ChatWidget_Pointers(self).cursor) + kChatNodeKind);
         if (v5 == 1 || v5 == 2) return 0;
@@ -1545,7 +1545,7 @@ static int __fastcall ChatLB_lineHover(DWORD* self, int, int row)
         SIZE sz = {0,0};
         int len = Platform::TextLength(sender);
         if (gFont.GetTextDC()) gFont.MeasureText(gFont.GetTextDC(), sender, len, &sz);
-        if (FUN_0040c490((int)self[11] + 10, (int)self[12] - 13 * v4 - 16, sz.cx, 13, 1)) {
+        if (Chat_BBoxHit((int)self[11] + 10, (int)self[12] - 13 * v4 - 16, sz.cx, 13, 1)) {
             ChatLBNode* v10 = ChatWidget_Pointers(self).cursor;
             if (Hero && strcmp((const char*)(v10 + 8), EntityName::Get(Hero))) {
                 ChatWidget_Pointers(self).selected = v10;
@@ -1564,7 +1564,7 @@ static int __fastcall ChatLB_perFrameInput(DWORD* self)
     typedef void (__fastcall *FnInt2)(DWORD*, int, int);
     void** vt = ChatWidget_GetVTable(self);
 
-    if (FUN_0040c490((int)self[11], (int)self[12] - (int)self[14],
+    if (Chat_BBoxHit((int)self[11], (int)self[12] - (int)self[14],
                      (int)self[13], 8, 1)
         && !ChatListBox_GetFocusState(self)
         && !dword_55C9B7C)
@@ -1592,8 +1592,8 @@ static int __fastcall ChatLB_perFrameInput(DWORD* self)
         const int gap = (int)ChatListBox_TabButtonSpacing;
 
         // Botón 1 — "ver chat on/off" (mismo flag que la tecla F2).
-        if (FUN_0040c490(bx + gap, by, bw, bh, 1)) {
-            DAT_00559bf1 = (DAT_00559bf1 == 0);
+        if (Chat_BBoxHit(bx + gap, by, bw, bh, 1)) {
+            ChatDisplayToggle = (ChatDisplayToggle == 0);
             PlayBuffer(25, 0, 0);
             // IDA: `(*(...)(*(_DWORD *)this + 48))(this, 0)` → *this = vptr,
             // +48 BYTES = entrada 12 de la vtable = sub_40CC50 (scrollByN),
@@ -1601,38 +1601,38 @@ static int __fastcall ChatLB_perFrameInput(DWORD* self)
             // Al cambiar la visibilidad de los whispers cambia la cantidad de
             // filas visibles, así que se re-scrollea con delta 0.
             ((FnInt2)vt[12])(self, 0, 0);
-            DAT_083a4124 = 0;                 // MouseLButtonPush = 0 (consumir click)
+            MouseLButtonPush = 0;                 // MouseLButtonPush = 0 (consumir click)
         }
 
         // Botón 2 — cicla el tamaño del historial (mismo que la tecla F4).
-        if (FUN_0040c490(bx + 2 * gap, by, bw, bh, 1)) {
+        if (Chat_BBoxHit(bx + 2 * gap, by, bw, bh, 1)) {
             Input_CycleChatSize();            // lo mismo que F4 (incluye reubicar el recuadro)
-            DAT_083a4124 = 0;
+            MouseLButtonPush = 0;
         }
 
         // Boton 4: abre o cierra el menu de emotes.
-        if (FUN_0040c490(bx + 4 * gap, by, bw, bh, 1)) {
+        if (Chat_BBoxHit(bx + 4 * gap, by, bw, bh, 1)) {
             EmoteMenu::Toggle(EmoteMenu::Fortnite);
             PlayBuffer(25, 0, 0);
-            DAT_083a4124 = 0;
+            MouseLButtonPush = 0;
         }
 
         // Boton de la izquierda: abre o cierra la lista de gestos clasicos.
-        if (FUN_0040c490(bx, by, bw, bh, 1)) {
+        if (Chat_BBoxHit(bx, by, bw, bh, 1)) {
             EmoteMenu::Toggle(EmoteMenu::Classic);
             PlayBuffer(25, 0, 0);
-            DAT_083a4124 = 0;
+            MouseLButtonPush = 0;
         }
 
         // Botón 3 — transparencia: self[47] += 0.2, y al pasar 0.9 vuelve a 0.2.
         // self[47] es el float de alpha del recuadro (+188), el mismo campo que
         // escribe F3/30 ReceiveOption como `transparencia * 0.1`.
-        if (FUN_0040c490(bx + 3 * gap, by, bw, bh, 1)) {
+        if (Chat_BBoxHit(bx + 3 * gap, by, bw, bh, 1)) {
             float* alpha = (float*)&self[47];
             *alpha += 0.2f;
             if (*alpha > 0.89999998f) *alpha = 0.2f;
             PlayBuffer(25, 0, 0);
-            DAT_083a4124 = 0;
+            MouseLButtonPush = 0;
         }
     }
     return 1;
@@ -1655,21 +1655,21 @@ static void __fastcall ChatLB_AddText(DWORD* self, int /*edx*/,
         if (!g_bUseChatListBox && !self[34]) {
             ChatLBNode* v6 = ChatWidget_Pointers(self).list2;
             for (ChatLBNode* i = v6->next; i != v6; i = i->next) {
-                FUN_0040c930(ChatLBNode_Data(i));   // ++[+0x114] (cached cx — used as fade)
+                ChatLB_IncSlot114(ChatLBNode_Data(i));   // ++[+0x114] (cached cx — used as fade)
             }
         }
         return;
     }
 
-    if (DAT_00559bf1) {
+    if (ChatDisplayToggle) {
         if (kind == 3) {
             // IDA sub_40C940: con el filtro de susurros activo solo pasan los que
             // coinciden (por remitente o por texto) con la lista del widget
             // (this+200, hasta 5 entradas de 256).  sub_40E730 devuelve 1 si la
             // lista esta vacia.  Con lista y m_bWhisperSound (0x07E11D80) suena
             // el aviso 38.
-            extern int __fastcall FUN_0040e730(void* This, int edx, char* param_1);
-            if (!FUN_0040e730(self, 0, src) && !FUN_0040e730(self, 0, msg))
+            extern int __fastcall Chat_CheckWordBlocklist(void* This, int edx, char* param_1);
+            if (!Chat_CheckWordBlocklist(self, 0, src) && !Chat_CheckWordBlocklist(self, 0, msg))
                 return;
             if (*((BYTE*)self + 200) && m_bWhisperSound)
                 PlayBuffer(38, 0, 0);
@@ -1699,10 +1699,10 @@ static void __fastcall ChatLB_AddText(DWORD* self, int /*edx*/,
         // IDA sub_40C940 L96-150: mensaje largo.  sub_40C2A0 lo parte en hasta
         // dos lineas de 180 px (buffers de 0x100); la primera va con el
         // remitente y la segunda con el nombre vacio.
-        extern int __cdecl FUN_0040c2a0(LPCSTR, char*, int, int, size_t, UINT, int);
+        extern int __cdecl Chat_WrapTextLines(LPCSTR, char*, int, int, size_t, UINT, int);
         char lines[2][0x100];
         memset(lines, 0, sizeof(lines));
-        FUN_0040c2a0(msg, &lines[0][0], 180, 2, 0x100, 0, 0);
+        Chat_WrapTextLines(msg, &lines[0][0], 180, 2, 0x100, 0, 0);
         for (int ln = 0; ln < 2; ln++) {
             if (!lines[ln][0]) {
                 if (ln == 0) continue;     // IDA: `if (v24[0])` salta solo el alta
@@ -1734,11 +1734,11 @@ static void __fastcall ChatLB_AddText(DWORD* self, int /*edx*/,
 }
 
 // slot 29 — sub_40CD30 — ¿el tipo de mensaje de esta fila es visible ahora?
-//   - whisper-only mode (byte_559BF1=0) hides msg-type 3 (whispers).
+//   - whisper-only mode (ChatDisplayToggle=0) hides msg-type 3 (whispers).
 //   - chat-list-box mode hides msg-type 1 and 2 (system/error).
 static int __stdcall ChatLB_isRowVisible(const BYTE* rowData)
 {
-    if (!DAT_00559bf1 && *(DWORD*)(rowData + kChatNodeKind) == 3) return 1;
+    if (!ChatDisplayToggle && *(DWORD*)(rowData + kChatNodeKind) == 3) return 1;
     if (g_bUseChatListBox) {
         int v2 = *(DWORD*)(rowData + kChatNodeKind);
         if (v2 == 1 || v2 == 2) return 1;
@@ -1756,7 +1756,7 @@ static int __stdcall ChatLB_isRowVisible(const BYTE* rowData)
 // MouseOnWindow: el slot 7 escribe este `MouseOnWindow` local y al final lo
 // publica en el latch `g_ChatLB_MouseOnWindow`.  El flag que consume el resto
 // del build (Player_InputTick, para no mandar al personaje a caminar cuando el
-// click cae sobre una ventana) es `g_MouseOnWindow` (alias de DAT_07d78094 en
+// click cae sobre una ventana) es `g_MouseOnWindow` (alias de MouseOnWindowFlag en
 // Game/Player_InputTick.cpp).
 //
 // No se puede escribir g_MouseOnWindow directo desde acá: Player_InputTick lo
@@ -1769,10 +1769,10 @@ int g_ChatLB_MouseOnWindow = 0;
 }
 
 // ===========================================================================
-// ===  WIDGET DE LISTA DE GUILD (dword_55C9FF4, vtable off_5526EC)         ===
+// ===  WIDGET DE LISTA DE GUILD (WhisperChatWidget, vtable off_5526EC)         ===
 // ===========================================================================
 //
-// El objeto de `dword_55C9FF4` (el que construye `sub_40E990`) NO comparte
+// El objeto de `WhisperChatWidget` (el que construye `sub_40E990`) NO comparte
 // vtable con el chat principal: son DOS vtables distintas.
 //
 //   slot  off   off_5525CC (chat)  off_5526EC (guild)   ¿igual?
@@ -1799,7 +1799,7 @@ int g_ChatLB_MouseOnWindow = 0;
 // Nodo de la lista, tal como lo arma sub_40EC20 (0x18 bytes en el binario;
 // 0.97.40: el nombre mide 40 bytes y el nodo 0x34):
 //   +0x00 next . +0x04 prev
-//   +0x08 name[41]  (copia desde el staging dword_55C9B60)
+//   +0x08 name[41]  (copia desde el staging SoundChannelIndexOffset)
 //   +0x31 flag de conexion (a3)
 //   +0x32 numero de party, o 0xFF si no esta en party (a4)
 // ===========================================================================
@@ -1876,7 +1876,7 @@ static int __fastcall GuildLB_scrollByN(DWORD* self, int /*edx*/, int a2)
 // ── slot 21 — sub_4124B0 — hit-test del rectangulo del panel ────────────────
 static int __fastcall GuildLB_hitTestInput(DWORD* self)
 {
-    return FUN_0040c490((int)self[11], (int)self[12], (int)self[13], (int)self[14], 2);
+    return Chat_BBoxHit((int)self[11], (int)self[12], (int)self[13], (int)self[14], 2);
 }
 
 // ── slot 22 — sub_40ED80 — fondo: flechas arriba/abajo + riel + pulgar ──────
@@ -1972,7 +1972,7 @@ static int __fastcall GuildLB_renderLine(DWORD* self, int /*edx*/, int a2)
     if (self[46] == 1 ||
         !strcmp(name, EntityName::Get(Hero)))
     {
-        // flt_55265C = 22.0 . flt_5527DC = 13.0 . flt_55256C = 1.0 . flt_5527D8 = 11.0
+        // flt_55265C = 22.0 . ArrowCountOffsetX = 13.0 . ImpulseScaleBaseB = 1.0 . flt_5527D8 = 11.0
         float bx = (float)((int)self[13] + (int)self[11]) - 22.0f - 13.0f;
         float by = (float)v5 - 1.0f;
         GL_DrawTexture(280, bx, by, 13.0f, 11.0f, 0.0f, 0.0f, 0.75f, 0.75f, 1, 1);
@@ -2040,7 +2040,7 @@ static int __fastcall GuildLB_perFrameInput(DWORD* self)
                         MouseLButtonPush = 0;
                         PlayBuffer(25, 0, 0);                 // PlayBuffer(25)
                         int v9 = ((FnInt)vt[19])(self) - (int)self[34];
-                        DAT_083a7c24     = 126;   // ErrorMessage
+                        InGameUiState     = 126;   // ErrorMessage
                         dword_5615E4     = v9 - v3 - 1;
                         ClearInput(0);                        // ClearInput(0)
                         InputEnable      = 0;
@@ -2075,7 +2075,7 @@ static void __fastcall GuildLB_AddMember(DWORD* self, int /*edx*/,
     if (!((FnInt)vt[19])(self))
         self[46] = (DWORD)(strcmp(Source, EntityName::Get(Hero)) == 0);
 
-    // Staging dword_55C9B60[11] + byte_55C9B6B + byte_55C9B6C, tal cual el
+    // Staging SoundChannelIndexOffset[11] + byte_55C9B6B + byte_55C9B6C, tal cual el
     // original (que despues copia 12 bytes de golpe al nodo).
     char staging[kGuildMemberRecordSize];
     memset(staging, 0, sizeof(staging));
@@ -2263,7 +2263,7 @@ extern "C" void* GuildListBox_GetVTable(void) { return &s_GuildLB_VTable; }
 // ---------------------------------------------------------------------------
 extern "C" void GuildList_Clear(void)
 {
-    DWORD* obj = (DWORD*)(uintptr_t)DAT_055c9ff4;
+    DWORD* obj = (DWORD*)(uintptr_t)WhisperChatWidget;
     if (!obj || !ChatWidget_GetVTable(obj)) return;
     typedef void (__fastcall *FnVoid)(DWORD*);
     ((FnVoid)(ChatWidget_GetVTable(obj))[10])(obj);
@@ -2271,7 +2271,7 @@ extern "C" void GuildList_Clear(void)
 
 extern "C" void GuildList_AddMember(const char* name, char connected, char partyNumber)
 {
-    DWORD* obj = (DWORD*)(uintptr_t)DAT_055c9ff4;
+    DWORD* obj = (DWORD*)(uintptr_t)WhisperChatWidget;
     if (!obj || !ChatWidget_GetVTable(obj)) return;
     typedef void (__fastcall *FnAdd)(DWORD*, int, const char*, char, char);
     ((FnAdd)(ChatWidget_GetVTable(obj))[28])(obj, 0, name, connected, partyNumber);
@@ -2304,7 +2304,7 @@ char __fastcall TextureScriptParsing_parsingTScript(void* ecx, void* /*edx*/, DW
 // DESVIACION (Fase 4, cortes UAX #14): el binario corta en cualquier punto de
 // la palabra. Ahora, si hay un punto de corte en la segunda mitad de lo que
 // entra, la linea termina ahi (despues de un espacio, entre ideogramas...).
-int __cdecl FUN_0040c2a0(LPCSTR text, char* dst, int width, int maxLines,
+int __cdecl Chat_WrapTextLines(LPCSTR text, char* dst, int width, int maxLines,
                          size_t lineSize, UINT firstIndent, int reverse) {
     const char* cur = text;                        // IDA: v7
     int lines = 0;                                 // IDA: v8
@@ -2361,15 +2361,15 @@ int __cdecl FUN_0040c2a0(LPCSTR text, char* dst, int width, int maxLines,
     return lines + 1;
 }
 
-// FUN_0040c480 @ 0x0040C480 (12 bytes) — increment ref counter
-// FUN_0040c480 (IDA-activated)
-int FUN_0040c480()
+// Chat_RefCountInc @ 0x0040C480 (12 bytes) — increment ref counter
+// Chat_RefCountInc (IDA-activated)
+int Chat_RefCountInc()
 {
-  return ++DAT_055c9b78;
+  return ++ChatListBoxNextId;
 }
 
-// FUN_0040c500 @ 0x0040C500 (~36 lines) — UI widget: insert child node into linked list
-void __fastcall FUN_0040c500(void* ecx, void* /*edx*/, int param_1, int param_2, int param_3) {
+// UI_InsertChildNode @ 0x0040C500 (~36 lines) — UI widget: insert child node into linked list
+void __fastcall UI_InsertChildNode(void* ecx, void* /*edx*/, int param_1, int param_2, int param_3) {
     (void)ecx; (void)param_1; (void)param_2; (void)param_3;
 }
 
@@ -2388,20 +2388,20 @@ void __fastcall ChatListBox_DequeueFront(DWORD* self) {
     }
 }
 
-// FUN_0040c5d0 @ 0x0040C5D0 (~38 lines) — UI widget constructor (base class)
-void* __fastcall FUN_0040c5d0(void* param_1) {
+// UI_WidgetCtorBase @ 0x0040C5D0 (~38 lines) — UI widget constructor (base class)
+void* __fastcall UI_WidgetCtorBase(void* param_1) {
     return param_1;
 }
 
-// FUN_0040c670 @ 0x0040C670 (10 bytes) — thiscall setter field_0x24
-void __fastcall FUN_0040c670(intptr_t ecx, int /*edx*/, int param_1) {
+// UI_SetField24 @ 0x0040C670 (10 bytes) — thiscall setter field_0x24
+void __fastcall UI_SetField24(intptr_t ecx, int /*edx*/, int param_1) {
     *(int *)(ecx + 0x24) = param_1;
 }
 
 // ── 4-5 byte: trivial field access ──────────────────────────────────────────
 
-// FUN_0040c680 @ 0x0040C680 (4 bytes) — getter thiscall: devuelve this->field_0x24
-// FUN_0040c680 (IDA-activated)
+// UI_GetField24 @ 0x0040C680 (4 bytes) — getter thiscall: devuelve this->field_0x24
+// UI_GetField24 (IDA-activated)
 // IDA: FUN_0040c680
 int __cdecl ChatListBox_GetFocusState(DWORD *_this)
 {
@@ -2411,98 +2411,98 @@ int __cdecl ChatListBox_GetFocusState(DWORD *_this)
 // Alias con el nombre de IDA.  Sin callers en el código compilado (lo usaban
 // los ports gated que quedaron en docs/codigo-muerto/ida-ports/ del tag 0.97.21).
 // IDA: FUN_0040c680
-int __cdecl FUN_0040c680(DWORD *_this)
+int __cdecl UI_GetField24(DWORD *_this)
 {
   return ChatListBox_GetFocusState(_this);
 }
 
-// FUN_0040c6b0 @ 0x0040C6B0 (17 bytes) — thiscall: setea dos campos en +0x34 y +0x38
-void __fastcall FUN_0040c6b0(intptr_t ecx, int /*edx*/, int param_1, int param_2) {
+// UI_SetFields3438 @ 0x0040C6B0 (17 bytes) — thiscall: setea dos campos en +0x34 y +0x38
+void __fastcall UI_SetFields3438(intptr_t ecx, int /*edx*/, int param_1, int param_2) {
     *(int *)(ecx + 0x34) = param_1;
     *(int *)(ecx + 0x38) = param_2;
 }
 
 // ── 24-byte ─────────────────────────────────────────────────────────────────
 
-// FUN_0040c6d0 @ 0x0040C6D0 (24 bytes) — thiscall: setea 3 campos en +0x3c, +0x44 y +0x48
-void __fastcall FUN_0040c6d0(intptr_t ecx, int /*edx*/, int p1, int p2, int p3) {
+// UI_SetFields3C4448 @ 0x0040C6D0 (24 bytes) — thiscall: setea 3 campos en +0x3c, +0x44 y +0x48
+void __fastcall UI_SetFields3C4448(intptr_t ecx, int /*edx*/, int p1, int p2, int p3) {
     *(int *)(ecx + 0x3c) = p1;
     *(int *)(ecx + 0x44) = p2;
     *(int *)(ecx + 0x48) = p3;
 }
 
-// FUN_0040c6f0 @ 0x0040C6F0 (24 bytes) — thiscall: setea 3 campos en +0x40, +0x4c y +0x50
-void __fastcall FUN_0040c6f0(intptr_t ecx, int /*edx*/, int p1, int p2, int p3) {
+// UI_SetFields404C50 @ 0x0040C6F0 (24 bytes) — thiscall: setea 3 campos en +0x40, +0x4c y +0x50
+void __fastcall UI_SetFields404C50(intptr_t ecx, int /*edx*/, int p1, int p2, int p3) {
     *(int *)(ecx + 0x40) = p1;
     *(int *)(ecx + 0x4c) = p2;
     *(int *)(ecx + 0x50) = p3;
 }
 
-// FUN_0040c710 @ 0x0040C710 (~41 lines) — UI widget: recursive input processing
-int __fastcall FUN_0040c710(void* ecx, void* /*edx*/, int param_1) {
+// UI_ProcessInputRecursive @ 0x0040C710 (~41 lines) — UI widget: recursive input processing
+int __fastcall UI_ProcessInputRecursive(void* ecx, void* /*edx*/, int param_1) {
     (void)ecx; (void)param_1;
     return 0;
 }
 
-// FUN_0040c930 @ 0x0040C930 (11 bytes) — refcount increment at +0x114
-// FUN_0040c930 (IDA-activated)
-int __cdecl FUN_0040c930(BYTE* a1)
+// ChatLB_IncSlot114 @ 0x0040C930 (11 bytes) — refcount increment at +0x114
+// ChatLB_IncSlot114 (IDA-activated)
+int __cdecl ChatLB_IncSlot114(BYTE* a1)
 {
   ++*(DWORD *)(a1 + kChatNodeLines);   // 0x114 en el binario
   return 0;
 }
 
-// FUN_0040d550 @ 0x0040D550 (~45 lines) — UI widget list: destructor helper
-void __fastcall FUN_0040d550(void* param_1) { (void)param_1; }
+// DSDevice_Deinit @ 0x0040D550 (~45 lines) — UI widget list: destructor helper
+void __fastcall DSDevice_Deinit(void* param_1) { (void)param_1; }
 
-// FUN_00410a90 @ 0x00410A90 (18 bytes)
-void __fastcall FUN_00410a90(int *param_1) {
-    FUN_0040f680(param_1);
-    *param_1 = (int)(intptr_t)&PTR_LAB_00552810;
+// UI_SimpleWidgetCtor @ 0x00410A90 (18 bytes)
+void __fastcall UI_SimpleWidgetCtor(int *param_1) {
+    StreamBase_SetVtableA(param_1);
+    *param_1 = (int)(intptr_t)&Vtbl_ChatListBox;
 }
 
-// FUN_00410ad0 @ 0x00410AD0 (11 bytes)
-void __fastcall FUN_00410ad0(void *This) {
-    *(int *)This = (int)(intptr_t)&PTR_LAB_00552810;
-    FUN_0040f690(This);
+// StreamBase_SetVtableChain @ 0x00410AD0 (11 bytes)
+void __fastcall StreamBase_SetVtableChain(void *This) {
+    *(int *)This = (int)(intptr_t)&Vtbl_ChatListBox;
+    StreamBase_SetVtableB(This);
 }
 
 // ── 14-byte ─────────────────────────────────────────────────────────────────
 
-// FUN_00410e50 @ 0x00410E50 (~295 lines) — BST_EraseNode: red-black tree node removal with
+// BST_EraseNode @ 0x00410E50 (~295 lines) — BST_EraseNode: red-black tree node removal with
 // full rebalancing (left/right rotations, color fixup). Frees node via delete, decrements
 // el tamaño del árbol en this+0xC. Internals estándar estilo map::erase de la STL.
-void __cdecl FUN_00410e50(void* self, DWORD* param_1, int* param_2) {
+void __cdecl BST_EraseNode(void* self, DWORD* param_1, int* param_2) {
     (void)self; (void)param_1; (void)param_2;
 }
 
-// FUN_00411360 @ 0x00411360 (~16 lines) — BST_UnlinkNode: unlinks doubly-linked node
+// BST_UnlinkNode @ 0x00411360 (~16 lines) — BST_UnlinkNode: unlinks doubly-linked node
 // (punteros prev/next en [0]/[1]), llama a delete sobre el nodo, decrementa el contador en this+8.
-void __cdecl FUN_00411360(void* self, int* param_1, int* param_2) {
+void __cdecl BST_UnlinkNode(void* self, int* param_1, int* param_2) {
     (void)self; (void)param_1; (void)param_2;
 }
 
 // ── BST / STL map operations ────────────────────────────────────────────────
 
-// FUN_00411460 @ 0x00411460 (~164 lines) — BST_InsertNode: allocates 0x138-byte node,
-// copia la clave vía FUN_004124d0, inserta en el árbol rojo-negro con rebalanceo completo
+// BST_InsertNode @ 0x00411460 (~164 lines) — BST_InsertNode: allocates 0x138-byte node,
+// copia la clave vía Mem_Copy296, inserta en el árbol rojo-negro con rebalanceo completo
 // (rotaciones vía FUN_00411700/FUN_00411760). Incrementa el contador en this+0xC.
-void __cdecl FUN_00411460(void* self, DWORD* param_1, int param_2, int* param_3, int* param_4) {
+void __cdecl BST_InsertNode(void* self, DWORD* param_1, int param_2, int* param_3, int* param_4) {
     (void)self; (void)param_1; (void)param_2; (void)param_3; (void)param_4;
 }
 
-// FUN_00411920 @ 0x00411920 (~31 líneas) — ListBox_RenderItems: llama a métodos de la vtable para
+// ListBox_RenderItems @ 0x00411920 (~31 líneas) — ListBox_RenderItems: llama a métodos de la vtable para
 // empezar el render, después itera los ítems llamando a vtable[0x5C](índice) por cada fila visible,
 // ajustando el índice según el retorno negativo/cero. Llama a vtable[0x60] para terminar el render.
-void __fastcall FUN_00411920(int* param_1) {
+void __fastcall ListBox_RenderItems(int* param_1) {
     (void)param_1;
 }
 
-// FUN_004119a0 @ 0x004119A0 (~29 lines) — ListBox_ScrollUp: decrements scroll offset
+// ListBox_ScrollUp @ 0x004119A0 (~29 lines) — ListBox_ScrollUp: decrements scroll offset
 // (this+0x88) en param_1, clampeado a [0, itemCount - visibleCount]. Chequea la capacidad
 // en this+0x80 o this+0x60 según el flag de modo en this+0x74.
-// FUN_004119a0 (IDA-activated)
-int __cdecl FUN_004119a0(DWORD *_this, int a2)
+// ListBox_ScrollUp (IDA-activated)
+int __cdecl ListBox_ScrollUp(DWORD *_this, int a2)
 {
   int result; // eax
 
@@ -2540,11 +2540,11 @@ int __cdecl FUN_004119a0(DWORD *_this, int a2)
   return result;
 }
 
-// FUN_00411a20 @ 0x00411A20 (~66 lines) — ListBox_HandleInput: processes key events
+// ListBox_HandleInput @ 0x00411A20 (~66 lines) — ListBox_HandleInput: processes key events
 // (7=click, 0xC=page-scroll, 0xD/0xE=selection up/down) on a doubly-linked item list.
 // Ajusta la posición del scroll vía vtable[0x30] y actualiza el puntero al ítem seleccionado en this[0x1C].
-// FUN_00411a20 (IDA-activated)
-int __cdecl FUN_00411a20(DWORD *_this)
+// ListBox_HandleInput (IDA-activated)
+int __cdecl ListBox_HandleInput(DWORD *_this)
 {
   typedef void (__fastcall *FnVoid)(DWORD*);
   typedef int  (__fastcall *FnScroll)(DWORD*, int, int);
@@ -2607,7 +2607,7 @@ int __cdecl FUN_00411a20(DWORD *_this)
 }
 
 void ChatListBox_TickPresentation() {
-    DWORD *self = (DWORD *)DAT_055c9ff0;
+    DWORD *self = (DWORD *)ChatHistoryWidget;
     if (!self) return;
     void **vt = ChatWidget_GetVTable(self);
     // El campo 46 tiene otro significado en las listas de guild.

@@ -18,7 +18,7 @@ static char s_GuildMarkName[kGuildMarkRecordCount][NetText::GuildNameSize + 1] =
 
 BYTE* GuildMark_Record(int row)
 {
-    return (BYTE*)DAT_07e919bc + row * 80;
+    return (BYTE*)GuildInfoTable + row * 80;
 }
 
 int GuildMark_UpsertRecord(int key, const BYTE* serverName, const BYTE* mark32)
@@ -282,8 +282,8 @@ void NetRecv_56(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (result == 1) {
         GuildCreator_CloseFromResult();
         PlayBuffer(28, 0, 0);
-        DAT_07e11d28 = 0;
-        DAT_00559bec = 6;
+        MoveDebounceCounter = 0;
+        MouseUpdateTimeMax = 6;
     } else if (result < _countof(textIndex) && textIndex[result] >= 0) {
         UIChatLogWindow_AddText(nullptr, GlobalText[textIndex[result]], 2);
     }
@@ -297,10 +297,10 @@ void NetRecv_50(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // clave y después abre el diálogo 119; la respuesta es C1:51, no el
     // C1:41 de party. Mantener este estado aislado de los pedidos de party.
     if (Size < 5) return;
-    DAT_07eaa0d8 = (DWORD)((Msg[3] << 8) | Msg[4]);
+    GuildInviteKey = (DWORD)((Msg[3] << 8) | Msg[4]);
     SetErrorMessage(119);
     NetLog("NET: -> 0x50 GuildRequest inviter=%u",
-           (unsigned)DAT_07eaa0d8);
+           (unsigned)GuildInviteKey);
 }
 
 // 0x51
@@ -341,7 +341,7 @@ void NetRecv_52(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (Size < kHeaderSize) return;
     const BYTE count = Msg[5];
     // IDA: FUN_004348B0 avanza el staging DAT_07e91790 de a 13
-    // bytes. El espacio real hasta DAT_07e919bc es 0x22C: admite
+    // bytes. El espacio real hasta GuildInfoTable es 0x22C: admite
     // 42 registros, aunque MuEmu hoy envíe como máximo 40.
     const int NAME = (int)NetText::CharacterNameSize;
     const int memberSize = NAME + 2;
@@ -352,8 +352,8 @@ void NetRecv_52(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     g_nGuildMemberCount = memberCount;
     GuildTotalScore = *(const int*)(Msg + 8);
     if (GuildTotalScore < 0) GuildTotalScore = 0;
-    // Se alimenta el WIDGET de lista (dword_55C9FF4), que es de donde
-    // `RenderGuildList` saca las filas (`byte_7E919BC` el render lo usa nada más
+    // Se alimenta el WIDGET de lista (WhisperChatWidget), que es de donde
+    // `RenderGuildList` saca las filas (`GuildInfoTable` el render lo usa nada más
     // que para el nombre del guild en el título).
     // Fiel a IDA ReceiveGuildList @0x4348B0: vtable[10] para limpiar
     // y vtable[28] por cada miembro, con el registro de 13 bytes
@@ -422,7 +422,7 @@ void NetRecv_5C(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         return;
     }
     const int entitySlot = FindCharacterIndex(entityKey);
-    BYTE* base = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* base = (BYTE*)(uintptr_t)CharactersClient;
     if (base && entitySlot >= 0 && entitySlot < 400) {
         BYTE* entity = base + entitySlot * CHARACTER_STRIDE;
         *(short*)(entity + EntityOffset(474)) = (short)row;
@@ -441,7 +441,7 @@ void NetRecv_5D(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (Size < 5) return;
     const WORD entityKey = (WORD)((Msg[3] << 8) | Msg[4]);
     const int entitySlot = FindCharacterIndex(entityKey);
-    BYTE* base = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* base = (BYTE*)(uintptr_t)CharactersClient;
     if (base && entitySlot >= 0 && entitySlot < 400)
         *(short*)(base + entitySlot * CHARACTER_STRIDE + EntityOffset(474)) = -1;
     GuildOpened = 0;
@@ -509,7 +509,7 @@ void NetRecv_5B(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     BYTE count = Msg[4];
     NetLog("NET:  → 0x5B EntityGuildList count=%d", count);
     if (Size < 5 + count * 4) return;
-    BYTE* basePtr = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* basePtr = (BYTE*)(uintptr_t)CharactersClient;
     for (int i = 0; i < count; ++i) {
         const BYTE* e = Msg + 5 + i * 4;
         WORD entityId = (WORD)((e[0] << 8) | e[1]) & 0x7FFF;
@@ -527,8 +527,8 @@ void NetRecv_5B(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             AsCharacter(slot)->GuildTeam = 0;
             // Mismo guild que el heroe.  IDA no excluye al heroe: el
             // propio personaje tambien queda marcado con 1.
-            if (DAT_07abf5d8) {
-                const short heroGuild = *(short*)((BYTE*)DAT_07abf5d8 + EntityOffset(474));
+            if (Hero) {
+                const short heroGuild = *(short*)((BYTE*)Hero + EntityOffset(474));
                 if (heroGuild != -1 && AsCharacter(slot)->GuildMarkIndex == heroGuild)
                     AsCharacter(slot)->GuildTeam = 1;
             }

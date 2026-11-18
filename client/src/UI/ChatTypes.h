@@ -5,7 +5,7 @@
 #include <cstdint>
 
 // IDA: CHAT, 0x254 bytes; burbujas de chat sobre los personajes, pool de 100
-// en 0x07E016F8 (DAT_07e016f8).
+// en 0x07E016F8 (ChatBubblePool).
 //
 // Los nombres siguen al struct CHAT de MU 5.2 (ZzzInterface.cpp). En el 0.97k
 // ID y Guild son más cortos y no está szShopTitle. Anclajes en IDA:
@@ -29,7 +29,7 @@ struct CHAT {
     vec3_t      Position;              // 0x248
 };
 #pragma pack(pop)
-// El pool DAT_07e016f8 (globals) se dimensiona con esta misma cuenta.
+// El pool ChatBubblePool (globals) se dimensiona con esta misma cuenta.
 static_assert(sizeof(CHAT) == 0x254 + sizeof(void*) - 4, "CHAT: tamano del pool de burbujas");
 
 #if UINTPTR_MAX == 0xFFFFFFFFu

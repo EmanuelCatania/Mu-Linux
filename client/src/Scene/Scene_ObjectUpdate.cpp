@@ -14,7 +14,7 @@
 
 extern void __cdecl Effect_PhysicsTick(std::uintptr_t Object);
 // MoveObject_PerWorld @ 0x004FDC00 (~608 lines) — SUMMARY STUB, sin llamadores:
-// la copia viva es el port de FUN_004fdc00 más abajo en este archivo.
+// la copia viva es el port de Object_TickUpdate más abajo en este archivo.
 // Per-world object animation. Per-frame for each visible scene object.
 // World 9: random terrain lights. World 0: toggle objects by HeroTile.
 // Then: Alpha(), BMD setup, animate, render via RenderPartObject.
@@ -77,18 +77,18 @@ float* __cdecl MoveObject_PerWorld(OBJECT* object) {
 
     // Check alpha > 0
     float alpha = AsObject(objPtr)->Alpha;
-    if (alpha < _DAT_005524f8) {
+    if (alpha < 0.01f) {
         return (float*)0;  // invisible, skip
     }
 
-    // Setup BMD model: Models base = DAT_05828d58, stride = sizeof(BMD) = 188 (0xBC)
+    // Setup BMD model: Models base = ModelsBase, stride = sizeof(BMD) = 188 (0xBC)
     int modelIdx = (int)AsObject(objPtr)->Type;
-    char* model = (char*)(DAT_05828d58 + modelIdx * BMD_STRIDE);
+    char* model = (char*)(ModelsBase + modelIdx * BMD_STRIDE);
     *(char *)&AsModel(model)->CurrentAction = *(char *)&AsObject(objPtr)->CurrentAction;  // set current action
 
     float animSpeed = AsObject(objPtr)->Velocity;
     if (gMapManager.GetCurrentMap() == 8 && AsObject(objPtr)->Type == 8) {
-        animSpeed = animSpeed * _DAT_00552650;  // slow down lava objects
+        animSpeed = animSpeed * 4.0f;  // slow down lava objects
     }
 
     // Play animation — BMD__PlayAnimation(model, frame*, scale*, extra, speed)
@@ -108,8 +108,8 @@ float* __cdecl MoveObject_PerWorld(OBJECT* object) {
             AsObject(objPtr)->BlendMeshTexCoordV = -((float)((std::int64_t)WorldTime % 4000) * 0.00025f);
         } else if (t == 162) {
             // CameraWalkCut → over-bright final; si no, rampa 0..0.08.
-            float v8 = (DAT_083a7af4 != 0) ? 1.5f
-                                           : (float)(int)DAT_005615e8 * 0.002f;
+            float v8 = (CameraWalkCut != 0) ? 1.5f
+                                           : (float)(int)CurrentCameraCount * 0.002f;
             AsObject(objPtr)->Light[0] = v8;   // Light[0]
             AsObject(objPtr)->Light[1] = v8;   // Light[1]
             AsObject(objPtr)->Light[2] = v8;   // Light[2]
@@ -119,18 +119,18 @@ float* __cdecl MoveObject_PerWorld(OBJECT* object) {
 
     // ── Per-world special effects (large switch) ──
     // The original has a huge switch(World) with sub-switches on objType.
-    // Most branches call FUN_0046c7f0 (directional effects), CreateEffect,
+    // Most branches call Object_SpawnAmbientFX (directional effects), CreateEffect,
     // or manipulate rotation/scale based on WorldTime with sin() waves.
     // These are cosmetic ambient effects. Key patterns:
     //
-    // World 0: types 0x32-0x34 → FUN_0046c7f0 (fire effects)
+    // World 0: types 0x32-0x34 → Object_SpawnAmbientFX (fire effects)
     //          types 0x75,0x7a → random scale
     //          types 0x76,0x77 → WorldTime-based rotation
-    //          types 0x82-0x84 → FUN_0046c7f0 + SubType=-2
+    //          types 0x82-0x84 → Object_SpawnAmbientFX + SubType=-2
     // World 1: types 0x16-0x18 → WorldTime%1000 rotation
-    //          type 0x29,0x2a → FUN_0046c7f0
+    //          type 0x29,0x2a → Object_SpawnAmbientFX
     // World 2: types 0x14,0x41,0x56,0x58 → follow hero (gates)
-    //          types 0x1e,0x42 → FUN_0046c7f0
+    //          types 0x1e,0x42 → Object_SpawnAmbientFX
     // World 3: type 0x12 → WorldTime rotation
     //          type 0x27 → SubType=1
     //          types 0x2a,0x2b → WorldTime scale
@@ -153,19 +153,19 @@ float* __cdecl MoveObject_PerWorld(OBJECT* object) {
     switch (gMapManager.GetCurrentMap()) {
     case 0:
         switch (objType) {
-        case 0x32: FUN_0046c7f0(0, AsObject(objPtr), 0.0f, 0.0f, 200.0f); return (float*)0;       // 0x43480000
-        case 0x33: FUN_0046c7f0(0, AsObject(objPtr), 0.0f, -30.0f, 60.0f); return (float*)0;      // 0xc1f00000, 0x42700000
+        case 0x32: Object_SpawnAmbientFX(0, AsObject(objPtr), 0.0f, 0.0f, 200.0f); return (float*)0;       // 0x43480000
+        case 0x33: Object_SpawnAmbientFX(0, AsObject(objPtr), 0.0f, -30.0f, 60.0f); return (float*)0;      // 0xc1f00000, 0x42700000
         case 0x34:
-            FUN_0046c7f0(0, AsObject(objPtr), 0.0f, 0.0f, 60.0f);
-            AsObject(objPtr)->BlendMeshLight = (float)(rand() % 6 + 4) * _DAT_005524f4;
+            Object_SpawnAmbientFX(0, AsObject(objPtr), 0.0f, 0.0f, 60.0f);
+            AsObject(objPtr)->BlendMeshLight = (float)(rand() % 6 + 4) * 0.1f;
             return (float*)0;
         case 0x37:
-            FUN_0046c7f0(0, AsObject(objPtr), -150.0f, -150.0f, 140.0f);   // 0xc3160000, 0x430c0000
-            FUN_0046c7f0(0, AsObject(objPtr), 150.0f, -150.0f, 140.0f);
+            Object_SpawnAmbientFX(0, AsObject(objPtr), -150.0f, -150.0f, 140.0f);   // 0xc3160000, 0x430c0000
+            Object_SpawnAmbientFX(0, AsObject(objPtr), 150.0f, -150.0f, 140.0f);
             return (float*)0;
         case 0x50:
-            FUN_0046c7f0(0, AsObject(objPtr), 90.0f, -200.0f, 30.0f);     // 0xc3480000, 0x41f00000
-            FUN_0046c7f0(0, AsObject(objPtr), 90.0f, 200.0f, 30.0f);       // 0x43480000, 0x41f00000
+            Object_SpawnAmbientFX(0, AsObject(objPtr), 90.0f, -200.0f, 30.0f);     // 0xc3480000, 0x41f00000
+            Object_SpawnAmbientFX(0, AsObject(objPtr), 90.0f, 200.0f, 30.0f);       // 0x43480000, 0x41f00000
             return (float*)0;
         case 0x5A: {
             float light = (float)(rand() % 2 + 6) * 0.1f;
@@ -191,7 +191,7 @@ float* __cdecl MoveObject_PerWorld(OBJECT* object) {
             // (8 vértices, textura dummy `ston03` 2x2 negra) y sub_46C7F0 emite
             // el fuego/humo. IDA sub_4FDC00, World 0.
             int kind = objType - 0x82;
-            FUN_0046c7f0(kind, AsObject(objPtr), 0.0f, 0.0f, 0.0f);
+            Object_SpawnAmbientFX(kind, AsObject(objPtr), 0.0f, 0.0f, 0.0f);
             AsObject(objPtr)->HiddenMesh = -2;
             return (float*)0;
         }
@@ -221,8 +221,8 @@ float* __cdecl MoveObject_PerWorld(OBJECT* object) {
         case 0x33:
             AsObject(objPtr)->HiddenMesh = -2;
             break;
-        case 0x29: FUN_0046c7f0(0, AsObject(objPtr), 0.0f, -30.0f, 240.0f); return (float*)0;     // 0xc1f00000, 0x43700000
-        case 0x2a: FUN_0046c7f0(0, AsObject(objPtr), 0.0f, 0.0f, 190.0f); return (float*)0;       // 0x433e0000
+        case 0x29: Object_SpawnAmbientFX(0, AsObject(objPtr), 0.0f, -30.0f, 240.0f); return (float*)0;     // 0xc1f00000, 0x43700000
+        case 0x2a: Object_SpawnAmbientFX(0, AsObject(objPtr), 0.0f, 0.0f, 190.0f); return (float*)0;       // 0x433e0000
         case 0x34:
             if (!(rand() % 3)) {
                 CreateEffect(215, (float*)(objPtr + 16), (float*)(objPtr + 28),
@@ -243,7 +243,7 @@ float* __cdecl MoveObject_PerWorld(OBJECT* object) {
             // IDA's moving gate/bridge objects chase their target coordinate
             // until they are close enough, then select the correct turn arc.
             // This is visual state only; it must not synthesize a gate packet.
-            if (!DAT_07e11d30 && Hero) {
+            if (!EditFlag && Hero) {
                 const float dx = *(float*)(Hero + 16) - AsObject(objPtr)->HeadTargetAngle[0];
                 const float dy = *(float*)(Hero + 20) - AsObject(objPtr)->HeadTargetAngle[1];
                 const float distance = sqrtf(dx * dx + dy * dy);
@@ -269,7 +269,7 @@ float* __cdecl MoveObject_PerWorld(OBJECT* object) {
             }
             break;
         case 0x1e:
-        case 0x42: FUN_0046c7f0(0, AsObject(objPtr), 0.0f, 0.0f, 50.0f); return (float*)0;        // 0x42480000
+        case 0x42: Object_SpawnAmbientFX(0, AsObject(objPtr), 0.0f, 0.0f, 50.0f); return (float*)0;        // 0x42480000
         }
         break;
 
@@ -477,7 +477,7 @@ int __stdcall MoveHeavenThunder(void) {
     CreateEffect(182, (float *)(Hero + 16), Angle, Light,
                   (float *)0, (float *)0, (float *)0xffffffff, (float *)0, 0);
 
-    if (DAT_083a3fec) objectCount = rand() % (int)DAT_083a3fec;
+    if (VisibleObjectCount) objectCount = rand() % (int)VisibleObjectCount;
 
     // Segunda fase (20%): rayo bifurcado.
     if (rand() % 5) return objectCount;
@@ -550,12 +550,12 @@ int __stdcall MoveHeavenThunder(void) {
 
 // MoveObjects @ 0x004FF260 (~169 lines) — per-frame object update dispatcher
 // World 10: MoveHeavenThunder. World 11..16: ambient particles.
-// Iterates all object lists calling MoveObject_Special or FUN_004fdc00 (el tick por objeto).
+// Iterates all object lists calling MoveObject_Special or Object_TickUpdate (el tick por objeto).
 void __stdcall MoveObjects(void) {
     // 0x004FF260 — Per-frame object update dispatcher.
     // World 10: calls MoveHeavenThunder. World 11..16: spawn ambient particles.
     // Then iterates all object bucket lists (16 buckets per block, from DAT_083a021c)
-    // calling MoveObject_Special (Object_AnimUpdate) or FUN_004fdc00 (Object_RenderUpdate).
+    // calling MoveObject_Special (Object_AnimUpdate) or Object_TickUpdate (Object_RenderUpdate).
     // In World 10 with thunder active, spawns lightning joints on random objects.
 
     float Scale = 0.0f;
@@ -570,7 +570,7 @@ void __stdcall MoveObjects(void) {
         float pos[3];
         pos[0] = (float)(rand() % 900 - 300) + *(float*)((char*)Hero + 0x10);
         pos[1] = (float)(rand() % 900 - 300) + *(float*)((char*)Hero + 0x14);
-        pos[2] = (float)(rand() % 50) + *(float*)((char*)Hero + 0x18) + _DAT_00552994;
+        pos[2] = (float)(rand() % 50) + *(float*)((char*)Hero + 0x18) + 250.0f;
         unsigned int r = rand() & 0x80000003;
         if ((int)r < 0) r = (r - 1 | 0xFFFFFFFC) + 1;
         if (r == 0) {
@@ -582,7 +582,7 @@ void __stdcall MoveObjects(void) {
         }
     }
 
-    DAT_083a3fec = 0;  // reset visible object counter
+    VisibleObjectCount = 0;  // reset visible object counter
 
     // IDA 0x004FF260: recorrer las 256 celdas en bloques de 16.
     SceneObjectCell* puVar4 = g_ObjectBucketGrid;
@@ -616,15 +616,15 @@ void __stdcall MoveObjects(void) {
                        ++bucketIter < kBucketIterMax) {
                     if (*pcVar6 != '\0' && pcVar6[EntityOffset(0x160)] != '\0') {
                         // IDA 0x004FF3B7: push edi pasa la dirección del objeto, no un float.
-                        FUN_004fdc00(AsObject(pcVar6));
-                        DAT_083a3fec++;
+                        Object_TickUpdate(AsObject(pcVar6));
+                        VisibleObjectCount++;
 
                         // Este bloque vive en **MoveObjects (0x004FF260)**, la funcion que contiene
                         // este mismo loop (no en `sub_4FDC00`, el tick por objeto), literal:
                         //
                         //   if ( World == 10 && objCount ) {
                         //     if ( rand() % 10 || (v5 = *(_WORD *)(v4 + 2), v5 < 0) || v5 > 5 )
-                        //       --unk_83A3FEC;
+                        //       --VisibleObjectCount;
                         //     else {
                         //       Light[i] = (double)(rand() % 10) * 0.02;
                         //       CreateSprite(1269, (float *)(v4 + 16), 0.5, Light, Hero, 0.0, 0);
@@ -658,7 +658,7 @@ void __stdcall MoveObjects(void) {
                                              6, (intptr_t)pcVar6, Scale, -1, 0);
                             }
                             else {
-                                DAT_083a3fec--;
+                                VisibleObjectCount--;
                             }
                         }
                         MoveObject_Special(AsObject(pcVar6));
@@ -683,7 +683,7 @@ void __stdcall MoveObjects(void) {
 // alpha, copia pos del owner, dispatch de acción por CurrentAction del owner,
 // avanza el BMD, y para el hada/uniria-helper (816/817) hace el follow-movement.
 //
-// Layout de entry (base = e, stride 0x1BC, 10 entries en DAT_083a1218):
+// Layout de entry (base = e, stride 0x1BC, 10 entries en ButterflyObjectPool):
 //   +0x00 BYTE Live      +0x02 short type    +0x04 DWORD subType
 //   +0x10 posX +0x14 posY +0x18 posZ   +0x1c angleX +0x20 angleY +0x24 angleZ
 //   +0xC0 velX +0xC4 velY +0xC8 velZ   +0xCC animSpeed
@@ -705,11 +705,11 @@ static void CustomPet_Move(char* e, const BYTE* owner, const Proto::CATALOG_PET&
     // da vueltas cortas sobre él hasta que el server lo levanta (y el zen
     // desaparece del suelo).  El server decide; esto es sólo lo que se ve.
     const float* zen = nullptr;
-    if ((pet.Flags & Proto::CATALOG_PET_FLAG_COLLECT) && DAT_07e12840) {
+    if ((pet.Flags & Proto::CATALOG_PET_FLAG_COLLECT) && GroundItemPool) {
         const float range = (float)pet.CollectRange * 100.0f + 50.0f;
         float best = range * range;
         for (int i = 0; i < 1000; ++i) {
-            const BYTE* ip = (const BYTE*)DAT_07e12840 + i * GROUND_ITEM_STRIDE;
+            const BYTE* ip = (const BYTE*)GroundItemPool + i * GROUND_ITEM_STRIDE;
             if (ip[72] == 0 || *(const short*)(ip + 74) != 863) continue;   // zen
             const float* p = (const float*)(ip + 88);
             const float dx = p[0] - ownerPos[0], dy = p[1] - ownerPos[1];
@@ -759,7 +759,7 @@ static void CustomPet_Move(char* e, const BYTE* owner, const Proto::CATALOG_PET&
 void __stdcall MoveBugs(void) {
     extern unsigned char* TerrainWall;
 
-    char*  base = (char*)DAT_083a1218;
+    char*  base = (char*)ButterflyObjectPool;
     DWORD* v0   = (DWORD*)(base + 0xFC);      // = &unk_83A1314 (owner field de entry 0)
     for (int slot = 0; slot < 10; ++slot) {
         char* e = (char*)v0 - offsetof(OBJECT, Owner);           // v1 — entry base
@@ -781,7 +781,7 @@ void __stdcall MoveBugs(void) {
         float x2 = *(float*)(v2 + 16);         // owner posX
         float y2 = *(float*)(v2 + 20);         // owner posY
         int   v4 = AsObject(e)->Type;           // type
-        char* v40 = (char*)(DAT_05828d58 + BMD_STRIDE * v4);   // Models[v4]
+        char* v40 = (char*)(ModelsBase + BMD_STRIDE * v4);   // Models[v4]
         float v36 = 0.0f;                      // trackDist (solo usado por 816/817)
 
         if (v4 > 267) {
@@ -979,7 +979,7 @@ void EmitSceneFlames(char* object, const SceneFlamePreset& preset)
 {
     for (int i = 0; i < preset.Count; ++i) {
         const auto& offset = preset.Offset[i];
-        FUN_0046c7f0(preset.Variant, AsObject(object), offset[0], offset[1], offset[2]);
+        Object_SpawnAmbientFX(preset.Variant, AsObject(object), offset[0], offset[1], offset[2]);
     }
     if (preset.RandomAlpha)
         *(float*)(object + 104) = (double)(rand() % 6 + 4) * 0.1;
@@ -988,17 +988,16 @@ void EmitSceneFlames(char* object, const SceneFlamePreset& preset)
 }
 } // namespace
 
-// === FUN_004fdc00 / MoveObjects (0x004FDC00) ===
+// === Object_TickUpdate / MoveObjects (0x004FDC00) ===
 // Gateada por IDA_PORT_004FDC00, que esta definida.
 // Es la copia VIVA: el `MoveObject_PerWorld` de mas arriba en este archivo es
 // el resumen viejo y no tiene llamadores (su unico call site, en
 // Scene_ObjectLegacy.cpp, esta bajo `#ifndef IDA_PORT_004FDC00`).
 // Alias locales para este port. #undef al final del bloque.
-#define Models      DAT_05828d58
-#define EditFlag    DAT_07e11d30
+#define Models      ModelsBase
 extern void __cdecl Effect_PhysicsTick(std::uintptr_t Object); // Efectos del mapa 4
 extern "C" void DbgLogPublic(const char*);        // [DIAG activación temporal]
-void __cdecl FUN_004fdc00(OBJECT* object)
+void __cdecl Object_TickUpdate(OBJECT* object)
 {
   // IDA 0x004FDD00/0x004FDD0D: carga la dirección y lee Type en +2.
   // Se conserva la aritmética en bytes hasta migrar los layouts en su propia capa.

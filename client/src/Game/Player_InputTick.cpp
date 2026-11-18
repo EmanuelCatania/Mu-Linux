@@ -38,19 +38,19 @@ static bool HUD_IsCharacterInfoRuntime(void);
 //
 // Gated by:
 //   - sólo en estado in-game (SceneFlag == 5)
-//   - released-click signal (DAT_083a413c) so holding doesn't repeat
-//   - limpiar DAT_083a413c después de consumirlo, para que otra parte de la UI no lo maneje dos veces
+//   - released-click signal (MouseLButtonPop) so holding doesn't repeat
+//   - limpiar MouseLButtonPop después de consumirlo, para que otra parte de la UI no lo maneje dos veces
 //
 // En el binario 0.97k original esto estaba inline dentro del ruido anti-tamper de
 // sub_004B82xx; acá lo reimplementamos limpio.
 //
 // `MouseOnWindow` (IDA Player_InputTick:416,566 + sub_402F40:9) es un solo
-// global del binario, 0x07D78094 (= DAT_07d78094): se setea cada frame si el
+// global del binario, 0x07D78094 (= MouseOnWindowFlag): se setea cada frame si el
 // mouse está sobre algún panel de UI abierto y gatea el GroundClick, para que
 // clickear adentro de un panel no haga caminar al jugador. Lo escribe
 // CheckInventory (sub_4E6550) con los seis rects de panel; g_MouseOnWindow es
 // un alias.
-#define g_MouseOnWindow DAT_07d78094
+#define g_MouseOnWindow MouseOnWindowFlag
 
 // IDA `Attacking` — estado del auto-ataque: -1 = ninguno, 1 = ataque iniciado
 // desde Player_InputTick (L942), 2 = desde Attack (0x49CBF0 L1323).
@@ -77,15 +77,15 @@ static void MouseOnWindow_Update(void)
     // SUMAN -- este, `sub_4E6550` y el widget de chat.  El reset que habia aca
     // borraba el aporte de los paneles si corria despues de CheckInventory.
 
-    int mx = (int)DAT_083a427c;
-    int my = (int)DAT_083a4278;
+    int mx = (int)MouseX;
+    int my = (int)MouseY;
 
     if (g_ChatLB_MouseOnWindow) { g_MouseOnWindow = 1; return; }
 
     // El selector local de Chaos (ErrorMessage 143) es un modal de 213x210;
     // el original bloquea el click de mundo mientras está presente.  Sin este
     // gate, sus botones pueden atravesar hacia los paneles o el mapa.
-    if (DAT_083a7c24 == 143 &&
+    if (InGameUiState == 143 &&
         mx >= 213 && mx < 426 && my >= 120 && my < 330) {
         g_MouseOnWindow = 1;
         return;
@@ -94,7 +94,7 @@ static void MouseOnWindow_Update(void)
     // IDA: RenderErrorMessage dibuja los modales 126/152 desde (213,60)
     // hasta (426,124), incluidos el campo de Personal Code y sus botones.
     // Ese diálogo es modal: su click no puede seguir al recorrido de mundo.
-    if ((DAT_083a7c24 == 126 || DAT_083a7c24 == 152) &&
+    if ((InGameUiState == 126 || InGameUiState == 152) &&
         mx >= 213 && mx < 426 && my >= 60 && my < 124) {
         g_MouseOnWindow = 1;
         return;
@@ -112,8 +112,8 @@ static void MouseOnWindow_Update(void)
         // IDA: estos rectángulos comparten el origen guardado por
         // RenderGuildCreation. El port ya no usa Inventory[32] para ese
         // scratch, porque dicho slot pertenece al pool de tienda.
-        int btnX = (int)((float)g_GuildCreatorScratchX + _DAT_005524fc);
-        int btnY = (int)((float)g_GuildCreatorScratchY + _DAT_00552ca4);
+        int btnX = (int)((float)g_GuildCreatorScratchX + 20.0f);
+        int btnY = (int)((float)g_GuildCreatorScratchY + 350.0f);
         if (mx >= btnX && mx < btnX + 70 && my >= btnY && my < btnY + 21) {
             g_MouseOnWindow = 1; return;
         }
@@ -126,30 +126,30 @@ static void MouseOnWindow_Update(void)
     }
 
     if (HUD_IsGuildListRuntime()) {
-        int iconX = (int)((float)DAT_07e91788 + _DAT_00552464);
-        int iconY = (int)((float)DAT_07e91784 + _DAT_0055246c);
+        int iconX = (int)((float)GuildListStartXStorage + 25.0f);
+        int iconY = (int)((float)GuildListStartYStorage + 395.0f);
         if (mx >= iconX && mx < iconX + 24 && my >= iconY && my < iconY + 24) {
             g_MouseOnWindow = 1; return;
         }
     }
 
     if (HUD_IsCharacterInfoRuntime()) {
-        int iconX = (int)DAT_07ea982c + 25;
-        int iconY = (int)DAT_07ea9830 + 395;
+        int iconX = (int)CharacterInfoStartXStorage + 25;
+        int iconY = (int)CharacterInfoStartYStorage + 395;
         if (mx >= iconX && mx < iconX + 24 && my >= iconY && my < iconY + 24) {
             g_MouseOnWindow = 1; return;
         }
     }
 
-    // Skill bar expanded list (cells at y=370..411 cuando DAT_07db870c=1, el user
+    // Skill bar expanded list (cells at y=370..411 cuando ItemSelectMenuFlag=1, el user
     // expandió el menú con click en el icono central): un click en una cell no
     // tiene que caer como move click.
     //
-    // Chat_InputTick (corre ANTES) resetea DAT_07db870c a 0 cuando el user clickea
+    // Chat_InputTick (corre ANTES) resetea ItemSelectMenuFlag a 0 cuando el user clickea
     // una cell, así que acá se usa un latch del frame anterior para que el click
     // "tail" siga viendo el menú como abierto.
     static char s_lastMenuOpen = 0;
-    char menuOpen = (DAT_07db870c != '\0') ? (char)1 : (char)0;
+    char menuOpen = (ItemSelectMenuFlag != '\0') ? (char)1 : (char)0;
     if ((menuOpen || s_lastMenuOpen) && my >= 370 && my < 412) {
         // Cell range x es variable por slot count, pero conservadoramente el
         // skill list expandido vive entre x=180..460 (centrado en 320 con ~10
@@ -196,27 +196,27 @@ enum HudPanelTail { TAIL_GUILD, TAIL_PARTY, TAIL_CHARACTER, TAIL_INVENTORY_CLOSE
 static bool HUD_PanelTail97k(HudPanelTail kind)
 {
     extern void __cdecl CloseInventoryRelatedWindows(void);
-    if (DAT_07eaa11b) {                                     // TradeOpened
+    if (TradeOpened) {                                     // TradeOpened
         const BYTE pkt[3] = { 0xC1, 0x03, 0x3D };
         gNetwork.Send(pkt, sizeof(pkt));
         return true;
     }
-    if (DAT_07eaa119) {                                     // WarehouseOpened
-        if (DAT_07eaa165) return false;                     // EquipmentItem
-        DAT_07eaa117 = 0;                                   // InventoryOpened
+    if (WarehouseOpened) {                                     // WarehouseOpened
+        if (ItemMoveInFlightFlag) return false;                     // EquipmentItem
+        InventoryOpened = 0;                                   // InventoryOpened
         CloseInventoryRelatedWindows();
-        if ((int)DAT_07e91388 > 0) Item_ReturnPickedItem();
+        if ((int)ItemPickedFlag > 0) Item_ReturnPickedItem();
         const BYTE pkt[3] = { 0xC1, 0x03, 0x82 };
         gNetwork.SendC1(pkt, sizeof(pkt));
         return true;
     }
-    if (DAT_07eaa11a)                                       // ChaosMixOpened
+    if (ChaosMixOpened)                                       // ChaosMixOpened
         return ChaosBoxRequestClose() != FALSE;             // aviso 593 incluido
     switch (kind) {
-    case TAIL_GUILD:     DAT_07eaa117 = 0; DAT_07eaa116 = 0; break;
-    case TAIL_PARTY:     DAT_07eaa117 = 0; DAT_07eaa11b = 0; DAT_07eaa116 = 0; break;
-    case TAIL_CHARACTER: DAT_07eaa114 = 0; DAT_07eaa115 = 0; break;
-    case TAIL_INVENTORY_CLOSE: DAT_07eaa117 = 0; break;
+    case TAIL_GUILD:     InventoryOpened = 0; CharacterOpened = 0; break;
+    case TAIL_PARTY:     InventoryOpened = 0; TradeOpened = 0; CharacterOpened = 0; break;
+    case TAIL_CHARACTER: GuildOpened = 0; PartyOpened = 0; break;
+    case TAIL_INVENTORY_CLOSE: InventoryOpened = 0; break;
     }
     CloseInventoryRelatedWindows();
     return true;
@@ -228,7 +228,7 @@ static bool HUD_PanelTail97k(HudPanelTail kind)
 //
 // Como en IDA: inventario y personaje conviven (por eso GetScreenWidth
 // devuelve 260 justo para esa combinacion); el click se toma de
-// `MouseLButtonPush` (DAT_083a4124) y se CONSUME poniendolo en 0, que es lo
+// `MouseLButtonPush` (MouseLButtonPush) y se CONSUME poniendolo en 0, que es lo
 // que evita el auto-repeat; y toda la fila se apaga mientras hay un modal.
 //
 // Rects (IDA L1130, L1455, L1775, L2078):
@@ -245,30 +245,30 @@ void HUD_BottomBarButtons_HitTest(void)
     // Gate de IDA L1116-1128: con un modal o el creador de guild abiertos, la
     // fila entera de botones no responde.  (`GuildInputEnable` del original no
     // existe en este arbol; GuildCreatorOpened cubre el mismo estado.)
-    if (DAT_07eaa11b ||                      // TradeOpened
-        DAT_07eaa124 ||                      // GuildCreatorOpened
-        DAT_083a7c24 == 126 ||               // ErrorMessage: expulsar del guild
-        DAT_083a7c24 == 152 ||
+    if (TradeOpened ||                      // TradeOpened
+        GuildCreatorOpened ||                      // GuildCreatorOpened
+        InGameUiState == 126 ||               // ErrorMessage: expulsar del guild
+        InGameUiState == 152 ||
         _g_bEventChipDialogEnable ||
         ServerDivisionOpened ||                      // g_bServerDivisionEnable
         HUD_IsQuestPanelOpenRuntime())
         return;
 
-    const int mx = (int)DAT_083a427c;       // 640-space mouse X
-    const int my = (int)DAT_083a4278;       // 480-space mouse Y
+    const int mx = (int)MouseX;       // 640-space mouse X
+    const int my = (int)MouseY;       // 480-space mouse Y
 
     // -- Guild --
     if (mx >= 582 && mx < 634 && my >= 459 && my < 477) {
-        DAT_083a4124 = 0;                    // MouseLButtonPush = 0
-        DAT_07eaa115 = 0;                    // PartyOpened = 0
-        if (DAT_07eaa114) {                  // GuildOpened
-            DAT_07eaa114 = 0;
+        MouseLButtonPush = 0;                    // MouseLButtonPush = 0
+        PartyOpened = 0;                    // PartyOpened = 0
+        if (GuildOpened) {                  // GuildOpened
+            GuildOpened = 0;
         } else {
             // 0x52 pide Encrypt=0 en HackPacketCheck.txt -> frame C1 plano.
             const BYTE guildListPkt[3] = { 0xC1, 0x03, 0x52 };
             gNetwork.SendC1(guildListPkt, sizeof(guildListPkt));
             g_nGuildMemberCount = -1;
-            DAT_07eaa114 = 1;
+            GuildOpened = 1;
             HUD_PanelTail97k(TAIL_GUILD);
         }
         PlayBuffer(0x19, 0, 0);            // IDA LABEL_123: en las dos ramas
@@ -278,8 +278,8 @@ void HUD_BottomBarButtons_HitTest(void)
 
     // -- Party --
     if (mx >= 348 && mx < 372 && my >= 452 && my < 476) {
-        DAT_083a4124 = 0;
-        DAT_07eaa114 = 0;                    // GuildOpened
+        MouseLButtonPush = 0;
+        GuildOpened = 0;                    // GuildOpened
         if (PartyOpened) {
             PartyOpened = 0;
             PlayBuffer(0x19, 0, 0);
@@ -296,13 +296,13 @@ void HUD_BottomBarButtons_HitTest(void)
 
     // -- Personaje --
     if (mx >= 379 && mx < 403 && my >= 452 && my < 476) {
-        DAT_083a4124 = 0;
-        if (DAT_07eaa116) {                  // CharacterOpened
-            DAT_07eaa116 = 0;
+        MouseLButtonPush = 0;
+        if (CharacterOpened) {                  // CharacterOpened
+            CharacterOpened = 0;
             PlayBuffer(0x19, 0, 0);
             PlayBuffer(0x1c, 0, 0);
         } else {
-            DAT_07eaa116 = 1;
+            CharacterOpened = 1;
             HUD_PanelTail97k(TAIL_CHARACTER);
         }
         return;
@@ -310,11 +310,11 @@ void HUD_BottomBarButtons_HitTest(void)
 
     // -- Inventario --
     if (mx >= 410 && mx < 434 && my >= 452 && my < 476) {
-        DAT_083a4124 = 0;
-        if (!DAT_07eaa117) {                 // InventoryOpened
-            DAT_07eaa117 = 1;
-            DAT_07eaa114 = 0;                // GuildOpened = 0
-            DAT_07eaa115 = 0;                // PartyOpened = 0
+        MouseLButtonPush = 0;
+        if (!InventoryOpened) {                 // InventoryOpened
+            InventoryOpened = 1;
+            GuildOpened = 0;                // GuildOpened = 0
+            PartyOpened = 0;                // PartyOpened = 0
         } else {
             HUD_PanelTail97k(TAIL_INVENTORY_CLOSE);
         }
@@ -340,13 +340,13 @@ static void ClampChatModeIME(const char* tag)
 {
     static int s_logs = 0;
     BYTE chat = (BYTE)GuildInputEnable;
-    BYTE ime  = (BYTE)DAT_07e11d71;
+    BYTE ime  = (BYTE)ImeModeFlag;
     if (chat > 1 || ime > 1) {
         if (s_logs < 8) {
             s_logs++;
         }
         if (chat > 1) GuildInputEnable = 0;
-        if (ime  > 1) DAT_07e11d71 = 0;
+        if (ime  > 1) ImeModeFlag = 0;
     }
 
     // Detector de la transición 0→1 de ChatMode: el clamp de arriba sólo atrapa
@@ -381,29 +381,29 @@ static bool HUD_IsGoldenArcherPanelRuntime(void)
 
 static bool HUD_IsGuildCreationRuntime(void)
 {
-    return DAT_07eaa124 != 0;
+    return GuildCreatorOpened != 0;
 }
 
 static bool HUD_IsGuildListRuntime(void)
 {
-    return DAT_07eaa114 != 0;
+    return GuildOpened != 0;
 }
 
 static bool HUD_IsCharacterInfoRuntime(void)
 {
-    return DAT_07eaa116 != 0;
+    return CharacterOpened != 0;
 }
 
 static bool HUD_IsInventoryFamilyActive(void)
 {
-    return (DAT_07eaa117 != 0) ||   // InventoryOpened
-           (DAT_07eaa116 != 0) ||   // CharacterOpened
-           (DAT_07eaa118 != 0) ||   // ShopOpened
-           (DAT_07eaa119 != 0) ||   // WarehouseOpened
-           (DAT_07eaa11a != 0) ||   // ChaosMixOpened
-           (DAT_07eaa11b != 0) ||   // TradeOpened
-           (DAT_07eaa11c != 0) ||   // EventWindowOpened
-           (DAT_07eaa124 != 0) ||   // GuildCreatorOpened
+    return (InventoryOpened != 0) ||   // InventoryOpened
+           (CharacterOpened != 0) ||   // CharacterOpened
+           (ShopOpened != 0) ||   // ShopOpened
+           (WarehouseOpened != 0) ||   // WarehouseOpened
+           (ChaosMixOpened != 0) ||   // ChaosMixOpened
+           (TradeOpened != 0) ||   // TradeOpened
+           (EventWindowOpened != 0) ||   // EventWindowOpened
+           (GuildCreatorOpened != 0) ||   // GuildCreatorOpened
            HUD_IsGoldenArcherPanelRuntime() ||
            (ServerDivisionOpened != 0) ||   // ServerDivisionOpened
            HUD_IsQuestPanelOpenRuntime();
@@ -412,8 +412,8 @@ static bool HUD_IsInventoryFamilyActive(void)
 static bool HUD_IsAnyRightPanelOpen(void)
 {
     return HUD_IsInventoryFamilyActive() ||
-           (DAT_07eaa115 != 0) ||   // PartyOpened
-           (DAT_07eaa114 != 0) ||   // GuildOpened
+           (PartyOpened != 0) ||   // PartyOpened
+           (GuildOpened != 0) ||   // GuildOpened
            gEventTimer.IsOpen();    // DESVIACION: panel H
 }
 
@@ -424,12 +424,12 @@ static bool HUD_IsAnyRightPanelOpen(void)
 extern bool g_bAutoGetItem;
 static void HUD_PickUpNearestItem(void)
 {
-    if (!Hero || (int)DAT_07e91388 > 0) return;                 // item en el cursor
-    if ((int)DAT_083a427c >= GetScreenWidth() || (int)DAT_083a4278 >= 429) return;
+    if (!Hero || (int)ItemPickedFlag > 0) return;                 // item en el cursor
+    if ((int)MouseX >= GetScreenWidth() || (int)MouseY >= 429) return;
     const float heroX = *(const float*)(Hero + 16);
     const float heroY = *(const float*)(Hero + 20);
     for (int i = 0; i < 1000; ++i) {
-        const BYTE* item = &DAT_07e12840[0] + (size_t)i * GROUND_ITEM_STRIDE;
+        const BYTE* item = &GroundItemPool[0] + (size_t)i * GROUND_ITEM_STRIDE;
         if (!item[72] || !item[72 + EntityOffset(0x160)]) continue;                   // vivo y visible
         const float dx = *(const float*)(item + 88) - heroX;
         const float dy = *(const float*)(item + 92) - heroY;
@@ -466,8 +466,8 @@ static void HUD_HotkeyTick(void)
     int kF11 = PressKey(VK_F11);
 
     if (GuildInputEnable != '\0') return;  // g_ChatMode
-    if (DAT_00559c84 != '\0') return;  // g_TextMode (login / dialog text)
-    if (DAT_07e11d71 != '\0') return;  // g_IME_Mode
+    if (InputEnable != '\0') return;  // g_TextMode (login / dialog text)
+    if (ImeModeFlag != '\0') return;  // g_IME_Mode
     // IDA Chat_InputTick L3976-3985: ANTES de mirar cualquier hotkey de panel,
     // el original corta la funcion entera con esta lista:
     //
@@ -482,10 +482,10 @@ static void HUD_HotkeyTick(void)
     // CloseInventoryRelatedWindows limpiaría el flag sin avisarle al server, que
     // después rechaza /move. Con el gate, esa ventana solo se cierra por su X o
     // caminando, que son los caminos que mandan el 0x31.
-    if (DAT_07eaa11b ||                      // TradeOpened
-        DAT_07eaa124 ||                      // GuildCreatorOpened
-        DAT_083a7c24 == 126 ||               // ErrorMessage: expulsar del guild
-        DAT_083a7c24 == 152 ||
+    if (TradeOpened ||                      // TradeOpened
+        GuildCreatorOpened ||                      // GuildCreatorOpened
+        InGameUiState == 126 ||               // ErrorMessage: expulsar del guild
+        InGameUiState == 152 ||
         _g_bEventChipDialogEnable ||         // Golden Archer / chip de evento
         ServerDivisionOpened ||                      // g_bServerDivisionEnable
         HUD_IsQuestPanelOpenRuntime())
@@ -508,9 +508,9 @@ static void HUD_HotkeyTick(void)
     // queda cerrado.  Los sonidos 25/28 salen al cerrar y al abrir el
     // inventario.
     if (kG) {
-        DAT_07eaa115 = 0;                    // PartyOpened
-        if (DAT_07eaa114) {
-            DAT_07eaa114 = 0;
+        PartyOpened = 0;                    // PartyOpened
+        if (GuildOpened) {
+            GuildOpened = 0;
             PlayBuffer(0x19, 0, 0);
             PlayBuffer(0x1c, 0, 0);
         } else {
@@ -518,12 +518,12 @@ static void HUD_HotkeyTick(void)
             const BYTE guildListPkt[3] = { 0xC1, 0x03, 0x52 };
             gNetwork.SendC1(guildListPkt, sizeof(guildListPkt));
             g_nGuildMemberCount = -1;
-            DAT_07eaa114 = 1;
-            if (!HUD_PanelTail97k(TAIL_GUILD)) DAT_07eaa114 = 0;
+            GuildOpened = 1;
+            if (!HUD_PanelTail97k(TAIL_GUILD)) GuildOpened = 0;
         }
     }
     if (kP) {
-        DAT_07eaa114 = 0;                    // GuildOpened
+        GuildOpened = 0;                    // GuildOpened
         if (PartyOpened) {
             PartyOpened = 0;
             PlayBuffer(0x19, 0, 0);
@@ -537,21 +537,21 @@ static void HUD_HotkeyTick(void)
         }
     }
     if (kC) {
-        if (DAT_07eaa116) {
-            DAT_07eaa116 = 0;
+        if (CharacterOpened) {
+            CharacterOpened = 0;
             PlayBuffer(0x19, 0, 0);
             PlayBuffer(0x1c, 0, 0);
         } else {
-            DAT_07eaa116 = 1;
-            if (!HUD_PanelTail97k(TAIL_CHARACTER)) DAT_07eaa116 = 0;
+            CharacterOpened = 1;
+            if (!HUD_PanelTail97k(TAIL_CHARACTER)) CharacterOpened = 0;
         }
     }
     if (kV || kI) {
-        if (!DAT_07eaa117) {                 // InventoryOpened
-            DAT_07eaa11b = 0;                // IDA: TradeOpened = 0 al abrir
-            DAT_07eaa117 = 1;
-            DAT_07eaa114 = 0;                // GuildOpened
-            DAT_07eaa115 = 0;                // PartyOpened
+        if (!InventoryOpened) {                 // InventoryOpened
+            TradeOpened = 0;                // IDA: TradeOpened = 0 al abrir
+            InventoryOpened = 1;
+            GuildOpened = 0;                // GuildOpened
+            PartyOpened = 0;                // PartyOpened
             PlayBuffer(0x19, 0, 0);
             PlayBuffer(0x1c, 0, 0);
         } else {
@@ -564,38 +564,38 @@ static void HUD_HotkeyTick(void)
 //
 // Procesador de input del jugador por frame. Se llama desde el camino de render del HUD/UI en cada frame.
 // Responsibilities:
-//   1. Cooldown gate (DAT_07e11d1c must be <= 0x1e)
+//   1. Cooldown gate (InputCooldownTicks must be <= 0x1e)
 //   2. Second-password auto-fill from hover entity name
 //   3. Camera update + facing angle packet [0xC1][0x18][0x66]
 //   4. Sub-tick via CheckGate
-//   5. Movement debounce (DAT_07e11d28 >= DAT_00559bec and !DAT_07e11dc0)
+//   5. Movement debounce (MoveDebounceCounter >= MouseUpdateTimeMax and !MoveLockFlag)
 //   6. Animation state exit: swimming, normal walk, cancel
 //   7. Click sobre mob/jugador (SelectedCharacter): pathfind + Combat_SendMovePathPacket
 //   8. Click sobre NPC (SelectedNpc): pathfind alternativo
 //   9. Click sobre objeto especial (SelectedOperate): pathfind + lookup de entity_type
 //  10. Click en suelo (ray cast RenderTerrain + RenderTerrainTile): chequeo de terreno + pathfind
 //  11. Actualización de estado de entidad: Combat_DispatchHeroSkillAttack
-//  12. Atributo de terreno bajo el cursor → DAT_07e118e8
+//  12. Atributo de terreno bajo el cursor → WorldMapType
 //
 // Los bloques de ofuscación por HashTable repartidos por la función (~70 % del código) se omiten
 // (ver docs/analisis/hashtable-anti-tamper.md del tag 0.97.21).
 //
 // Key globals:
-//   DAT_07abf5d8          — local player entity ptr
-//   DAT_07abf5d0          — entity array base (stride 0x394)
-//   DAT_07cf1ffc          — g_CharData (XOR-encoded char-select data block)
+//   Hero          — local player entity ptr
+//   CharactersClient          — entity array base (stride 0x394)
+//   CharacterMachinePtr          — g_CharData (XOR-encoded char-select data block)
 //   WorldTime          — frame counter (float-compatible tick)
-//   _DAT_00552890         — speed scale (dt multiplier)
-//   _DAT_00552b6c         — max facing dt threshold
-//   _DAT_00552928         — min entity speed for facing packet
-//   DAT_00559bec          — movement debounce threshold
-//   DAT_07e11d28          — movement debounce counter
-//   DAT_07e11db8          — contador de pasos (tiene que ser > 0x27 para el facing)
+//   DeltaTimeScale         — speed scale (dt multiplier)
+//   FacingDtMax         — max facing dt threshold
+//   0.7f         — min entity speed for facing packet
+//   MouseUpdateTimeMax          — movement debounce threshold
+//   MoveDebounceCounter          — movement debounce counter
+//   MoveStepCounter          — contador de pasos (tiene que ser > 0x27 para el facing)
 //   SelectedCharacter          — hover mob/player entity index
 //   SelectedNpc          — hover NPC entity index
 //   SelectedOperate          — hover special-object index
 //   SelectedItem          — hover ground item index
-//   DAT_083a2378          — special-object entity pointer table (stride 3*int)
+//   SpecialObjPtrTable          — special-object entity pointer table (stride 3*int)
 //
 // Packet formats (all XOR-encoded before send):
 //   Facing:       [0xC1][0x07][0x0F] + encoded direction byte
@@ -616,13 +616,13 @@ void __cdecl Player_ProcessInput(void)
     // Poblar el flag MouseOnWindow (per IDA) ANTES de la lógica de GroundClick,
     // así clickear adentro de un panel no hace caminar al jugador.
     MouseOnWindow_Update();
-    // DAT_07d78094 y g_MouseOnWindow son la misma memoria (la escribe
+    // MouseOnWindowFlag y g_MouseOnWindow son la misma memoria (la escribe
     // CheckInventory por los paneles): no copiar uno en el otro acá.
     // Los botones de la barra inferior se atienden desde `Chat_InputTick`
     // (0x4B14F0), que es donde los tiene el binario.
 
     // ── Guard: entity visibility / renderable flag ─────────────────────────────
-    if (*(static_cast<const char*>(DAT_07abf5d8) + EntityOffset(0x2fd)) != '\0')
+    if (*(static_cast<const char*>(Hero) + EntityOffset(0x2fd)) != '\0')
         return;
 
     // ── LoadingWorld cooldown ────────────────────────────────────────────────
@@ -632,41 +632,41 @@ void __cdecl Player_ProcessInput(void)
     // this same global to be exactly zero.  Omitting the decrement left the
     // value written by ReceiveTeleport (30) permanently nonzero, preventing
     // every subsequent automatic map gate from ever sending C3:06:1C.
-    if (DAT_07e11d1c > 0)
-        --DAT_07e11d1c;
+    if (InputCooldownTicks > 0)
+        --InputCooldownTicks;
 
-    if (DAT_07e11d1c > 0x1e)
+    if (InputCooldownTicks > 0x1e)
         return;
 
     // ── Second-password auto-fill from hover entity name ──────────────────────
     // Si el modo de segunda contraseña está activo, la entidad bajo el mouse está muerta y el índice de hover es válido:
-    //   copy entity name (entity+0x1c1) to password buffer DAT_07db8810,
-    //   después poner en cero y volver a copiar vía el buffer intermedio DAT_07e113e4.
-    if (DAT_00559c84 != '\0'
-        && *(static_cast<const char*>(DAT_07abf5d8) + EntityOffset(0x34e)) != '\0'
+    //   copy entity name (entity+0x1c1) to password buffer PasswordInputBuffer,
+    //   después poner en cero y volver a copiar vía el buffer intermedio ChatHistoryBuffer.
+    if (InputEnable != '\0'
+        && *(static_cast<const char*>(Hero) + EntityOffset(0x34e)) != '\0'
         && SelectedCharacter != -1
         && MouseRButtonPush != '\0')
     {
-        unsigned char *hoverEntity = (unsigned char*)(DAT_07abf5d0 + SelectedCharacter * CHARACTER_STRIDE);
+        unsigned char *hoverEntity = (unsigned char*)(CharactersClient + SelectedCharacter * CHARACTER_STRIDE);
         const unsigned char *nameSrc = (const unsigned char*)EntityName::Get(hoverEntity);
 
         // Copy name into password buffer
-        memcpy(DAT_07db8810, nameSrc, 0x40);
+        memcpy(PasswordInputBuffer, nameSrc, 0x40);
 
-        // El slot del historial es dword_559CC4 (0..4), NO SelectedCharacter.
+        // El slot del historial es ChatHistoryIndex (0..4), NO SelectedCharacter.
         // IDA Player_InputTick L344-349:
-        //     v11 = dword_559CC4;
-        //     v12 = &byte_7E113E4[256 * v11];
-        int histSlot = (int)DAT_00559cc4;
+        //     v11 = ChatHistoryIndex;
+        //     v12 = &ChatHistoryBuffer[256 * v11];
+        int histSlot = (int)ChatHistoryIndex;
         if (histSlot < 0 || histSlot > 4) histSlot = 0;
-        memcpy((void*)(DAT_07e113e4 + histSlot * 0x100), nameSrc, 0x40);
+        memcpy((void*)(ChatHistoryBuffer + histSlot * 0x100), nameSrc, 0x40);
 
         // Pone en cero el buffer de contraseña y después copia de vuelta desde el slot preparado
-        memset(DAT_07db8810, 0, 0x40 * sizeof(DWORD));
-        memcpy(DAT_07db8810, (void*)(DAT_07e113e4 + histSlot * 0x100), 0x40);
+        memset(PasswordInputBuffer, 0, 0x40 * sizeof(DWORD));
+        memcpy(PasswordInputBuffer, (void*)(ChatHistoryBuffer + histSlot * 0x100), 0x40);
 
         // Setea el largo de la contraseña y dispara el BGM 0x19
-        DAT_07d780ac = (DWORD)strlen((char*)DAT_07db8810);
+        InputLength1 = (DWORD)strlen((char*)PasswordInputBuffer);
         PlayBuffer(0x19, 0, 0);
     }
 
@@ -677,12 +677,12 @@ void __cdecl Player_ProcessInput(void)
     bool bHeadTrackActive = false;
     float fHalfScreenW = 320.0f;
     {
-        unsigned char* ent = (unsigned char*)DAT_07abf5d8;
+        unsigned char* ent = (unsigned char*)Hero;
         if (ent) {
             // En pantalla ancha el mundo ocupa toda la ventana: su centro es 320.
             fHalfScreenW = gWindow.IsWide() ? 320.0f : (float)(GetScreenWidth() / 2);
-            const float mouseX = (float)(int)DAT_083a427c;
-            const float mouseY = (float)(int)DAT_083a4278;
+            const float mouseX = (float)(int)MouseX;
+            const float mouseY = (float)(int)MouseY;
 
             // Ángulo del mouse respecto del centro del viewport, llevado al marco
             // del cuerpo y clampeado a [120, 240]: la cabeza sólo gira ~±60°.
@@ -695,12 +695,12 @@ void __cdecl Player_ProcessInput(void)
 
             // IDA L374: el tracking se apaga durante el auto-ataque y con la
             // animación de muerte (62).
-            if ((DAT_07e11e18 == 0 || g_Attacking == -1 || gMapManager.GetCurrentMap() == 6)
+            if ((AutoAttackFlag == 0 || g_Attacking == -1 || gMapManager.GetCurrentMap() == 6)
                 && AsCharacter(ent)->Object.CurrentAction != 62)
             {
                 bHeadTrackActive = true;
                 AsCharacter(ent)->Object.HeadTargetAngle[0] = (float)((v16 + 180) % 360);   // yaw
-                AsCharacter(ent)->Object.HeadTargetAngle[1] = (float)(180 - (int)DAT_083a4278) * 0.050000001f; // pitch
+                AsCharacter(ent)->Object.HeadTargetAngle[1] = (float)(180 - (int)MouseY) * 0.050000001f; // pitch
             }
             else
             {
@@ -715,11 +715,11 @@ void __cdecl Player_ProcessInput(void)
 
     // ── WALKER (corre cada tick, INDEPENDIENTE de gates) ─────────────────────
     // Va fuera del gate de debounce `bec <= d28` (que se setea a `wpCount*3+4` en
-    // cada envío de camino) y ARRIBA del gate `DAT_07d78094` (hover sobre la skill
+    // cada envío de camino) y ARRIBA del gate `MouseOnWindowFlag` (hover sobre la skill
     // bar): el walker se ejecuta SIEMPRE; solo el envío de packets y el
     // procesamiento de clicks nuevos van gateados.
     {
-        unsigned char *ent = (unsigned char*)DAT_07abf5d8;
+        unsigned char *ent = (unsigned char*)Hero;
         if (*(unsigned char*)(ent + 0x78) & 0x20) {
             SetPlayerStop(AsCharacter(ent));
         } else {
@@ -754,8 +754,8 @@ void __cdecl Player_ProcessInput(void)
                     SetPlayerStop(AsCharacter(ent));
                     // IDA L401: `dword_7E11DBC = (std::int64_t)*(float *)(v0 + 36);`
                     // — es el FACING del héroe, no un timestamp.
-                    DAT_07e11dbc = (int)AsCharacter(ent)->Object.Angle[2];
-                    DAT_07e11db8 = 0;
+                    FacingAngle = (int)AsCharacter(ent)->Object.Angle[2];
+                    MoveStepCounter = 0;
                     // IDA L397-403: al terminar el camino, Action(c, c) con
                     // la cola que haya (0 = nada).  El port despachaba por
                     // tipo de cola con atajos propios (talk directo, pickup,
@@ -774,8 +774,8 @@ void __cdecl Player_ProcessInput(void)
                 // OCTANTE (360/8 = 45°, de ahí el * 1/45 = 0.022222223) del
                 // facing actual contra el del mouse, y sólo si cambió se rota.
                 // Además espera 40 ticks (~1.6 s a 25 fps) entre rotaciones.
-                ++DAT_07e11db8;
-                if (DAT_07e11db8 >= 40 && !g_MouseOnWindow && !AsCharacter(ent)->Dead)
+                ++MoveStepCounter;
+                if (MoveStepCounter >= 40 && !g_MouseOnWindow && !AsCharacter(ent)->Dead)
                 {
                     const BYTE act = AsCharacter(ent)->Object.CurrentAction;
                     // 139/140/133/135 = animaciones de gate/teleport: no rotar.
@@ -789,17 +789,17 @@ void __cdecl Player_ProcessInput(void)
                     if (act != 139 && act != 140 && act != 133 && act != 135 && !inGesture
                         && bHeadTrackActive && !AsCharacter(ent)->SkillStage)
                     {
-                        DAT_07e11db8 = 0;
-                        const float mouseX = (float)(int)DAT_083a427c;
-                        const float mouseY = (float)(int)DAT_083a4278;
+                        MoveStepCounter = 0;
+                        const float mouseX = (float)(int)MouseX;
+                        const float mouseY = (float)(int)MouseY;
                         const int   angToMouse =
                             (int)CreateAngle(mouseX, mouseY, fHalfScreenW, 180.0f);
 
                         const float curFacing = AsCharacter(ent)->Object.Angle[2];
                         const int   curOct = (int)((curFacing + 22.5f) * 0.022222223f + 1.0f) & 7;
 
-                        DAT_07e11dbc = (405 - angToMouse) % 360;
-                        const float newFacing = (float)DAT_07e11dbc;
+                        FacingAngle = (405 - angToMouse) % 360;
+                        const float newFacing = (float)FacingAngle;
                         const int   newOct = (int)((newFacing + 22.5f) * 0.022222223f + 1.0f) & 7;
 
                         if (curOct != newOct) {
@@ -819,11 +819,11 @@ void __cdecl Player_ProcessInput(void)
     // ── obsolete inline mini-attack disabled below ──────────────────────────
     #if 0
     {
-        unsigned char *ent = (unsigned char*)DAT_07abf5d8;
+        unsigned char *ent = (unsigned char*)Hero;
         if (ent && AsCharacter(ent)->MovementType == 3 && AsCharacter(ent)->PathNum == 0) {
-            int targetIdx = (int)DAT_00559ce8;
+            int targetIdx = (int)HoverTargetIndex;
             if (targetIdx >= 0 && targetIdx < 400) {
-                unsigned char *tgt = (unsigned char*)(DAT_07abf5d0 + (uintptr_t)targetIdx * CHARACTER_STRIDE);
+                unsigned char *tgt = (unsigned char*)(CharactersClient + (uintptr_t)targetIdx * CHARACTER_STRIDE);
                 if (AsCharacter(tgt)->Object.Live != 0 && AsCharacter(tgt)->SafeZone == 0) {
                     int hxg = (int)AsCharacter(ent)->PositionX;
                     int hyg = (int)AsCharacter(ent)->PositionY;
@@ -868,8 +868,8 @@ void __cdecl Player_ProcessInput(void)
 
     // ── Salida temprana si el movimiento está bloqueado o la UI activa (post-walker) ──
     // El gate va DESPUÉS del walker, así el walker siempre avanza incluso con
-    // DAT_07d78094 seteado (mouse sobre la barra de skills).
-    if (DAT_07e11d30 != 0 || g_MouseOnWindow != 0)
+    // MouseOnWindowFlag seteado (mouse sobre la barra de skills).
+    if (EditFlag != 0 || g_MouseOnWindow != 0)
         goto end_tick;
 
     // ── Movement debounce gate (controla envío de packets/clicks, NO walker) ─
@@ -877,14 +877,14 @@ void __cdecl Player_ProcessInput(void)
     // inmediato; mientras se mueve se mantiene el gate por tiempo para no spamear
     // el server con paths intermedios.
     { // El salto de salida no entra en el ámbito de estas variables.
-    bool walkerIdle = (((unsigned char*)DAT_07abf5d8)[EntityOffset(0x356)] == 0);
-    // DAT_07e11dc0 ("movement lock flag B"): según IDA solo lo escriben Attack
+    bool walkerIdle = (((unsigned char*)Hero)[EntityOffset(0x356)] == 0);
+    // MoveLockFlag ("movement lock flag B"): según IDA solo lo escriben Attack
     // (0x49CC50) y Chat_InputTick (0x4B6630). Attack es stub vacío en nuestro build
     // y el port de Chat_InputTick no tiene ese write, así que su valor fiel es 0;
     // se fuerza acá porque se observó corrompido (-44) por un buffer adyacente.
     // Revisar al portar Attack.
-    DAT_07e11dc0 = 0;
-    if ((DAT_00559bec <= DAT_07e11d28) && DAT_07e11dc0 == '\0') {
+    MoveLockFlag = 0;
+    if ((MouseUpdateTimeMax <= MoveDebounceCounter) && MoveLockFlag == '\0') {
 
         // Un click = un GroundClick.
         //
@@ -913,17 +913,17 @@ void __cdecl Player_ProcessInput(void)
             if (curState != s_lastGameState) {
                 if (curState == 5) {
                     // Entró al mundo en este frame — consume cualquier flag de click viejo.
-                    DAT_083a4124 = '\0';
-                    DAT_083a413c = '\0';
-                    DAT_083a42c4 = 0;
+                    MouseLButtonPush = '\0';
+                    MouseLButtonPop = '\0';
+                    MouseLButton = 0;
                     // Limpia los objetivos de hover para evitar arrastre de estado del char-select.
                     SelectedCharacter = -1;
                     SelectedNpc = -1;
                     SelectedItem = -1;
                     SelectedOperate = -1;
                     Attacking = -1;
-                    DAT_00559c70 = -1;
-                    DAT_00559ce8 = -1;
+                    HoverAttackTarget = -1;
+                    HoverTargetIndex = -1;
                     // Clear hero action queue (+0x2ED) so secondary tick
                     // doesn't fire Action() with garbage. NO tocar +0x2EC —
                     // ése es un state flag (is_moving / in_action) que server
@@ -932,8 +932,8 @@ void __cdecl Player_ProcessInput(void)
                     //
                     // También se resetean anim_state a idle (1) y el path state: el héroe hereda
                     // el anim_state del preview de CharSelect.
-                    if (DAT_07abf5d8) {
-                        BYTE* hero = (BYTE*)DAT_07abf5d8;
+                    if (Hero) {
+                        BYTE* hero = (BYTE*)Hero;
                         *(char *)&AsCharacter(hero)->MovementType = 0;            // action queue
                         *(char *)&AsCharacter(hero)->Object.CurrentAction = 1;            // anim_state = idle
                         *(char *)&AsCharacter(hero)->Object.PriorAction = 1;            // anim_state_prev
@@ -952,19 +952,19 @@ void __cdecl Player_ProcessInput(void)
         }
 
         // Semántica per IDA Player_InputTick:
-        //   DAT_083a4124 = MouseLButtonPush (DOWN pulse, ONE-SHOT)
-        //                  Lo setea WndProc en WM_LBUTTONDOWN si DAT_083a42c4==0.
+        //   MouseLButtonPush = MouseLButtonPush (DOWN pulse, ONE-SHOT)
+        //                  Lo setea WndProc en WM_LBUTTONDOWN si MouseLButton==0.
         //                  IDA consume: `if (Push) { Push=0; v32=1; }`.
-        //   DAT_083a42c4 = MouseLButton (estado de mantenido: se setea al bajar, se limpia al soltar)
-        //   DAT_083a413c = MouseLButtonPop (set on UP no-drag)
+        //   MouseLButton = MouseLButton (estado de mantenido: se setea al bajar, se limpia al soltar)
+        //   MouseLButtonPop = MouseLButtonPop (set on UP no-drag)
         //
         // PUSH es one-shot — set en DOWN, consumed por nosotros aquí, no se
         // dispara again hasta el next DOWN.
         // HELD es continuous — refleja el real-time mouse button state.
         // POP es UP-edge — set en UP no-drag, consumed por dialog buttons etc.
-        bool bMousePush    = (DAT_083a4124 == 1);   // DOWN pulse this tick
-        bool bClickHeld    = (DAT_083a42c4 != 0);   // real-time held state
-        bool bClickLatched = (DAT_083a413c == 1);   // UP no-drag latch
+        bool bMousePush    = (MouseLButtonPush == 1);   // DOWN pulse this tick
+        bool bClickHeld    = (MouseLButton != 0);   // real-time held state
+        bool bClickLatched = (MouseLButtonPop == 1);   // UP no-drag latch
         bool bAnyPending   = bClickHeld || bClickLatched || bMousePush;
 
         if (!bAnyPending) {
@@ -1000,10 +1000,10 @@ void __cdecl Player_ProcessInput(void)
         s_prevClickHeld = bClickHeld;
 
         // bClickEdge = bMousePush: el push pulse YA es one-shot (como en IDA). Después
-        // del click handler se CONSUME (DAT_083a4124 = 0).
+        // del click handler se CONSUME (MouseLButtonPush = 0).
         //
         // Push semantics:
-        //   - DOWN: WndProc sets DAT_083a4124=1, DAT_083a42c4=1.
+        //   - DOWN: WndProc sets MouseLButtonPush=1, MouseLButton=1.
         //   - InputTick this frame: bMousePush=true → process → consume (=0).
         //   - Held: 4124=0 (consumed), 42c4=1 (still held).
         //   - UP: WndProc clears 4124 (already 0), 42c4=0, sets 413c=1.
@@ -1014,22 +1014,22 @@ void __cdecl Player_ProcessInput(void)
         // attack-arm (dispararía ataques al pasar el mouse).
         bool bClickEdge = bMousePush;
         // Solo consumir el push pulse si el click NO está sobre una ventana de UI: el
-        // click handler de ESA ventana (FUN_004d23b0, llamado más tarde desde
+        // click handler de ESA ventana (Inventory_ClickHandler, llamado más tarde desde
         // RenderInventoryWindow / RenderShopInterface / etc.) necesita ver
-        // `DAT_083a4124 == 1`. `g_MouseOnWindow` lo setea HUD_HitTest_AllWindows según
+        // `MouseLButtonPush == 1`. `g_MouseOnWindow` lo setea HUD_HitTest_AllWindows según
         // las flags de panel abierto + bounding box.
         if (bMousePush && !g_MouseOnWindow) {
-            DAT_083a4124 = 0;
+            MouseLButtonPush = 0;
         }
 
         // Hard-consume del latch POP también, por si quedó stale.
         // Mismo razonamiento: solo consumir si NO estamos sobre UI.
         if (bClickLatched && !g_MouseOnWindow) {
-            DAT_083a413c = 0;
+            MouseLButtonPop = 0;
         }
 
         // Durante los primeros 10 frames in-world, bClickEdge=false: cubre un
-        // DAT_083a4124=1 colgado de la transición CharSelect → World.
+        // MouseLButtonPush=1 colgado de la transición CharSelect → World.
         {
             static int s_inWorldFramesEdge = 0;
             if (SceneFlag == 5) s_inWorldFramesEdge++;
@@ -1055,35 +1055,35 @@ void __cdecl Player_ProcessInput(void)
         if (bClickHeld || bClickLatched) {
             bHoverActive = true;
             s_clickCycleConsumed = true;
-            // NO consumir DAT_083a4124 cuando el mouse está sobre
+            // NO consumir MouseLButtonPush cuando el mouse está sobre
             // un panel — el render-phase de RenderCharacterInfoWindow / etc.
             // necesita ese flag para detectar clicks en sus botones (X close,
             // [+] stat add, etc.).  Solo consumir cuando el click ES para el ground
             // (mouse fuera de panels).
             if (!g_MouseOnWindow) {
-                DAT_083a4124 = '\0';
-                DAT_083a413c = '\0';   // consume ambos flags
+                MouseLButtonPush = '\0';
+                MouseLButtonPop = '\0';   // consume ambos flags
             }
         }
         // Si el mouse está sobre un panel (HUD bottom, skill expanded list, panels
         // right-side), bHoverActive=false para que los alt-targets (hover target, NPC
         // click, tertiary) NO procesen el click como movement. También se consume
-        // DAT_083a42c4 y se resetean SelectedCharacter/4c/48 (hover targets), para que
+        // MouseLButton y se resetean SelectedCharacter/4c/48 (hover targets), para que
         // un hover target stale no dispare pathfind.
         if (g_MouseOnWindow || s_clickStartedOnWindow) {
             bHoverActive = false;
             // Consume los flags de click para que no se propaguen al tick
             // alt-target processing. Panel handlers se registraron via
             // Chat_InputTick (corre antes); ya no necesitamos los flags.
-            DAT_083a4124 = '\0';
-            DAT_083a413c = '\0';
-            DAT_083a42c4 = 0;
+            MouseLButtonPush = '\0';
+            MouseLButtonPop = '\0';
+            MouseLButton = 0;
         }
 
         // Si el user NO está clickeando activamente (no held, no latched), forzar
-        // DAT_083a42c4=0 también, para que un click mal consumido no deje el flag activo.
+        // MouseLButton=0 también, para que un click mal consumido no deje el flag activo.
         if (!bClickHeld && !bClickLatched) {
-            DAT_083a42c4 = 0;
+            MouseLButton = 0;
         }
 
         // IDA 0x004ACEF0 L599-604: si NO hay click (v32 = MouseLButtonPush ||
@@ -1091,7 +1091,7 @@ void __cdecl Player_ProcessInput(void)
         // por LABEL_390 SIN tocar MouseUpdateTime:
         //     if ( (!m_bAutoAttack || World == 6 || Attacking != 1
         //           || SelectedCharacter == -1) && !v32 )
-        //     { flt_7E11D50 = 0.0; flt_7E11D4C = WorldTime; goto LABEL_390; }
+        //     { FacingDelta = 0.0; FacingLastWorldTime = WorldTime; goto LABEL_390; }
         //
         // Faltaba, y es la causa de "hay que clickear varias veces para
         // caminar".  El `MouseUpdateTime = 0` de LABEL_190 (mas abajo) corria
@@ -1107,16 +1107,16 @@ void __cdecl Player_ProcessInput(void)
                                          && (g_Attacking == 1)
                                          && (SelectedCharacter != -1);
             if (!bAutoAttackEngaged && !bHasClick) {
-                _DAT_07e11d50 = 0.0f;
-                _DAT_07e11d4c = WorldTime;      // WorldTime
+                FacingDelta = 0.0f;
+                FacingLastWorldTime = WorldTime;      // WorldTime
                 goto end_tick_inc;                 // IDA: goto LABEL_390
             }
         }
 
         // (Walker movido arriba del gate — ya corrió al inicio del tick.)
-        unsigned char *ent = (unsigned char*)DAT_07abf5d8;
+        unsigned char *ent = (unsigned char*)Hero;
 
-        _DAT_07e11d50 = (WorldTime - _DAT_07e11d4c) * _DAT_00552890;
+        FacingDelta = (WorldTime - FacingLastWorldTime) * DeltaTimeScale;
 
         // IDA 0x004ACEF0 L613-625: ANTES de procesar el click, el original lo
         // descarta mientras el heroe no puede actuar:
@@ -1179,7 +1179,7 @@ void __cdecl Player_ProcessInput(void)
         // y pisaba la ruta.  Como el heroe quedaba siempre caminando,
         // `AsCharacter(ent)->MovementType==3 && AsCharacter(ent)->PathNum==0` nunca se cumplia, Action nunca corria
         // y el cursor parpadeaba entre ataque y movimiento.
-        DAT_07e11d28 = 0;
+        MoveDebounceCounter = 0;
 
         // ── Movement/attack packet for swimming anim ─────────────────────────
         // Si la entidad está viva y CanAct y en movimiento de nado:
@@ -1194,8 +1194,8 @@ void __cdecl Player_ProcessInput(void)
                     && *(char *)&AsCharacter(ent)->MovementType == '\0'
                     && (AsCharacter(ent)->Class & 7) == 2)
                 {
-                    short animA = *(short*)((unsigned char*)DAT_07cf1ffc + 0x86);
-                    short animB = *(short*)((unsigned char*)DAT_07cf1ffc + 0x97);
+                    short animA = *(short*)((unsigned char*)CharacterMachinePtr + 0x86);
+                    short animB = *(short*)((unsigned char*)CharacterMachinePtr + 0x97);
 
                     // Anim ranges for movement packet [0xC1][0x11]
                     bool sendMovePkt =
@@ -1241,7 +1241,7 @@ void __cdecl Player_ProcessInput(void)
                     if ((char)canAct == '\0') {
                         goto end_tick_inc;
                     }
-                    BYTE* hoverEnt = (BYTE*)(uintptr_t)DAT_07abf5d0
+                    BYTE* hoverEnt = (BYTE*)(uintptr_t)CharactersClient
                                    + (uintptr_t)SelectedCharacter * CHARACTER_STRIDE;
                     // Muerto = +0x2FD (IDA ReceiveDie:18). No usar +0x2EC (state flag que el
                     // server también pone en 0 en ReceiveAction) ni +0x34E (es SafeZone: dejaría
@@ -1252,23 +1252,23 @@ void __cdecl Player_ProcessInput(void)
                         SelectedCharacter = -1;
                         SelectedOperate = -1;
                         Attacking = 0;
-                        DAT_00559c70 = -1;
+                        HoverAttackTarget = -1;
                         goto end_tick_inc;
                     }
-                    intptr_t tgtEntityBase = (intptr_t)(DAT_07abf5d0 + SelectedCharacter * CHARACTER_STRIDE);
+                    intptr_t tgtEntityBase = (intptr_t)(CharactersClient + SelectedCharacter * CHARACTER_STRIDE);
                     int dstX = AsCharacter(tgtEntityBase)->PositionX;
                     int dstY = AsCharacter(tgtEntityBase)->PositionY;
 
-                    DAT_00559ce8 = SelectedCharacter;
+                    HoverTargetIndex = SelectedCharacter;
                     Attacking  = 1;
                     AsCharacter(ent)->MovementType = 3;
                     // Destino = grid del MOB target (no WorldTime, que es el tick counter).
                     TargetX = (DWORD)dstX;
                     TargetY = (DWORD)dstY;
 
-                    DAT_07db8708    = (int)AsCharacter(tgtEntityBase)->Object.Type;
-                    _DAT_07e118e4   = *(DWORD *)&AsCharacter(tgtEntityBase)->Object.Angle[2];
-                    DAT_00559c70    = SelectedCharacter;
+                    HoverTargetType    = (int)AsCharacter(tgtEntityBase)->Object.Type;
+                    FacingAnglePacket   = *(DWORD *)&AsCharacter(tgtEntityBase)->Object.Angle[2];
+                    HoverAttackTarget    = SelectedCharacter;
 
                     // Pathfind to hover target
                     int srcX = AsCharacter(ent)->PositionX;
@@ -1328,7 +1328,7 @@ void __cdecl Player_ProcessInput(void)
                         goto end_tick_inc;
                     }
                     {
-                        const char* const CM = (const char*)(uintptr_t)DAT_07cf1ffc;
+                        const char* const CM = (const char*)(uintptr_t)CharacterMachinePtr;
                         const int lh = CM ? ItemBehaviorType(*(const short*)(CM + 536)) : -1;  // IDA: v265
                         const int rh = CM ? ItemBehaviorType(*(const short*)(CM + 604)) : -1;  // IDA: v264
                         const bool bRanged = (lh >= 136 && lh < 143)
@@ -1383,7 +1383,7 @@ void __cdecl Player_ProcessInput(void)
         // IDA L590-598: las ramas de mobiliario, NPC e item corren con
         //     v32 = MouseLButtonPush || MouseLButton
         // o sea con el boton MANTENIDO tambien, igual que el click al suelo.
-        const bool bClickNow = bClickEdge || DAT_083a42c4 != 0;   // MouseLButton
+        const bool bClickNow = bClickEdge || MouseLButton != 0;   // MouseLButton
         if (SelectedOperate != -1 && bClickNow) {
             // Gate de montura (IDA L1135): solo se opera si NO se va
             // montado, o si se esta en zona segura.
@@ -1393,7 +1393,7 @@ void __cdecl Player_ProcessInput(void)
             const int iSrc = SelectedOperate;
             // Bound check (no esta en IDA): SelectedOperate viene del
             // picker del frame anterior.
-            const int nOper = (int)(sizeof(DAT_083a2370) / 0xc);
+            const int nOper = (int)(sizeof(OperateEntryPool) / 0xc);
             const intptr_t tgtEntityPtr = (iSrc >= 0 && iSrc < nOper)
                                    ? g_OperateObjects[iSrc] : 0;
 
@@ -1406,12 +1406,12 @@ void __cdecl Player_ProcessInput(void)
                 TargetY = (DWORD)(int)(*(float*)(tgtEntityPtr + 0x14) * 0.01f);
 
                 const int attrIdx = TERRAIN_INDEX((int)TargetX, (int)TargetY);
-                if (((unsigned char*)&DAT_0838bc70)[attrIdx] < 2
+                if (((unsigned char*)&TerrainWallFlags)[attrIdx] < 2
                     && *(char *)&AsCharacter(ent)->Movement == 0)
                 {
                     AsCharacter(ent)->MovementType = 4;   // MOVEMENT_OPERATE
-                    DAT_07db8708  = (int)*(short*)(tgtEntityPtr + 2);
-                    _DAT_07e118e4 = *(DWORD*)(tgtEntityPtr + 0x24);
+                    HoverTargetType  = (int)*(short*)(tgtEntityPtr + 2);
+                    FacingAnglePacket = *(DWORD*)(tgtEntityPtr + 0x24);
 
                     const int srcX = AsCharacter(ent)->PositionX;
                     const int srcY = AsCharacter(ent)->PositionY;
@@ -1440,13 +1440,13 @@ void __cdecl Player_ProcessInput(void)
             if (SelectedNpc != -1 && bClickNow) {
                 // Click sobre un NPC: setea el objetivo de movimiento y pathfindea (gateado por
                 // un click real, bClickEdge, no bHoverActive).
-                if (DAT_07eaa118 == '\0' && DAT_07eaa119 == '\0') {
+                if (ShopOpened == '\0' && WarehouseOpened == '\0') {
                     AsCharacter(ent)->MovementType = 2;
-                    DAT_00559ce8 = SelectedNpc;
-                    intptr_t tgtBase = (intptr_t)(DAT_07abf5d0 + SelectedNpc * CHARACTER_STRIDE);
-                    DAT_07db8708  = (int)AsCharacter(tgtBase)->Object.Type;
-                    _DAT_07e118e4 = *(DWORD *)&AsCharacter(tgtBase)->Object.Angle[2];
-                    DAT_00559c70  = SelectedNpc;
+                    HoverTargetIndex = SelectedNpc;
+                    intptr_t tgtBase = (intptr_t)(CharactersClient + SelectedNpc * CHARACTER_STRIDE);
+                    HoverTargetType  = (int)AsCharacter(tgtBase)->Object.Type;
+                    FacingAnglePacket = *(DWORD *)&AsCharacter(tgtBase)->Object.Angle[2];
+                    HoverAttackTarget  = SelectedNpc;
 
                     int srcX = AsCharacter(ent)->PositionX;
                     int srcY = AsCharacter(ent)->PositionY;
@@ -1474,11 +1474,11 @@ void __cdecl Player_ProcessInput(void)
                 // bClickEdge, no bHoverActive (igual que el handler de ataque).
                 AsCharacter(ent)->MovementType = 1;
                 ItemKey = (DWORD)SelectedItem;   // latch, IDA L1281
-                // SelectedItem es índice del pool de items del suelo (DAT_07e12840, stride
-                // 0x204), NO del pool de personajes (DAT_07abf5d0, stride 0x394). El tile del
+                // SelectedItem es índice del pool de items del suelo (GroundItemPool, stride
+                // 0x204), NO del pool de personajes (CharactersClient, stride 0x394). El tile del
                 // item = worldXY/100.
                 int itemSlotIdx = (int)SelectedItem;
-                BYTE* itemEnt = (BYTE*)&DAT_07e12840[0]
+                BYTE* itemEnt = (BYTE*)&GroundItemPool[0]
                               + (uintptr_t)itemSlotIdx * GROUND_ITEM_STRIDE;
                 // La posición world del item la escribe CreateItem en ip+88/92 (el render la
                 // lee en v1+16 = ip+72+16 = ip+88); itemEnt = ip.
@@ -1509,14 +1509,14 @@ void __cdecl Player_ProcessInput(void)
             //     if (bVar32) MouseLButtonPush = false;      // consume el flanco
             //     bVar31 = MouseLButton != false || bVar32;  // ESTADO SOSTENIDO || flanco
             //     if (MouseLButton == false && !bVar32) { ...sale sin mover... }
-            // La repetición la limita el debounce (DAT_00559bec <= DAT_07e11d28), igual
+            // La repetición la limita el debounce (MouseUpdateTimeMax <= MoveDebounceCounter), igual
             // que el original la limita con MouseUpdateTimeMax <= MouseUpdateTime.
             //
-            // Se lee DAT_083a42c4 EN VIVO, no la copia bClickHeld: más arriba se limpian
+            // Se lee MouseLButton EN VIVO, no la copia bClickHeld: más arriba se limpian
             // los flags cuando el cursor pasa sobre una ventana, y con la copia el hold
             // seguiría recalculando el destino un frame más (como la cámara sigue al
             // héroe, el destino huiría con ella).
-            if (DAT_083a42c4 == 0 && !bClickEdge) goto end_tick_inc;
+            if (MouseLButton == 0 && !bClickEdge) goto end_tick_inc;
             // Per IDA Player_InputTick:416,566: bloquear el ground click cuando el mouse
             // está sobre cualquier panel abierto (MouseOnWindow=1).
             if (g_MouseOnWindow) goto end_tick_inc;
@@ -1533,12 +1533,12 @@ void __cdecl Player_ProcessInput(void)
             // y este chequeo).
             {
                 static char s_lastSkillMenu = 0;
-                char skillMenuNow = (DAT_07db870c != '\0') ? (char)1 : (char)0;
+                char skillMenuNow = (ItemSelectMenuFlag != '\0') ? (char)1 : (char)0;
                 bool skillMenuActive = (skillMenuNow || s_lastSkillMenu);
                 s_lastSkillMenu = skillMenuNow;
                 if (skillMenuActive) {
-                    int my = (int)DAT_083a4278;
-                    int mx = (int)DAT_083a427c;
+                    int my = (int)MouseY;
+                    int mx = (int)MouseX;
                     // si mouse está cerca de la skill bar zone, ignorar click
                     if (my >= 350 && my < 460 && mx >= 180 && mx < 460) {
                         goto end_tick_inc;
@@ -1549,24 +1549,24 @@ void __cdecl Player_ProcessInput(void)
                 SHORT shift = Platform::GetInput().KeyState(0x10);
                 bool shiftHeld = ((char)((unsigned short)shift >> 8) == -0x80);
                 if (!shiftHeld) {
-                    // Reset del closest-hit sentinel ANTES de cada scan: si DAT_083a4120 (t_max)
+                    // Reset del closest-hit sentinel ANTES de cada scan: si RayCastClosestT (t_max)
                     // quedó de un frame previo, CollisionDetectLineToFace rechaza todos los hits.
                     extern void Map_InitRayCast(void);
                     Map_InitRayCast();
-                    DAT_07eab1fc = 0;             // reset hit flag
+                    TilePickResultFlag = 0;             // reset hit flag
                     RenderTerrain('\x01');         // iterate tiles + raycast
 
-                    char cHit = (DAT_07eab1fc != 0) ? '\x01' : '\0';
+                    char cHit = (TilePickResultFlag != 0) ? '\x01' : '\0';
 
                     if (cHit != '\0') {
-                        // DAT_080ab288/28c ya viene en grid coords (e.g. 218.0): el picker
-                        // (RenderTerrain) hace la conversión interna con _DAT_005524f0. Cast directo a
+                        // SelectXF/28c ya viene en grid coords (e.g. 218.0): el picker
+                        // (RenderTerrain) hace la conversión interna con GridToWorldScale. Cast directo a
                         // int, sin dividir por 100.
-                        float pickWX = *(float*)&DAT_080ab288;
-                        float pickWY = *(float*)&DAT_080ab28c;
+                        float pickWX = *(float*)&SelectXF;
+                        float pickWY = *(float*)&SelectYF;
                         TargetX = (DWORD)(int)pickWX;
                         TargetY = (DWORD)(int)pickWY;
-                        // DAT_07e11d64 es `DontMove` (0x07E11D64 en el binario), NO un
+                        // DontMoveFlag es `DontMove` (0x07E11D64 en el binario), NO un
                         // "walkable": es COSMETICO, sólo elige el sprite del cursor
                         // (10 = prohibido / 3 = mover) en el render del puntero. No
                         // bloquea nada, ni acá ni en el original — que también lo usa
@@ -1582,11 +1582,11 @@ void __cdecl Player_ProcessInput(void)
                         // que es exactamente lo que hace la forma de abajo. Es fiel;
                         // el nombre "walkability" del comentario viejo confundía.
                         int terrIdx = TargetX + TargetY * 0x100;
-                        unsigned char terrAttr = ((unsigned char*)&DAT_0838bc70)[terrIdx];
+                        unsigned char terrAttr = ((unsigned char*)&TerrainWallFlags)[terrIdx];
                         if (terrAttr < 8 || (terrAttr & 0x20) == 0x20)
-                            DAT_07e11d64 = 0;   // DontMove = false
+                            DontMoveFlag = 0;   // DontMove = false
                         else
-                            DAT_07e11d64 = 1;   // DontMove = true
+                            DontMoveFlag = 1;   // DontMove = true
 
                         // La rama de piso de 004ACEF0 no rechaza una animación de
                         // acción/ataque activa. Resuelve el click sobre el terreno
@@ -1620,7 +1620,7 @@ void __cdecl Player_ProcessInput(void)
                                 }
                                 if (bMoving &&
                                     srcX == (int)TargetX && srcY == (int)TargetY) {
-                                    DAT_07e11d28 = 0;          // IDA LABEL_389
+                                    MoveDebounceCounter = 0;          // IDA LABEL_389
                                     goto end_tick_inc;
                                 }
                             }
@@ -1634,7 +1634,7 @@ void __cdecl Player_ProcessInput(void)
                                 goto end_tick_inc;
                             }
                         }
-                        DAT_07e11d28 = 0;
+                        MoveDebounceCounter = 0;
                     }
                 }
             }
@@ -1642,19 +1642,19 @@ void __cdecl Player_ProcessInput(void)
     }
     // IDA Player_InputTick (0x4ACEF0 L586-588) NO borra los flags de click cuando
     // el gate de debounce bloquea:
-    //     if ( MouseUpdateTime < MouseUpdateTimeMax || byte_7E11DC0 )
+    //     if ( MouseUpdateTime < MouseUpdateTimeMax || MoveLockFlag )
     //         goto LABEL_390;            // == ++MouseUpdateTime; salir
     // Los dos flags solo se limpian en el anti-AFK de L607-611 (boton
     // sostenido 3600 s). O sea el click PENDIENTE sobrevive al bloqueo y lo
     // procesa el primer tick que pase el gate.
 
 end_tick_inc:
-    DAT_07e11d28 = DAT_07e11d28 + 1;
+    MoveDebounceCounter = MoveDebounceCounter + 1;
 
     }
 end_tick:
     // ── Per-frame entity state update ─────────────────────────────────────────
-    Combat_DispatchHeroSkillAttack(DAT_07abf5d8);
+    Combat_DispatchHeroSkillAttack(Hero);
 
     // ── HeroTile: atributo de terreno bajo el HÉROE ───────────────────────────
     // IDA Player_InputTick L570-582:
@@ -1672,14 +1672,14 @@ end_tick:
     // Lo leen además Render_Frame (2da pasada de SkillEffect_Render) y
     // Scene_CharSelect_Nav.
     {
-        const char* hero = (const char*)DAT_07abf5d8;
+        const char* hero = (const char*)Hero;
         if (hero) {
             int gx = (int)(*(const float*)(hero + 16)) / 100;   // world X → celda
             int gy = (int)(*(const float*)(hero + 20)) / 100;   // world Y → celda
             int idx = gx + (gy << 8);
             if (idx < 0)       idx = 0;
             if (idx > 0xffff)  idx = 0xffff;
-            DAT_07e118e8 = ((unsigned char*)&TerrainMappingLayer1)[idx];
+            WorldMapType = ((unsigned char*)&TerrainMappingLayer1)[idx];
         }
     }
 }

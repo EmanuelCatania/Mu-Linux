@@ -6,7 +6,7 @@
 //
 // ── POOL DE JUGADORES ─────────────────────────────────────────────────────────
 //
-//   Base iterador: DAT_07c74f54 (puVar1 = &DAT_07c74f54)
+//   Base iterador: PlayerRenderV1AnchorPtr (puVar1 = &PlayerRenderV1AnchorPtr)
 //   Stride:        0x6f * 4 = 0x1bc bytes por entrada
 //   Límite:        puVar1 < 0x7c7fcc4
 //   Entradas:      (0x7c7fcc4 - 0x07c74f54) / 0x1bc = ~100 jugadores
@@ -25,7 +25,7 @@
 //
 //   void FUN_00475110(void)
 //   {
-//     puVar1 = &DAT_07c74f54;
+//     puVar1 = &PlayerRenderV1AnchorPtr;
 //     do {
 //       if (*(char*)(puVar1 - 0x3b) != '\0') {   // jugador activo
 //         glColor3f(puVar1[-1], *puVar1, puVar1[1]);  // setear color RGB
@@ -43,7 +43,7 @@
 // ── NOTA ARQUITECTURAL ────────────────────────────────────────────────────────
 //
 //   A diferencia de Entity_Render_Sprites que usa el array general de entidades
-//   (DAT_07e12945, stride 0x204), este pool es exclusivo para jugadores y tiene
+//   (PlayerSpritePoolBase, stride 0x204), este pool es exclusivo para jugadores y tiene
 //   stride diferente (0x1bc). Probablemente es el pool de otros jugadores en el
 //   área visible, con datos simplificados (solo pos/rot/scale/color/type).
 //
@@ -64,16 +64,16 @@
 #include "Render/Player_Render.h"
 
 // Player_Render @ 0x00475110 (18 lines)
-// Iterates player entity table (base DAT_07c74f54 − 0xbc, stride 0x6f×4),
+// Iterates player entity table (base PlayerRenderV1AnchorPtr − 0xbc, stride 0x6f×4),
 // renders each active player sprite with its stored color + transform.
 void Player_Render(void)
 {
     // Pool g_PlayerRenderPool[100 × 0x1BC] (IDA bound 0xAD70 = 100 × 444), con
-    // DAT_07c74f54 apuntando a g_PlayerRenderPool + 0xEC (= v1 anchor del
+    // PlayerRenderV1AnchorPtr apuntando a g_PlayerRenderPool + 0xEC (= v1 anchor del
     // slot 0). Los reads negativos (puVar1 - 0x3b = -0xEC bytes) caen dentro del
     // buffer.
     //
-    // Walker iter: v1 starts at DAT_07c74f54 (= slot 0 + 0xEC), advances 0x6F
+    // Walker iter: v1 starts at PlayerRenderV1AnchorPtr (= slot 0 + 0xEC), advances 0x6F
     // floats (= 0x1BC bytes) per iter. Total 100 slots.
     //
     // Slot fields (relative to v1 = slot+0xEC):
@@ -83,7 +83,7 @@ void Player_Render(void)
     //   v1 - 0x32 (= slot+0x24) float: scale
     //   v1 - 1, v1, v1 + 1      float: color RGB
     //   v1 - 0xea (= slot - 0xC2 from v1) short: class_code
-    DWORD* puVar1 = DAT_07c74f54;
+    DWORD* puVar1 = PlayerRenderV1AnchorPtr;
     for (int i = 0; i < 100; ++i) {
         if (*(char*)(puVar1 - 0x3b) != '\0') {                   // active flag
             float r = *(float*)(puVar1 - 1);

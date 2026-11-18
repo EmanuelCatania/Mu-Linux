@@ -7,10 +7,10 @@
 // Terrain_Water @ 0x004f95e0 — Terrain_ComputeLightMap
 //
 // Terrain light map:
-//   DAT_07eab200 — float[256][256] per-tile brightness (wave-modulated)
-//   DAT_081cb608 — float[256][256][3] per-tile RGB light colour (bilinear)
-//   DAT_0828b608 — source RGB light colour table (read-only)
-//   DAT_0839bc84 — flag: light map enabled
+//   WaterWaveHeightTable — float[256][256] per-tile brightness (wave-modulated)
+//   PrimaryTerrainLightStorage — float[256][256][3] per-tile RGB light colour (bilinear)
+//   TerrainLightData — source RGB light colour table (read-only)
+//   LightMapEnableFlag — flag: light map enabled
 //   FrustrumBoundMinX_1/94 — current dirty rect corners
 
 #include "stdafx.h"
@@ -18,8 +18,8 @@
 
 // IDA: RequestTerrainLight (0x004F7960)
 // Samples the light colour at world position (param_1, param_2) using
-// bilinear interpolation over the 256x256 tile RGB map at DAT_081cb608.
-// Requires map mode 5 (SceneFlag==5) and DAT_0839bc84 != 0.
+// bilinear interpolation over the 256x256 tile RGB map at PrimaryTerrainLightStorage.
+// Requires map mode 5 (SceneFlag==5) and LightMapEnableFlag != 0.
 // param_1: world X  param_2: world Y  param_3: output float[3] RGB
 // On failure (out-of-bounds or wrong mode), writes (0,0,0).
 void __cdecl RequestTerrainLight(float param_1,float param_2,float *param_3)
@@ -36,9 +36,9 @@ void __cdecl RequestTerrainLight(float param_1,float param_2,float *param_3)
   float *pfVar10;
   longlong lVar11;
 
-  if ((SceneFlag == 5) && (DAT_0839bc84 != '\0')) {
-    fVar3 = param_1 * _DAT_00552594;
-    fVar2 = param_2 * _DAT_00552594;
+  if ((SceneFlag == 5) && (LightMapEnableFlag != '\0')) {
+    fVar3 = param_1 * EffectScaleUnit;
+    fVar2 = param_2 * EffectScaleUnit;
     lVar11 = (longlong)fVar3;   // IDA RequestTerrainLight: v3 = (std::int64_t)xfa  (xf*0.01)
     iVar4 = (int)lVar11;
     lVar11 = (longlong)fVar2;   // IDA RequestTerrainLight: v4 = (std::int64_t)yfa  (yf*0.01)
@@ -46,13 +46,13 @@ void __cdecl RequestTerrainLight(float param_1,float param_2,float *param_3)
     if ((-1 < iVar4) && (((-1 < iVar9 && (iVar4 < 0xff)) && (iVar9 < 0xff)))) {
       iVar6 = iVar9 * 0x100 + iVar4;
       fVar2 = fVar2 - (float)iVar9;
-      // DAT_081cb608 es DWORD: la aritmética va sobre char* para que el offset sea en
+      // PrimaryTerrainLightStorage es DWORD: la aritmética va sobre char* para que el offset sea en
       // bytes (idx*3*4; disasm @ 0x004f7a13-28).
-      pfVar5 = (float *)((char*)&DAT_081cb608 + ((iVar9 + 1) * 0x100 + iVar4) * 0xc);
+      pfVar5 = (float *)((char*)&PrimaryTerrainLightStorage + ((iVar9 + 1) * 0x100 + iVar4) * 0xc);
       iVar9 = 3;
-      pfVar7 = (float *)((char*)&DAT_081cb608 + iVar6 * 0xc);
-      pfVar8 = (float *)((char*)&DAT_081cb608 + (iVar6 * 3 + 3) * 4);
-      pfVar10 = (float *)((char*)&DAT_081cb608 + (iVar6 * 3 + 0x303) * 4);
+      pfVar7 = (float *)((char*)&PrimaryTerrainLightStorage + iVar6 * 0xc);
+      pfVar8 = (float *)((char*)&PrimaryTerrainLightStorage + (iVar6 * 3 + 3) * 4);
+      pfVar10 = (float *)((char*)&PrimaryTerrainLightStorage + (iVar6 * 3 + 0x303) * 4);
       do {
         fVar1 = *pfVar5;
         pfVar5 = pfVar5 + 1;
@@ -108,8 +108,8 @@ void __cdecl Entity_GetLightScale(uintptr_t param_1,uintptr_t param_2)
   if (object->Type == 0xe1)
     memcpy(&ownerFlags, reinterpret_cast<const BYTE*>(object->Owner) + 0x78, sizeof(ownerFlags));
   if ((object->Type == 0xe1) && ((ownerFlags & 0x200) == 0x200)) {
-    fVar1 = (float10)fsin((float10)WorldTime * (float10)_DAT_00552a08);
-    fVar1 = (fVar1 + (float10)_DAT_0055256c) * (float10)_DAT_00552504;
+    fVar1 = (float10)fsin((float10)WorldTime * (float10)0.003f);
+    fVar1 = (fVar1 + (float10)1.0f) * (float10)HalfScale;
     model->BodyLight[0] = (float)fVar1;
     model->BodyLight[1] = (float)fVar1;
     model->BodyLight[2] = (float)fVar1;
@@ -155,9 +155,9 @@ void __cdecl Entity_GetLightScale(uintptr_t param_1,uintptr_t param_2)
       rgb[0] == 0.0f && rgb[1] == 0.0f && rgb[2] == 0.0f) {
     rgb[0] = rgb[1] = rgb[2] = 1.0f;
   }
-  local_8 = local_8 * _DAT_005524f4;
-  local_4 = local_4 * _DAT_005524f4;
-  model->BodyLight[0] = local_c * _DAT_005524f4 + object->Light[0];
+  local_8 = local_8 * 0.1f;
+  local_4 = local_4 * 0.1f;
+  model->BodyLight[0] = local_c * 0.1f + object->Light[0];
   model->BodyLight[1] = local_8 + object->Light[1];
   model->BodyLight[2] = local_4 + object->Light[2];
   return;
@@ -196,26 +196,26 @@ int FUN_004f95e0_DISABLED(void)
           iVar2 = (uVar5 & 0xff) + (uVar7 & 0xff) * 0x100;
           iVar3 = iVar2 * 0xc;
           uVar5 = uVar5 + 1;
-          *(undefined4 *)(&DAT_081cb608 + iVar3) = DAT_0828b608[iVar2 * 3];
-          *(undefined4 *)(&DAT_081cb60c + iVar3) = (&DAT_0828b60c)[iVar2 * 3];
-          *(undefined4 *)(&DAT_081cb610 + iVar3) = (&DAT_0828b610)[iVar2 * 3];
+          *(undefined4 *)(&PrimaryTerrainLightStorage + iVar3) = TerrainLightData[iVar2 * 3];
+          *(undefined4 *)(&PrimaryTerrainLightG + iVar3) = (&TerrainLightDataG)[iVar2 * 3];
+          *(undefined4 *)(&PrimaryTerrainLightB + iVar3) = (&TerrainLightDataB)[iVar2 * 3];
           uVar8 = FrustrumBoundMinY_1;
         } while ((int)uVar5 <= iVar4);
       }
       uVar7 = uVar7 + 1;
     } while ((int)uVar7 <= iVar10);
   }
-  if (DAT_083a3ff0 == 0) {
+  if (WeatherModeState == 0) {
     uVar14 = (longlong)WorldTime;   // IDA Terrain_Water: (std::int64_t)WorldTime
     uVar14 = (ulonglong)(uint)((int)uVar14 >> 0x1f) << 0x20 | uVar14 & 0xffffffff;
     iVar4 = (int)((longlong)uVar14 / 720000);
-    fVar11 = (float10)(int)((longlong)uVar14 % 720000) * (float10)_DAT_005528e0;
+    fVar11 = (float10)(int)((longlong)uVar14 % 720000) * (float10)ZBobFreq;
   }
   else {
     uVar14 = (longlong)WorldTime;   // IDA Terrain_Water: (std::int64_t)WorldTime
     uVar14 = (ulonglong)(uint)((int)uVar14 >> 0x1f) << 0x20 | uVar14 & 0xffffffff;
     iVar4 = (int)((longlong)uVar14 / 36000);
-    fVar11 = (float10)(int)((longlong)uVar14 % 36000) * (float10)_DAT_005524f8;
+    fVar11 = (float10)(int)((longlong)uVar14 % 36000) * (float10)0.01f;
   }
   iVar2 = gMapManager.GetCurrentMap();
   if ((int)uVar8 <= iVar10) {
@@ -226,16 +226,16 @@ int FUN_004f95e0_DISABLED(void)
       fVar12 = (float10)(int)FrustrumBoundMinX_1;
       if ((int)FrustrumBoundMinX_1 <= iVar3) {
         iVar4 = (iVar3 - FrustrumBoundMinX_1) + 1;
-        pfVar6 = (float *)(&DAT_07eab200 + (iVar9 + FrustrumBoundMinX_1) * 4);
+        pfVar6 = (float *)(&WaterWaveHeightTable + (iVar9 + FrustrumBoundMinX_1) * 4);
         do {
-          fVar1 = _DAT_00552660;
+          fVar1 = 5.0f;
           if (iVar2 == 8) {
-            fVar1 = _DAT_00552598;
+            fVar1 = 50.0f;
           }
           iVar4 = iVar4 + -1;
           fVar13 = (float10)fsin(fVar12 * (float10)fVar1 + fVar11);
-          *pfVar6 = (float)(fVar13 * (float10)_DAT_00552488);
-          fVar12 = fVar12 + (float10)_DAT_0055256c;
+          *pfVar6 = (float)(fVar13 * (float10)10.0f);
+          fVar12 = fVar12 + (float10)1.0f;
           pfVar6 = pfVar6 + 1;
         } while (iVar4 != 0);
       }

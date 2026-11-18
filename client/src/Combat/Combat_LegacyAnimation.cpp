@@ -2,7 +2,7 @@
 
 #include "stdafx.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -82,17 +82,17 @@ extern void MapFileDecrypt(BYTE* buf, int size);
 //   P+1460  RIDE_SKILL               v34 + 0.3
 extern DWORD CharacterAttribute_var;     // alias - already in our globals
 void __cdecl SetAttackSpeed(void) {
-    const BYTE* ca = static_cast<const BYTE*>(DAT_07cf1ff4);
+    const BYTE* ca = static_cast<const BYTE*>(CharacterAttributePtr);
     if (ca == 0) return;
-    const BYTE* models = reinterpret_cast<const BYTE*>(DAT_05828d58);
+    const BYTE* models = reinterpret_cast<const BYTE*>(ModelsBase);
     if (models == 0) return;
 
     // Read stats (16-bit unsigned)
     int  attackSpeed = (int)(*(unsigned short*)(ca + 0x38));
     int  magicSpeed  = (int)(*(unsigned short*)(ca + 0x44));
 
-    float v34 = (float)attackSpeed * _DAT_005524bc;  // = AttackSpeed * 0.004
-    float v39 = (float)magicSpeed  * _DAT_005524bc;  // = MagicSpeed  * 0.004
+    float v34 = (float)attackSpeed * 0.004f;  // = AttackSpeed * 0.004
+    float v39 = (float)magicSpeed  * 0.004f;  // = MagicSpeed  * 0.004
 
     // Que v33/v38 aparezcan sin inicializar en el decompile es un artefacto de
     // Hex-Rays, no del binario: `v34` (= AttackSpeed*0.004) y `v39` (=

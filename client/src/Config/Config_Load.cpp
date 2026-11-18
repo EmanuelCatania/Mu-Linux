@@ -6,7 +6,7 @@
 //
 // 1. Windows Registry: HKEY_CURRENT_USER\SOFTWARE\Webzen\Mu\Config
 //    Values:
-//      (default)   -> version string (lpData_055c9ba0, 11 bytes)
+//      (default)   -> version string (SavedUsernameBuf, 11 bytes)
 //      SoundOnOff  -> DWORD -> g_SoundOn  (default: 1)
 //      MusicOnOff  -> DWORD -> m_MusicOnOff @ 0x055C9E3C (default: 0)
 //      Resolution  -> DWORD -> resolution index (default: 0)
@@ -25,7 +25,7 @@
 //
 // Config_ReadServerAddr @ 0x0041E800
 //   Reads server IP from config.ini using key 0x75 ('u') and port using 0x70 ('p').
-//   Result stored at: PTR_s_connect_muonline_co_kr_005615b8 (IP) and g_ServerPort (port).
+//   Result stored at: szServerIpAddress (IP) and g_ServerPort (port).
 //   Patchs.cpp overrides these:
 //     MemoryCpy(0x00558ED8, serverIP, size);
 //     SetWord(0x005615BC, serverPort);
@@ -121,11 +121,11 @@ int Config_Load(void)
 
     // --- 4. Registry: HKCU\SOFTWARE\Webzen\Mu\Config ---
     Platform::InitialClientSettings initial;
-    std::memcpy(initial.username, lpData_055c9ba0, sizeof(initial.username));
+    std::memcpy(initial.username, SavedUsernameBuf, sizeof(initial.username));
     initial.sound = g_SoundOn; initial.music = gSound.GetMusicEnabled();
     initial.resolution = g_Resolution; initial.textOut = g_TextOut;
     Platform::GetClientSettings().ReadDefaults(initial, configPath);
-    std::memcpy(lpData_055c9ba0, initial.username, sizeof(initial.username));
+    std::memcpy(SavedUsernameBuf, initial.username, sizeof(initial.username));
     g_SoundOn = initial.sound; gSound.SetMusicEnabled(initial.music);
     g_Resolution = initial.resolution; g_TextOut = initial.textOut;
 
@@ -144,7 +144,7 @@ int Config_Load(void)
         gWindow.SetWindowMode(windowMode, borderless);
     }
     if (gUserSettings.GetUsername()[0] != 0)
-        Platform::TextCopy((char*)lpData_055c9ba0, gUserSettings.GetUsername(), 11);
+        Platform::TextCopy((char*)SavedUsernameBuf, gUserSettings.GetUsername(), 11);
 
     // --- 5. Resolution -> screen dimensions ---
     //
@@ -214,9 +214,9 @@ int Config_Load(void)
 //   outPort   — destination for port as ushort (param_3)
 //
 // Called from WinMain:
-//   Config_ReadServerAddr(this, param_3, &DAT_055c9e04, &port)
+//   Config_ReadServerAddr(this, param_3, &ServerAddressStr, &port)
 //   If success:
-//     PTR_s_connect_muonline_co_kr_005615b8 = &DAT_055c9e04  (server IP)
+//     szServerIpAddress = &ServerAddressStr  (server IP)
 //     g_ServerPort = port
 //
 // Helpers:

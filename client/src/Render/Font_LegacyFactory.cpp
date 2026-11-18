@@ -3,7 +3,7 @@
 
 #include "stdafx.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -46,8 +46,8 @@ extern void MapFileDecrypt(BYTE* buf, int size);
 
 // Font_CreateTextDib (FUN_0050f5f0) — implemented in src/Render/Font_Layout.cpp
 // FUN_0040f570 @ 0x0040F570 — Font_CreateRenderer(this, type, dc)
-// Creates a font rendering object: if type==1, allocates a 0x2C4-byte widget (FUN_0040f730),
-// otherwise allocates a 4-byte simple widget (FUN_00410a90). Stores at this+4,
+// Creates a font rendering object: if type==1, allocates a 0x2C4-byte widget (UI_ListTreeWidgetCtor),
+// otherwise allocates a 4-byte simple widget (UI_SimpleWidgetCtor). Stores at this+4,
 // sets this+8 = type, then calls the vtable's first virtual method with dc.
 void __cdecl Font_CreateRenderer(intptr_t self, int param_1, int param_2)
 {
@@ -55,12 +55,12 @@ void __cdecl Font_CreateRenderer(intptr_t self, int param_1, int param_2)
     if (param_1 == 1) {
         void* mem = operator_new(0x2C4);
         if (mem) {
-            pObj = (void*)FUN_0040f730(mem);
+            pObj = (void*)UI_ListTreeWidgetCtor(mem);
         }
     } else {
         int* mem = (int*)operator_new(4);
         if (mem) {
-            FUN_00410a90(mem);
+            UI_SimpleWidgetCtor(mem);
             pObj = (void*)mem;
         }
     }

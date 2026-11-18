@@ -95,7 +95,7 @@ void __cdecl CWsctlc_Startup(uintptr_t param_1) {
     uint16_t socketVersion = 0;
     int r = Platform::GetSocket().Startup(0x202, socketVersion);
     if (r != 0) {
-        CErrorReport_Write(&DAT_055c9bf0, "Winsock DLL Initialize error");
+        CErrorReport_Write(&ErrorReportCtx, "Winsock DLL Initialize error");
         Platform::GetWindow().ShowError("Winsock error", "IError", false, false);
         return;
     }
@@ -105,7 +105,7 @@ void __cdecl CWsctlc_Startup(uintptr_t param_1) {
         CWsctlc__LogPrintOn();
     } else {
         Platform::GetSocket().Cleanup();
-        CErrorReport_Write(&DAT_055c9bf0, "Winsock version low");
+        CErrorReport_Write(&ErrorReportCtx, "Winsock version low");
         Platform::GetWindow().ShowError("Winsock version error", "IError", false, false);
     }
 }
@@ -121,7 +121,7 @@ void __cdecl CWsctlc_Create(void* ctx, int param_1) {
         char buf[128];
         int err = Platform::GetSocket().LastError();
         Platform::TextFormat(buf, "Socket error: %d", err);
-        CErrorReport_Write(&DAT_055c9bf0, buf);
+        CErrorReport_Write(&ErrorReportCtx, buf);
         Platform::GetWindow().ShowError(buf, "IError", false, false);
         return;
     }
@@ -223,7 +223,7 @@ void __cdecl BMD__Release(BMD* model) {
 void __cdecl DeleteObjects(void) {
     // free all model slots
     for (int slot = 0; slot < 0xa0; ++slot)
-        BMD__Release(AsModel(DAT_05828d58) + slot);
+        BMD__Release(AsModel(ModelsBase) + slot);
 
     // IDA 0x004FFD50: descargar cada celda desde la cola hacia la cabeza.
     // El límite cuenta las 256 celdas y no depende del ancho de los punteros.
@@ -251,7 +251,7 @@ void __cdecl DeleteObjects(void) {
             // no son válidas.  Esos clears no se portaron; si se portan, acotar con el
             // sizeof de cada símbolo.
             //
-            // La de `Operates` (DAT_083a2370) SI hay que limpiarla.
+            // La de `Operates` (OperateEntryPool) SI hay que limpiarla.
             // IDA la borra aca (`v12 = &unk_83A2370; do { *v12 = 0; v12 += 12; }`)
             // y es la lista de objetos interactuables que arma `sub_4FF580` desde
             // CreateObject.  Sin el clear, al cambiar de mapa quedan punteros a
@@ -259,7 +259,7 @@ void __cdecl DeleteObjects(void) {
             // la lista se llena y los objetos del mapa nuevo no entran.
             // El array es real y esta dimensionado, asi que se acota con sizeof en
             // vez del bound absoluto del binario.
-            memset(DAT_083a2370, 0, sizeof(DAT_083a2370));
+            memset(OperateEntryPool, 0, sizeof(OperateEntryPool));
     memset(g_OperateObjects, 0, sizeof(g_OperateObjects));
             return;
         }
@@ -267,14 +267,14 @@ void __cdecl DeleteObjects(void) {
 }
 
 // ClearCharacters @ 0x0045ABB0 — Entity_ClearByType(map_id)
-// Loops over entity array (base DAT_07abf5d0, stride 0x394).
+// Loops over entity array (base CharactersClient, stride 0x394).
 // For each active entity whose type (+0x1dc) != map_id: clears active flag,
-// also clears matching emitter pool entries (DAT_083a1218, stride 0x1bc).
+// also clears matching emitter pool entries (ButterflyObjectPool, stride 0x1bc).
 // Then calls DeleteCloth on every slot.
 //
-// Cota del bucle interno: el binario usa el literal 0x83a2370 (= DAT_083a1218
+// Cota del bucle interno: el binario usa el literal 0x83a2370 (= ButterflyObjectPool
 // + 0x1158, fin del array Butterfles); acá el array vive en otra dirección,
-// así que se usa DAT_083a1218 + 10 * OBJECT_STRIDE (end-pointer real).
+// así que se usa ButterflyObjectPool + 10 * OBJECT_STRIDE (end-pointer real).
 void __cdecl ClearCharacters(int param_1) {
     gHealthBar.Clear();
     // DESVIACION: cerrar las extensiones al reconstruir el mapa, sin borrar catálogos.
@@ -282,14 +282,14 @@ void __cdecl ClearCharacters(int param_1) {
     gEventTimer.Close();
     gChaosMixRates.Reset();
     GoldenArcher_ResetCharacter();
-    char* butterflesEnd = DAT_083a1218 + 10 * OBJECT_STRIDE;
+    char* butterflesEnd = ButterflyObjectPool + 10 * OBJECT_STRIDE;
     for (int i = 0; i < 400 * CHARACTER_STRIDE; i += CHARACTER_STRIDE) {
-        char* puVar1 = (char*)(i + DAT_07abf5d0);
+        char* puVar1 = (char*)(i + CharactersClient);
         // El slot puede reutilizarse antes de que MoveJoint observe Live=0.
         // Cancela el Mana Shield del ocupante anterior, incluso si ya fue borrado.
         if (param_1 == -1 || *(short*)(puVar1 + EntityOffset(0x1dc)) != (short)param_1) {
-            JOINT* joints = AsJoint(DAT_07b27150);
-            for (size_t jointIndex = 0; jointIndex < sizeof(DAT_07b27150) / sizeof(JOINT); ++jointIndex) {
+            JOINT* joints = AsJoint(JointPoolBase);
+            for (size_t jointIndex = 0; jointIndex < sizeof(JointPoolBase) / sizeof(JOINT); ++jointIndex) {
                 JOINT& joint = joints[jointIndex];
                 if (joint.Live && joint.Type == 266 && joint.SubType == 0 &&
                     joint.Target == reinterpret_cast<OBJECT*>(puVar1))
@@ -298,7 +298,7 @@ void __cdecl ClearCharacters(int param_1) {
         }
         if (*puVar1 != '\0' && *(short*)(puVar1 + EntityOffset(0x1dc)) != (short)param_1) {
             *puVar1 = 0;
-            char* pcVar2 = DAT_083a1218;
+            char* pcVar2 = ButterflyObjectPool;
             do {
                 if (*pcVar2 != '\0' && *(void**)(pcVar2 + 0xfc) == puVar1)
                     *pcVar2 = '\0';
@@ -345,7 +345,7 @@ void __cdecl ClearCharacters(int param_1) {
 void __cdecl Effect_CollisionCheck(intptr_t Target) {
     char* T = (char*)(uintptr_t)Target;
     if (!T) return;
-    const BYTE* ca = static_cast<const BYTE*>(DAT_07cf1ff4);  // CharacterAttribute
+    const BYTE* ca = static_cast<const BYTE*>(CharacterAttributePtr);  // CharacterAttribute
     if (ca == 0) return;
 
     if (*(unsigned char*)(T + 132) != 0) {
@@ -360,7 +360,7 @@ void __cdecl Effect_CollisionCheck(intptr_t Target) {
             randPass = (rcheck == 0);
         }
         if (!randPass) return;
-        if (*(intptr_t*)(T + 252) != (intptr_t)DAT_07abf5d8) return;  // hero only
+        if (*(intptr_t*)(T + 252) != (intptr_t)Hero) return;  // hero only
 
         // Anti-tamper hash table — skipped
 
@@ -415,7 +415,7 @@ void __cdecl Effect_CollisionCheck(intptr_t Target) {
     else {
         // ── Path B: AOE — scan all entities within 100 units ──────────────
         intptr_t owner = *(intptr_t*)(T + 252);
-        char* charBase = (char*)(uintptr_t)DAT_07abf5d0;  // CharactersClient
+        char* charBase = (char*)(uintptr_t)CharactersClient;  // CharactersClient
         const int kEntStride = CHARACTER_STRIDE;
         char* found = nullptr;
         for (int idx = 0; idx < 400; ++idx) {
@@ -425,7 +425,7 @@ void __cdecl Effect_CollisionCheck(intptr_t Target) {
             // visibility flag at +332
             if (*(unsigned char*)(ent + EntityOffset(352)) == 0) continue;
             // skip hero
-            if (ent == (char*)(uintptr_t)DAT_07abf5d8) continue;
+            if (ent == (char*)(uintptr_t)Hero) continue;
             // skip if "dead" flag at +745+20
             if (*(unsigned char*)(ent + EntityOffset(765)) != 0) continue;
             // distance check (XY only, sqrt <= 100)
@@ -502,8 +502,8 @@ void __cdecl Joint_BoneOffsetApply(BYTE* param_1, int param_2) {
 void __cdecl AddTerrainLight(float xf, float yf, float *Light, int Range, float *Buffer) {
     // DESVIACION (DLL Antilag, ret en 0x004F76C0): sin luces de skills sobre el terreno.
     if (gUserSettings.GetAntilag(ANTILAG_SKILLS)) return;
-    float cx   = xf * _DAT_00552594;
-    float cy   = yf * _DAT_00552594;
+    float cx   = xf * EffectScaleUnit;
+    float cy   = yf * EffectScaleUnit;
     int   icx  = (int)cx;
     int   icy  = (int)cy;
     int   rMin = icy - Range,  rMax = icy + Range;
@@ -516,11 +516,11 @@ void __cdecl AddTerrainLight(float xf, float yf, float *Light, int Range, float 
         for (int col = cMin; col <= cMax; col++) {
             float fDx  = cx - (float)col;
             float fVal = ((float)Range - sqrtf(fDx * fDx + fDy * fDy)) / (float)Range;
-            if (_DAT_00552580 >= fVal) continue;
+            if (FloatZeroB >= fVal) continue;
             float *dst = Buffer + ((uRow & 0xff) * 0x100 + ((unsigned int)col & 0xff)) * 3;
             for (int k = 0; k < 3; k++) {
                 float fv = fVal * Light[k] + dst[k];
-                dst[k] = (fv < _DAT_00552580) ? 0.0f : fv;
+                dst[k] = (fv < FloatZeroB) ? 0.0f : fv;
             }
         }
     }
@@ -529,7 +529,7 @@ void __cdecl AddTerrainLight(float xf, float yf, float *Light, int Range, float 
 // Scans up to 400 entities for those within radius param_3 of world pos param_2.
 // Collects up to kMaxMultiSkillTargets entity IDs matching type/team filter (IDA: 5).
 // If any found, sends C1-0x1d packet with entity list XOR-encrypted.
-// param_1  = char data stat slot index (indexes into DAT_07cf1ff4+0x57)
+// param_1  = char data stat slot index (indexes into CharacterAttributePtr+0x57)
 // param_2  = float[2] world position to search from
 // param_3  = search radius
 // param_4  = zone/flag byte written into packet
@@ -538,7 +538,7 @@ void __cdecl AddTerrainLight(float xf, float yf, float *Light, int Range, float 
 float* __cdecl Entity_FindNearby_SendPacket(unsigned int param_1, float* param_2, float param_3, int param_4, short param_5)
 {
     // 1. Read character stat byte for this slot
-    BYTE uVar19 = *(BYTE*)((char*)DAT_07cf1ff4 + 0x57 + param_1);
+    BYTE uVar19 = *(BYTE*)((char*)CharacterAttributePtr + 0x57 + param_1);
 
     // IDA sub_45FEC0 L157-195.  El bucle ancla en `v16 = CharactersClient + 747`
     // y todos los campos salen relativos a ese puntero:
@@ -567,11 +567,11 @@ float* __cdecl Entity_FindNearby_SendPacket(unsigned int param_1, float* param_2
     constexpr int kMaxMultiSkillTargets = 80;
     int count = 0;
     short nearbyIds[kMaxMultiSkillTargets] = {};
-    char *pcEnt = (char *)DAT_07abf5d0;
+    char *pcEnt = (char *)CharactersClient;
     for (int i = 0; i < 400 && count < kMaxMultiSkillTargets; i++, pcEnt += CHARACTER_STRIDE) {
         if (*(char *)&AsCharacter(pcEnt)->Object.Live == '\0') continue;                    // IDA: *(v16 - 747)
         if (*(char *)&AsCharacter(pcEnt)->Object.Visible == '\0') continue;                // IDA: *(v16 - 395)
-        if (pcEnt == DAT_07abf5d8) continue;               // IDA: v16 - 747 != Hero
+        if (pcEnt == Hero) continue;               // IDA: v16 - 747 != Hero
         if (*(char *)&AsCharacter(pcEnt)->Dead != '\0') continue;                   // IDA: v16[18] = ent + 765
 
         // IDA L160-163: v17 = a2[1] - ent.y ; v19 = a2[0] - ent.x ; sqrt <= a3
@@ -602,7 +602,7 @@ float* __cdecl Entity_FindNearby_SendPacket(unsigned int param_1, float* param_2
 
     // IDA L197-218: si el nombre del heroe contiene "webzen" (aWebzen_2,
     // 0x559B80) sale sin mandar el 0x1D.  Exencion de las cuentas de Webzen.
-    if (DAT_07abf5d8 && strstr(EntityName::Get(DAT_07abf5d8), "webzen"))
+    if (Hero && strstr(EntityName::Get(Hero), "webzen"))
         return (float*)(uintptr_t)1;
 
     // 3. Paquete C1:1D — PMSG_MULTI_SKILL_ATTACK_RECV.
@@ -653,7 +653,7 @@ float* __cdecl Entity_FindNearby_SendPacket(unsigned int param_1, float* param_2
 // Joint_SegmentTick @ 0x0046FE90 — Joint_SegmentTick(joint_ptr, mat)
 // Pushes all existing vertex segments one position forward (scroll back),
 // then computes 4 new billboard vertices (at ±half-width perpendicular offsets)
-// using Vector_Rotate and the weapon-scale constants _DAT_00552a14/_DAT_00552504.
+// using Vector_Rotate and the weapon-scale constants (-0.5f)/HalfScale.
 void __cdecl Joint_SegmentTick(intptr_t param_1, float *param_2) {
     // Ghidra produjo `float local_18[4], local_8, local_4;` y escribía la salida
     // de Vector_Rotate en `local_18 + 3`, esperando local_18[4]==local_8 y
@@ -689,28 +689,28 @@ void __cdecl Joint_SegmentTick(intptr_t param_1, float *param_2) {
         } while (iVar1 != 0);
     }
     // compute new tip vertices
-    local_18[0] = AsJoint(param_1)->Scale * _DAT_00552a14;
+    local_18[0] = AsJoint(param_1)->Scale * (-0.5f);
     local_18[1] = 0.0f; local_18[2] = 0.0f;
     Vector_Rotate(local_18, param_2, local_18 + 3);
     local_18[1] = 0.0f; local_18[2] = 0.0f;
     AsJoint(param_1)->Tails[0][0][0] = local_18[3] + AsJoint(param_1)->Position[0];
     AsJoint(param_1)->Tails[0][0][1] = local_8    + AsJoint(param_1)->Position[1];
     AsJoint(param_1)->Tails[0][0][2] = local_4    + AsJoint(param_1)->Position[2];
-    local_18[0] = AsJoint(param_1)->Scale * _DAT_00552504;
+    local_18[0] = AsJoint(param_1)->Scale * HalfScale;
     Vector_Rotate(local_18, param_2, local_18 + 3);
     local_18[0] = 0.0f;
     AsJoint(param_1)->Tails[0][1][0] = local_18[3] + AsJoint(param_1)->Position[0];
     local_18[1] = 0.0f;
     AsJoint(param_1)->Tails[0][1][1] = local_8    + AsJoint(param_1)->Position[1];
     AsJoint(param_1)->Tails[0][1][2] = local_4    + AsJoint(param_1)->Position[2];
-    local_18[2] = AsJoint(param_1)->Scale * _DAT_00552a14;
+    local_18[2] = AsJoint(param_1)->Scale * (-0.5f);
     Vector_Rotate(local_18, param_2, local_18 + 3);
     local_18[0] = 0.0f;
     AsJoint(param_1)->Tails[0][2][0] = local_18[3] + AsJoint(param_1)->Position[0];
     local_18[1] = 0.0f;
     AsJoint(param_1)->Tails[0][2][1] = local_8    + AsJoint(param_1)->Position[1];
     AsJoint(param_1)->Tails[0][2][2] = local_4    + AsJoint(param_1)->Position[2];
-    local_18[2] = AsJoint(param_1)->Scale * _DAT_00552504;
+    local_18[2] = AsJoint(param_1)->Scale * HalfScale;
     Vector_Rotate(local_18, param_2, local_18 + 3);
     AsJoint(param_1)->Tails[0][3][0] = local_18[3] + AsJoint(param_1)->Position[0];
     AsJoint(param_1)->Tails[0][3][1] = local_8    + AsJoint(param_1)->Position[1];
@@ -746,7 +746,7 @@ float __cdecl MoveHumming(float *param_1, float *param_2, float *param_3, float 
     // Vertical angle: from (pos.z, horizDist) to (target.z, 0)
     float vertAngle = CreateAngle(param_1[2], horizDist, param_3[2], 0.0f);
     // Interpolate rot[0] (pitch) toward (360 - vertAngle)
-    param_2[0] = TurnAngle2(param_2[0], _DAT_0055286c - vertAngle, param_4);
+    param_2[0] = TurnAngle2(param_2[0], AngleDeg360 - vertAngle, param_4);
 
     // VectorLength(Range) — el valor de retorno de la funcion.
     float local[3] = { dx, dy, dz };
@@ -765,7 +765,7 @@ float __cdecl MoveHumming(float *param_1, float *param_2, float *param_3, float 
 void __cdecl BMD__RenderBody(void *model, int flags, float f1, int f2, float f3, float f4, float f5, int f6, int rgba) {
     // Valida un slot completo del pool real, no una dirección virtual de Windows.
     // Linux ELF32 puede reservar este pool por encima de 2 GB.
-    const uintptr_t base = static_cast<uintptr_t>(DAT_05828d58);
+    const uintptr_t base = static_cast<uintptr_t>(ModelsBase);
     const uintptr_t address = reinterpret_cast<uintptr_t>(model);
     constexpr size_t stride = sizeof(BMD);
     if (!base || address < base) return;
@@ -777,8 +777,8 @@ void __cdecl BMD__RenderBody(void *model, int flags, float f1, int f2, float f3,
     if (!meshBase || reinterpret_cast<uintptr_t>(meshBase) < 0x100000) return;
     BMD__BeginRender();
     if (bmd->LightEnable == '\0') {
-        // IDA usa < 0.99f (_DAT_00552544), no < 1.0f.
-        if (f1 < _DAT_00552544) BufferedDraw::Color4f(bmd->BodyLight[0],bmd->BodyLight[1],bmd->BodyLight[2],f1);
+        // IDA usa < 0.99f (AlphaChannelThreshold), no < 1.0f.
+        if (f1 < AlphaChannelThreshold) BufferedDraw::Color4f(bmd->BodyLight[0],bmd->BodyLight[1],bmd->BodyLight[2],f1);
         else BufferedDraw::Color3fv(bmd->BodyLight);
     }
     // HiddenMesh: entero (indice de malla a ocultar, o -1), como el a8 de IDA.
@@ -807,9 +807,9 @@ void __cdecl BMD__RenderBody(void *model, int flags, float f1, int f2, float f3,
 }
 
 // SetMonsterSound @ 0x00509810 — Model_SetAnimationSlots(slot_idx, s0, s1, s2, s3, s4)
-// Writes 5 shorts into model slot at DAT_05828d58 + slot_idx * 0xbc + 0xaa.
+// Writes 5 shorts into model slot at ModelsBase + slot_idx * 0xbc + 0xaa.
 void __cdecl Model_SetAnimationSlots(int param_1, int param_2, int param_3, int param_4, int param_5, int param_6) {
-    auto* model = AsModel(DAT_05828d58) + param_1;
+    auto* model = AsModel(ModelsBase) + param_1;
     model->Sounds[0] = (short)param_2;
     model->Sounds[1] = (short)param_3;
     model->Sounds[2] = (short)param_4;
@@ -836,7 +836,7 @@ unsigned int __cdecl CheckAttack(void) {
         return 0;
     }
 
-    BYTE* target = (BYTE*)(uintptr_t)DAT_07abf5d0 + CHARACTER_STRIDE * SelectedCharacter;
+    BYTE* target = (BYTE*)(uintptr_t)CharactersClient + CHARACTER_STRIDE * SelectedCharacter;
     const BYTE kind = AsCharacter(target)->Object.Kind;
     if (kind == 2) {
         return 1;
@@ -850,7 +850,7 @@ unsigned int __cdecl CheckAttack(void) {
         return targetPkLevel >= 6 ||
                ((gUserSettings.GetPvPWithoutControl() ||   // DESVIACION (DLL, 0x0048322F)
                  ((unsigned short)Platform::GetInput().KeyState(VK_CONTROL) >> 8) == 0x80) &&
-                target != (BYTE*)(uintptr_t)DAT_07abf5d8);
+                target != (BYTE*)(uintptr_t)Hero);
     }
 
     // In a war, a PK target from our own guild remains protected before the
@@ -859,15 +859,15 @@ unsigned int __cdecl CheckAttack(void) {
     if (targetPkLevel >= 6) {
         const short targetGuild = AsCharacter(target)->GuildMarkIndex;
         if (targetGuild != -1) {
-            const short heroGuild = *(short*)((BYTE*)(uintptr_t)DAT_07abf5d8 + EntityOffset(474));
-            if (strcmp(DAT_07e919bc + 80 * heroGuild,
-                       DAT_07e919bc + 80 * targetGuild) == 0) {
+            const short heroGuild = *(short*)((BYTE*)(uintptr_t)Hero + EntityOffset(474));
+            if (strcmp(GuildInfoTable + 80 * heroGuild,
+                       GuildInfoTable + 80 * targetGuild) == 0) {
                 return 0;
             }
         }
     }
 
-    if (AsCharacter(target)->GuildTeam == 2 && target != (BYTE*)(uintptr_t)DAT_07abf5d8) {
+    if (AsCharacter(target)->GuildTeam == 2 && target != (BYTE*)(uintptr_t)Hero) {
         return 1;
     }
 
@@ -890,7 +890,7 @@ int __cdecl Net_Connect(void* ctx, char* ip, unsigned short port, unsigned int w
     if (!Platform::GetSocket().ResolveIPv4(ip, addr)) {
         char buf[160];
         Platform::TextFormat(buf, "gethostbyname failed for %.64s (WSA=%d)", ip, Platform::GetSocket().LastError());
-        CErrorReport_Write(&DAT_055c9bf0, buf);
+        CErrorReport_Write(&ErrorReportCtx, buf);
         return 0;
     }
 
@@ -899,7 +899,7 @@ int __cdecl Net_Connect(void* ctx, char* ip, unsigned short port, unsigned int w
     if (s == Platform::InvalidSocket || s == 0) {
         s = Platform::GetSocket().CreateTcp(Platform::TcpProtocol);
         if (s == Platform::InvalidSocket) {
-            CErrorReport_Write(&DAT_055c9bf0, "socket() failed");
+            CErrorReport_Write(&ErrorReportCtx, "socket() failed");
             return 0;
         }
         *(SOCKET*)((char*)ctx + 8) = s;
@@ -919,7 +919,7 @@ int __cdecl Net_Connect(void* ctx, char* ip, unsigned short port, unsigned int w
         if (err != Platform::SocketWouldBlock) {
             char buf[160];
             Platform::TextFormat(buf, "connect(%.64s:%u) failed (WSA=%d)", ip, (unsigned)port, err);
-            CErrorReport_Write(&DAT_055c9bf0, buf);
+            CErrorReport_Write(&ErrorReportCtx, buf);
             return 0;
         }
         // WSAEWOULDBLOCK = connect in progress; FD_CONNECT will fire later.

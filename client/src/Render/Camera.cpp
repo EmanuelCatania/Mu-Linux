@@ -11,7 +11,7 @@
 // Computes view frustum from camera position + FOV, then derives tile-space
 // bounding boxes for the terrain chunk-cull loop, and 5 frustum half-planes.
 //
-// param_1: screen width ratio = Screen_GetWidth() * DAT_0055283c
+// param_1: screen width ratio = Screen_GetWidth() * ConvertXScaleBits
 // param_2: camera world position [x, y, z]
 void __cdecl Camera_SetupFrustum(float param_1, float *param_2)
 {
@@ -38,10 +38,10 @@ void __cdecl Camera_SetupFrustum(float param_1, float *param_2)
     // Step 1 — FOV half-extents ───────────────────────────────────────────────
     // near_w = tan(FOV * PI/180) * (near_clip * viewscale) * screen_ratio + tile_scale
     // near_h = near_w * aspect_ratio
-    long double fov_tan = tanl((long double)Ff(DAT_00561554) * (long double)_DAT_00552cc4);
-    long double near_w  = fov_tan * (long double)(Ff(DAT_00561550) * _DAT_005526e8) *
-                          (long double)param_1 + (long double)_DAT_005524f0;
-    long double near_h  = near_w * (long double)_DAT_00552adc;
+    long double fov_tan = tanl((long double)Ff(CameraFOVStorage) * (long double)HalfDegToRad);
+    long double near_w  = fov_tan * (long double)(Ff(CameraViewFarStorage) * 0.9f) *
+                          (long double)param_1 + (long double)GridToWorldScale;
+    long double near_h  = near_w * (long double)AspectRatioScale;
     // DESVIACION (in-game): la pirámide del binario es más angosta que la
     // vista real: usa tan(FOV/2) como semiancho sin el aspecto 4:3 y el alto
     // en 0.75 de eso.  Con el FOV de 35 alcanzaba; con 50 cortaba objetos y
@@ -49,15 +49,15 @@ void __cdecl Camera_SetupFrustum(float param_1, float *param_2)
     // (gluPerspective: semialto tan(FOV/2), semiancho * W/H de la ventana,
     // que en pantallas anchas no es 4:3).
     if (SceneFlag == 5 || gWindow.IsWide()) {
-        const long double depth = (long double)(Ff(DAT_00561550) * _DAT_005526e8);
-        near_h = fov_tan * depth + (long double)_DAT_005524f0;
+        const long double depth = (long double)(Ff(CameraViewFarStorage) * 0.9f);
+        near_h = fov_tan * depth + (long double)GridToWorldScale;
         const long double aspect = (gWindow.GetHeight() > 0)
             ? (long double)gWindow.GetRealWidth() / (long double)gWindow.GetHeight() : (4.0L / 3.0L);
-        near_w = fov_tan * depth * (long double)param_1 * aspect + (long double)_DAT_005524f0;
+        near_w = fov_tan * depth * (long double)param_1 * aspect + (long double)GridToWorldScale;
     }
     // En selección y login anchos se usa también el semialto de la proyección:
     // ensanchar sólo near_w conserva un frustum demasiado bajo y recorta terreno.
-    float near_dist     = -(Ff(DAT_00561550) * _DAT_005526e8);  // negative near depth
+    float near_dist     = -(Ff(CameraViewFarStorage) * 0.9f);  // negative near depth
 
     // Step 2 — 5 view-space corners ───────────────────────────────────────────
     corners[0]  = 0.0f;           // apex (origin)
@@ -84,17 +84,17 @@ void __cdecl Camera_SetupFrustum(float param_1, float *param_2)
         Vector_InverseRotate(&corners[i * 3], local_30, out3);
 
         // World corner = camera_pos + rotated_view_corner
-        float wx = _DAT_083a42d4 + out3[0];
-        float wy = _DAT_083a42d8 + out3[1];
-        float wz = _DAT_083a42dc + out3[2];
+        float wx = CameraPositionX + out3[0];
+        float wy = CameraPositionY + out3[1];
+        float wz = CameraPositionZ + out3[2];
 
         // Store to global frustum corner array
         switch (i) {
-        case 0: FrustrumVertex=wx; DAT_07eab1b4=wy; DAT_07eab1b8=wz; break;
-        case 1: DAT_07eab1bc=wx; DAT_07eab1c0=wy; DAT_07eab1c4=wz; break;
-        case 2: DAT_07eab1c8=wx; DAT_07eab1cc=wy; DAT_07eab1d0=wz; break;
-        case 3: DAT_07eab1d4=wx; DAT_07eab1d8=wy; DAT_07eab1dc=wz; break;
-        case 4: DAT_07eab1e0=wx; DAT_07eab1e4=wy; DAT_07eab1e8=wz; break;
+        case 0: FrustrumVertex=wx; FrustrumCorner0Y=wy; FrustrumCorner0Z=wz; break;
+        case 1: FrustrumCorner1X=wx; FrustrumCorner1Y=wy; FrustrumCorner1Z=wz; break;
+        case 2: FrustrumCorner2X=wx; FrustrumCorner2Y=wy; FrustrumCorner2Z=wz; break;
+        case 3: FrustrumCorner3X=wx; FrustrumCorner3Y=wy; FrustrumCorner3Z=wz; break;
+        case 4: FrustrumCorner4X=wx; FrustrumCorner4Y=wy; FrustrumCorner4Z=wz; break;
         }
 
         if (wx < local_7c) local_7c = wx;
@@ -116,13 +116,13 @@ void __cdecl Camera_SetupFrustum(float param_1, float *param_2)
     };
 
     // Near tile bounds — clamped [0, 0xFB = 251]
-    int iVar2 = floor4tile_min(local_7c, _DAT_005524f0);
+    int iVar2 = floor4tile_min(local_7c, GridToWorldScale);
     FrustrumBoundMinX_1 = iVar2;
-    int iVar3 = floor4tile_min(local_84, _DAT_005524f0);
+    int iVar3 = floor4tile_min(local_84, GridToWorldScale);
     FrustrumBoundMinY_1 = iVar3;
-    int iVar1 = floor4tile_max(local_80, _DAT_005524f0);
+    int iVar1 = floor4tile_max(local_80, GridToWorldScale);
     FrustrumBoundMaxX_1 = iVar1;
-    FrustrumBoundMaxY_1 = floor4tile_max(local_88, _DAT_005524f0);
+    FrustrumBoundMaxY_1 = floor4tile_max(local_88, GridToWorldScale);
 
     if (iVar2 < 0)              { iVar2 = 0; FrustrumBoundMinX_1 = 0; }
     if (iVar3 < 0)              { iVar3 = 0; FrustrumBoundMinY_1 = 0; }
@@ -134,13 +134,13 @@ void __cdecl Camera_SetupFrustum(float param_1, float *param_2)
     if (0xfb < (int)FrustrumBoundMaxY_1) FrustrumBoundMaxY_1 = 0xfb;
 
     // Extended (far) tile bounds — clamped [0, 0xEF = 239]
-    iVar2 = floor4tile_min(local_7c, _DAT_005524f0);
+    iVar2 = floor4tile_min(local_7c, GridToWorldScale);
     FrustrumBoundMinX_2 = iVar2;
-    iVar3 = floor4tile_min(local_84, _DAT_005524f0);
+    iVar3 = floor4tile_min(local_84, GridToWorldScale);
     FrustrumBoundMinY_2 = iVar3;
-    iVar1 = floor4tile_max(local_80, _DAT_005524f0);
+    iVar1 = floor4tile_max(local_80, GridToWorldScale);
     FrustrumBoundMaxX_2 = iVar1;
-    FrustrumBoundMaxY_2 = floor4tile_max(local_88, _DAT_005524f0);
+    FrustrumBoundMaxY_2 = floor4tile_max(local_88, GridToWorldScale);
 
     if (iVar2 < 0)              { iVar2 = 0; FrustrumBoundMinX_2 = 0; }
     if (iVar3 < 0)              { iVar3 = 0; FrustrumBoundMinY_2 = 0; }
@@ -154,11 +154,11 @@ void __cdecl Camera_SetupFrustum(float param_1, float *param_2)
     // Step 5 — 5 frustum plane normals ────────────────────────────────────────
     // Planes from: apex + 2 adjacent near corners; near plane from 3 near corners.
     float plane0[3], plane1[3], plane2[3], plane3[3], plane4[3];
-    float c0[3] = { FrustrumVertex, DAT_07eab1b4, DAT_07eab1b8 };  // apex
-    float c1[3] = { DAT_07eab1bc, DAT_07eab1c0, DAT_07eab1c4 };  // top-left
-    float c2[3] = { DAT_07eab1c8, DAT_07eab1cc, DAT_07eab1d0 };  // top-right
-    float c3[3] = { DAT_07eab1d4, DAT_07eab1d8, DAT_07eab1dc };  // bot-right
-    float c4[3] = { DAT_07eab1e0, DAT_07eab1e4, DAT_07eab1e8 };  // bot-left
+    float c0[3] = { FrustrumVertex, FrustrumCorner0Y, FrustrumCorner0Z };  // apex
+    float c1[3] = { FrustrumCorner1X, FrustrumCorner1Y, FrustrumCorner1Z };  // top-left
+    float c2[3] = { FrustrumCorner2X, FrustrumCorner2Y, FrustrumCorner2Z };  // top-right
+    float c3[3] = { FrustrumCorner3X, FrustrumCorner3Y, FrustrumCorner3Z };  // bot-right
+    float c4[3] = { FrustrumCorner4X, FrustrumCorner4Y, FrustrumCorner4Z };  // bot-left
 
     // IDA Camera_SetupFrustum L169-173 — los 4 planos laterales salen del ápice
     // y el quinto es la BASE de la pirámide (el que corta por distancia):
@@ -176,20 +176,20 @@ void __cdecl Camera_SetupFrustum(float param_1, float *param_2)
     Triangle_ComputeNormal(c3, c2, c1, plane4);
 
     // Store plane normals to globals (read by Frustum_IsVisible)
-    FrustrumFaceNormal = plane0[0]; DAT_0838b7c8 = plane0[1]; DAT_0838b7cc = plane0[2];
-    DAT_0838b7d0 = plane1[0]; DAT_0838b7d4 = plane1[1]; DAT_0838b7d8 = plane1[2];
-    DAT_0838b7dc = plane2[0]; DAT_0838b7e0 = plane2[1]; DAT_0838b7e4 = plane2[2];
-    DAT_0838b7e8 = plane3[0]; DAT_0838b7ec = plane3[1]; DAT_0838b7f0 = plane3[2];
-    DAT_0838b7f4 = plane4[0]; DAT_0838b7f8 = plane4[1]; DAT_0838b7fc = plane4[2];
+    FrustrumFaceNormal = plane0[0]; FrustrumPlane0NormalY = plane0[1]; FrustrumPlane0NormalZ = plane0[2];
+    FrustrumPlane1NormalX = plane1[0]; FrustrumPlane1NormalY = plane1[1]; FrustrumPlane1NormalZ = plane1[2];
+    FrustrumPlane2NormalX = plane2[0]; FrustrumPlane2NormalY = plane2[1]; FrustrumPlane2NormalZ = plane2[2];
+    FrustrumPlane3NormalX = plane3[0]; FrustrumPlane3NormalY = plane3[1]; FrustrumPlane3NormalZ = plane3[2];
+    FrustrumPlane4NormalX = plane4[0]; FrustrumPlane4NormalY = plane4[1]; FrustrumPlane4NormalZ = plane4[2];
 
     // Step 6 — Plane D values: D = -(normal · reference_point) ───────────────
     // Los planos 0-3 se referencian al ápice (V[0] = c0); el 4 a V[1] = c1
     // (IDA L186-188: `FrustrumFaceD[4] = -(dot(normal[4], FrustrumVertex[1]))`).
     Ff(FrustrumFaceD) = -(plane0[0]*c0[0] + plane0[1]*c0[1] + plane0[2]*c0[2]);
-    Ff(DAT_07eeb204) = -(plane1[0]*c0[0] + plane1[1]*c0[1] + plane1[2]*c0[2]);
-    Ff(DAT_07eeb208) = -(plane2[0]*c0[0] + plane2[1]*c0[1] + plane2[2]*c0[2]);
-    Ff(DAT_07eeb20c) = -(plane3[0]*c0[0] + plane3[1]*c0[1] + plane3[2]*c0[2]);
-    Ff(DAT_07eeb210) = -(plane4[0]*c1[0] + plane4[1]*c1[1] + plane4[2]*c1[2]);
+    Ff(FrustrumPlane1Dist) = -(plane1[0]*c0[0] + plane1[1]*c0[1] + plane1[2]*c0[2]);
+    Ff(FrustrumPlane2Dist) = -(plane2[0]*c0[0] + plane2[1]*c0[1] + plane2[2]*c0[2]);
+    Ff(FrustrumPlane3Dist) = -(plane3[0]*c0[0] + plane3[1]*c0[1] + plane3[2]*c0[2]);
+    Ff(FrustrumPlane4Dist) = -(plane4[0]*c1[0] + plane4[1]*c1[1] + plane4[2]*c1[2]);
 
     // Step 7 — Apply camera view matrix
     CreateFrustrum2D(param_2);
@@ -201,16 +201,16 @@ void __cdecl Camera_SetupFrustum(float param_1, float *param_2)
 void __cdecl Camera_MouseRay(int mouseX, int mouseY, float *out_ray)
 {
     float view_x = ((float)gWindow.PixelFromUiX(mouseX) - Ff(ViewportCenterX)) *
-                   Ff(DAT_083a42a4) * Ff(DAT_00561550);
+                   Ff(PerspectiveScaleXBits) * Ff(CameraViewFarStorage);
     float view_y = -((float)gWindow.GetHeight() * (float)mouseY / 0x1e0 - Ff(ViewportCenterY)) *
-                   Ff(DAT_083a42a8) * Ff(DAT_00561550);
-    float view_z = -Ff(DAT_00561550);
+                   Ff(PerspectiveScaleYBits) * Ff(CameraViewFarStorage);
+    float view_z = -Ff(CameraViewFarStorage);
 
     // Camera forward (negated local-space)
     float cam_fwd_neg[3] = {
-        -Ff(DAT_083a414c),
-        -Ff(DAT_083a415c),
-        -Ff(DAT_083a416c)
+        -Ff(CameraTranslateXBits),
+        -Ff(CameraTranslateYBits),
+        -Ff(CameraTranslateZBits)
     };
     float view_dir[3] = { view_x, view_y, view_z };
 
@@ -225,7 +225,7 @@ void __cdecl Camera_MouseRay(int mouseX, int mouseY, float *out_ray)
 
 // ── Compatibility helper; no standalone IDA function ─────────────────────────
 // CÓDIGO MUERTO: esta función NO se llama. Es una decompilación errónea
-// que asume corners en DAT_07eab1bc..1e8 (que ya están en world coords post
+// que asume corners en FrustrumCorner1X..1e8 (que ya están en world coords post
 // Camera_SetupFrustum). La verdadera FUN_004F8EB0 (CreateFrustrum2D) vive en
 // src/Terrain/Terrain_RenderTerrain.cpp — usa 4 corners hardcoded escalados por
 // GetScreenWidth(), rotados Z=45°, trasladados por cam_pos. Se mantiene por la
@@ -240,10 +240,10 @@ void __cdecl Camera_SetMatrix(float *cam_pos)
     // Transform the 4 near corners (skipping apex at index 0)
     float corners_world[4][3];
     float near_corners[4][3] = {
-        { DAT_07eab1bc, DAT_07eab1c0, DAT_07eab1c4 },  // TL
-        { DAT_07eab1c8, DAT_07eab1cc, DAT_07eab1d0 },  // TR
-        { DAT_07eab1d4, DAT_07eab1d8, DAT_07eab1dc },  // BR
-        { DAT_07eab1e0, DAT_07eab1e4, DAT_07eab1e8 },  // BL
+        { FrustrumCorner1X, FrustrumCorner1Y, FrustrumCorner1Z },  // TL
+        { FrustrumCorner2X, FrustrumCorner2Y, FrustrumCorner2Z },  // TR
+        { FrustrumCorner3X, FrustrumCorner3Y, FrustrumCorner3Z },  // BR
+        { FrustrumCorner4X, FrustrumCorner4Y, FrustrumCorner4Z },  // BL
     };
 
     for (int i = 0; i < 4; i++)
@@ -261,8 +261,8 @@ void __cdecl Camera_SetMatrix(float *cam_pos)
     float* outX = (float*)&FrustrumX;
     float* outY = (float*)&FrustrumY;
     for (int i = 0; i < 4; i++) {
-        outX[i] = corners_world[i][0] / _DAT_005524f0;  // tile-space X
-        outY[i] = corners_world[i][1] / _DAT_005524f0;  // tile-space Y
+        outX[i] = corners_world[i][0] / GridToWorldScale;  // tile-space X
+        outY[i] = corners_world[i][1] / GridToWorldScale;  // tile-space Y
     }
 }
 
@@ -273,7 +273,7 @@ void __cdecl Camera_SetMatrix(float *cam_pos)
 // param_2: radius (frustum half-width extension)
 // Returns a short: low byte 1 if inside all planes, high byte flags if outside.
 // Recorre los 5 planos del frustum (normales desde FrustrumFaceNormal /
-// DAT_0838b7c8.., distancias desde FrustrumFaceD). El original camina las
+// FrustrumPlane0NormalY.., distancias desde FrustrumFaceD). El original camina las
 // normales con un puntero acotado por el literal `< 0x838b804`; acá cada
 // componente es un global SEPARADO (el linker no garantiza contigüidad), así
 // que se leen por nombre, desenrollado 5×. Los escribe Camera_SetupFrustum.
@@ -293,11 +293,11 @@ int __cdecl Frustum_TestSphere(float *param_1, float param_2)
         if (ltf) return (int)bVar3 << 8;                                       \
     } while (0)
 
-    PLANE_TEST(FrustrumFaceNormal, DAT_0838b7c8, DAT_0838b7cc, FrustrumFaceD);
-    PLANE_TEST(DAT_0838b7d0, DAT_0838b7d4, DAT_0838b7d8, DAT_07eeb204);
-    PLANE_TEST(DAT_0838b7dc, DAT_0838b7e0, DAT_0838b7e4, DAT_07eeb208);
-    PLANE_TEST(DAT_0838b7e8, DAT_0838b7ec, DAT_0838b7f0, DAT_07eeb20c);
-    PLANE_TEST(DAT_0838b7f4, DAT_0838b7f8, DAT_0838b7fc, DAT_07eeb210);
+    PLANE_TEST(FrustrumFaceNormal, FrustrumPlane0NormalY, FrustrumPlane0NormalZ, FrustrumFaceD);
+    PLANE_TEST(FrustrumPlane1NormalX, FrustrumPlane1NormalY, FrustrumPlane1NormalZ, FrustrumPlane1Dist);
+    PLANE_TEST(FrustrumPlane2NormalX, FrustrumPlane2NormalY, FrustrumPlane2NormalZ, FrustrumPlane2Dist);
+    PLANE_TEST(FrustrumPlane3NormalX, FrustrumPlane3NormalY, FrustrumPlane3NormalZ, FrustrumPlane3Dist);
+    PLANE_TEST(FrustrumPlane4NormalX, FrustrumPlane4NormalY, FrustrumPlane4NormalZ, FrustrumPlane4Dist);
 
     #undef PLANE_TEST
 
@@ -308,15 +308,15 @@ int __cdecl Frustum_TestSphere(float *param_1, float param_2)
 // FUN_004FA5C0 @ 0x004FA5C0 — Camera_SetViewport
 // Stores viewport parameters into globals.
 // param_1: x offset,  param_2: y offset
-// param_3: width,     param_4: height (int → converted to float at _DAT_0055a7bc)
-// Globals: DAT_0055a7b0/b4/b8/bc
+// param_3: width,     param_4: height (int → converted to float at ViewportHeightF)
+// Globals: ActionObjCollapseType/b4/b8/bc
 // IDA: SetActionObject (0x004FA5C0)
 void __cdecl SetActionObject(int param_1,int param_2,int param_3,int param_4)
 {
-  DAT_0055a7b4 = param_1;
-  _DAT_0055a7bc = (float)param_4;
-  DAT_0055a7b0 = param_2;
-  DAT_0055a7b8 = param_3;
+  ActionObjWorldId = param_1;
+  ViewportHeightF = (float)param_4;
+  ActionObjCollapseType = param_2;
+  ActionObjFrameCount = param_3;
   return;
 }
 
@@ -340,8 +340,8 @@ void __cdecl Camera_ProjectWorldToScreen(float *param_1,int *param_2,int *param_
   // Perspective divide (eye-space → NDC → window pixels)
   if (TPos[2] == 0.0f) { *param_2 = -1000; *param_3 = -1000; return; }
   float invZ = 1.0f / TPos[2];
-  int sx = (int)ViewportCenterX - (int)(TPos[0] * invZ / _DAT_083a42a4);
-  int sy = (int)ViewportCenterY + (int)(TPos[1] * invZ / _DAT_083a42a8);
+  int sx = (int)ViewportCenterX - (int)(TPos[0] * invZ / PerspectiveScaleX);
+  int sy = (int)ViewportCenterY + (int)(TPos[1] * invZ / PerspectiveScaleY);
 
   // Scale from real-window pixels to logical 640×480
   // IDA: `*sx = 640 * *sx / (int)WindowWidth;` — aritmetica CON SIGNO (el cast
@@ -379,30 +379,30 @@ void __cdecl GL_BeginViewport(int param_1,int param_2,int param_3,int param_4)
   Gfx::PushMatrix();
   Gfx::LoadIdentity();
   GL_SetViewport(viewportX,uVar2 / 0x1e0,uVar3,uVar4);
-  // DAT_00561550 es DWORD (bit-pattern float): reinterpretar con Ff() antes de
-  // multiplicar. `DAT_00561550 * float` haría int→float (0x461c4000=10000.0f
+  // CameraViewFarStorage es DWORD (bit-pattern float): reinterpretar con Ff() antes de
+  // multiplicar. `CameraViewFarStorage * float` haría int→float (0x461c4000=10000.0f
   // pasaría a 1.17e9) y daría un far plane astronómico.
   //
   // FOV y Near pasan crudos como `int` — GL_SetPerspective (GL_LegacyState.cpp)
   // los recibe como `int fov, int near_clip` y hace `Ff()` internamente.
   // Pasarles Ff() aquí causaría DOBLE reinterpretación:
   // 55.0f→int 55→Ff(55)=7.7e-44 → FOV≈0 → pantalla negra.
-  // Solo el far necesita Ff() en el caller porque lo multiplicamos por _DAT_00552d34
+  // Solo el far necesita Ff() en el caller porque lo multiplicamos por PerspectiveFarScale
   // (1.4f) ANTES de pasarlo — la multiplicación es en float-space aquí.
-  GL_SetPerspective(DAT_00561554,(float)uVar3 / (float)uVar4,DAT_0056154c,Ff(DAT_00561550) * _DAT_00552d34);
+  GL_SetPerspective(CameraFOVStorage,(float)uVar3 / (float)uVar4,CameraViewNearStorage,Ff(CameraViewFarStorage) * PerspectiveFarScale);
   Gfx::MatrixMode(Gfx::Matrix::ModelView);
   Gfx::PushMatrix();
   Gfx::LoadIdentity();
-  // Los ángulos DAT_083a42b8/bc/c0 son DWORD (bit-pattern de float): en el asm
+  // Los ángulos LegacyCameraAngle0/bc/c0 son DWORD (bit-pattern de float): en el asm
   // original FLD los lee como float. Pasarlos directo a glRotatef haría int→float
   // (pitch=-40.0f, 0xc2200000, saldría 3.26e9°): se reinterpretan con Ff(). El
   // eje va como 1.0f literal, no como el bit pattern 0x3f800000.
-  Gfx::Rotate(Ff(DAT_083a42bc), 0.0f, 1.0f, 0.0f);
+  Gfx::Rotate(Ff(LegacyCameraAngle1), 0.0f, 1.0f, 0.0f);
   if (CameraTopViewEnabled == '\0') {
-    Gfx::Rotate(Ff(DAT_083a42b8), 1.0f, 0.0f, 0.0f);
+    Gfx::Rotate(Ff(LegacyCameraAngle0), 1.0f, 0.0f, 0.0f);
   }
-  Gfx::Rotate(Ff(DAT_083a42c0), 0.0f, 0.0f, 1.0f);
-  Gfx::Translate(-_DAT_083a42d4, -_DAT_083a42d8, -_DAT_083a42dc);
+  Gfx::Rotate(Ff(LegacyCameraAngle2), 0.0f, 0.0f, 1.0f);
+  Gfx::Translate(-CameraPositionX, -CameraPositionY, -CameraPositionZ);
   // DESVIACION R4g: el productor declara su entrada; el backend aplica los
   // mismos campos que la referencia, sin normalizar blend ni bindings.
   // El color de la niebla legacy sin catálogo aún no tiene un recurso RGBA
@@ -411,12 +411,12 @@ void __cdecl GL_BeginViewport(int param_1,int param_2,int param_3,int param_4)
   // si no las manda), calibradas para el alcance normal; se estiran con el
   // alcance de la cámara (cámara 3D y distancia de dibujado), si no con el
   // alcance ampliado tapa todo lo lejano.
-  const float fogScale = Ff(DAT_00561550) > 3000.0f ? Ff(DAT_00561550) / 3000.0f : 1.0f;
+  const float fogScale = Ff(CameraViewFarStorage) > 3000.0f ? Ff(CameraViewFarStorage) / 3000.0f : 1.0f;
   float fogStart, fogEnd;
   gContentCatalog.GetFogRange((int)gMapManager.GetCurrentMap(), fogStart, fogEnd);
-  if(Materials::Enabled() && (DAT_083a42ea=='\0'||gContentCatalog.HasMapFog())){
+  if(Materials::Enabled() && (FogEnable=='\0'||gContentCatalog.HasMapFog())){
     Materials::ViewState state;
-    if(DAT_083a42ea!='\0'){
+    if(FogEnable!='\0'){
       state.fog=Materials::ViewFog::Linear;state.fogStart=fogStart*fogScale;state.fogEnd=fogEnd*fogScale;
       gContentCatalog.GetFogColor((int)gMapManager.GetCurrentMap(),state.fogColor);
     }
@@ -429,17 +429,17 @@ void __cdecl GL_BeginViewport(int param_1,int param_2,int param_3,int param_4)
   Gfx::Enable(Gfx::Cap::DepthTest);    // GL_DEPTH_TEST
   Gfx::Enable(Gfx::Cap::CullFace);    // GL_CULL_FACE (matches original binary)
   Gfx::DepthMask(true);
-  DAT_083a411d = 0;
-  DAT_083a4125 = 1;
-  DAT_083a411e = 1;
-  DAT_083a411c = 1;
-  DAT_083a42e8 = 1;
+  AlphaTestEnableCache = 0;
+  Texture2DEnableCache = 1;
+  DepthTestEnableCache = 1;
+  CullFaceEnableCache = 1;
+  DepthMaskCache = 1;
   Gfx::DepthFunc(Gfx::Compare::LessEqual);
   // 0.25f literal: 0x3e800000 es el bit pattern de 0.25f y glAlphaFunc espera
   // GLclampf. Como int se convertiría a 1048576000.0f → clamp a 1.0 → el test
   // "alpha > 1.0" siempre falla y todo el UI con alpha-test queda invisible.
   Gfx::AlphaFunc(Gfx::Compare::Greater, 0.25f);
-  if (DAT_083a42ea != '\0' && gContentCatalog.HasMapFog()) {
+  if (FogEnable != '\0' && gContentCatalog.HasMapFog()) {
     // DESVIACION (DLL MapFog glEnableFog, ahora catálogo 0.97.20): niebla
     // lineal 2000..2700 con el color del mapa.
     float fog[4];
@@ -452,10 +452,10 @@ void __cdecl GL_BeginViewport(int param_1,int param_2,int param_3,int param_4)
     GL_GetModelViewMatrix((unsigned int *)&CameraMatrix);
     return;
   }
-  if (DAT_083a42ea != '\0') {
+  if (FogEnable != '\0') {
     Gfx::Enable(Gfx::Cap::Fog);
     Gfx::SetFogMode(Gfx::FogMode::Exp2);
-    Gfx::FogDensity(DAT_00561558);
+    Gfx::FogDensity(FogStartDistance);
     Gfx::FogColor((const float*)&FogColor);
     GL_GetModelViewMatrix((unsigned int *)&CameraMatrix);
     return;

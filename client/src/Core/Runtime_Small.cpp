@@ -33,7 +33,7 @@ extern void __cdecl Xor_ConvertBlock(BYTE *lpBuffer, int iSize, int iKey);
 
 // ── 1-byte: nop ──────────────────────────────────────────────────────────────
 
-// FUN_0053ad80 — definida al final de este archivo (codec noop start_pass)
+// Codec_NoopStartPass — definida al final de este archivo (codec noop start_pass)
 
 // ── 3-byte: stub returning 0 ────────────────────────────────────────────────
 
@@ -44,33 +44,31 @@ HRESULT __cdecl FillBuffer(int Buffer, int MaxChannel, BOOL Enable) { return 0; 
 
 // ── 7-byte: vtable setters ──────────────────────────────────────────────────
 
-// FUN_00403310 @ 0x00403310 (7 bytes)
-void __fastcall FUN_00403310(int *param_1) { *param_1 = (intptr_t)&PTR_LAB_00552460; }
+// Obj_SetVtable00552460 @ 0x00403310 (7 bytes)
+void __fastcall Obj_SetVtable00552460(int *param_1) { *param_1 = (intptr_t)&Vtbl_ObjectBase; }
 
-// FUN_00407970 @ 0x00407970 (7 bytes)
-// FUN_00407970 (IDA-activated)
-void __cdecl FUN_00407970(void *_this)
+// ClothNode_Dtor @ 0x00407970 (7 bytes)
+// ClothNode_Dtor (IDA-activated)
+void __cdecl ClothNode_Dtor(void *_this)
 {
   extern void *g_ClothNodeVTable[1];
   ClothPoint(_this).VTable = g_ClothNodeVTable;
 }
 
 
-// FUN_00407de0 @ 0x00407DE0 (7 bytes)
-// FUN_00407de0 (IDA-activated)
-void __cdecl FUN_00407de0(DWORD *_this)
+// CWaveFile_SetVtable @ 0x00407DE0 (7 bytes)
+// CWaveFile_SetVtable (IDA-activated)
+void __cdecl CWaveFile_SetVtable(DWORD *_this)
 {
-  ClothBody(_this).VTable = reinterpret_cast<void**>(&DAT_00552508);
+  ClothBody(_this).VTable = reinterpret_cast<void**>(&ClothBodyVTable);
 }
 
 
-// FUN_0040f690 @ 0x0040F690 (7 bytes)
-void __fastcall FUN_0040f690(void *This) { *(int *)This = (intptr_t)&PTR_LAB_005527e4; }
+// StreamBase_SetVtableB @ 0x0040F690 (7 bytes)
+void __fastcall StreamBase_SetVtableB(void *This) { *(int *)This = (intptr_t)&Vtbl_StreamBase; }
 
-// FUN_0040f680 @ 0x0040F680 (9 bytes) — same vtable as 0040f690 (duplicate entry)
-void __fastcall FUN_0040f680(void *This) { *(int *)This = (intptr_t)&PTR_LAB_005527e4; }
-
-
+// StreamBase_SetVtableA @ 0x0040F680 (9 bytes) — same vtable as 0040f690 (duplicate entry)
+void __fastcall StreamBase_SetVtableA(void *This) { *(int *)This = (intptr_t)&Vtbl_StreamBase; }
 
 
 
@@ -83,20 +81,22 @@ void __fastcall FUN_0040f680(void *This) { *(int *)This = (intptr_t)&PTR_LAB_005
 
 
 
-// FUN_00407ec0 @ 0x00407EC0 (11 bytes)
-// FUN_00407ec0 (IDA-activated)
-void __cdecl FUN_00407ec0(DWORD *_this)
+
+
+// CWaveFile_SetVtableChain @ 0x00407EC0 (11 bytes)
+// CWaveFile_SetVtableChain (IDA-activated)
+void __cdecl CWaveFile_SetVtableChain(DWORD *_this)
 {
   extern void *g_ClothAnchorVTable[3];
   ClothBody(_this).VTable = g_ClothAnchorVTable;
-  FUN_00407de0(_this);
+  CWaveFile_SetVtable(_this);
 }
 
 
 
-// FUN_0040a6e0 @ 0x0040A6E0 (11 bytes)
-void __fastcall FUN_0040a6e0(void *This) {
-    *(int *)This = (intptr_t)&PTR_LAB_005524e8;
+// WidgetC_SetVtable @ 0x0040A6E0 (11 bytes)
+void __fastcall WidgetC_SetVtable(void *This) {
+    *(int *)This = (intptr_t)&ClothNodeVtable;
     WidgetB_SetVtable(This);
 }
 
@@ -137,23 +137,23 @@ void __fastcall CErrorReport__AddSeparator(intptr_t This) {
 
 
 // ClearNotice @ 0x0047FAC0 (17 bytes) — zero-fill notice text array
-// Notice vive en 0x07DB80D8 (= DAT_07db80d8, 6 x 0x108).  DAT_083a2370 + 0x10
+// Notice vive en 0x07DB80D8 (= SystemChatBuffer, 6 x 0x108).  OperateEntryPool + 0x10
 // es otra cosa (la lista de objetos interactuables, Operates).
-void __cdecl ClearNotice(void) { memset(DAT_07db80d8, 0, 0x630); }
+void __cdecl ClearNotice(void) { memset(SystemChatBuffer, 0, 0x630); }
 
 // ── 18-byte ─────────────────────────────────────────────────────────────────
 
 // FUN_00406de0 @ 0x00406DE0 (18 bytes) — HashTable init (set vtable + zero fields)
 void __fastcall FUN_00406de0_impl(int *param_1) {
-    *param_1 = (intptr_t)&PTR_FUN_005524d8;
+    *param_1 = (intptr_t)&Vtbl_HashTable;
     param_1[3] = 0;
     param_1[1] = 0;
     param_1[2] = 0;
 }
 
 
-// FUN_0053d580 @ 0x0053D580 (18 bytes) — GameGuard query wrapper
-int __stdcall FUN_0053d580(void) {
+// GameGuard_Query @ 0x0053D580 (18 bytes) — GameGuard query wrapper
+int __stdcall GameGuard_Query(void) {
     if (lpParameter == NULL) return 0;
     return GameGuard_HealthCheck(lpParameter);
 }
@@ -162,7 +162,7 @@ int __stdcall FUN_0053d580(void) {
 
 // ── 19-byte ─────────────────────────────────────────────────────────────────
 
-// FUN_00405290 @ 0x00405290 (19 bytes) — CErrorReport field init
+// CErrorReport_InitFields @ 0x00405290 (19 bytes) — CErrorReport field init
 static void __cdecl FUN_00405290_impl(void* param_1) {
     BYTE* fields = static_cast<BYTE*>(param_1);
     *(int *)(fields + 4) = -1;  // 0xffffffff
@@ -170,14 +170,14 @@ static void __cdecl FUN_00405290_impl(void* param_1) {
     *(int *)(fields + 0x10c) = 0;
 }
 
-// FUN_0047cfe0 @ 0x0047CFE0 (19 bytes) — item field accessor (word at +0x14)
-short __cdecl FUN_0047cfe0(short *param_1) {
+// Item_GetField14 @ 0x0047CFE0 (19 bytes) — item field accessor (word at +0x14)
+short __cdecl Item_GetField14(short *param_1) {
     if (*param_1 == -1) return 0;
     return param_1[10];  // offset +0x14
 }
 
-// FUN_0047d000 @ 0x0047D000 (19 bytes) — item field accessor (word at +0x18)
-short __cdecl FUN_0047d000(short *param_1) {
+// Item_GetField18 @ 0x0047D000 (19 bytes) — item field accessor (word at +0x18)
+short __cdecl Item_GetField18(short *param_1) {
     if (*param_1 == -1) return 0;
     return param_1[0xc];  // offset +0x18
 }
@@ -264,16 +264,16 @@ const ITEM* __cdecl PlusSpecialPercent(short *a1, int a2, const ITEM* a3, unsign
 //   base = Vit/7, max = Vit/4
 // Then per-slot bonuses (Wings/WeaponL/WeaponR/Ring1) with durability scaling.
 // Bow+arrows + crossbow+bolts synergy: special level boost based on arrow type.
-// dword_7E91388/pPickedItem preview path skipped (hover-time UI).
+// ItemPickedFlag/pPickedItem preview path skipped (hover-time UI).
 int __fastcall Stats_CalcBase(BYTE* a1) {
     // Guarda de a1: abajo se lee `*(short*)(a1 + 536)` /
     // `(a1 + 604)` (slots de arma) sin chequear.
     if (a1 == 0 || (uintptr_t)a1 < 0x100000) return 0;
 
-    const BYTE* charAttr = static_cast<const BYTE*>(DAT_07cf1ff4);
+    const BYTE* charAttr = static_cast<const BYTE*>(CharacterAttributePtr);
     if (!charAttr || reinterpret_cast<uintptr_t>(charAttr) < 0x100000) return 0;
 
-    // Usar ItemAttribute_Base() (globals.h) y no DAT_07d78068 crudo: ese
+    // Usar ItemAttribute_Base() (globals.h) y no ItemAttributeBase crudo: ese
     // puntero se pisa a 0x1 en runtime.
     ITEM_ATTRIBUTE* ITEM_ATTR = (ITEM_ATTRIBUTE*)(uintptr_t)ItemAttribute_Base();
     if (ITEM_ATTR == nullptr) return 0;
@@ -282,7 +282,7 @@ int __fastcall Stats_CalcBase(BYTE* a1) {
     BYTE* wp_R = a1 + 604;
     BYTE* ring1 = a1 + 1148;
 
-    // Skip hover-preview override (dword_7E91388 path)
+    // Skip hover-preview override (ItemPickedFlag path)
 
     unsigned short *atkMinL = (unsigned short*)(a1 + 60);
     unsigned short *atkMaxL = (unsigned short*)(a1 + 62);
@@ -472,8 +472,8 @@ void __fastcall CUIRenderText_SetFont(intptr_t ecx, int /*edx*/, int param_1) {
 
 
 
-// FUN_00406d20 @ 0x00406D20 (22 bytes) — initialize hash table fields
-void __fastcall FUN_00406d20(intptr_t param_1) {
+// HashTable_InitFields @ 0x00406D20 (22 bytes) — initialize hash table fields
+void __fastcall HashTable_InitFields(intptr_t param_1) {
     *(int *)(param_1 + 0x1c) = 0x83;
     *(int *)(param_1 + 0xc) = 0;
     *(int *)(param_1 + 4) = 0;
@@ -487,21 +487,21 @@ void __fastcall FUN_00406d20(intptr_t param_1) {
 
 
 
-// FUN_004cbdd0 @ 0x004CBDD0 (29 bytes) — clear one of the item-slot tables.
+// Item_ClearSlotTable @ 0x004CBDD0 (29 bytes) — clear one of the item-slot tables.
 //
 // In the source binary, the IDA decompile reads as:
-//   result = dword_7E11FB0;
+//   result = TradeItemKeyBase;
 //   *(WORD*)((char*)result - 56) = -1;   // type field at -56 from result
 //   *result = 0;                          // active flag at +0
 //   result += 17 (=68 bytes);
-// The "-56" offset reaches into a SEPARATE global `DAT_07e11f78` (Net_Packet
+// The "-56" offset reaches into a SEPARATE global `TradeItemList` (Net_Packet
 // Session.cpp:228-235 confirms this is a paired layout: type-field array at
 // _07e11f78, active-flag array at _07e11fb0, both 0x880 bytes / 32 slots ×
 // 68-byte stride). We use the symbol bases here so the linker's placement
 // is irrelevant.
-void __cdecl FUN_004cbdd0(void) {
-    BYTE* typeBase   = (BYTE*)&DAT_07e11f78;
-    BYTE* activeBase = (BYTE*)&DAT_07e11fb0;
+void __cdecl Item_ClearSlotTable(void) {
+    BYTE* typeBase   = (BYTE*)&TradeItemList;
+    BYTE* activeBase = (BYTE*)&TradeItemKeyBase;
     for (int i = 0; i < 32; ++i) {
         int off = i * 0x44;
         *(short*)(typeBase   + off) = (short)0xffff;
@@ -523,59 +523,59 @@ void __cdecl ReleaseMainData(void) {
 // waveIO__CloseWaveFile @ 0x00404E60 — CWaveFile deinit (set vtable, close MMIO)
 
 
-// FUN_00406cb0 @ 0x00406CB0 — HashWidget ~dtor
-void __fastcall FUN_00406cb0(intptr_t ecx, int /*edx*/, BYTE param_1) {
-    FUN_00406cd0((void *)ecx);
+// HashWidget_Dtor @ 0x00406CB0 — HashWidget ~dtor
+void __fastcall HashWidget_Dtor(intptr_t ecx, int /*edx*/, BYTE param_1) {
+    HashWidget_Deinit((void *)ecx);
     if (param_1 & 1) operator_delete((void *)ecx);
 }
 
-// FUN_00407dc0 @ 0x00407DC0 — destructor base con liberación opcional.
-void __fastcall FUN_00407dc0(void* ecx, int /*edx*/, BYTE param_1) {
-    FUN_00407de0(static_cast<DWORD*>(ecx));
+// CWaveFile_DtorBase @ 0x00407DC0 — destructor base con liberación opcional.
+void __fastcall CWaveFile_DtorBase(void* ecx, int /*edx*/, BYTE param_1) {
+    CWaveFile_SetVtable(static_cast<DWORD*>(ecx));
     if (param_1 & 1) operator_delete(ecx);
 }
 
-// FUN_00407ea0 @ 0x00407EA0 — destructor usado por el slot 0 del ancla de tela.
-void __fastcall FUN_00407ea0(void* ecx, int /*edx*/, BYTE param_1) {
-    FUN_00407ec0(static_cast<DWORD*>(ecx));
+// ClothAnchor_DtorSlot0 @ 0x00407EA0 — destructor usado por el slot 0 del ancla de tela.
+void __fastcall ClothAnchor_DtorSlot0(void* ecx, int /*edx*/, BYTE param_1) {
+    CWaveFile_SetVtableChain(static_cast<DWORD*>(ecx));
     if (param_1 & 1) operator_delete(ecx);
 }
 
 
 
-// FUN_0040a6c0 @ 0x0040A6C0 — WidgetC derived ~dtor
-void __fastcall FUN_0040a6c0(intptr_t ecx, int /*edx*/, BYTE param_1) {
-    FUN_0040a6e0((void *)ecx);
+// WidgetC_DtorDerived @ 0x0040A6C0 — WidgetC derived ~dtor
+void __fastcall WidgetC_DtorDerived(intptr_t ecx, int /*edx*/, BYTE param_1) {
+    WidgetC_SetVtable((void *)ecx);
     if (param_1 & 1) operator_delete((void *)ecx);
 }
 
-// FUN_0040db60 @ 0x0040DB60 — DSDevice ~dtor
-void __fastcall FUN_0040db60(intptr_t ecx, int /*edx*/, BYTE param_1) {
-    FUN_0040d550((void *)ecx);
+// DSDevice_Dtor @ 0x0040DB60 — DSDevice ~dtor
+void __fastcall DSDevice_Dtor(intptr_t ecx, int /*edx*/, BYTE param_1) {
+    DSDevice_Deinit((void *)ecx);
     if (param_1 & 1) operator_delete((void *)ecx);
 }
 
-// FUN_0040db80 @ 0x0040DB80 — DSBuffer ~dtor
-void __fastcall FUN_0040db80(intptr_t ecx, int /*edx*/, BYTE param_1) {
-    FUN_0040dba0((void *)ecx);
+// DSBuffer_Dtor @ 0x0040DB80 — DSBuffer ~dtor
+void __fastcall DSBuffer_Dtor(intptr_t ecx, int /*edx*/, BYTE param_1) {
+    DSBuffer_Deinit((void *)ecx);
     if (param_1 & 1) operator_delete((void *)ecx);
 }
 
-// FUN_0040eac0 @ 0x0040EAC0 — DSBufferB ~dtor
-void __fastcall FUN_0040eac0(intptr_t ecx, int /*edx*/, BYTE param_1) {
-    FUN_0040eae0((void *)ecx);
+// DSBufferB_Dtor @ 0x0040EAC0 — DSBufferB ~dtor
+void __fastcall DSBufferB_Dtor(intptr_t ecx, int /*edx*/, BYTE param_1) {
+    DSBufferB_Deinit((void *)ecx);
     if (param_1 & 1) operator_delete((void *)ecx);
 }
 
-// FUN_0040f520 @ 0x0040F520 — Stream deinit ~dtor
-void __fastcall FUN_0040f520(intptr_t ecx, int /*edx*/, BYTE param_1) {
-    FUN_0040f540((void *)ecx);
+// Stream_Dtor @ 0x0040F520 — Stream deinit ~dtor
+void __fastcall Stream_Dtor(intptr_t ecx, int /*edx*/, BYTE param_1) {
+    Stream_Deinit((void *)ecx);
     if (param_1 & 1) operator_delete((void *)ecx);
 }
 
-// FUN_0040f840 @ 0x0040F840 — StreamB ~dtor
-void __fastcall FUN_0040f840(intptr_t ecx, int /*edx*/, BYTE param_1) {
-    FUN_0040f950((void *)ecx);
+// StreamB_Dtor @ 0x0040F840 — StreamB ~dtor
+void __fastcall StreamB_Dtor(intptr_t ecx, int /*edx*/, BYTE param_1) {
+    UI_ListWidgetDtor((void *)ecx);
     if (param_1 & 1) operator_delete((void *)ecx);
 }
 
@@ -585,12 +585,12 @@ void __fastcall FUN_0040f840(intptr_t ecx, int /*edx*/, BYTE param_1) {
 
 // ── 30-byte: other ──────────────────────────────────────────────────────────
 
-// FUN_00405240 @ 0x00405240 (30 bytes) — ErrorReport init (vtable + open log)
-// NOTE: FUN_004052b0 opens the log file — stub it as nop for now
+// CErrorReport_Init @ 0x00405240 (30 bytes) — ErrorReport init (vtable + open log)
+// NOTE: CErrorReport_OpenLog opens the log file — stub it as nop for now
 void __fastcall FUN_00405240_init(void *This) {
-    *(int *)This = (intptr_t)&PTR_FUN_005524c4;
+    *(int *)This = (intptr_t)&Vtbl_CErrorReport;
     FUN_00405290_impl(This);
-    // FUN_004052b0(This, "MuError.log"); — opens MuError.log for writing
+    // CErrorReport_OpenLog(This, "MuError.log"); — opens MuError.log for writing
 }
 
 // ── 32-byte ─────────────────────────────────────────────────────────────────
@@ -614,8 +614,8 @@ void __cdecl StopMusic(void) {
 
 // ── 33-byte ─────────────────────────────────────────────────────────────────
 
-// FUN_00406e60 @ 0x00406E60 (33 bytes) — free two allocations + zero count
-void __fastcall FUN_00406e60(intptr_t param_1) {
+// HashTable_FreeTwoAllocs @ 0x00406E60 (33 bytes) — free two allocations + zero count
+void __fastcall HashTable_FreeTwoAllocs(intptr_t param_1) {
     operator_delete(*(void **)(param_1 + 8));
     operator_delete(*(void **)(param_1 + 4));
     *(int *)(param_1 + 0xc) = 0;
@@ -655,8 +655,8 @@ int __cdecl GetHandOfWeapon(intptr_t obj) {
 
 // ── 37-byte ─────────────────────────────────────────────────────────────────
 
-// FUN_0040a830 @ 0x0040A830 (37 bytes) — free two optional allocations
-void __fastcall FUN_0040a830(intptr_t param_1) {
+// Obj_FreeTwoOptional @ 0x0040A830 (37 bytes) — free two optional allocations
+void __fastcall Obj_FreeTwoOptional(intptr_t param_1) {
     if (*(void **)(param_1 + 0x1c) != NULL) operator_delete(*(void **)(param_1 + 0x1c));
     if (*(void **)(param_1 + 8) != NULL) operator_delete(*(void **)(param_1 + 8));
 }
@@ -685,21 +685,21 @@ void __cdecl FreeDirectSound(void) {
 
 // ── 43-byte ─────────────────────────────────────────────────────────────────
 
-// FUN_00406ec0 @ 0x00406EC0 (43 bytes) — hash table destructor (zero fields + set vtable + conditional delete)
-void __fastcall FUN_00406ec0(intptr_t ecx, int /*edx*/, BYTE param_1) {
+// HashTable_Dtor @ 0x00406EC0 (43 bytes) — hash table destructor (zero fields + set vtable + conditional delete)
+void __fastcall HashTable_Dtor(intptr_t ecx, int /*edx*/, BYTE param_1) {
     *(int *)(ecx + 0xc) = 0;
     *(int *)(ecx + 4) = 0;
     *(int *)(ecx + 8) = 0;
-    *(int *)ecx = (intptr_t)&PTR_FUN_005524d8;
+    *(int *)ecx = (intptr_t)&Vtbl_HashTable;
     if (param_1 & 1) operator_delete((void *)ecx);
 }
 
 // ── 45-byte ─────────────────────────────────────────────────────────────────
 
-// FUN_0040f540 @ 0x0040F540 (45 bytes) — Stream deinit: set vtable + release sub-object
-void __fastcall FUN_0040f540(void *This) {
+// Stream_Deinit @ 0x0040F540 (45 bytes) — Stream deinit: set vtable + release sub-object
+void __fastcall Stream_Deinit(void *This) {
     int *piVar1 = (int *)((int *)This)[1];
-    *(int *)This = (intptr_t)&PTR_FUN_005527e0;
+    *(int *)This = (intptr_t)&Vtbl_StreamDeinit;
     if (piVar1 != NULL) {
         typedef void (__cdecl *RelFunc)(int);
         RelFunc fn = (RelFunc)(*(int *)(*piVar1 + 0x14));
@@ -707,12 +707,12 @@ void __fastcall FUN_0040f540(void *This) {
     }
 }
 
-// FUN_0053cc00 @ 0x0053CC00 (45 bytes) — GameGuard class: zero 12 fields
+// GameGuard_ZeroFields @ 0x0053CC00 (45 bytes) — GameGuard class: zero 12 fields
 
 // ── 48-byte ─────────────────────────────────────────────────────────────────
 
-// FUN_00406db0 @ 0x00406DB0 (48 bytes) — thiscall: set fields + random hash prime
-void __fastcall FUN_00406db0(intptr_t ecx, int /*edx*/, int param_1, int param_2) {
+// HashTable_SetFieldsAndPrime @ 0x00406DB0 (48 bytes) — thiscall: set fields + random hash prime
+void __fastcall HashTable_SetFieldsAndPrime(intptr_t ecx, int /*edx*/, int param_1, int param_2) {
     *(int *)(ecx + 0x10) = param_1;
     *(int *)(ecx + 0x14) = param_2;
     int r = rand();
@@ -722,13 +722,13 @@ void __fastcall FUN_00406db0(intptr_t ecx, int /*edx*/, int param_1, int param_2
 // MoveBlurs @ 0x0046C3B0 (48 bytes) — tick blur pool, decrement counters.
 //
 // The blur/joint/trail shared pool is allocated as
-// `g_RenderPool_07c608a8[100 * 0x2f0]` in globals.cpp.
-// DAT_07c608b8 is the +16 anchor (= +4 from DAT_07c608b4). The walker reads
+// `g_RenderPool[100 * 0x2f0]` in globals.cpp.
+// LegacyRenderPoolOff16 is the +16 anchor (= +4 from JointRenderPool). The walker reads
 // fields at piVar2[-4..-2..0] which map to slot offsets 0..4..8..16 — all
 // inside the 100-slot pool. Iteration count is 100 (matches IDA bound
 // `< 0x7c72e78` = base + 100*0x2f0).
 void __cdecl MoveBlurs(void) {
-    int *piVar2 = &DAT_07c608b8;
+    int *piVar2 = &LegacyRenderPoolOff16;
     for (int slotIdx = 0; slotIdx < 100; ++slotIdx, piVar2 = (int*)((char*)piVar2 + 0x2f0)) {
         if (*(char *)(piVar2 - 4) != '\0') {
             int iVar1 = piVar2[-2];
@@ -759,7 +759,7 @@ void __cdecl SetMatchInfo(BYTE byType, int iMaxTime, int iTime, int iMaxMonster,
 }
 
 // clearMatchInfo @ 0x0047EB80 (31 bytes).
-// OJO: no es FUN_004827a0, que cae en medio de sub_4824C0 (el scan de flechas
+// OJO: no es Fn_004827a0, que cae en medio de sub_4824C0 (el scan de flechas
 // del inventario).
 // IDA: clearMatchInfo (0x0047EB80)
 void __cdecl clearMatchInfo(void) {
@@ -794,8 +794,8 @@ char *__cdecl getMonsterName(int type) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // END BATCH: ~80 functions implemented (1-52 bytes range)
 
-// ── FUN_00405240 (IDA-activated, absent in Ghidra) ──
-int __cdecl FUN_00405240(void *lpBuffer, int iSize, int iKey)
+// ── CErrorReport_Init (IDA-activated, absent in Ghidra) ──
+int __cdecl CErrorReport_Init(void *lpBuffer, int iSize, int iKey)
 {
   int iConvertSize; // esi
   int v4; // edi
@@ -830,21 +830,21 @@ int __cdecl FUN_00405240(void *lpBuffer, int iSize, int iKey)
   return v4;
 }
 
-// ── FUN_00405290 (IDA-activated, absent in Ghidra) ──
-int __cdecl FUN_00405290(void* _this)
+// ── CErrorReport_InitFields (IDA-activated, absent in Ghidra) ──
+int __cdecl CErrorReport_InitFields(void* _this)
 {
   FUN_00405290_impl(_this);
   return 0;
 }
 
-// ── FUN_0053ad80 (IDA-activated, absent in Ghidra) ──
-void FUN_0053ad80()
+// ── Codec_NoopStartPass (IDA-activated, absent in Ghidra) ──
+void Codec_NoopStartPass()
 {
   ;
 }
 
-// ── FUN_0053cc00 (IDA-activated, absent in Ghidra) ──
-int __cdecl FUN_0053cc00(DWORD *_this)
+// ── GameGuard_ZeroFields (IDA-activated, absent in Ghidra) ──
+int __cdecl GameGuard_ZeroFields(DWORD *_this)
 {
   int result; // eax
   DWORD *v2; // edx

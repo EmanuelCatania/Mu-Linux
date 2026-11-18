@@ -49,16 +49,16 @@ void* __cdecl Entity_SpawnBoneEffect(intptr_t entity, int effectType, float scal
     offset[2] = yOff;
 
     float outPos[3];
-    void *modelPtr = (void *)(DAT_05828d58 + *(short *)(entity + 2) * BMD_STRIDE);
+    void *modelPtr = (void *)(ModelsBase + *(short *)(entity + 2) * BMD_STRIDE);
     float *boneMat = (float *)((intptr_t)((OBJECT*)(uintptr_t)(entity))->BoneMatrices + bone * 0x30);
     BMD_TransformPosition(modelPtr, boneMat, offset, outPos, '\x01');
 
     // Pulsing light: sin(animTick * period) * amp + base
-    float sinVal = (float)fsin((double)WorldTime * (double)_DAT_005528e0);
+    float sinVal = (float)fsin((double)WorldTime * (double)ZBobFreq);
     float light[3];
-    light[0] = sinVal * _DAT_005528b8 + _DAT_00552928;
-    light[1] = light[0] * _DAT_00552534;
-    light[2] = light[0] * _DAT_005528b4;
+    light[0] = sinVal * 0.3f + 0.7f;
+    light[1] = light[0] * 0.6f;
+    light[2] = light[0] * 0.4f;
 
     // IDA sub_456590: CreateSprite(Type, Position, Scale, Light, Owner, 0.0, 0) —
     // el 3er argumento es la ESCALA, no el tipo.
@@ -70,10 +70,10 @@ void* __cdecl Entity_SpawnBoneEffect(intptr_t entity, int effectType, float scal
 // Spawns beam effects between two bones of the entity, and writes bone2 world pos to entity+0x40.
 void* __cdecl Entity_SpawnBoneRangeEffect(intptr_t entity, intptr_t bone1, intptr_t bone2, float scale)
 {
-    float sinVal = (float)fsin((double)WorldTime * (double)_DAT_005528e0);
-    void *modelPtr = (void *)(DAT_05828d58 + *(short *)(entity + 2) * BMD_STRIDE);
+    float sinVal = (float)fsin((double)WorldTime * (double)ZBobFreq);
+    void *modelPtr = (void *)(ModelsBase + *(short *)(entity + 2) * BMD_STRIDE);
 
-    float light0 = sinVal * _DAT_005528b8 + _DAT_00552530;
+    float light0 = sinVal * 0.3f + 0.8f;
     float light[3] = { light0, light0, light0 };
 
     // Bone1: offset {5, 0, 0} → spawn at world pos

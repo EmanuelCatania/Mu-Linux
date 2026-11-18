@@ -43,9 +43,9 @@
 //
 // Globals:
 //   CameraMatrix  — current view/projection matrix
-//   DAT_083a7cc8  — per-channel flags table (stride 0x38, byte at +0 = type)
-//   _DAT_00552504 — degrees-to-radians or scale constant
-//   _DAT_00552580 — float 0.0
+//   BitmapsBpp  — per-channel flags table (stride 0x38, byte at +0 = type)
+//   HalfScale — degrees-to-radians or scale constant
+//   FloatZeroB — float 0.0
 
 #include "stdafx.h"
 #include "Render/BufferedDraw.h"
@@ -102,13 +102,13 @@ RenderSprite_0(int param_1,float *param_2,float param_3,float param_4,float *par
   local_ac = TPos_buf[0];
   local_a8 = TPos_buf[1];
   *(float*)&local_a4 = TPos_buf[2];
-  local_9c[3] = param_3 * _DAT_00552504;
+  local_9c[3] = param_3 * HalfScale;
   local_a0 = local_a8;
-  local_80 = param_4 * _DAT_00552504;
+  local_80 = param_4 * HalfScale;
   // local_a4 guarda el bit-pattern de TPos[2]: reinterpretar los bits (el
   // decompile hace `(float)local_a4`, que sería un CAST int→float).
   float depth_eye = *(float*)&local_a4;
-  if (param_6 == _DAT_00552580) {
+  if (param_6 == FloatZeroB) {
     local_60[0] = local_ac - local_9c[3];
     local_60[2] = depth_eye;
     local_60[1] = local_a8 - local_80;
@@ -128,8 +128,8 @@ RenderSprite_0(int param_1,float *param_2,float param_3,float param_4,float *par
     //   BL(-hw,-hh) BR(+hw,-hh) TR(+hw,+hh) TL(-hw,+hh), z = depth_eye.
     // TODOS los sprites/flares/glows con rotación pasan por acá (partículas
     // 0x4e1 con frame≠0, weapon glow, etc.), no solo el char-select.
-    float halfW = local_9c[3];   // param_3 * _DAT_00552504
-    float halfH = local_80;      // param_4 * _DAT_00552504
+    float halfW = local_9c[3];   // param_3 * HalfScale
+    float halfH = local_80;      // param_4 * HalfScale
     float rotOffsets[12] = {
         -halfW, -halfH, depth_eye,   // BL
          halfW, -halfH, depth_eye,   // BR
@@ -177,7 +177,7 @@ RenderSprite_0(int param_1,float *param_2,float param_3,float param_4,float *par
   // correcta a glows sobre armas/armaduras (siguen el contorno), en vez de
   // cuadrados blanco-fluo cubriendo todo.
   BufferedDraw::Begin(BufferedDraw::Primitive::Quads);
-  if ((&DAT_083a7cc8)[param_1 * TEXTURE_STRIDE] == '\x03') {
+  if ((&BitmapsBpp)[param_1 * TEXTURE_STRIDE] == '\x03') {
     BufferedDraw::Color3fv(param_5);
   }
   else {

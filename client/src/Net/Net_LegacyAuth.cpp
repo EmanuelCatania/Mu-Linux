@@ -2,7 +2,7 @@
 
 #include "stdafx.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -62,16 +62,16 @@ char __cdecl Connection_Check(void *ctx, int p1, int p2) {
     return uVar1;
 }
 
-// FUN_00494520 @ 0x00494520 — Auth_XorEncode(key_ctx, buf, flag)
+// Auth_XorEncode @ 0x00494520 — Auth_XorEncode(key_ctx, buf, flag)
 // __thiscall in original (this=key_ctx). XOR-encodes buf[] using a key schedule derived
 // from this->key_table (256-byte S-box from RC4 variant). flag=0: encode only; flag!=0: also validates.
 // Uses SEH frame + 256-byte S-box + HashTable obfuscation. 3500+ lines in binary.
 // STUB: SEH + unaff_ESI pattern prevent safe implementation.
-DWORD __cdecl FUN_00494520(void*, char) { return 0; } // STUB: sub_494520 (SEH+RC4, anti-tamper)
+DWORD __cdecl Auth_XorEncode(void*, char) { return 0; } // STUB: sub_494520 (SEH+RC4, anti-tamper)
 
 // Chat_Validate @ 0x00513440 — Chat_Validate(buf)
 // Returns 1 if buf (after stripping spaces) matches any word in the
-// banned-keyword table at DAT_07d73104 (stride 0x14, count DAT_07d78070).
+// banned-keyword table at WordFilterTable (stride 0x14, count WordFilterCount).
 // Returns 0 if buf starts with '/' or no match found.
 char __cdecl Chat_Validate(char *param_1) {
     if (*param_1 == '/') return 0;
@@ -84,8 +84,8 @@ char __cdecl Chat_Validate(char *param_1) {
     }
     local_100[out] = '\0';
     // search banned word table
-    int count = (int)DAT_07d78070;
-    char *entry = DAT_07d73104;
+    int count = (int)WordFilterCount;
+    char *entry = WordFilterTable;
     for (int i = 0; i < count; i++) {
         if (FindTextA(local_100, entry, '\0')) return 1;
         entry += 0x14;
@@ -95,12 +95,12 @@ char __cdecl Chat_Validate(char *param_1) {
 // 0x00497C70 no es un key schedule: es CheckChatText (gestos por texto del
 // chat). Portado en src/UI/Chat_Gestures.cpp.
 // SecondPassword_Shuffle @ 0x004E9250 — SecondPassword_Shuffle(mode)
-// Initializes a 10-element short array at DAT_07e91394 with values 0..9,
-// then performs 20 random XOR swaps. Stores mode in DAT_07eaa14c.
+// Initializes a 10-element short array at PinShuffleDigits with values 0..9,
+// then performs 20 random XOR swaps. Stores mode in PinInputModeState.
 // Returns last randomly-computed iVar4 (ignore value — callers discard).
 int __cdecl SecondPassword_Shuffle(int mode) {
     // Fill 0..9
-    short* arr = (short*)&DAT_07e91394;
+    short* arr = (short*)&PinShuffleDigits;
     for (int i = 0; i < 10; i++) arr[i] = (short)i;
     // 20 random swaps
     int iVar4 = 0;
@@ -114,10 +114,10 @@ int __cdecl SecondPassword_Shuffle(int mode) {
             arr[a] ^= arr[b];
         }
     }
-    memset(DAT_07ea9814, 0, sizeof(DAT_07ea9814));
-    DAT_07ea9818  = 0;
-    DAT_07eaa14c  = (DWORD)mode;
-    DAT_07ea981c  = 0;
-    DAT_07ea981e  = 0;
+    memset(PinBytesPart0Bits, 0, sizeof(PinBytesPart0Bits));
+    PinBytes4to7  = 0;
+    PinInputModeState  = (DWORD)mode;
+    PinBytes8to9  = 0;
+    PinByte10  = 0;
     return iVar4;
 }

@@ -49,7 +49,7 @@ void __cdecl BMD__Open(BMD* param_1, const char* param_2, const char* param_3, i
     // DESVIACION (pack HD): con texturas HD, un modelo de Data\HD\<ruta> con el
     // mismo nombre reemplaza al original. Ver Texture_HDAssetPath.
     char hdPath[300];
-    FILE *fp = crt_fopen(Texture_HDAssetPath(local_4c, hdPath, sizeof(hdPath)), DAT_005580ac);
+    FILE *fp = crt_fopen(Texture_HDAssetPath(local_4c, hdPath, sizeof(hdPath)), FopenModeRb);
     if (!fp) {
         return;
     }
@@ -389,9 +389,9 @@ void __cdecl BMD__FindNearTriangle(void *pThis)
 void __cdecl BMD_CreateBoundingBox(BMD* model)
 {
     // IDA 0x00442E60: conservar centinelas, comparaciones y contador de 16 bits.
-    auto* counts = reinterpret_cast<std::uint16_t*>(DAT_077d87fc);
-    float* maximum = DAT_05827a98;
-    float* minimum = DAT_06f42a5c;
+    auto* counts = reinterpret_cast<std::uint16_t*>(BoneVertexCounts);
+    float* maximum = BoneBBoxMax;
+    float* minimum = BoneBBoxMin;
     constexpr std::uint32_t lowerBits = 0xc61c3c00, upperBits = 0x461c3c00;
     for (int b = 0; b < model->NumBones; ++b) {
         counts[b] = 0;
@@ -456,7 +456,7 @@ undefined4 __cdecl BMD__Save(intptr_t thisModel, char *param_1, char *param_2)
     strncpy(local_40 + len1, param_2, sizeof(local_40)-len1-1);
     local_40[63] = '\0';
 
-    FILE *pFVar4 = (FILE *)crt_fopen(local_40, &DAT_005597d4);
+    FILE *pFVar4 = (FILE *)crt_fopen(local_40, &FopenModeWb);
     if (!pFVar4) return 0;
 
     putc(0x42, (int *)pFVar4);  // 'B'

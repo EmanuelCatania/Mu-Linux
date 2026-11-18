@@ -76,11 +76,11 @@ static void ApplyCustomEquipment(BYTE* c, const BYTE* items)
 
 void Recv_CustomEquipment(const BYTE* Msg, int Size)
 {
-    if (Size < 24 || !DAT_07abf5d0) return;
+    if (Size < 24 || !CharactersClient) return;
     const int key = ((Msg[4] & 0x7F) << 8) | Msg[5];
     const int idx = FindCharacterIndex(key);
     if (idx < 0 || idx >= 400) return;
-    ApplyCustomEquipment((BYTE*)(uintptr_t)DAT_07abf5d0 + (size_t)idx * CHARACTER_STRIDE, Msg + 6);
+    ApplyCustomEquipment((BYTE*)(uintptr_t)CharactersClient + (size_t)idx * CHARACTER_STRIDE, Msg + 6);
 }
 
 // 0.97.20: C1:F3:ED — lo mismo para un personaje de la lista del
@@ -88,15 +88,15 @@ void Recv_CustomEquipment(const BYTE* Msg, int Size)
 // y este paquete llega justo después del F3/00.
 void Recv_CharacterListCustom(const BYTE* Msg, int Size)
 {
-    if (Size < 24 || !DAT_07abf5d0) return;
+    if (Size < 24 || !CharactersClient) return;
     const int slot = Msg[4];
     if (slot >= 400) return;
-    ApplyCustomEquipment((BYTE*)(uintptr_t)DAT_07abf5d0 + (size_t)slot * CHARACTER_STRIDE, Msg + 6);
+    ApplyCustomEquipment((BYTE*)(uintptr_t)CharactersClient + (size_t)slot * CHARACTER_STRIDE, Msg + 6);
 }
 
 void Recv_ChangePlayer(const BYTE* Msg, int Size)
 {
-    if (Size < 5 + ITEM_INFO_SIZE || !DAT_07abf5d0) return;
+    if (Size < 5 + ITEM_INFO_SIZE || !CharactersClient) return;
 
     const int key = Msg[4] + (Msg[3] << 8);
     const int idx = FindCharacterIndex(key);
@@ -104,7 +104,7 @@ void Recv_ChangePlayer(const BYTE* Msg, int Size)
         NetLog("NET:  -> 0x25 ChangePlayer key=%d (entidad ausente)", key);
         return;
     }
-    BYTE* c = (BYTE*)(uintptr_t)DAT_07abf5d0 + (size_t)idx * CHARACTER_STRIDE;
+    BYTE* c = (BYTE*)(uintptr_t)CharactersClient + (size_t)idx * CHARACTER_STRIDE;
 
     const bool  empty  = (Msg[5] == 0xFF);
     const int   type   = ConvertItemType((BYTE*)Msg + 5);   // 0x0047B110
@@ -201,10 +201,10 @@ void NetRecv_10(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     NetLog("NET:  → 0x10 Move id=%d to (%d,%d)", entityId, gx, gy);
     // Actualizar la entidad sin importar si es hero u otra.
     BYTE* h = nullptr;
-    if (entityId == g_HeroKey && DAT_07abf5d8) {
-        h = (BYTE*)DAT_07abf5d8;
+    if (entityId == g_HeroKey && Hero) {
+        h = (BYTE*)Hero;
     } else {
-        BYTE* basePtr = (BYTE*)(uintptr_t)DAT_07abf5d0;
+        BYTE* basePtr = (BYTE*)(uintptr_t)CharactersClient;
         for (int s = 0; s < 400; ++s) {
             BYTE* slot = basePtr + s * CHARACTER_STRIDE;
             if (slot[0] && *(WORD*)(slot + EntityOffset(0x1dc)) == entityId) {
@@ -216,7 +216,7 @@ void NetRecv_10(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         // ReceiveMoveCharacter @ 00427B90: speed is always updated.
         h[EntityOffset(0x2fc)] = (BYTE)(Msg[7] >> 4);
 
-        if (h == (BYTE*)DAT_07abf5d8) {
+        if (h == (BYTE*)Hero) {
             // IDA no pisa acá la ruta local del héroe ni su posición
             // en el mundo. Sólo refresca este cache de respaldo
             // while no locally interpolated path is active.
@@ -262,10 +262,10 @@ void NetRecv_11(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     BYTE gx = Msg[5], gy = Msg[6];
     NetLog("NET:  → 0x11 Position id=%d to (%d,%d)", entityId, gx, gy);
     BYTE* h = nullptr;
-    if (entityId == g_HeroKey && DAT_07abf5d8) {
-        h = (BYTE*)DAT_07abf5d8;
+    if (entityId == g_HeroKey && Hero) {
+        h = (BYTE*)Hero;
     } else {
-        BYTE* basePtr = (BYTE*)(uintptr_t)DAT_07abf5d0;
+        BYTE* basePtr = (BYTE*)(uintptr_t)CharactersClient;
         for (int s = 0; s < 400; ++s) {
             BYTE* slot = basePtr + s * CHARACTER_STRIDE;
             if (slot[0] && *(WORD*)(slot + EntityOffset(0x1dc)) == entityId) {
@@ -303,9 +303,9 @@ void NetRecv_12(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // IDA `Combat_PacketDispatch` (0x429690) NO tiene ese guard:
     // crea las entidades con `CreateCharacter` sin mirar al heroe.
     // Lo unico que hace falta es el ARRAY de entidades. El filtro de
-    // mas abajo ya tolera `DAT_07abf5d8 == 0` (`heroEnt ? ... :
+    // mas abajo ya tolera `Hero == 0` (`heroEnt ? ... :
     // g_HeroKey`) y el bloque del heroe tiene su propio `if (hero)`.
-    if (!DAT_07abf5d0) {
+    if (!CharactersClient) {
         NetLog("NET:    0x12 SKIP - entity array no alocado");
         return;
     }
@@ -328,7 +328,7 @@ void NetRecv_12(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         NetLog("NET:    0x12 SKIP - payload corto (count=%d, size=%d)", count, Size);
         return;
     }
-    BYTE* basePtr = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* basePtr = (BYTE*)(uintptr_t)CharactersClient;
     for (int i = 0; i < count && (entryStart + (i + 1) * entryStride) <= Size; ++i) {
         const BYTE* e = Msg + entryStart + i*entryStride;
         // Layout decompilado del binario MuEmu
@@ -354,10 +354,10 @@ void NetRecv_12(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         // si `g_HeroKey` quedara desfasado, `CreateCharacter` reusaria el slot del
         // heroe por Key y lo re-inicializaria SIN pasar por la restauracion de abajo
         // (se perderia, entre otras cosas, el byte de clase +0x1BC).
-        BYTE* heroEnt = (BYTE*)(uintptr_t)DAT_07abf5d8;
+        BYTE* heroEnt = (BYTE*)(uintptr_t)Hero;
         const WORD heroKeyReal = heroEnt ? *(WORD*)(heroEnt + EntityOffset(0x1DC)) : g_HeroKey;
         if (entityId == g_HeroKey || entityId == heroKeyReal) {
-            BYTE* hero = (BYTE*)(uintptr_t)DAT_07abf5d8;
+            BYTE* hero = (BYTE*)(uintptr_t)Hero;
             if (hero) {
                 AsCharacter(hero)->PositionX = x;
                 AsCharacter(hero)->PositionY = y;
@@ -533,7 +533,7 @@ void NetRecv_45(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         // Campos de estado exactos de 00429C50, adaptados sólo para el
         // MuEmu record offsets above.
         if (entity[EntityOffset(747)] == 7) *(float*)(entity + 12) = 0.8f;
-        if (DAT_07abf5d8) entity[EntityOffset(444)] = ((BYTE*)DAT_07abf5d8)[EntityOffset(444)];
+        if (Hero) entity[EntityOffset(444)] = ((BYTE*)Hero)[EntityOffset(444)];
         entity[EntityOffset(746)] = e[10 + NAME] & 0x0F;
         entity[132] = 1;
         entity[EntityOffset(847)] = 1;
@@ -579,9 +579,9 @@ void NetRecv_13(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // el server lo manda junto con el spawn del heroe).
     //
     // IDA `ReceiveCreateMonsterViewport` (0x42A230) no tiene ese
-    // guard, y este handler no usa `DAT_07abf5d8` en ningun lado de
+    // guard, y este handler no usa `Hero` en ningun lado de
     // su cuerpo: lo unico que necesita es el ARRAY de entidades.
-    if (!DAT_07abf5d0) {
+    if (!CharactersClient) {
         NetLog("NET:    0x13 SKIP - entity array no alocado");
         return;
     }
@@ -598,7 +598,7 @@ void NetRecv_13(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // TODAS las entradas desde la segunda ante cualquier desajuste de `Size`
     // (el `type` sale de un byte que no es el suyo → monstruos fantasma).
     const int entryStride = 12;
-    BYTE* basePtr = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* basePtr = (BYTE*)(uintptr_t)CharactersClient;
     for (int i = 0; i < count && (entryStart + i*entryStride + 11) <= Size; ++i) {
         const BYTE* e = Msg + entryStart + i*entryStride;
         // Layout decompilado del binario MuEmu
@@ -643,7 +643,7 @@ void NetRecv_13(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             // Init +0x168 (screen distance) a 1.0f para
             // que mob sea targetable INMEDIATAMENTE (antes del primer
             // frame de render). Sin esto, FUN_004afdc0 (hover detect)
-            // filtra mob por `_DAT_00552580 < ent[+0x168]` (= 0
+            // filtra mob por `FloatZeroB < ent[+0x168]` (= 0
             // por default) → mob no es hovered hasta que sea
             // rendered (1+ frame later).
             AsCharacter(slot)->Object.Alpha = 1.0f;
@@ -701,9 +701,9 @@ void NetRecv_1F(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     const int entryStart = 4 + hdrOff;
     const int NAME = (int)NetText::CharacterNameSize;
     const int entryStride = 12 + NAME;
-    // Idem 0x12/0x13: no exigir el heroe (`DAT_07abf5d8`) para procesar el
+    // Idem 0x12/0x13: no exigir el heroe (`Hero`) para procesar el
     // paquete al entrar al mapa. Este handler tampoco usa el heroe.
-    if (Size <= countOff || !DAT_07abf5d0) return;
+    if (Size <= countOff || !CharactersClient) return;
 
     const int count = Msg[countOff];
     if (count <= 0 || count > 255 ||
@@ -713,7 +713,7 @@ void NetRecv_1F(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         return;
     }
 
-    BYTE* entityBase = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* entityBase = (BYTE*)(uintptr_t)CharactersClient;
     for (int i = 0; i < count; ++i) {
         const BYTE* e = Msg + entryStart + i * entryStride;
         const bool create = (e[0] & 0x80) != 0;
@@ -776,7 +776,7 @@ void NetRecv_25(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
 
 // ── 0x20 ViewportItem (ground items) ────────────────────────────
 // Port FIEL del IDA ReceiveCreateItemViewport @ 0x0042F240.
-// Spawnea cada item en DAT_07e12840 pool; el render lo hace
+// Spawnea cada item en GroundItemPool pool; el render lo hace
 // Entity_Render (Entity_Render) que itera el pool por slots activos.
 // 0x20
 void NetRecv_20(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
@@ -786,7 +786,7 @@ void NetRecv_20(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     NetLog("NET:  → 0x20 ViewportItem count=%d size=%d", count, Size);
     int cursor = 4 + hdrOff;
     // Cada entrada del pool es un ITEM_t (structs.h): Key, Item y Object.
-    BYTE* itemPool = (BYTE*)&DAT_07e12840[0];
+    BYTE* itemPool = (BYTE*)&GroundItemPool[0];
     extern int  __cdecl ItemObjectAttribute(OBJECT*);   // ItemObjectAttribute
     extern void __cdecl ItemAngle(OBJECT*);   // ItemAngle
     // DESVIACION: el server manda PMSG_VIEWPORT_ITEM (Viewport.h) con
@@ -924,10 +924,10 @@ void NetRecv_21(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     int hdrOff = (Msg[0] == 0xC1) ? 0 : 1;
     int count = Msg[3 + hdrOff];
     NetLog("NET:  → 0x21 ViewportItemDestroy count=%d", count);
-    // Limpiar slots en DAT_07e12840 pool. Per-entry
+    // Limpiar slots en GroundItemPool pool. Per-entry
     // 2 bytes (key WORD, big-endian).
     int entryStart = 4 + hdrOff;
-    BYTE* itemPool = (BYTE*)&DAT_07e12840;
+    BYTE* itemPool = (BYTE*)&GroundItemPool;
     for (int i = 0; i < count && entryStart + i*2 + 1 < Size; ++i) {
         WORD raw = (Msg[entryStart + i*2] << 8) | Msg[entryStart + i*2 + 1];
         WORD key = raw & 0x7FFF;

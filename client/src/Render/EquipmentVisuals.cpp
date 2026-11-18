@@ -41,8 +41,8 @@ int currentStage = 0, scene = -1, world = -1;
 bool drawing = false;
 
 int Slot(const void *entity) {
-    if (entity == DAT_07abf050) return 400;
-    const uintptr_t address = (uintptr_t)entity, base = (uintptr_t)DAT_07abf5d0;
+    if (entity == CharSelPreviewEntity) return 400;
+    const uintptr_t address = (uintptr_t)entity, base = (uintptr_t)CharactersClient;
     if (!base || address < base || address - base >= 400 * sizeof(CHARACTER)) return -1;
     const uintptr_t offset = address - base;
     return offset % sizeof(CHARACTER) ? -1 : (int)(offset / sizeof(CHARACTER));
@@ -106,26 +106,26 @@ void Equipment_AddMesh(int model, const void *object, const float *light,
     recording->commands.push_back({true, (unsigned int)recording->meshes.size(), currentStage});
     recording->meshes.emplace_back();
     Mesh &mesh = recording->meshes.back();
-    MaterialVisuals_Prepare(mesh.material,model,false,alpha>_DAT_005524f8 && !*((const BYTE *)object+140));
+    MaterialVisuals_Prepare(mesh.material,model,false,alpha>0.01f && !*((const BYTE *)object+140));
     mesh.model = model; mesh.alpha = alpha; mesh.level = level;
     mesh.part=part; mesh.stage=currentStage;
     if (part) memcpy(&mesh.partState,(void *)part,sizeof(mesh.partState));
     mesh.linked=linked!=0;
     if (offset) memcpy(mesh.offset,offset,sizeof(mesh.offset));
-    memcpy(mesh.root,&DAT_06989c9c,sizeof(mesh.root));
+    memcpy(mesh.root,&RootBoneMatrix,sizeof(mesh.root));
     const OBJECT &owner=*AsObject(recording->entity);
     const float *ownerBone=owner.BoneMatrices ? (const float *)owner.BoneMatrices+mesh.partState.LinkBone*12 : nullptr;
     float inverse[12], rotated[3]{};
     if (owner.BoneMatrices) {
         mesh.relativeValid=RenderInverseMatrix(ownerBone,inverse);
         if (mesh.relativeValid) R_ConcatTransforms(inverse,mesh.root,mesh.relative);
-        if (!mesh.linked) BMD__RotationPosition((void *)(DAT_05828d58+owner.Type* BMD_STRIDE),(float *)ownerBone,mesh.offset,rotated);
+        if (!mesh.linked) BMD__RotationPosition((void *)(ModelsBase+owner.Type* BMD_STRIDE),(float *)ownerBone,mesh.offset,rotated);
     }
-    const BMD &context=*AsModel(DAT_05828d58+model* BMD_STRIDE);
+    const BMD &context=*AsModel(ModelsBase+model* BMD_STRIDE);
     for (int axis=0;axis<3;++axis) mesh.extraOrigin[axis]=context.BodyOrigin[axis]-owner.Position[axis]-rotated[axis];
     mesh.option = option; mesh.flags = flags; mesh.translate = translate;
-    mesh.lod = _DAT_005597c8;
-    memcpy(mesh.context, (void *)(DAT_05828d58 + model * BMD_STRIDE), sizeof(mesh.context));
+    mesh.lod = EntityLodScale;
+    memcpy(mesh.context, (void *)(ModelsBase + model * BMD_STRIDE), sizeof(mesh.context));
     memcpy(mesh.bones, g_BoneScratch, sizeof(mesh.bones));
     memcpy(mesh.object, object, sizeof(mesh.object));
     memcpy(mesh.light, light, sizeof(mesh.light));
@@ -142,9 +142,9 @@ void Equipment_Draw(const CHARACTER* entity, int stage) {
     // no consume azar ni crea joints/partículas persistentes por pasada.
     char savedBones[sizeof(g_BoneScratch)];
     memcpy(savedBones, g_BoneScratch, sizeof(savedBones));
-    const float savedLod = _DAT_005597c8;
-    char savedQuaternions[sizeof(DAT_05826e18)]; float savedRoot[12];
-    memcpy(savedQuaternions,DAT_05826e18,sizeof(savedQuaternions)); memcpy(savedRoot,&DAT_06989c9c,sizeof(savedRoot));
+    const float savedLod = EntityLodScale;
+    char savedQuaternions[sizeof(BoneQuaternionScratch)]; float savedRoot[12];
+    memcpy(savedQuaternions,BoneQuaternionScratch,sizeof(savedQuaternions)); memcpy(savedRoot,&RootBoneMatrix,sizeof(savedRoot));
     const EquipmentFrame &previous=previousFrames[slot];
     const bool continuous=RenderInterpolation_OwnerContinuous(entity) && previous.valid &&
         previous.entity==entity && previous.spawn==frame.spawn && previous.type==frame.type && previous.key==frame.key;
@@ -168,7 +168,7 @@ void Equipment_Draw(const CHARACTER* entity, int stage) {
         }
         const Mesh &mesh = frame.meshes[command.index];
         float drawAlpha=mesh.alpha;
-        void *model = (void *)(DAT_05828d58 + mesh.model * BMD_STRIDE);
+        void *model = (void *)(ModelsBase + mesh.model * BMD_STRIDE);
         EquipmentModelContext savedModel(model);
         memcpy(model, mesh.context, sizeof(mesh.context));
         memcpy(g_BoneScratch, mesh.bones, sizeof(mesh.bones));
@@ -185,12 +185,12 @@ void Equipment_Draw(const CHARACTER* entity, int stage) {
                 // ItemObjectAttribute, PlayAnimation ni sus emisiones.
                 R_ConcatTransforms(ownerBone,(float *)mesh.relative,root);
             } else if (same) RenderBlendMatrix(old->root,mesh.root,alpha,root);
-            memcpy(&DAT_06989c9c,root,sizeof(root));
+            memcpy(&RootBoneMatrix,root,sizeof(root));
             BMD &context=*AsModel(model);
             context.BodyScale=owner.Scale;
             float rotated[3]{};
             if (!mesh.linked) {
-                void *ownerModel=(void *)(DAT_05828d58+owner.Type* BMD_STRIDE);
+                void *ownerModel=(void *)(ModelsBase+owner.Type* BMD_STRIDE);
                 EquipmentModelContext savedOwner(ownerModel);
                 AsModel(ownerModel)->BodyScale=owner.Scale;
                 BMD__RotationPosition(ownerModel,ownerBone,(float *)mesh.offset,rotated);
@@ -212,8 +212,8 @@ void Equipment_Draw(const CHARACTER* entity, int stage) {
             BMD_Animation(model,reinterpret_cast<float*>(g_BoneScratch),frame,priorBits,mesh.partState.PriorAction,(unsigned int *)zero,zero,1,1);
             drawAlpha=owner.Alpha;
         }
-        if (drawAlpha<=_DAT_005524f8) continue;
-        _DAT_005597c8 = mesh.lod;
+        if (drawAlpha<=0.01f) continue;
+        EntityLodScale = mesh.lod;
         float zero[3] = {}, bounds[15];
         Skeleton_Transform(model, reinterpret_cast<float*>(g_BoneScratch), zero, zero, bounds, mesh.translate);
         // El objeto mínimo es local: los materiales pueden escribir UV/escala.
@@ -226,6 +226,6 @@ void Equipment_Draw(const CHARACTER* entity, int stage) {
     }
     drawing = false;
     memcpy(g_BoneScratch, savedBones, sizeof(savedBones));
-    _DAT_005597c8 = savedLod;
-    memcpy(DAT_05826e18,savedQuaternions,sizeof(savedQuaternions)); memcpy(&DAT_06989c9c,savedRoot,sizeof(savedRoot));
+    EntityLodScale = savedLod;
+    memcpy(BoneQuaternionScratch,savedQuaternions,sizeof(savedQuaternions)); memcpy(&RootBoneMatrix,savedRoot,sizeof(savedRoot));
 }

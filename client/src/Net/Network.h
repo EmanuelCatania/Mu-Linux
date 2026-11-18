@@ -67,7 +67,7 @@ private:
     void SendResolved(const BYTE* pkt, int len, bool chosenC3, const char* who);
     void RequestServerList();   // C1 04 F4 02, una sola vez por sesión de CS
 
-    char m_SendSerial = 0; // IDA: DAT_05826CEB (0x05826CEB)
+    char m_SendSerial = 0; // IDA: LegacyPacketSerialSend (0x05826CEB)
     DWORD m_ReceiveSerial = 0; // IDA: g_byPacketSerialRecv (0x05826CEC)
 
     bool m_HasConnectServer = false;

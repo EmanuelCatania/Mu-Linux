@@ -13,7 +13,7 @@
 //   param_1/2/3  = x,y,z   — local offset position (used when Link==0)
 //   param_4      = c        — entity OBJECT* (parent character)
 //   param_5      = f        — PART slot pointer (equipped item desc)
-//   param_6      = Type     — model index (DAT_05828d58 + Type*0xbc)
+//   param_6      = Type     — model index (ModelsBase + Type*0xbc)
 //   param_7      = Level
 //   param_8      = Option1
 //   param_9      = Link     — if nonzero: linked-bone path (builds angle matrix);
@@ -22,21 +22,21 @@
 //   param_11     = RenderType — render flags OR'd into RenderPartObjectEffect call
 //
 // Layout del PART (param_5) y del OBJECT (param_4): Entity/EntityTypes.h.
-// Layout del modelo (DAT_05828d58 + Type*0xbc): Model/ModelTypes.h.
+// Layout del modelo (ModelsBase + Type*0xbc): Model/ModelTypes.h.
 //
 // Key globals:
-//   DAT_05828d58       — Models base pointer (stride 0xBC per BMD)
-//   DAT_06970a9c       — BoneTransform global scratch array (stride 0x30)
-//   DAT_06989c9c       — ParentMatrix scratch (root bone combine output)
+//   ModelsBase       — Models base pointer (stride 0xBC per BMD)
+//   BoneScratchRoot       — BoneTransform global scratch array (stride 0x30)
+//   RootBoneMatrix       — ParentMatrix scratch (root bone combine output)
 //   WorldTime       — g_AnimTick (boss-head angle spin)
-//   DAT_07abf5c4/c8/cc — Boss-head position offset (x/y/z added to BodyOrigin)
+//   PreviewBodyOriginXBits/c8/cc — Boss-head position offset (x/y/z added to BodyOrigin)
 //   World       — World (wing particle suppression when ==10)
-//   _DAT_00552580      — 0.0f guard constant
-//   _DAT_00552940      — luminosity scale factor (rand%30+70)*factor
+//   FloatZeroB      — 0.0f guard constant
+//   0.005f      — luminosity scale factor (rand%30+70)*factor
 //
 // Hash-table blocks (obfuscation, NOT game logic):
 //   MAIN_HASH_CLASS/bcc/bd0/bd4/bf0 — ref-count hash table on param_4+0x302
-//   DAT_00559050 — XOR key used in ref-count manipulation
+//   LegacyPacketXorKey16 — XOR key used in ref-count manipulation
 //   CErrorReport_Write — hash-table error reporter ("Hash table full")
 //   operator_new / operator_delete — used only in ref-count alloc/free
 //   This entire block manipulates param_4+0x302 but the net effect on game
@@ -99,14 +99,14 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
 
     float local_1c8;         // boss-head BoneHead flag
 
-    intptr_t local_22c;         // cached model pointer = DAT_05828d58 + param_6* BMD_STRIDE
+    intptr_t local_22c;         // cached model pointer = ModelsBase + param_6* BMD_STRIDE
     intptr_t   iVar7;             // model pointer (same as local_22c for most of fn)
 
     // ── 1. look up model, copy entity fields ──────────────────────────────────
     // 0.97.20: la pieza guarda el modelo lógico (param_6, que decide la pose y
     // los efectos por tipo); se dibuja con el modelo propio del catálogo.
     const int drawModel = gContentCatalog.EntityDrawModel((const void*)(uintptr_t)param_4, param_6);
-    iVar7 = DAT_05828d58 + drawModel * BMD_STRIDE;
+    iVar7 = ModelsBase + drawModel * BMD_STRIDE;
     EquipmentModelContext modelContext((void *)iVar7);
     AsModel(iVar7)->ContrastEnable = AsCharacter(param_4)->Object.ContrastEnable;  // ContrastEnable
     *(unsigned int *)&AsModel(iVar7)->BodyScale = *(unsigned int *)&AsCharacter(param_4)->Object.Scale;  // Scale
@@ -140,7 +140,7 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
         float* pBoneMat = (float*)((unsigned int)*(unsigned char*)(param_5 + 4) * 0x30
                                    + (intptr_t)AsCharacter(param_4)->Object.BoneMatrices);
 
-        void* ownerModel = (void*)(DAT_05828d58
+        void* ownerModel = (void*)(ModelsBase
                                    + (int)AsCharacter(param_4)->Object.Type * BMD_STRIDE);
 
         // BMD__RotationPosition = RotationPosition: transforms pos_in through bone → pos_out
@@ -168,7 +168,7 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
                 (param_6 == 0x220) || (param_6 == 0x222))
             {
                 // BOW range 0x218-0x21e / 0x220 / 0x222
-                afStack_264[3] = _DAT_00552580;  // 0.0f
+                afStack_264[3] = FloatZeroB;  // 0.0f
                 afStack_264[4] = 20.0f;
                 afStack_264[5] = 180.0f;
                 Matrix_BuildFromEuler(afStack_264 + 3, local_228);
@@ -190,7 +190,7 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
             else
             {
                 // General weapon / staff / shield path
-                afStack_264[4] = _DAT_00552580;  // 0.0f
+                afStack_264[4] = FloatZeroB;  // 0.0f
                 afStack_264[3] = 70.0f;
                 afStack_264[5] = 90.0f;
                 Matrix_BuildFromEuler(afStack_264 + 3, local_228);
@@ -273,7 +273,7 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
         else if ((param_6 == 0x23a) || (param_6 == 0x1a3))
         {
             // Cloaking/magic channel special types
-            afStack_264[4] = _DAT_00552580;  // 0.0f
+            afStack_264[4] = FloatZeroB;  // 0.0f
             afStack_264[3] = 90.0f;
             afStack_264[5] = 90.0f;
             Matrix_BuildFromEuler(afStack_264 + 3, local_228);
@@ -283,8 +283,8 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
         }
         else if (param_6 == 0x222)
         {
-            afStack_264[4] = _DAT_00552580;
-            afStack_264[5] = _DAT_00552580;
+            afStack_264[4] = FloatZeroB;
+            afStack_264[5] = FloatZeroB;
             afStack_264[3] = 10.0f;
             Matrix_BuildFromEuler(afStack_264 + 3, local_228);
             local_21c =   0.0f;
@@ -303,7 +303,7 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
                                    + (intptr_t)AsCharacter(param_4)->Object.BoneMatrices);
 
         // R_ConcatTransforms: combine bone matrix with local angle matrix → ParentMatrix
-        R_ConcatTransforms(pBoneMat, local_228, (float*)&DAT_06989c9c);
+        R_ConcatTransforms(pBoneMat, local_228, (float*)&RootBoneMatrix);
 
         // BodyOrigin = entity world position (copy from entity, no local offset added)
         *(unsigned int *)&AsModel(iVar7)->BodyOrigin[0] = *(unsigned int *)&AsCharacter(param_4)->Object.Position[0];
@@ -315,9 +315,9 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
     local_1c8 = 0.0f;
     if (param_6 == 0xea)
     {
-        AsModel(iVar7)->BodyOrigin[0] += _DAT_07abf5c4;
-        AsModel(iVar7)->BodyOrigin[1] += _DAT_07abf5c8;
-        AsModel(iVar7)->BodyOrigin[2] += _DAT_07abf5cc;
+        AsModel(iVar7)->BodyOrigin[0] += PreviewBodyOriginX;
+        AsModel(iVar7)->BodyOrigin[1] += PreviewBodyOriginY;
+        AsModel(iVar7)->BodyOrigin[2] += PreviewBodyOriginZ;
         *(unsigned int *)&AsModel(iVar7)->BoneHead = 0;      // BoneHead = 0
         local_1c8 = (float)WorldTime;         // spinning angle = g_AnimTick
     }
@@ -335,12 +335,12 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
         unsigned char* pbVar12 = nullptr; // Visible también desde la salida temprana de GetIndex.
 
         // -- GetIndex loop --
-        if (DAT_055c9bd4 != 0)
+        if (HashTableCapacity != 0)
         {
             bool found = false;
             do {
                 // compare pbStack_26c with hash slot key
-                unsigned char* slotKey = (unsigned char*)(DAT_055c9bd0 + uVar3 * 4);
+                unsigned char* slotKey = (unsigned char*)(HashTableKeys + uVar3 * 4);
                 int cmp = 0;
                 bool eq = true;
                 unsigned char* lhs = (unsigned char*)&pbStack_26c;
@@ -353,7 +353,7 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
 
                 // compare local_238 slot
                 unsigned char* lhs2 = (unsigned char*)&local_238_f;
-                unsigned char* slotKey2 = (unsigned char*)(DAT_055c9bd0 + uVar3 * 4);
+                unsigned char* slotKey2 = (unsigned char*)(HashTableKeys + uVar3 * 4);
                 int cmp2 = 0; bool eq2 = true;
                 for (int k = 4; k; --k)
                 {
@@ -366,14 +366,14 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
                     uVar3 = (**(unsigned int(__cdecl**)(unsigned char*))(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pbVar1);
                     pbStack_26c = nullptr;
                     uVar16 = 0;
-                    if (DAT_055c9bd4 != 0) goto hash_getindex_loop2;
+                    if (HashTableCapacity != 0) goto hash_getindex_loop2;
                     goto hash_getindex_done;
                 }
-                uVar3 = (uVar3 + 1) % DAT_055c9bd4;
+                uVar3 = (uVar3 + 1) % HashTableCapacity;
                 uVar16++;
-            } while (uVar16 < DAT_055c9bd4);
+            } while (uVar16 < HashTableCapacity);
             if (!false) // loop exhausted
-                CErrorReport_Write((void*)&DAT_055c9bf0, "Hash table full, GetIndex");
+                CErrorReport_Write((void*)&ErrorReportCtx, "Hash table full, GetIndex");
             found = true;
         }
 
@@ -384,11 +384,11 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
         local_23c_f = 0.0f; // local_23c = null
         uVar16 = 0;
 
-        if (DAT_055c9bd4 != 0)
+        if (HashTableCapacity != 0)
         {
         hash_getindex_loop2:
             do {
-                unsigned char* slotKey = (unsigned char*)(DAT_055c9bd0 + uVar3 * 4);
+                unsigned char* slotKey = (unsigned char*)(HashTableKeys + uVar3 * 4);
                 int cmp = 0; bool eq = true;
                 unsigned char* lhs = (unsigned char*)&pbStack_26c; // &stack0xfffffd8c equiv
                 for (int k = 4; k; --k)
@@ -399,11 +399,11 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
                 if (cmp == 0)
                 {
                     // LAB_00455ab1
-                    *(unsigned char**)(DAT_055c9bcc + uVar3 * 4) = pbStack_270;
-                    *(unsigned char**)(DAT_055c9bd0 + uVar3 * 4) = pbVar1;
+                    *(unsigned char**)(HashTableValues + uVar3 * 4) = pbStack_270;
+                    *(unsigned char**)(HashTableKeys + uVar3 * 4) = pbVar1;
                     goto hash_insert_done;
                 }
-                unsigned char* slotKey2 = (unsigned char*)(DAT_055c9bd0 + uVar3 * 4);
+                unsigned char* slotKey2 = (unsigned char*)(HashTableKeys + uVar3 * 4);
                 int cmp2 = 0; bool eq2 = true;
                 unsigned char* lhs2 = (unsigned char*)&local_23c_f;
                 for (int k = 4; k; --k)
@@ -413,14 +413,14 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
                 }
                 if (cmp2 == 0)
                 {
-                    *(unsigned char**)(DAT_055c9bcc + uVar3 * 4) = pbStack_270;
-                    *(unsigned char**)(DAT_055c9bd0 + uVar3 * 4) = pbVar1;
+                    *(unsigned char**)(HashTableValues + uVar3 * 4) = pbStack_270;
+                    *(unsigned char**)(HashTableKeys + uVar3 * 4) = pbVar1;
                     goto hash_insert_done;
                 }
-                uVar3 = (uVar3 + 1) % DAT_055c9bd4;
+                uVar3 = (uVar3 + 1) % HashTableCapacity;
                 uVar16++;
-            } while (uVar16 < DAT_055c9bd4);
-            CErrorReport_Write((void*)&DAT_055c9bf0, "Hash table full, Insert");
+            } while (uVar16 < HashTableCapacity);
+            CErrorReport_Write((void*)&ErrorReportCtx, "Hash table full, Insert");
         }
 
     hash_insert_done:
@@ -436,10 +436,10 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
             uVar16 = 0;
 
             // GetIndex for the newly inserted slot
-            if (DAT_055c9bd4 != 0)
+            if (HashTableCapacity != 0)
             {
                 do {
-                    unsigned char* slotKey = (unsigned char*)(DAT_055c9bd0 + uVar3 * 4);
+                    unsigned char* slotKey = (unsigned char*)(HashTableKeys + uVar3 * 4);
                     // compare pbStack_270 equivalent
                     int cmp = 0; bool eq = true;
                     unsigned char* lhs = pbStack_270; // &stack0xfffffd88 equiv
@@ -454,7 +454,7 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
                         // LAB_00455bc1
                         goto hash_getindex2_found;
                     }
-                    unsigned char* slotKey2 = (unsigned char*)(DAT_055c9bd0 + uVar3 * 4);
+                    unsigned char* slotKey2 = (unsigned char*)(HashTableKeys + uVar3 * 4);
                     int cmp2 = 0; bool eq2 = true;
                     unsigned char* lhs2 = (unsigned char*)&local_240;
                     for (int k = 4; k; --k)
@@ -468,14 +468,14 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
                         *(void**)&local_240 = pbVar1;
                         uVar3 = (**(unsigned int(__cdecl**)(unsigned char*))(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pbVar1);
                         uVar16 = 0;
-                        if (DAT_055c9bd4 != 0) goto hash_getindex2_loop;
+                        if (HashTableCapacity != 0) goto hash_getindex2_loop;
                         goto hash_getindex2_exhaust;
                     }
-                    uVar3 = (uVar3 + 1) % DAT_055c9bd4;
+                    uVar3 = (uVar3 + 1) % HashTableCapacity;
                     uVar16++;
                 hash_getindex2_loop:;
-                } while (uVar16 < DAT_055c9bd4);
-                CErrorReport_Write((void*)&DAT_055c9bf0, "Hash table full, GetIndex");
+                } while (uVar16 < HashTableCapacity);
+                CErrorReport_Write((void*)&ErrorReportCtx, "Hash table full, GetIndex");
             }
 
         hash_getindex_done:
@@ -504,10 +504,10 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
             unsigned char* pbVar12 = nullptr;
             uVar3 = (**(unsigned int(__cdecl**)(unsigned char*))(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pbVar1);
             uVar16 = 0;
-            if (DAT_055c9bd4 != 0)
+            if (HashTableCapacity != 0)
             {
                 do {
-                    unsigned char* slotKey = (unsigned char*)(DAT_055c9bd0 + uVar3 * 4);
+                    unsigned char* slotKey = (unsigned char*)(HashTableKeys + uVar3 * 4);
                     int cmp = 0;
                     unsigned char* lhs = pbStack_270;
                     unsigned char* rhs = slotKey;
@@ -517,7 +517,7 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
                         ++lhs; ++rhs;
                     }
                     if (cmp == 0) goto hash_decref_found;
-                    unsigned char* slotKey2 = (unsigned char*)(DAT_055c9bd0 + uVar3 * 4);
+                    unsigned char* slotKey2 = (unsigned char*)(HashTableKeys + uVar3 * 4);
                     int cmp2 = 0;
                     unsigned char* lhs2 = (unsigned char*)&local_240;
                     unsigned char* rhs2 = slotKey2;
@@ -529,13 +529,13 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
                     if (cmp2 == 0)
                     {
                         if (uVar3 == 0xffffffff) goto hash_decref_found;
-                        pbVar12 = *(unsigned char**)(DAT_055c9bcc + uVar3 * 4);
+                        pbVar12 = *(unsigned char**)(HashTableValues + uVar3 * 4);
                         goto hash_decref_action;
                     }
-                    uVar3 = (uVar3 + 1) % DAT_055c9bd4;
+                    uVar3 = (uVar3 + 1) % HashTableCapacity;
                     uVar16++;
-                } while (uVar16 < DAT_055c9bd4);
-                CErrorReport_Write((void*)&DAT_055c9bf0, "Hash table full, GetIndex");
+                } while (uVar16 < HashTableCapacity);
+                CErrorReport_Write((void*)&ErrorReportCtx, "Hash table full, GetIndex");
             }
         hash_decref_found:
             pbVar12 = nullptr;
@@ -560,7 +560,7 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
 
     // ── 5. Post-hash: animation-frame override for bow firing (link path) ─────
     // Check: local_23c high byte == '4' (0x34), entity type == 0x186, anim in range,
-    //        anim frame in [_DAT_00552660 .. _DAT_00552488]
+    //        anim frame in [5.0f .. 10.0f]
     // Maps to: if piercing skill active + bow-wielding + attack anim → force frame
     {
         // local_23c._3_1_ == '4' check: byte 3 of local_23c_f (the float storage)
@@ -569,8 +569,8 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
                  && (AsCharacter(param_4)->Object.Type == 0x186)
                  && (AsCharacter(param_4)->Object.CurrentAction > 0x21)
                  && (AsCharacter(param_4)->Object.CurrentAction < 0x5c)
-                 && (_DAT_00552660 <= AsCharacter(param_4)->Object.AnimationFrame)
-                 && (AsCharacter(param_4)->Object.AnimationFrame <= _DAT_00552488);
+                 && (5.0f <= AsCharacter(param_4)->Object.AnimationFrame)
+                 && (AsCharacter(param_4)->Object.AnimationFrame <= 10.0f);
         if (cond)
         {
             // Override PART animation frames: PriorAnimFrame = 2.0, AnimFrame = 3.2
@@ -605,7 +605,7 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
     // BMD_Animation: __thiscall (model, BoneTransformArray, AnimFrame, PriorAnimFrame,
     //               PriorAction, Angle, HeadAngle, Parent=1, Translate=1)
     void* pModel = (void*)iVar7;
-    BMD_Animation(pModel, reinterpret_cast<float*>(&DAT_06970a9c),
+    BMD_Animation(pModel, reinterpret_cast<float*>(&BoneScratchRoot),
                  *(float*)((intptr_t)param_5 + 0x08),        // AnimationFrame
                  *(unsigned int*)((intptr_t)param_5 + 0x0c), // PriorAnimationFrame (as uint)
                  *(unsigned char*)((intptr_t)param_5 + 0x06), // PriorAction
@@ -633,8 +633,8 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
     // (Data/Custom/Items/*.json), sobre los huesos que acaba de animar el
     // render de la pieza.
     gContentCatalog.RunEquippedEffects((const void*)(uintptr_t)param_4, drawModel, pModel2);
-    // Luminosity = (float)(rand()%30 + 70) * _DAT_00552940
-    float fLum = (float)(iVar_rand % 0x1e + 0x46) * _DAT_00552940;
+    // Luminosity = (float)(rand()%30 + 70) * 0.005f
+    float fLum = (float)(iVar_rand % 0x1e + 0x46) * 0.005f;
     // `Light[3]` de IDA como array real: los 9 cases del switch de abajo lo pasan
     // como vec3 a CreateSprite (Ghidra lo había separado en TRES escalares
     // ebp-270h / -26Ch / -268h).
@@ -652,17 +652,17 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
     {
     case 0x1a3:  // MODEL_STAFF+10 equivalent — fire particles on bones 0..9
     {
-        Light[1] = fLum * _DAT_005528b8;
+        Light[1] = fLum * 0.3f;
         afStack_264[3] = 0.0f;
         afStack_264[4] = 0.0f;
         afStack_264[5] = 0.0f;
-        Light[2] = fLum * _DAT_005524f4;
+        Light[2] = fLum * 0.1f;
         // IDA: `while ((int)v43 < (int)flt_6970C4C)` es una direccion ABSOLUTA del
         // binario fuente; aca se usa el rango real dentro de g_BoneScratch:
-        //   base = flt_6970AFC = g_BoneScratch + 0x60 = hueso 2
-        //   fin  = flt_6970C4C                        = hueso 9
+        //   base = BoneScratchSlot060 = g_BoneScratch + 0x60 = hueso 2
+        //   fin  = BoneScratchFireB                        = hueso 9
         //   (0xC4C - 0xAFC) / 0x30 = 7 iteraciones -> huesos 2..8
-        float* pfVar10 = (float*)&DAT_06970afc;
+        float* pfVar10 = (float*)&BoneScratchSlot060;
         Light[0] = fLum;
         for (int nBone = 0; nBone < 7; ++nBone) {
             afStack_264[0] = 0.4f;
@@ -687,8 +687,8 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
             afStack_264[4] = 0.0f;
             afStack_264[5] = 0.0f;
             rand();
-            BMD_TransformPosition(pModel2, (float*)&DAT_06970b2c, afStack_264 + 3, afStack_264, '\x01');
-            BMD_TransformPosition(pModel2, (float*)&DAT_06970afc, afStack_264 + 3, afStack_264 + 6, '\x01');
+            BMD_TransformPosition(pModel2, (float*)&BoneScratchSecB, afStack_264 + 3, afStack_264, '\x01');
+            BMD_TransformPosition(pModel2, (float*)&BoneScratchSlot060, afStack_264 + 3, afStack_264 + 6, '\x01');
             return;
         }
         break;
@@ -708,13 +708,13 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
                 afStack_264[3] = 0.0f;
                 afStack_264[4] = 0.0f;
                 afStack_264[5] = 0.0f;
-                BMD_TransformPosition(pModel2, (float*)&DAT_06970acc, afStack_264 + 3, afStack_264 + 6, '\x01');
+                BMD_TransformPosition(pModel2, (float*)&BoneScratchSecA, afStack_264 + 3, afStack_264 + 6, '\x01');
                 int r1 = rand();
-                afStack_264[6] += (float)(r1 % 0x1e) - _DAT_00552834;
+                afStack_264[6] += (float)(r1 % 0x1e) - 15.0f;
                 int r2 = rand();
                 int iVar8 = 4;
-                local_248 += (float)(r2 % 0x1e) - _DAT_00552834;
-                local_244 += _DAT_005524fc;
+                local_248 += (float)(r2 % 0x1e) - 15.0f;
+                local_244 += 20.0f;
                 do {
                     int r3 = rand();
                     afStack_264[1] = 0.0f;
@@ -731,33 +731,33 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
 
     case 0x1d7:  // blue light pulse on bone
     {
-        Light[1] = fLum * _DAT_005526e8;
+        Light[1] = fLum * 0.9f;
         Light[2] = 0.0f;
         afStack_264[3] = 0.0f;
         afStack_264[4] = 0.0f;
         afStack_264[5] = 0.0f;
         Light[0] = fLum;
-        BMD_TransformPosition(pModel2, (float*)&DAT_06970acc, afStack_264 + 3, afStack_264 + 6, '\x01');
+        BMD_TransformPosition(pModel2, (float*)&BoneScratchSecA, afStack_264 + 3, afStack_264 + 6, '\x01');
         Equipment_AddSprite(0x47e, afStack_264 + 6, 2.0f, Light, param_4, 0, 0);
         Light[0] = 0.5f;
         Light[1] = 0.5f;
-        float fVar15 = (float)sin((double)((float)WorldTime * _DAT_005528e0));
+        float fVar15 = (float)sin((double)((float)WorldTime * ZBobFreq));
         Light[2] = 0.5f;
-        Equipment_AddSprite(0x47e, afStack_264 + 6, fVar15 + _DAT_00552504, Light, param_4, 0, 0);
+        Equipment_AddSprite(0x47e, afStack_264 + 6, fVar15 + HalfScale, Light, param_4, 0, 0);
         return;
     }
 
     case 0x1fa:  // orbit sprite loop
     {
-        Light[0] = fLum * _DAT_005526e4;
+        Light[0] = fLum * 0.2f;
         afStack_264[3] = 0.0f;
         afStack_264[4] = 0.0f;
         afStack_264[5] = 0.0f;
-        // Mismo bound absoluto que arriba, aca desde flt_6970ACC:
+        // Mismo bound absoluto que arriba, aca desde BoneScratchSecA:
         //   (0xC4C - 0xACC) / 0x30 = 8 iteraciones -> huesos 1..8
-        float* pfVar10 = (float*)&DAT_06970acc;
-        Light[1] = fLum * _DAT_005524f4;
-        Light[2] = fLum * _DAT_00552530;
+        float* pfVar10 = (float*)&BoneScratchSecA;
+        Light[1] = fLum * 0.1f;
+        Light[2] = fLum * 0.8f;
         for (int nBone = 0; nBone < 8; ++nBone) {
             BMD_TransformPosition(pModel2, pfVar10, afStack_264 + 3, afStack_264 + 6, '\x01');
             Equipment_AddSprite(0x47e, afStack_264 + 6, 1.3f, Light, param_4, 0, 0);
@@ -773,9 +773,9 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
     {
         if (drawModel == 0x216)
         {
-            Light[0] = fLum * _DAT_00552534;
+            Light[0] = fLum * 0.6f;
             int iVar8 = 0x0d;
-            Light[2] = fLum * _DAT_00552530;
+            Light[2] = fLum * 0.8f;
             Light[1] = fLum;
             do {
                 Model_BoneParticle(pModel2, 0x4cf, iVar8, 1.0f, Light, param_4);
@@ -785,9 +785,9 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
         }
         if (drawModel == 0x221)
         {
-            Light[0] = fLum * _DAT_00552504;
+            Light[0] = fLum * HalfScale;
             int iVar8 = 0x0d;
-            Light[2] = fLum * _DAT_00552530;
+            Light[2] = fLum * 0.8f;
             Light[1] = Light[0];
             do {
                 Model_BoneParticle(pModel2, 0x4cf, iVar8, 1.0f, Light, param_4);
@@ -801,28 +801,28 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
             return;
         }
         // cases 0x214 and 0x215
-        Light[1] = fLum * _DAT_00552534;
-        Light[2] = fLum * _DAT_005526e4;
+        Light[1] = fLum * 0.6f;
+        Light[2] = fLum * 0.2f;
         Light[0] = fLum;
         Model_BoneParticle(pModel2, 0x4cf, 2, 1.0f, Light, param_4);
         Model_BoneParticle(pModel2, 0x4cf, 6, 1.0f, Light, param_4);
         return;
     }
 
-    case 0x23a:  // MODEL_STAFF+10 alternate — orbit loop on DAT_06970a9c
+    case 0x23a:  // MODEL_STAFF+10 alternate — orbit loop on BoneScratchRoot
     {
-        Light[1] = fLum * _DAT_005528b8;
+        Light[1] = fLum * 0.3f;
         int iVar7_loc = 0;
-        Light[2] = fLum * _DAT_005524f4;
+        Light[2] = fLum * 0.1f;
         Light[0] = fLum;
         do {
             afStack_264[0] = 0.4f;
-            afStack_264[3] = (float)iVar7_loc * _DAT_0055284c - _DAT_005524ec;
+            afStack_264[3] = (float)iVar7_loc * 30.0f - AngleDeg180;
             afStack_264[1] = 0.4f;
             afStack_264[2] = 0.4f;
             afStack_264[4] = -40.0f;
             afStack_264[5] = 0.0f;
-            BMD_TransformPosition(pModel2, (float*)&DAT_06970a9c, afStack_264 + 3, afStack_264 + 6, '\x01');
+            BMD_TransformPosition(pModel2, (float*)&BoneScratchRoot, afStack_264 + 3, afStack_264 + 6, '\x01');
             int r1 = rand() % 3;
             if (r1 == 0)
             {
@@ -838,15 +838,15 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
 
     case 0x25f:  // electric charge effect
     {
-        Light[0] = fLum * _DAT_00552534;
+        Light[0] = fLum * 0.6f;
         Light[2] = fLum + fLum;
         afStack_264[3] = 15.0f;
         afStack_264[4] = -15.0f;
         afStack_264[5] = 0.0f;
         Light[1] = Light[0];
-        BMD_TransformPosition(pModel2, (float*)&DAT_06970acc, afStack_264 + 3, afStack_264 + 6, '\x01');
+        BMD_TransformPosition(pModel2, (float*)&BoneScratchSecA, afStack_264 + 3, afStack_264 + 6, '\x01');
         Equipment_AddSprite(0x4cf, afStack_264 + 6, 1.5f, Light, param_4, 0, 0);
-        Equipment_AddSprite(0x47e, afStack_264 + 6, fLum + _DAT_005528f0, Light, param_4, 0, 0);
+        Equipment_AddSprite(0x47e, afStack_264 + 6, fLum + 1.5f, Light, param_4, 0, 0);
         return;
     }
 

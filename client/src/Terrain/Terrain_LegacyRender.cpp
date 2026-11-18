@@ -51,28 +51,28 @@ void __cdecl Terrain_RenderQuad(float p1, float p2, float p3, int p4, const floa
     int idx3 = iX + (iY + p4) * 0x100;
     int idx2 = p4 + idx3;
 
-    float scale = _DAT_005524f0;
+    float scale = GridToWorldScale;
     float verts[4][3];
     verts[0][0] = p1 * scale;
     verts[0][1] = p2 * scale;
-    verts[0][2] = DAT_080cb2cc[idx0]; // IDA: BackTerrainHeight (0x080CB2CC)
+    verts[0][2] = BackTerrainHeight[idx0]; // IDA: BackTerrainHeight (0x080CB2CC)
     verts[1][0] = verts[0][0] + p3 * scale;
     verts[1][1] = verts[0][1];
-    verts[1][2] = DAT_080cb2cc[idx1];
+    verts[1][2] = BackTerrainHeight[idx1];
     verts[2][0] = verts[1][0];
     verts[2][1] = verts[0][1] + p3 * scale;
-    verts[2][2] = DAT_080cb2cc[idx2];
+    verts[2][2] = BackTerrainHeight[idx2];
     verts[3][0] = verts[0][0];
     verts[3][1] = verts[2][1];
-    verts[3][2] = DAT_080cb2cc[idx3];
+    verts[3][2] = BackTerrainHeight[idx3];
 
     float light[4][3];
     if (p6 != '\0') {
         int indices[4] = { idx0, idx1, idx2, idx3 };
         for (int v = 0; v < 4; v++) {
-            // PrimaryTerrainLight es DAT_081cb608, el mismo buffer que Terrain_Water
-            // resetea por frame; DAT_07eab250 es un DWORD muerto.
-            float *src = &DAT_081cb608[indices[v] * 3];
+            // PrimaryTerrainLight es PrimaryTerrainLightStorage, el mismo buffer que Terrain_Water
+            // resetea por frame; Unknown32_07EAB250 es un DWORD muerto.
+            float *src = &PrimaryTerrainLightStorage[indices[v] * 3];
             light[v][0] = src[0]; light[v][1] = src[1]; light[v][2] = src[2];
         }
     }
@@ -102,7 +102,7 @@ void __cdecl Terrain_RenderQuad(float p1, float p2, float p3, int p4, const floa
 // Uses AngleMatrix + VectorRotate to rotate sub-tile corners, then draws each
 // with Terrain_RenderQuad (Particle_DrawTile).
 // Bitmaps[idx * 0xE + 8] = width, Bitmaps[idx * 0xE + 9] = height.
-// _DAT_00552b9c = 1/64 (UV step), _DAT_0055256c = 1.0 (tile step).
+// 0.015625f = 1/64 (UV step), 1.0f = 1.0 (tile step).
 void __cdecl RenderTerrainBitmap(int p1, int p2, int p3, float p4)
 {
     BufferedDraw::Color3f(1.0f, 1.0f, 1.0f);
@@ -116,21 +116,21 @@ void __cdecl RenderTerrainBitmap(int p1, int p2, int p3, float p4)
     float* bmpData = (float*)((char*)Bitmaps + p1 * 0xE * sizeof(float));
     float bmpW = bmpData[8];
     float bmpH = bmpData[9];
-    float uvStepX = _DAT_00552cb4 / bmpW;  // 64.0 / width
-    float uvStepY = _DAT_00552cb4 / bmpH;  // 64.0 / height
+    float uvStepX = TerrainTileSize / bmpW;  // 64.0 / width
+    float uvStepY = TerrainTileSize / bmpH;  // 64.0 / height
 
-    float tileW = bmpW * _DAT_00552b9c;  // width * (1/64)
-    float tileH = bmpH * _DAT_00552b9c;  // height * (1/64)
+    float tileW = bmpW * 0.015625f;  // width * (1/64)
+    float tileH = bmpH * 0.015625f;  // height * (1/64)
 
     float fy = 0.0f;
     while (fy < tileH) {
         float fx = 0.0f;
         float uvY0 = fy * uvStepY;
-        float uvY1 = (fy + _DAT_0055256c) * uvStepY;
+        float uvY1 = (fy + 1.0f) * uvStepY;
 
         while (fx < tileW) {
             float uvX0 = fx * uvStepX;
-            float uvX1 = (fx + _DAT_0055256c) * uvStepX;
+            float uvX1 = (fx + 1.0f) * uvStepX;
             float uvRot[4][3] = {
                 { uvX0, uvY0, 0.0f },
                 { uvX1, uvY0, 0.0f },
@@ -139,23 +139,23 @@ void __cdecl RenderTerrainBitmap(int p1, int p2, int p3, float p4)
             };
             for (int i = 0; i < 4; ++i) {
                 float in[3] = {
-                    uvRot[i][0] - _DAT_00552504,
-                    uvRot[i][1] - _DAT_00552504,
+                    uvRot[i][0] - HalfScale,
+                    uvRot[i][1] - HalfScale,
                     0.0f
                 };
                 float out[3];
                 out[0] = in[0] * matrix[0][0] + in[1] * matrix[0][1] + in[2] * matrix[0][2];
                 out[1] = in[0] * matrix[1][0] + in[1] * matrix[1][1] + in[2] * matrix[1][2];
                 out[2] = in[0] * matrix[2][0] + in[1] * matrix[2][1] + in[2] * matrix[2][2];
-                uvRot[i][0] = out[0] + _DAT_00552504;
-                uvRot[i][1] = out[1] + _DAT_00552504;
+                uvRot[i][0] = out[0] + HalfScale;
+                uvRot[i][1] = out[1] + HalfScale;
                 uvRot[i][2] = out[2];
             }
 
             Terrain_RenderQuad((float)p2 + fx, (float)p3 + fy, 1.0f, 1, uvRot, '\x01', 1.0f);
-            fx += _DAT_0055256c;
+            fx += 1.0f;
         }
-        fy += _DAT_0055256c;
+        fy += 1.0f;
     }
 }
 

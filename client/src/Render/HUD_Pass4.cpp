@@ -5,7 +5,7 @@
 //   * Render_MacroTimer    (sub_4BF090)  — macro timer + match-countdown
 //   * Render_MapLoadText   (sub_4BF2D0)  — match-mode banner during world 11..16
 //   * Render_QuickButtons  (sub_4F5820)  — main HUD UI dispatcher
-//   * sub_4E38B0           — inventory grid render (items + glow on chaos mix)
+//   * HUD_RenderInventoryGrid (IDA: sub_4E38B0) - inventory grid render (items + glow on chaos mix)
 //   * RenderInputText      (sub_47F0B0)  — input field with cursor + IME pass
 //   * RenderTipText        (sub_47F7F0)  — tooltip with bordered background
 //   * CreateGuildMark      (sub_4F0100)  — composes guild mark texture from
@@ -37,15 +37,15 @@ extern "C" {
     void __cdecl RenderGuildCreation(int iPosX, int iPosY);
 }
 
-// ── Aliases: WM_CHAR + RenderInputText share storage via DAT_07db8710 /
-// DAT_07d780a8 globals (matching the IDA original where InputText is at
+// ── Aliases: WM_CHAR + RenderInputText share storage via InputTextBuffers /
+// InputTextLengths globals (matching the IDA original where InputText is at
 // 0x07db8710 and InputLength at 0x07d780a8). See globals.h.
 // MacroTime es 0x07E11D7C (IDA lo decrementa en Game_MainLoop y lo pone en
 // 100 al disparar una macro): tiene que ser el global, no una variable propia.
-#define MacroTime   DAT_07e11d7c
+#define MacroTime   MacroCooldown
 
-#define InputText   DAT_07db8710                    // char[10][256]
-#define InputLength ((int*)(void*)DAT_07d780a8)     // 10 × DWORD lengths
+#define InputText   InputTextBuffers                    // char[10][256]
+#define InputLength ((int*)(void*)InputTextLengths)     // 10 × DWORD lengths
 
 // ── Local globals (kept here to avoid widening globals.h further) ───────────
 extern "C" {
@@ -56,33 +56,33 @@ extern "C" {
     DWORD m_dwMatchCountDownStart = 0;
     // m_iMatchTime vive en globals.cpp (0x00559CCC): lo escribe SetMatchInfo
     // desde el handler 0x9B.
-    // MixState vive en globals.h como alias de DAT_07eaa140 (0x07EAA140): lo
+    // MixState vive en globals.h como alias de MixState (0x07EAA140): lo
     // escriben Item_ClickHandler al mandar el mix (= 1) y el handler del 0x86
     // (0 o 2), y lo leen la animacion de la caja de Chaos de abajo y el
     // `++MixState` que la hace avanzar.
     int   AlphaBlendType          = 0;
 
     // Input fields — IDA exposes 10 slots (chat + whisper-target + ...).
-    // InputText / InputLength son los globals DAT_07db8710 / DAT_07d780a8 que
+    // InputText / InputLength son los globals InputTextBuffers / InputTextLengths que
     // escribe WM_CHAR (ver los aliases de arriba), no storage local.
     BYTE  InputTextHide[10]       = {0};
     char  InputTextIME[10][256]   = {{0}};
     // `InputIndex` e `InputFrame` son los globals reales, no copias locales:
     //
-    //   InputIndex = DAT_07e11d78 — indice del campo de input activo. Lo rota el
-    //     Tab en WndProc (`DAT_07e11d78 = (DAT_07e11d78 + 1) % InputNumber`) y
+    //   InputIndex = ActiveInputIndex — indice del campo de input activo. Lo rota el
+    //     Tab en WndProc (`ActiveInputIndex = (ActiveInputIndex + 1) % InputNumber`) y
     //     lo leen `RenderInputText` y Chat.cpp para saber en que campo va el
     //     caret.
     //
-    //   InputFrame = DAT_07e11d2c — contador del parpadeo del caret; Chat.cpp
+    //   InputFrame = CaretBlinkCounter — contador del parpadeo del caret; Chat.cpp
     //     usa el mismo `% 2` sobre el global.
-    #define InputIndex   DAT_07e11d78
-    #define InputFrame   DAT_07e11d2c
+    #define InputIndex   ActiveInputIndex
+    #define InputFrame   CaretBlinkCounter
 
     // Guild mark colour palette (16 entries × DWORD ARGB).
-    // Es el global real 0x7E11F34 (= DAT_07e11f34), el que lee `RenderGuildMark`
+    // Es el global real 0x7E11F34 (= GuildMarkColors), el que lee `RenderGuildMark`
     // (0x4F02F0) y llena `CreateGuildMark`.
-    #define MarkColor DAT_07e11f34
+    #define MarkColor GuildMarkColors
 
     // Per-mark 8×8 nibble palette source (16 marks × 80 bytes — matches IDA
     // stride 80 for byte_7E919C5).  Storage opened here; the engine's mark
@@ -92,8 +92,8 @@ extern "C" {
 
 // Aliases.
 #define byte_7E919C5    byte_7E919C5_pool
-#define ItemAttribute   ((ITEM_ATTRIBUTE*)DAT_07d78068)
-#define byte_7E11D6E    DAT_07e11d6e
+#define ItemAttribute   ((ITEM_ATTRIBUTE*)ItemAttributeBase)
+#define byte_7E11D6E    HudTextVisibleFlag
 
 // Decoded from C2:5A/C1:5C by the same guild-mark record table used by the
 // viewport entity mapping (Character+474).
@@ -109,7 +109,7 @@ extern "C" double __cdecl RenderNumber2D(float, float, int, float, float);
 extern "C" void   __cdecl RenderBar(float, float, float, float, float, bool, bool);
 extern "C" SIZE*  __cdecl RenderCenteredText(int, int, const char*);
 extern "C" void   __cdecl RenderTipText(int, int, const char*);
-// TradeInventoryStartX/Y now #defined in globals.h to DAT_07ea5290/528c.
+// TradeInventoryStartX/Y now #defined in globals.h to TradeInventoryStartX/528c.
 extern "C" BYTE   OffsetMixItems[];
 extern "C" BYTE   Inventory[];
 extern "C" int*   g_pRenderText;
@@ -117,7 +117,6 @@ extern "C" DWORD  SetTextColor_0;
 extern "C" int    InputTextWidth;
 extern "C" int    RepairEnable_0;
 
-#define TradeOpened   DAT_07eaa11b
 
 static bool HUD_IsGuildCreationRuntime(void)
 {
@@ -142,10 +141,10 @@ void GL_EnableLightMap(void);
 void GL_SetBlendSrcAlpha(void);
 void __stdcall GL_SetBlendInvSrcColor(void);
 
-// All 9 sub-panels are implemented in src/Render/HUD_Pass6.cpp.  sub_5126E0
+// All 9 sub-panels are implemented in src/Render/HUD_Pass6.cpp.  HUD_RenderBillboardParticle
 // is also there.  Forward-declare the ones called from this TU.
 extern "C" {
-    void __cdecl sub_5126E0(int tex, float, float, float, float, int);
+    void __cdecl HUD_RenderBillboardParticle(int tex, float, float, float, float, int);
     void __cdecl RenderParty(int x, int y);
     void __cdecl RenderInventoryWindow(void);
     void __cdecl RenderTrade(void);
@@ -318,11 +317,11 @@ void Render_QuickButtons_(void)
         g_GuildCreatorScratchX = panelStartX;
         g_GuildCreatorScratchY = 0;
         // El origen de los botones OK/CANCEL es `g_GuildCreatorScratchX/Y`, el mismo
-        // que usa el hit-test GuildCreator_HitTest (no `DAT_07ea5b1c/20` =
+        // que usa el hit-test GuildCreator_HitTest (no `HudBtn1PosX/20` =
         // Inventory[32].Level/Part, que es el slot 0 del pool de la tienda).
         // Los tres offsets coinciden con esos hit-tests: +20/+350 y +100 el segundo.
-        float btnX = (float)g_GuildCreatorScratchX + _DAT_005524fc;
-        float btnY = (float)g_GuildCreatorScratchY + _DAT_00552ca4;
+        float btnX = (float)g_GuildCreatorScratchX + 20.0f;
+        float btnY = (float)g_GuildCreatorScratchY + 350.0f;
         Gfx::Color3f(1.0f, 1.0f, 1.0f);
         GL_DrawTexture(0x118, btnX, btnY, 70.0f, 21.0f, 0.0f, 0.0f, 2.1875f, 0.65625f, 1, 1);
         int tex = ((int)MouseX >= (int)btnX && (int)MouseX < (int)(btnX + 70.0f) &&
@@ -333,7 +332,7 @@ void Render_QuickButtons_(void)
         // IDA `sub_4E4760` L446-447 da los dos rects:
         //     boton 1 (crear):  [origin+20 , origin+90 )   ancho 70
         //     boton 2 (cancel): [origin+100, origin+170)   ancho 70
-        // (`_DAT_005524f0` es TERRAIN_SCALE, no un offset de UI.)
+        // (`GridToWorldScale` es TERRAIN_SCALE, no un offset de UI.)
         btnX = (float)g_GuildCreatorScratchX + 100.0f;
         GL_DrawTexture(0x118, btnX, btnY, 70.0f, 21.0f, 0.0f, 0.0f, 2.1875f, 0.65625f, 1, 1);
         tex = ((int)MouseX >= (int)btnX && (int)MouseX < (int)(btnX + 70.0f) &&
@@ -342,8 +341,8 @@ void Render_QuickButtons_(void)
     }
 
     if (HUD_IsGuildListRuntime()) {
-        float iconX = (float)DAT_07e91788 + _DAT_00552464;
-        float iconY = (float)DAT_07e91784 + _DAT_0055246c;
+        float iconX = (float)GuildListStartXStorage + 25.0f;
+        float iconY = (float)GuildListStartYStorage + 395.0f;
         Gfx::Color3f(1.0f, 1.0f, 1.0f);
         GL_DrawTexture(0x118, iconX, iconY, 24.0f, 24.0f, 0.0f, 0.0f, 0.75f, 0.75f, 1, 1);
         GL_DrawTexture(RepairEnable_0 ? 287 : 286,
@@ -376,14 +375,14 @@ void Render_QuickButtons_(void)
     // Boton de cierre del panel de personaje.  En IDA este bloque va ANTES de
     // RenderCharacterInfoWindow y la textura del panel (alcanza y=433) lo
     // tapaba, dejando un hitbox invisible; se dibuja DESPUES del panel para
-    // que sea visible (el origen DAT_07ea982c/30 lo escribe el propio
+    // que sea visible (el origen CharacterInfoStartXStorage/30 lo escribe el propio
     // RenderCharacterInfoWindow este mismo frame).  El click lo atiende
     // CharacterInfo_HitTest en [panelX+25,+49) x [panelY+395,+419).
     // GlobalText[222] = "Cerrar Info de Personaje (C)" (GlobalText[225] es
     // "Cerrar (I,V)", del panel de inventario).
     if (HUD_IsCharacterInfoRuntime()) {
-        float iconX = (float)DAT_07ea982c + 25.0f;
-        float iconY = (float)DAT_07ea9830 + 395.0f;
+        float iconX = (float)CharacterInfoStartXStorage + 25.0f;
+        float iconY = (float)CharacterInfoStartYStorage + 395.0f;
         Gfx::Color3f(1.0f, 1.0f, 1.0f);
         GL_DrawTexture(0x118, iconX, iconY, 24.0f, 24.0f, 0.0f, 0.0f, 0.75f, 0.75f, 1, 1);
         GL_DrawTexture(280, iconX, iconY, 24.0f, 24.0f,
@@ -409,7 +408,7 @@ void Render_QuickButtons_(void)
     // Render del panel de quest.  IDA sub_4F5820 L38:
     // `sub_403F30((_BYTE *)g_csQuest);` entre RenderGoldenArcherWindow y
     // RenderServerDivision.
-    FUN_00403f30((void*)(uintptr_t)g_csQuest);
+    Quest_RenderDispatch((void*)(uintptr_t)g_csQuest);
 
     // El drop se despacha sólo desde UpdateWindowsMouse en SIM (IDA).
     RenderServerDivision();
@@ -429,7 +428,7 @@ void HUD_BeginGridPass(int pass) { gridCursor[pass] = 0; }
 // DESVIACION: reproducir en SIM la multiplicidad de ambas pasadas de grillas.
 void HUD_TickGridPresentation() {
     gridCount[0] = gridCount[1] = 0;
-    if (SceneFlag != 5 || !DAT_083a7c10 || DAT_07e11d1c > 30 ||
+    if (SceneFlag != 5 || !EnableMainRender || InputCooldownTicks > 30 ||
         gUserSettings.GetAntilag(ANTILAG_INTERFACE)) return;
     bool pools[7]; int count=0;
     if (InventoryOpened) pools[count++]=false;
@@ -459,20 +458,20 @@ void HUD_TickGridPresentation() {
     }
 }
 
-// sub_4E38B0 — inventory grid render.  Walks an N×M grid of 68-byte ITEM
+// HUD_RenderInventoryGrid (IDA: sub_4E38B0) - inventory grid render.  Walks an N×M grid of 68-byte ITEM
 // records and renders each occupied cell either as a 3D mesh (`a6 != 0`)
 // via RenderItem3D, or as a 2D quantity glyph (RenderNumber2D) for arrows.
 //
 // Special case for OffsetMixItems during MixState animation: spawns three
-// glow particles via sub_5126E0 (HUD_Pass6.cpp).
+// glow particles via HUD_RenderBillboardParticle (HUD_Pass6.cpp).
 //
 // Special case for the Inventory pool: cells with Color == 99 get a quest
 // icon overlay (bitmap 9) bobbing with WorldTime, plus GlobalText[370]
 // label rendered in white.
 // =============================================================================
-extern "C" int __cdecl sub_4E38B0(float a1, float a2, const void* items, int a4,
+extern "C" int __cdecl HUD_RenderInventoryGrid(float a1, float a2, const void* items, int a4,
                                   float sx, int a6);
-int __cdecl sub_4E38B0(float a1, float a2, const void* items, int a4,
+int __cdecl HUD_RenderInventoryGrid(float a1, float a2, const void* items, int a4,
                        float sx, int a6)
 {
     // IDA receives the inventory-base pointer in the x87 float argument slot.
@@ -542,10 +541,10 @@ int __cdecl sub_4E38B0(float a1, float a2, const void* items, int a4,
                             float v20 = c.size;
                             float v28 = c.x + sxa;
                             float sxb = c.y + sy;
-                            sub_5126E0(1230, v28, sxb, v20, v20, 0);
-                            sub_5126E0(1230, v28, sxb, v20, v20, seed);
-                            sub_5126E0(1231, v28, sxb, v20 * 3.0f, v20 * 3.0f, seed);
-                            sub_5126E0(1150, v28, sxb, v20 * 6.0f, v20 * 6.0f, 0);
+                            HUD_RenderBillboardParticle(1230, v28, sxb, v20, v20, 0);
+                            HUD_RenderBillboardParticle(1230, v28, sxb, v20, v20, seed);
+                            HUD_RenderBillboardParticle(1231, v28, sxb, v20 * 3.0f, v20 * 3.0f, seed);
+                            HUD_RenderBillboardParticle(1150, v28, sxb, v20 * 6.0f, v20 * 6.0f, 0);
                             GL_ResetState();
                             v6_addr = v24;
                         }
@@ -691,7 +690,7 @@ extern "C" void __cdecl RenderTipText(int sx, int sy, const char* Text)
     float fy   = (float)sy;
     float fx   = (float)sx;
     float boxX = fx - 2.0f;     // ≈ flt_55264C constant
-    float boxY = fy - 1.0f;     // ≈ flt_552540 constant
+    float boxY = fy - 1.0f;     // ≈ FragmentGravityA constant
     float W    = (float)((double)sz.cx / gWindow.GetScreenRateX() + 4.0);
     float H    = (float)((double)sz.cy / gWindow.GetScreenRateY() + 4.0);
 
@@ -706,11 +705,11 @@ extern "C" void __cdecl RenderTipText(int sx, int sy, const char* Text)
     GL_DrawRect(boxX + 1.0f, boxY + 1.0f, W - 2.0f, H - 2.0f);
 
     Gfx::Color4f(1.0f, 1.0f, 1.0f, 1.0f);
-    // CACHE (2026-10-03): este glEnable no tocaba DAT_083a4125, asi que el GL
+    // CACHE (2026-10-03): este glEnable no tocaba Texture2DEnableCache, asi que el GL
     // quedaba texturado con el cache diciendo lo contrario y el proximo
     // DisableTexture salteaba su glDisable.  Mismo patron que la fuga de blend
     // que volvia traslucidos a los monstruos de Atlans.
-    Gfx::Enable(Gfx::Cap::Texture2D);   DAT_083a4125 = 1;
+    Gfx::Enable(Gfx::Cap::Texture2D);   Texture2DEnableCache = 1;
     m_dwBackColor = 0;
     m_dwTextColor = 0xFFFFFFFFu;
     UI_DrawText(sx, sy, (char*)Text, 0, 1, 0, (size_t)n + 1);

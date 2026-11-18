@@ -19,7 +19,7 @@ extern "C" const char* Guild_GetMarkName(int row);
 //   - Weapon-slot rendering         (RenderLinkObject)
 //   - Per-entity-type NPC / monster special effects (large outer switch)
 //
-// param_1  — player / local entity  (int*, stride 0x394, base DAT_07abf5d0[0])
+// param_1  — player / local entity  (int*, stride 0x394, base CharactersClient[0])
 // param_2  — entity being rendered  (undefined4* / puVar13 in Ghidra)
 // param_3  — zone-id or context param (treated as int for zone-scale calc)
 //
@@ -65,10 +65,10 @@ void __cdecl RenderGuildMarkOnShield(intptr_t entity, int shield_id)
 
     // `object+276` es el buffer de matrices animadas; 26 * 48 = 1248.
     float* bone26 = (float*)((BYTE*)(uintptr_t)(intptr_t)((OBJECT*)(uintptr_t)(object))->BoneMatrices + 1248);
-    R_ConcatTransforms(bone26, localMatrix, &DAT_06989c9c);
+    R_ConcatTransforms(bone26, localMatrix, &RootBoneMatrix);
 
     Gfx::Translate(*(float*)(object + 16), *(float*)(object + 20), *(float*)(object + 24));
-    GL_DrawBillboard(5.0f, 7.0f, &DAT_06989c9c);
+    GL_DrawBillboard(5.0f, 7.0f, &RootBoneMatrix);
     Gfx::PopMatrix();
     GL_DisableCullFace();
 }
@@ -80,7 +80,7 @@ static void RenderAttackBuffSparkles(BYTE* entity)
 {
     OBJECT& object = *AsObject(entity);
     if ((*(DWORD*)(entity + 120) & 4) == 0 || !object.BoneMatrices) return;
-    void* model = (void*)(uintptr_t)(DAT_05828d58 + object.Type * BMD_STRIDE);
+    void* model = (void*)(uintptr_t)(ModelsBase + object.Type * BMD_STRIDE);
     const int boneCount = AsModel(model)->NumBones;
     const float* bones = (const float*)object.BoneMatrices;
     float offset[3] = { 0.0f, 0.0f, 0.0f };
@@ -106,7 +106,7 @@ void* __cdecl RenderCharacter(void *param_1_, void *param_2_, void *param_3)
     short sVar2    = *(short *)((intptr_t)puVar13 + 2);        // entity_type
 
     intptr_t  entity_type = (int)sVar2;
-    void *model = (void *)(DAT_05828d58 + entity_type * BMD_STRIDE);
+    void *model = (void *)(ModelsBase + entity_type * BMD_STRIDE);
 
 
 
@@ -127,7 +127,7 @@ void* __cdecl RenderCharacter(void *param_1_, void *param_2_, void *param_3)
     {
         // Skill channel active — beam/barrier widget path
         unsigned int uVar11 = (unsigned int)(size_t)Calc_RenderObject(AsObject(puVar13), '\x01', (intptr_t)param_3);
-        if (AsObject(param_1)->Cloth) FUN_00408ff0((void *)AsObject(param_1)->Cloth);
+        if (AsObject(param_1)->Cloth) BMD_RenderMesh((void *)AsObject(param_1)->Cloth);
         if ((BYTE)uVar11 != 0)
             Draw_RenderObject(puVar13, 1, (intptr_t)param_3, '\0');
         break;
@@ -226,7 +226,7 @@ void* __cdecl RenderCharacter(void *param_1_, void *param_2_, void *param_3)
         // Los sprites se reproducen desde la muestra SIM de esta entidad.
     }
     else if ((bVar7 == 0x47) || (bVar7 == 0x4a)) {
-        if (AsObject(param_1)->Cloth) FUN_00408ff0((void *)AsObject(param_1)->Cloth);
+        if (AsObject(param_1)->Cloth) BMD_RenderMesh((void *)AsObject(param_1)->Cloth);
     }
     else if (bVar7 == 0x49) {
         // Drakan (73): IDA emite DOS pases distintos, no un 0x344 combinado.
@@ -264,7 +264,7 @@ void* __cdecl RenderCharacter(void *param_1_, void *param_2_, void *param_3)
         Entity_PrepareRender((unsigned char *)puVar13, 1, (intptr_t)param_3, 0);
 
 
-        if (AsObject(param_1)->Cloth) FUN_00408ff0((void *)AsObject(param_1)->Cloth);
+        if (AsObject(param_1)->Cloth) BMD_RenderMesh((void *)AsObject(param_1)->Cloth);
         --*(short *)((BYTE *)puVar13 + 2);
     }
 
@@ -364,7 +364,7 @@ void* __cdecl RenderCharacter(void *param_1_, void *param_2_, void *param_3)
     //
     // Va ANTES del render del cuerpo y ANTES de la segunda escritura de luz
     // (la del PK, mas abajo), igual que en IDA: L786 el heroe, L2310 el PK.
-    if ((void *)param_1 == DAT_07abf5d8) {
+    if ((void *)param_1 == Hero) {
         float L0 = 1.0f, L1 = 1.0f, L2 = 1.0f;
         const unsigned char drink = CharacterAttribute
             ? *((unsigned char *)(uintptr_t)CharacterAttribute + 40) : 0;
@@ -392,7 +392,7 @@ void* __cdecl RenderCharacter(void *param_1_, void *param_2_, void *param_3)
     *(float *)((int *)((char *)param_1 + EntityOffset(200 * 4)))  = local_60 + *(float *)(puVar13 + 0x3a);
     *(float *)((int *)((char *)param_1 + EntityOffset(0xc9 * 4))) = local_5c + *(float *)(puVar13 + 0x3b);
     *(float *)((int *)((char *)param_1 + EntityOffset(0xca * 4))) = local_58 + *(float *)(puVar13 + 0x3c);
-    if ((void *)param_1 == DAT_07abf5d8) {
+    if ((void *)param_1 == Hero) {
         // El heroe no usa la luz del terreno (ver el bloque de mas arriba).
         float L0 = 1.0f, L1 = 1.0f, L2 = 1.0f;
         const unsigned char drink = CharacterAttribute
@@ -467,19 +467,19 @@ void* __cdecl RenderCharacter(void *param_1_, void *param_2_, void *param_3)
                 // 0.97.20: modelo propio de la pieza (catálogo).
                 iVar9 = gContentCatalog.EntityDrawModel(param_1, iVar9);
                 BYTE bClassByte = *(BYTE *)&((CHARACTER*)(uintptr_t)(param_1))->Class;
-                *(BYTE *)(DAT_05828d58 + iVar9 * BMD_STRIDE + 0x98 + BMD_FIELD_SHIFT) =
+                *(BYTE *)(ModelsBase + iVar9 * BMD_STRIDE + 0x98 + BMD_FIELD_SHIFT) =
                     (BYTE)(((bClassByte & 7) << 1) | (bClassByte >> 3));
                 // ── DIAG: log per-call to RenderPartObject (Entity_DrawAt) for char-select
-                // dump scale, model addr, animCount@26, and DAT_005524f8 (cull thresh).
+                // dump scale, model addr, animCount@26, and 0 (cull thresh).
                 if (SceneFlag == 4) {
-                    int csSlot = (int)(((uintptr_t)param_1_ - (uintptr_t)DAT_07abf5d0) / CHARACTER_STRIDE);
+                    int csSlot = (int)(((uintptr_t)param_1_ - (uintptr_t)CharactersClient) / CHARACTER_STRIDE);
                     if (csSlot >= 0 && csSlot < 5) {
                         static DWORD s_lastDA[5] = {0,0,0,0,0};
                         DWORD now = Platform::GetTimer().Ticks();
                         if (now - s_lastDA[csSlot] > 1000) {
                             // log only the FIRST body-part draw of this slot per second
                             s_lastDA[csSlot] = now;
-                            void* bm = (void*)(DAT_05828d58 + iVar9 * BMD_STRIDE);
+                            void* bm = (void*)(ModelsBase + iVar9 * BMD_STRIDE);
                             float fScale = *(float *)((int *)((char *)puVar13 + EntityOffset(0x5a * 4)));
                         }
                     }
@@ -508,7 +508,7 @@ void* __cdecl RenderCharacter(void *param_1_, void *param_2_, void *param_3)
                 // que era incorrecta: la capita de atras se movia pegada al
                 // cuerpo en vez de simularse.
                 if (iVar9 == 706 && piVar16->Cloth && *(float *)((int *)((char *)puVar13 + EntityOffset(0x5a * 4))) > 0.01f)
-                    FUN_00408ff0(piVar16->Cloth);
+                    BMD_RenderMesh(piVar16->Cloth);
 
             }
             ++piVar16;   // advance to next slot (+0x18 bytes)
@@ -559,15 +559,15 @@ void* __cdecl RenderCharacter(void *param_1_, void *param_2_, void *param_3)
             const short guildIndex = AsCharacter(cb)->GuildMarkIndex;
             if (guildIndex != -1) {
                 const char* guildName = Guild_GetMarkName(guildIndex);
-                if (EnableSoccer && DAT_07abf5d8) {
-                    const short heroGuild = *(short*)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->GuildMarkIndex;
+                if (EnableSoccer && Hero) {
+                    const short heroGuild = *(short*)&((CHARACTER*)(uintptr_t)(Hero))->GuildMarkIndex;
                     if (heroGuild != -1 &&
                         (strcmp(Guild_GetMarkName(heroGuild), guildName) == 0 ||
                          strcmp(GuildWarName, guildName) == 0)) {
                         bCape = true;
                     }
                 }
-                if (DAT_05826d33 &&
+                if (SoccerObserver &&
                     (strcmp(SoccerTeamName[0], guildName) == 0 ||
                      strcmp(SoccerTeamName[1], guildName) == 0)) {
                     bCape = true;
@@ -575,7 +575,7 @@ void* __cdecl RenderCharacter(void *param_1_, void *param_2_, void *param_3)
             }
 
             if (bCape && AsObject(param_1)->Cloth)
-                FUN_00408ff0((void *)AsObject(param_1)->Cloth);
+                BMD_RenderMesh((void *)AsObject(param_1)->Cloth);
         }
     }
     RenderAttackBuffSparkles((BYTE*)param_1);
@@ -596,11 +596,11 @@ void Equipment_Tick(intptr_t entity, int highlighted)
     BYTE bVar7 = AsCharacter(entity)->MonsterIndex;
     bool bDeferWing = false;
     UINT local_74 = 0;
-    float fVar32 = (float)highlighted * _DAT_005524f8;
+    float fVar32 = (float)highlighted * 0.01f;
     float savedLight[3];
     memcpy(savedLight, (char *)param_1 + EntityOffset(800), sizeof(savedLight));
     Equipment_BeginCharacter(AsCharacter(static_cast<intptr_t>(entity)));
-    _DAT_005597c8 = 1.0f;
+    EntityLodScale = 1.0f;
     Equipment_SetStage(0);
     // ── 5. Dual-wield / shield-glow weapon cases ─────────────────────────────
     if (bVar7 == 0x2a) {
@@ -680,7 +680,7 @@ void Equipment_Tick(intptr_t entity, int highlighted)
                 (0x72 < bv2 && bv2 < 0x77) || (0x78 < bv2 && bv2 < 0x7d) ||
                 (0x7e < bv2 && bv2 < 0x83) || (0x84 < bv2 && bv2 < 0x89);
             if ((0 < iSub) && (iSub < 8) && bInRange && ((iSub / 3) != 0)) {
-                *(float *)((int *)((char *)param_1 + EntityOffset(200 * 4))) = (float)(iSub / 3) * _DAT_00552504;
+                *(float *)((int *)((char *)param_1 + EntityOffset(200 * 4))) = (float)(iSub / 3) * HalfScale;
                 bTint = true;
             }
         } else {
@@ -755,10 +755,10 @@ void Equipment_Tick(intptr_t entity, int highlighted)
             // Trail spawn at transformed bone position
             float fOff[3] = { 20.0f, 0.0f, 15.0f };
             float fWorldPos[3];
-            BMD_TransformPosition((void *)(DAT_05828d58 + (int)*(short *)((intptr_t)puVar13 + 2) * BMD_STRIDE),
+            BMD_TransformPosition((void *)(ModelsBase + (int)*(short *)((intptr_t)puVar13 + 2) * BMD_STRIDE),
                          (float *)((intptr_t)AsCharacter(puVar13)->Helper.LinkBone * 0x30 + (intptr_t)AsObject(puVar13)->BoneMatrices),
                          fOff, fWorldPos, '\x01');
-            float fColor2[3] = { fVar32 * _DAT_00552504, 0.0f, 0.0f };
+            float fColor2[3] = { fVar32 * HalfScale, 0.0f, 0.0f };
             Equipment_AddSprite(0x47e, fWorldPos, 1.5f, fColor2, (intptr_t)puVar13, 0, 0);
         }
 

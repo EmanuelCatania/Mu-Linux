@@ -16,7 +16,7 @@
 //
 // ── ENTITY ARRAY ─────────────────────────────────────────────────────────────
 //
-//   Base:  DAT_07abf5d0
+//   Base:  CharactersClient
 //   Stride: 0x394 (916 bytes) por entidad
 //   Count:  400 entidades máximo (índice 0..399)
 //   Slot vacío: entity[+0x00] == 0
@@ -50,7 +50,7 @@
 //   int Entity_FindById(int entity_id):
 //     // Busca en el array lineal (max 400 entradas)
 //     for i in 0..399:
-//       entity = DAT_07abf5d0 + i * 0x394
+//       entity = CharactersClient + i * 0x394
 //       if entity[0] != 0 && entity[+0x1dc] == entity_id:
 //         return i       // índice en el array
 //     return 400         // no encontrado (sentinel)
@@ -63,7 +63,7 @@
 //   char* Entity_FindByIdAndType(int entity_id, uint entity_type):
 //     // Busca igual que FindById pero por entity_type en +0x1dc
 //     for i in 0..399:
-//       entity = DAT_07abf5d0 + i * 0x394
+//       entity = CharactersClient + i * 0x394
 //       if entity[0] != 0 && entity[+0x1dc] == entity_id:
 //         Entity_Init(entity, entity_type)   // re-inicializa si ya existe
 //         return entity_ptr
@@ -76,7 +76,7 @@
 //         entity[+0x1dc] = entity_id
 //         return entity_ptr
 //
-//     return DAT_07abf5d0 + CHARACTER_STRIDE * 400 + 0x0          // sentinel: puntero al último slot+1
+//     return CharactersClient + CHARACTER_STRIDE * 400 + 0x0          // sentinel: puntero al último slot+1
 //
 // ── ENTITY_FINDORSPAWN (0x0045ccf0) ───────────────────────────────────────────
 //
@@ -86,20 +86,20 @@
 //     case 1 (NPC ambulante):
 //       Monster_LoadModel(1)               // carga Monster/Monster01.bmd
 //       entity = Entity_FindByIdAndType(entity_id, 0x10F)
-//       // Nombre: DAT_005599b0 ("Goblin" o similar)
+//       // Nombre: MonsterNameB ("Goblin" o similar)
 //       // entity[+0x0C..0x0F] = {0x9A, 0x99, 0x59, 0x3F} — (0.85f = color base)
 //       // entity[+0x270] = 0x94, entity[+0x271] = 0x01  — weapon slot
 //
 //     case 2 (NPC estático):
 //       Monster_LoadModel(2)
 //       entity = Entity_FindByIdAndType(entity_id, 0x110)
-//       // Nombre: DAT_005599e0
+//       // Nombre: MonsterNameC
 //       // entity[+0x0C..0x0F] = {0x00, 0x00, 0x00, 0x3F}
 //
 //     case 3 (guarda/especial):
 //       Monster_LoadModel(9)
 //       entity = Entity_FindByIdAndType(entity_id, 0x117)
-//       // Nombre: DAT_005599e0
+//       // Nombre: MonsterNameC
 //       // entity[+0x0C..0x0F] = {0xCD, 0xCC, 0xCC, 0x3E}
 //
 //     default (move_type 0,4,5,8 — monstruo estándar):
@@ -107,7 +107,7 @@
 //       entity = Entity_FindByIdAndType(entity_id, 0x10E)
 //
 //       switch (move_type):
-//         case 0: Goblin-like. name=DAT_0055987c. weapon=(0xB6,0x01). scale={0xCD,0xCC,0x4C,0x3F}
+//         case 0: Goblin-like. name=MonsterNameA. weapon=(0xB6,0x01). scale={0xCD,0xCC,0x4C,0x3F}
 //         case 4: Balrog-like. weapon=(0xF7,0x01). scale=(0x33,0x33,0x93,0x3F)
 //         case 5: Same weapon as 1 (0x94,0x01). flags entity[+0x1be]=1
 //         case 8: weapon=(0xF8,0x01). same flags as 5
@@ -175,11 +175,11 @@
 //
 //   void Monster_LoadModel(int monster_type):
 //     // monster_type = 0..0x2C (44+ tipos documentados)
-//     entity_def_idx = monster_type + 0x10E    // índice en DAT_05828d58
-//     entity_def = DAT_05828d58 + entity_def_idx * 0xBC
+//     entity_def_idx = monster_type + 0x10E    // índice en ModelsBase
+//     entity_def = ModelsBase + entity_def_idx * 0xBC
 //
 //     // Si ya cargado (anim_count > 0): skip
-//     if (DAT_0055a7c4 == 0 && entity_def[+0x24] > 0): skip
+//     if (g_tex_ext_mode == 0 && entity_def[+0x24] > 0): skip
 //
 //     // Carga el archivo BMD del monstruo:
 //     BMD_Load(entity_def_idx, "Data/Monster/", "Monster", monster_type + 1)
@@ -199,9 +199,9 @@
 //     entity_def[+0x60] = 1                      // loaded flag
 //
 //     // Ajustes de velocidad por tipo:
-//     Si monster_type == 3: speeds *= DAT_00552a1c   // Skeleton: más rápido
-//     Si monster_type == 5 || 0x19: speeds *= DAT_00552928  // Poison Bull: lento
-//     Si monster_type == 0x25 || 0x2A: speeds *= DAT_005528b4  // especiales
+//     Si monster_type == 3: speeds *= 1.0f   // Skeleton: más rápido
+//     Si monster_type == 5 || 0x19: speeds *= 0.7f  // Poison Bull: lento
+//     Si monster_type == 0x25 || 0x2A: speeds *= 0.4f  // especiales
 //
 //     // Override de velocidad "run" (anim_speed[2]) por tipo:
 //     case 2:   0x8B = 0.70f   // Bull Fighter
@@ -231,7 +231,7 @@
 //     Model_SetAnimationSlots(entity_def_idx, anim0, anim1, anim2, anim3, anim4)
 //       → Asigna idle/walk/run/attack/hurt animation IDs al entity_def
 //
-//     // Establece max_anim_count en DAT_05828d58 + offset para ese tipo
+//     // Establece max_anim_count en ModelsBase + offset para ese tipo
 //
 // ── BMD_LOAD (0x005060b0) ─────────────────────────────────────────────────────
 //
@@ -241,7 +241,7 @@
 //     elif num < 10: path = "folder/base_name0%d.bmd"
 //     else: path = "folder/base_name%d.bmd"
 //
-//     if (DAT_0055a7c4 == 0):   // sin compresión
+//     if (g_tex_ext_mode == 0):   // sin compresión
 //       if entity_def[+0x22] > 0: skip  // ya cargado
 //       BMD__Save(entity_def, folder, path_bmd)  // BMD_LoadFile
 //     else:
@@ -372,7 +372,7 @@
 //       Entity_SetFlags(flags, entity)
 //
 //       // facing angle:
-//       entity[+0x24] = (float(angle_packed >> 4) - DAT_0055256c) * DAT_00552844
+//       entity[+0x24] = (float(angle_packed >> 4) - 1.0f) * 45.0f
 //
 //       entity[+0x1DC] = entity_id         // set network ID
 //       entity[+0x21]  = 1                 // is_active = true
@@ -413,11 +413,11 @@
 //   8    | 0x100 | skill_shield  | Particle 0x10A ×5 (orbital shield)
 //   9    | 0x200 | flag_extra    | (sin visual conocido)
 //
-// ── ENTITY_DEF TABLE (DAT_05828d58) ──────────────────────────────────────────
+// ── ENTITY_DEF TABLE (ModelsBase) ──────────────────────────────────────────
 //
 //   Tabla de definiciones de entity types. Stride: 0xBC (188 bytes) por entry.
-//   Base: DAT_05828d58
-//   Index: entity_type → entry = DAT_05828d58 + entity_type * 0xBC
+//   Base: ModelsBase
+//   Index: entity_type → entry = ModelsBase + entity_type * 0xBC
 //
 //   Offsets en la entry (entity_def):
 //     +0x22 (short) load_count        — cuántas veces fue cargado (skip si > 0)
@@ -454,10 +454,10 @@
 //
 // ── GLOBALS ───────────────────────────────────────────────────────────────────
 //
-//   DAT_07abf5d0  — entity array base (stride 0x394, max 400)
-//   DAT_07abf5d8  — local player entity ptr
-//   DAT_05828d58  — entity_def table (stride 0xBC)
-//   DAT_0055a7c4  — compressed_assets flag (0=plain, 1=compressed)
+//   CharactersClient  — entity array base (stride 0x394, max 400)
+//   Hero  — local player entity ptr
+//   ModelsBase  — entity_def table (stride 0xBC)
+//   g_tex_ext_mode  — compressed_assets flag (0=plain, 1=compressed)
 //   DAT_07d4d580  — name display buffer
 //
 // ── CROSS-REFERENCE ───────────────────────────────────────────────────────────
@@ -470,7 +470,7 @@
 //   Monster_LoadModel       @ 0x005098c0  — carga BMD + configura anim speeds
 //   BMD_Load                @ 0x005060b0  — selecciona path y loader
 //   BMD_LoadFile            @ 0x00442a60  — fopen + fread del .bmd
-//   BMD_LoadCompressed      @ 0x004423e0  — versión comprimida (DAT_0055a7c4==1)
+//   BMD_LoadCompressed      @ 0x004423e0  — versión comprimida (g_tex_ext_mode==1)
 //   Monster_SetAnimIndices  @ 0x00509810  — asigna IDs de anim a entity_def
 //   Entity_SetFlags         @ 0x0043bde0  — aplica buff/debuff visual
 //   Entity_ClearFlag        @ 0x0043c070  — quita buff/debuff
@@ -501,11 +501,11 @@ extern void __cdecl OpenNpc(int Type);
 // CreateCharacter — finds/allocates an entity slot for Key, returns pointer.
 // 1) scan first 400 slots for matching key at +476 → reuse slot
 // 2) else find first inactive slot (active flag at +0 == 0) → init it
-// Devuelve la dirección completa dentro de CharactersClient (DAT_07abf5d0).
+// Devuelve la dirección completa dentro de CharactersClient (CharactersClient).
 CHARACTER* __cdecl CreateCharacter(int Key, int Type, unsigned char PosX,
                                    unsigned char PosY, float Rotation)
 {
-    BYTE* c = reinterpret_cast<BYTE*>(DAT_07abf5d0);
+    BYTE* c = reinterpret_cast<BYTE*>(CharactersClient);
     for (int i = 0; i < 400; ++i) {
         if (*(unsigned char*)c != 0 && *(short*)&((CHARACTER*)(uintptr_t)(c))->Key == (short)Key) {
             CreateCharacterPointer((unsigned char*)c, Type, PosX, PosY, Rotation);
@@ -515,11 +515,11 @@ CHARACTER* __cdecl CreateCharacter(int Key, int Type, unsigned char PosX,
     }
     // search again for an inactive slot
     int v7 = 0;
-    BYTE* i = reinterpret_cast<BYTE*>(DAT_07abf5d0);
+    BYTE* i = reinterpret_cast<BYTE*>(CharactersClient);
     while (*(unsigned char*)i != 0) {
         if (++v7 >= 400) {
             // all slots occupied — return sentinel slot at end (matches IDA)
-            return AsCharacter(DAT_07abf5d0 + 400 * CHARACTER_STRIDE);
+            return AsCharacter(CharactersClient + 400 * CHARACTER_STRIDE);
         }
         i += CHARACTER_STRIDE;
     }
@@ -644,7 +644,7 @@ void InitializeMonster73(CHARACTER* character)
 {
     BYTE* c = reinterpret_cast<BYTE*>(character);
     auto* meshes = reinterpret_cast<ClothModelMesh*>(
-        AsModel(DAT_05828d58 + BMD_STRIDE * AsCharacter(c)->Object.Type)->Meshs);
+        AsModel(ModelsBase + BMD_STRIDE * AsCharacter(c)->Object.Type)->Meshs);
     if (meshes) {
         meshes[0].Unknown0[0] = 1;
         meshes[1].Unknown0[0] = 0;
@@ -658,7 +658,7 @@ void InitializeMonster73(CHARACTER* character)
 void InitializeMonster77(CHARACTER* character)
 {
     BYTE* c = reinterpret_cast<BYTE*>(character);
-    *(unsigned char*)(uintptr_t)(DAT_05828d58 + BMD_STRIDE * 325 + 0x88 + BMD_FIELD_SHIFT) = 0;
+    *(unsigned char*)(uintptr_t)(ModelsBase + BMD_STRIDE * 325 + 0x88 + BMD_FIELD_SHIFT) = 0;
 }
 
 // IDA: CreateMonster (0x0045CCF0), configuración especial del tipo 88.

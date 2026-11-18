@@ -26,27 +26,26 @@ void HUD_BeginGridPass(int pass);
 #include "structs.h"
 #include "functions.h"
 
-// sub_4E38B0 / sub_47F360 / sub_47F4C0 are now ported in HUD_Pass4.cpp.
-// sub_4E9300 is ported in HUD_Pass6.cpp.
-extern "C" int __cdecl sub_4E38B0(float a1, float a2, const void* items, int a4,
+// HUD_RenderInventoryGrid (IDA: sub_4E38B0) / sub_47F360 / sub_47F4C0 are now ported in HUD_Pass4.cpp.
+// HUD_PetPanelSlotHitTest (IDA: sub_4E9300) is ported in HUD_Pass6.cpp.
+extern "C" int __cdecl HUD_RenderInventoryGrid(float a1, float a2, const void* items, int a4,
                                    float sx, int a6);
 
-extern "C" int __cdecl sub_4E9300_(void);
-#define sub_4E9300 sub_4E9300_
+extern "C" int __cdecl HUD_PetPanelSlotHitTest(void);
 // Alias a los globales reales (IDA): el teclado del PIN los comparte con
 // Warehouse_HitTest (boton del candado), el drop del baul y el manejador 0x4E93A0.
-#define dword_7EAA14C  DAT_07eaa14c
-#define byte_7EAA1A4   DAT_07eaa1a4
-#define byte_7EAA179   DAT_07eaa179
-#define dword_7EA9814  DAT_07ea9814
-#define word_7E91394   DAT_07e91394
+#define dword_7EAA14C  PinInputModeState
+#define byte_7EAA1A4   MaskedFieldPrefix
+#define byte_7EAA179   PinInputActiveFlag
+#define dword_7EA9814  PinBytesPart0Bits
+#define word_7E91394   PinShuffleDigits
 
 // ── Globals required by these renderers ─────────────────────────────────────
 
 // Inventory grid pool used by sub_482850 to count arrows.  IDA names this
-// `dword_7EA9328` but our globals.h already declares DAT_07ea9328 as a
+// `dword_7EA9328` but our globals.h already declares InventoryGridBase as a
 // sentinel int; expose our own backing array under a unique name with
-// external linkage so HUD_Pass5.cpp's sub_482E40 can share the same pool.
+// external linkage so HUD_Pass5.cpp's HUD_CountQuickSlotItems can share the same pool.
 
 // Public init helper called from WinMain.  Sets every ITEM slot's Type
 // field (offset 0, WORD) to 0xFFFF so empty inventory cells aren't
@@ -79,8 +78,8 @@ extern "C" void HUD_InitInventoryPools(void)
 extern "C" {
     int   m_Resolution           = 4;
 
-    // (Aca se definian dword_7EAA14C, byte_7EAA1A4, byte_7EAA179, dword_7EA9814
-    //  y word_7E91394 como variables PROPIAS de este archivo — memorias aparte
+    // (Aca se definian PinInputModeState, MaskedFieldPrefix, PinInputActiveFlag, PinBytesPart0Bits
+    //  y PinShuffleDigits como variables PROPIAS de este archivo — memorias aparte
     //  de los globales reales.  El modo del teclado del PIN se leia siempre 0,
     //  asi que el panel del candado del baul nunca se dibujaba.  Ahora son
     //  alias; ver el bloque de abajo.)
@@ -95,7 +94,7 @@ extern "C" {
     DWORD dword_7E11DA8          = 0;
 
     // SetTextColor_0 (= 0x00559C7C) NO se define acá: vive en globals.cpp y
-    // `DAT_00559c7c` es un alias del mismo símbolo (ver globals.h).  Verificado en
+    // `LegacySetTextColor0` es un alias del mismo símbolo (ver globals.h).  Verificado en
     // IDA: xrefs de 0x559C7C = { sub_47F360 (lee), RenderBoolean ×3 (escribe),
     // RenderPartyHP (escribe) } — o sea UNA sola memoria.
 
@@ -108,7 +107,7 @@ extern "C" {
     BYTE  OffsetTradeItems[64 * 68]       = {0};
     BYTE  OffsetMixItems[64 * 68]         = {0};
     // Warehouse grid is 8x15 = 120 slots * 0x44 = 8160 bytes.
-    // Used by FUN_004d23b0 (Inventory click handler) when WarehouseOpened.
+    // Used by Inventory_ClickHandler (Inventory click handler) when WarehouseOpened.
     BYTE  OffsetWarehouseItems[120 * 68]  = {0};
     // Pool de la TIENDA (8×15 = 120 slots), con array propio: en el binario
     // original son direcciones distintas, y como overlay dentro de Inventory
@@ -148,14 +147,13 @@ extern "C" void   __cdecl RenderTipText(int, int, const char*);
 // a la bold, por eso los textos "grandes" salian del tamano normal.
 
 // Aliases.  ItemAttribute already defined in HUD_Pass2 via a #define on
-// DAT_07d78068 — but #defines don't propagate across TUs.  Re-establish here.
-extern "C" std::uintptr_t DAT_07d78068;
-#define ItemAttribute            ((ITEM_ATTRIBUTE*)DAT_07d78068)
+// ItemAttributeBase — but #defines don't propagate across TUs.  Re-establish here.
+extern "C" std::uintptr_t ItemAttributeBase;
+#define ItemAttribute            ((ITEM_ATTRIBUTE*)ItemAttributeBase)
 
-#define byte_7E11D6E             DAT_07e11d6e
-#define byte_7E919BC             DAT_07e919bc
+#define byte_7E11D6E             HudTextVisibleFlag
+#define byte_7E919BC             GuildInfoTable
 #define ppvBits                  gFont.GetTextBits()
-#define g_pRenderText            g_pRenderText                       // exposed above
 #define dword_7EAA14C_alias      dword_7EAA14C
 #define m_Resolution_alias       m_Resolution
 
@@ -218,8 +216,8 @@ int __cdecl FUN_00482850_(void)
     // Recorre la grilla 8x8 del inventario hacia atras, igual que IDA.
     // unk_7EA9328 y unk_7EA9504 son posiciones dentro de OffsetInventoryItems — ver
     // la derivacion en globals.cpp.
-    int* base = &DAT_07ea9328;      // slot 56, campo Key
-    int* row  = &DAT_07ea9504;      // slot 63, campo Key  (= base + 119 dwords)
+    int* base = &InventoryGridBase;      // slot 56, campo Key
+    int* row  = &InventoryGridEnd;      // slot 63, campo Key  (= base + 119 dwords)
     while (row >= base) {
         int* cell = row;
         for (int i = 0; i < 8; ++i) {
@@ -368,7 +366,7 @@ void AntiTamper_HashMaintain_D(void) { Render_HudPass_4BCD20_(); }
 
 
 // =============================================================================
-// sub_4F6050 — inventory-grid render dispatch.  Calls sub_4E38B0 four times
+// sub_4F6050 - inventory-grid render dispatch.  Calls HUD_RenderInventoryGrid four times
 // to draw the active grid panel (Inventory / Shop / Trade / Warehouse /
 // ChaosMix) using its own offset ints and 8×N item array.
 //
@@ -379,7 +377,7 @@ void AntiTamper_HashMaintain_D(void) { Render_HudPass_4BCD20_(); }
 // sub_4F6050 (esta función) NO se llama in-world: el render por frame del
 // inventario in-world es RenderInventoryWindow (sub_4F0A50), invocado desde
 // Render_QuickButtons_ (sub_4F5820, HUD_Pass4.cpp). El hook del click-handler
-// (FUN_004d23b0) vive en HUD_Pass6.cpp:RenderInventoryWindow.
+// (Inventory_ClickHandler) vive en HUD_Pass6.cpp:RenderInventoryWindow.
 
 extern "C" void __cdecl Render_HudPass_4F6050_(void);
 void Render_HudPass_4F6050_(void)
@@ -398,37 +396,37 @@ void Render_HudPass_4F6050_(void)
 
     EnableAlphaTest(true);
     if (InventoryOpened) {
-        sub_4E38B0((float)((double)InventoryStartX + 15.0),
+        HUD_RenderInventoryGrid((float)((double)InventoryStartX + 15.0),
                    (float)((double)InventoryStartY + 200.0),
                    OffsetInventoryItems, 8, 8.0f, 1);
     }
     if (ShopOpened) {
-        sub_4E38B0((float)((double)dword_7EAA0C8 + 15.0),
+        HUD_RenderInventoryGrid((float)((double)dword_7EAA0C8 + 15.0),
                    (float)((double)dword_7EAA0CC + 50.0),
                    // IDA pushes `Inventory.WalkSpeed + 0x880`, which in our
                    // ITEM layout is exactly `&Inventory[32].WalkSpeed`.
                    ShopItems, 8, 15.0f, 1);
     }
     if (TradeOpened) {
-        sub_4E38B0((float)((double)TradeInventoryStartX + 15.0),
+        HUD_RenderInventoryGrid((float)((double)TradeInventoryStartX + 15.0),
                    (float)((double)TradeInventoryStartY + 70.0),
                    Inventory, 8, 4.0f, 1);
-        sub_4E38B0((float)((double)TradeInventoryStartX + 15.0),
+        HUD_RenderInventoryGrid((float)((double)TradeInventoryStartX + 15.0),
                    (float)((double)TradeInventoryStartY + 270.0),
                    OffsetTradeItems, 8, 4.0f, 1);
     }
     if (WarehouseOpened) {
-        sub_4E38B0((float)((double)dword_7EAA0C8 + 15.0),
+        HUD_RenderInventoryGrid((float)((double)dword_7EAA0C8 + 15.0),
                    (float)((double)dword_7EAA0CC + 50.0),
                    OffsetWarehouseItems, 8, 15.0f, 1);
     }
     if (ChaosMixOpened) {
-        sub_4E38B0((float)((double)dword_7EAA0C8 + 15.0),
+        HUD_RenderInventoryGrid((float)((double)dword_7EAA0C8 + 15.0),
                    (float)((double)dword_7EAA0CC + 110.0),
                    OffsetMixItems, 8, 4.0f, 1);
     }
     if (EventWindowOpened) {
-        sub_4E38B0((float)((double)dword_7EAA0C8 + 15.0),
+        HUD_RenderInventoryGrid((float)((double)dword_7EAA0C8 + 15.0),
                    (float)((double)dword_7EAA0CC + 50.0),
                    OffsetMixItems, 8, 4.0f, 1);
     }
@@ -438,13 +436,13 @@ void Render_HudPass_4F6050(void) { Render_HudPass_4F6050_(); }
 
 
 // =============================================================================
-// sub_4EB070 — pet stats / customise panel (when dword_7EAA14C != 0).
+// sub_4EB070 — pet stats / customise panel (when PinInputModeState != 0).
 // Renders:
 //   * Centred frame (5 row bitmaps 251 stacked between two cap rows 252)
 //   * Header text (RenderCenteredText) — picked by mode
 //   * Subtitle text (mode → 695/696/697)
 //   * Editable name field (string + cursor)
-//   * 11 skill icons (5×2 grid + extra slot 10) with counts in word_7E91394[]
+//   * 11 skill icons (5×2 grid + extra slot 10) with counts in PinShuffleDigits[]
 //   * Two action buttons at y=239
 // Currently the IDA panel only fires when a pet UI mode is active.
 // =============================================================================
@@ -453,7 +451,7 @@ void Render_HudPass_4EB070_(void)
 {
     if (!dword_7EAA14C) return;
 
-    int v20 = sub_4E9300();
+    int v20 = HUD_PetPanelSlotHitTest();
     Gfx::Color3f(1.0f, 1.0f, 1.0f);
     GL_DrawTexture(252, 213.0f, 100.0f, 213.0f, 5.0f, 0.0f, 0.0f, 0.83203125f, 0.625f, 1, 1);
 
@@ -499,7 +497,7 @@ void Render_HudPass_4EB070_(void)
 
     Gfx::Color3f(0.30000001f, 0.30000001f, 0.30000001f);
     // Largo del campo: 4 para el PIN, 7 para el codigo personal.
-    // DESVIACION: el binario lee LODWORD(flt_83A7ACC[0]), que es el arreglo de
+    // DESVIACION: el binario lee LODWORD(PinUiHeightParam[0]), que es el arreglo de
     // la CAMARA (lo escribe MoveCamera como floats) — o sea toma los bits de un
     // float como largo.  Usamos el largo real que valida el server
     // (gObjCheckPersonalCode compara 7 caracteres).
@@ -706,7 +704,7 @@ void __cdecl RenderBoolean(int x, int y, intptr_t c)
             // Se conserva la medición del texto; el logo no amplía el hover ni su caja de separación.
             constexpr float MarkSize = 16.0f;
             constexpr float MarkOffset = 21.0f;
-            const int previousTextureSlot = DAT_00561574;
+            const int previousTextureSlot = BoundTextureSlotCache;
             Gfx::PushAttrib(Gfx::AttribCurrent | Gfx::AttribTexture);
             // Alpha/blend ya están preparados al entrar; estos helpers sólo cambian la textura.
             Gfx::Color4f(1.0f, 1.0f, 1.0f, 1.0f);
@@ -714,7 +712,7 @@ void __cdecl RenderBoolean(int x, int y, intptr_t c)
             RenderBitmap(0x22, (float)x - MarkOffset, (float)y, MarkSize, MarkSize,
                          0.0f, 0.0f, 1.0f, 1.0f, true, true);
             Gfx::PopAttrib();
-            DAT_00561574 = previousTextureSlot;
+            BoundTextureSlotCache = previousTextureSlot;
         }
     }
 }

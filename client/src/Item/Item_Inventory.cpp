@@ -30,17 +30,17 @@ extern "C" int __cdecl ConvertItemType(BYTE* Item);
 // para el grid 8×8.  Cada slot es un ITEM (struct, 68 B).
 extern "C" BYTE OffsetInventoryItems[];
 extern "C" void HeroEquipWatchdog(CHARACTER* c);
-extern int DAT_00559c60;
-extern int DAT_00559c64;
-extern int DAT_00559c68;
+extern int QKeyItemType;
+extern int WKeyItemType;
+extern int EKeyItemType;
 extern "C" void __cdecl InsertInventoryItem(BYTE* Inv, int Width, int Height,
                                             int Index, BYTE* Item, bool First);
 
-// ItemAttribute base — `(ITEM_ATTRIBUTE*)DAT_07d78068` per HUD_Pass2.cpp:60.
+// ItemAttribute base — `(ITEM_ATTRIBUTE*)ItemAttributeBase` per HUD_Pass2.cpp:60.
 // La tabla la carga `Item_LoadFromBmd` desde Data\Local\Item.bmd al startup.
 // Si no está cargada (ItemAttribute=0 o type fuera de rango), defaulteamos
 // a 1×1 (worst case visualmente, pero al menos el item aparece).
-extern "C" std::uintptr_t DAT_07d78068;
+extern "C" std::uintptr_t ItemAttributeBase;
 
 static inline ITEM_ATTRIBUTE* Item_GetAttribute(int type)
 {
@@ -88,22 +88,22 @@ void __cdecl SeedQuickPotionTypesFromInventory()
     //   slot 0 -> life group (449..451)
     //   slot 1 -> mana group (452..454)
     //   slot 2 -> auxiliary group
-    DAT_00559c60 = 449;
-    DAT_00559c64 = 452;
-    DAT_00559c68 = 456;
+    QKeyItemType = 449;
+    WKeyItemType = 452;
+    EKeyItemType = 456;
 
     int hpType = FindFirstInventoryTypeInRange(451, 449);
     if (hpType == -1) hpType = FindFirstInventoryTypeInRange(448, 448);
-    if (hpType != -1) DAT_00559c60 = hpType;
+    if (hpType != -1) QKeyItemType = hpType;
 
     int mpType = FindFirstInventoryTypeInRange(454, 452);
-    if (mpType != -1) DAT_00559c64 = mpType;
+    if (mpType != -1) WKeyItemType = mpType;
 
     // Keep the auxiliary slot on real consumables only.
     // Town Portal Scroll (458) is intentionally excluded from the HUD hotbar.
     static const int kAuxTypes[] = { 468, 457, 456 };
     int auxType = FindFirstInventoryTypeExact(kAuxTypes, 3);
-    if (auxType != -1) DAT_00559c68 = auxType;
+    if (auxType != -1) EKeyItemType = auxType;
 }
 
 
@@ -194,7 +194,7 @@ static void WriteEquipmentSlot(int slotIdx, int type, int level, BYTE optByte, B
     //   +4  Level (int)
     //   +26 Durability (BYTE)
     //   +27 Option1 (BYTE)
-    BYTE* cm = (BYTE*)(uintptr_t)DAT_07cf1ffc;
+    BYTE* cm = (BYTE*)(uintptr_t)CharacterMachinePtr;
     if (!cm) return;
     if (slotIdx < 0 || slotIdx >= 12) return;
 
@@ -205,8 +205,8 @@ static void WriteEquipmentSlot(int slotIdx, int type, int level, BYTE optByte, B
         memset(slot, 0, sizeof(ITEM));
         AsItem(slot)->Type  = -1;
         AsItem(slot)->Key = 0;
-        if (SceneFlag == 5 && DAT_07abf5d8) {
-            HeroEquipWatchdog(AsCharacter(DAT_07abf5d8));
+        if (SceneFlag == 5 && Hero) {
+            HeroEquipWatchdog(AsCharacter(Hero));
         }
         return;
     }
@@ -236,8 +236,8 @@ static void WriteEquipmentSlot(int slotIdx, int type, int level, BYTE optByte, B
     equip->x = (BYTE)slotIdx;
     equip->y = 0;
     equip->Color = 0;
-    if (SceneFlag == 5 && DAT_07abf5d8) {
-        HeroEquipWatchdog(AsCharacter(DAT_07abf5d8));
+    if (SceneFlag == 5 && Hero) {
+        HeroEquipWatchdog(AsCharacter(Hero));
     }
 }
 
@@ -342,7 +342,7 @@ extern "C" void __cdecl Recv_Inventory(const BYTE* Msg)
 
     // Reset equipment slots in CharacterMachine.
     {
-        BYTE* cm = (BYTE*)(uintptr_t)DAT_07cf1ffc;
+        BYTE* cm = (BYTE*)(uintptr_t)CharacterMachinePtr;
         if (cm) {
             for (int s = 0; s < 12; ++s) {
                 int off = GetEquipSlotByteOffset(s);
@@ -391,8 +391,8 @@ extern "C" void __cdecl Recv_Inventory(const BYTE* Msg)
 
     SeedQuickPotionTypesFromInventory();
 
-    if (SceneFlag == 5 && DAT_07abf5d8) {
-        HeroEquipWatchdog(AsCharacter(DAT_07abf5d8));
+    if (SceneFlag == 5 && Hero) {
+        HeroEquipWatchdog(AsCharacter(Hero));
     }
 
 }
@@ -407,15 +407,15 @@ extern "C" void __cdecl Recv_Inventory(const BYTE* Msg)
 //                          dword_46F37C=0; *(WORD*)(off_46F064+388)=999;
 //   sub_407BA0 (op 0x54): clears every flag, dword_7A51B00=0
 //
-// En 0.97 el flag InventoryOpened está unificado con DAT_07eaa117 (per
+// En 0.97 el flag InventoryOpened está unificado con InventoryOpened (per
 // nuestra refactor).  Estos handlers simplemente lo flippean.
 // ─────────────────────────────────────────────────────────────────────────────
 extern "C" void __cdecl Recv_InventoryOpen(const BYTE* /*Msg*/)
 {
-    DAT_07eaa117 = 1;                               // InventoryOpened = true
+    InventoryOpened = 1;                               // InventoryOpened = true
 }
 
 extern "C" void __cdecl Recv_InventoryClose(const BYTE* /*Msg*/)
 {
-    DAT_07eaa117 = 0;                               // InventoryOpened = false
+    InventoryOpened = 0;                               // InventoryOpened = false
 }

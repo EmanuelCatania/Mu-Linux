@@ -10,8 +10,8 @@
 //
 // Globals used:
 //   DAT_0056156c / DAT_00561570 — viewport width / height
-//   DAT_00561554               — perspective FOV angle
-//   DAT_0056154c / DAT_00561550 — near / far clip planes
+//   CameraFOVStorage               — perspective FOV angle
+//   CameraViewNearStorage / CameraViewFarStorage — near / far clip planes
 
 #include "stdafx.h"
 #include "Render/Gfx.h"
@@ -24,13 +24,13 @@
 // Calls GL_DisableDepthTest to configure GL state for 2D (disable depth, etc.).
 void GL_Begin2D(void)
 {
-  // DAT_00561554/4c/50 son DWORDs que ALMACENAN bits de float (FOV/near/far).
+  // CameraFOVStorage/4c/50 son DWORDs que ALMACENAN bits de float (FOV/near/far).
   // El decompile de Ghidra los castea como (double)DWORD (interpretando como int)
   // → 45.0f bit-pattern (0x42340000 = 1110704128) daría FOV=1.1e9 → matriz
   // degenerada (NaN). Leer como float via puntero float*.
-  float fov  = *(float*)&DAT_00561554;
-  float near_ = *(float*)&DAT_0056154c;
-  float far_ = *(float*)&DAT_00561550;
+  float fov  = *(float*)&CameraFOVStorage;
+  float near_ = *(float*)&CameraViewNearStorage;
+  float far_ = *(float*)&CameraViewFarStorage;
   // Defensa: si el bloque init no corrió aún, fallback a valores razonables.
   if (!(fov > 0.0f && fov < 180.0f))   fov   = 45.0f;
   if (!(near_ > 0.0f))                  near_ = 10.0f;

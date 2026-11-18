@@ -168,7 +168,7 @@ bool InitWebGPU(DWORD width, DWORD height, bool windowMode, bool borderless)
     if (WebGPU::Initialize(WebGPUApi(gUserSettings.GetRenderBackend()), surface, width, height, gUserSettings.GetVSync(),
                            gUserSettings.GetGraphicsValidation()))
         return true;
-    CErrorReport_Write(&DAT_055c9bf0, "> WebGPU no disponible: se usa OpenGL");
+    CErrorReport_Write(&ErrorReportCtx, "> WebGPU no disponible: se usa OpenGL");
     RenderBackend::active = RenderBackend::Kind::OpenGL;
     Platform::GetWindow().Shutdown();
     return Platform::GetWindow().Create({width, height, windowMode, borderless, true, Gfx::Multisample()});
@@ -200,7 +200,7 @@ bool CWindow::InitOpenGL()
     }
     // DESVIACION: preferencias de presentación por la interfaz de plataforma.
     if (!Platform::GetGLContext().SetSwapInterval(gUserSettings.GetVSync() ? 1 : 0))
-        CErrorReport_Write(&DAT_055c9bf0, "> No se pudo aplicar Window.VSync");
+        CErrorReport_Write(&ErrorReportCtx, "> No se pudo aplicar Window.VSync");
     gFrameLimiter.SetFpsLimit(gUserSettings.GetFpsLimit());
     gFrameLimiter.SetRenderDecoupled(gUserSettings.GetRenderDecoupled());
     Platform::GetWindow().ShowAndFocus();

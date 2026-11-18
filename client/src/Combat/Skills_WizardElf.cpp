@@ -17,11 +17,11 @@ static BYTE ResolveQueuedSkillId97k()
     // UseSkillWizard @ 488A53 always dereferences the selected slot in
     // CharacterAttribute; its result is not conditional on the queued-action
     // flag.  The flag only controls how Attack/Action seed the slot.
-    BYTE* charAttr = (BYTE*)DAT_07cf1ff4;
+    BYTE* charAttr = (BYTE*)CharacterAttributePtr;
     if (charAttr) {
-        return charAttr[DAT_07d7809c + 87];
+        return charAttr[SelectedSkillSlot + 87];
     }
-    return (BYTE)DAT_07d7809c;
+    return (BYTE)SelectedSkillSlot;
 }
 
 static void SendSkillPacket19_Local(BYTE skillId, WORD targetKey);
@@ -40,13 +40,13 @@ static void SendMuEmuEncryptedPacket(BYTE* pkt, int len)
 // target set recovered from the switch at 0x489006: 1,2,3,4,7,11,17.
 //
 // ~70% of original 1227 lines is anti-tamper hash table operations
-// (HashTable_Insert, FUN_004041e0, HashTable_GetNode, Packet_DecryptByte, Packet_DecryptBuffer,
+// (HashTable_Insert, AE_HashLookup, HashTable_GetNode, Packet_DecryptByte, Packet_DecryptBuffer,
 //  Packet_EncryptBuffer) and XOR key init + dead forward/reverse loops — all skipped.
 //
 // IDA: UseSkillWizard @ 0x004889D0. Ghidra shows 63 phantom stack params
 // (unaff_retaddr etc.) — anti-tamper obfuscation.
 // Real params: c = CHARACTER* (hero entity ptr), o = OBJECT* (hero object ptr).
-// Correspondencia: skillId = el byte de CharacterAttribute[dword_7D7809C + 87];
+// Correspondencia: skillId = el byte de CharacterAttribute[SelectedSkillSlot + 87];
 //   targetIdx = MovementSkillTarget (0x07D780A0); angle = retorno de CreateAngle
 //   (0x0043E050, que el decompile llama `Movement_Tick`); targetKey = entidad+476.
 void __cdecl Combat_UseWizardSkill(intptr_t c, intptr_t o) {
@@ -54,7 +54,7 @@ void __cdecl Combat_UseWizardSkill(intptr_t c, intptr_t o) {
     // (IDA: c); `o` is its OBJECT (IDA: a2).  The skill selector itself is
     // deliberately global in the original, not a member of either parameter.
     // 004889D0 resolves the selected skill from the CharacterAttribute slot
-    // when dword_7D78098 is active.  Do not replace it with the local runtime
+    // when SkillModeFlag is active.  Do not replace it with the local runtime
     // cache: that cache survives target/mouse transitions and can dispatch a
     // previously selected spell after the user has changed slot.
     UINT skillId = (UINT)ResolveQueuedSkillId97k();
@@ -80,7 +80,7 @@ void __cdecl Combat_UseWizardSkill(intptr_t c, intptr_t o) {
     // ── Set target position from CharactersClient[MovementSkillTarget] ──
     char* heroEntity = (char*)c;
     int targetIdx = (int)MovementSkillTarget;  // MovementSkillTarget
-    intptr_t entityBase = DAT_07abf5d0;    // CharactersClient array base
+    intptr_t entityBase = CharactersClient;    // CharactersClient array base
 
     // Target entity position: entityBase + targetIdx * 0x394 + offset
     // Ghidra: CharactersClient[_MovementSkillTarget].Object.Position[0/1/2]
@@ -106,14 +106,14 @@ void __cdecl Combat_UseWizardSkill(intptr_t c, intptr_t o) {
     case 1: case 2: case 3: case 4:
     case 7: case 0xb: case 0x11:
     {
-        // GM name check: compare Hero->ID with "webzen" (DAT_00559d94)
+        // GM name check: compare Hero->ID with "webzen" (GmNameCheck1)
         // Hero->ID at entity offset +0x1C1
         // In original: strlen-based strstr scan. If hero name contains "webzen", skip.
         // This is an anti-impersonation check — GM accounts get special treatment.
         char* heroName = (char*)(Hero ? EntityName::Get(Hero) : EntityName::Get((std::uintptr_t)c));
         {
             // Simple strstr check for "webzen" in hero name
-            const char* gmStr = DAT_00559d94;
+            const char* gmStr = GmNameCheck1;
             int gmLen = (int)strlen(gmStr);
             int nameLen = (int)strlen(heroName);
             int diff = nameLen - gmLen;
@@ -155,7 +155,7 @@ void __cdecl Combat_UseWizardSkill(intptr_t c, intptr_t o) {
         // From CreateCharacter signature: (int Key, int Type, BYTE PosX, BYTE PosY, float Rot)
         // The entity index IS the key in some sense, but Ghidra shows .Key as a field.
         // Looking at Combat.cpp and other code: entity key is used as network ID.
-        // From DAT_07abf5d0 + idx * 0x394 — the Key field in Ghidra is likely at offset 0x00.
+        // From CharactersClient + idx * 0x394 — the Key field in Ghidra is likely at offset 0x00.
         WORD targetKey = *(WORD*)(entityBase + targetIdx * CHARACTER_STRIDE + EntityOffset(476)); // IDA: *v38
 
         // Real server recv:
@@ -166,10 +166,10 @@ void __cdecl Combat_UseWizardSkill(intptr_t c, intptr_t o) {
 
     case 0xd:
     {
-        // GM name check: compare Hero->ID with "webzen" (DAT_00559d9c)
+        // GM name check: compare Hero->ID with "webzen" (GmNameCheck2)
         char* heroName = (char*)(Hero ? EntityName::Get(Hero) : EntityName::Get((std::uintptr_t)c));
         {
-            const char* gmStr = DAT_00559d9c;
+            const char* gmStr = GmNameCheck2;
             int gmLen = (int)strlen(gmStr);
             int nameLen = (int)strlen(heroName);
             int diff = nameLen - gmLen;
@@ -287,7 +287,7 @@ void __cdecl GetSkillInformation(int iType, int iLevel, char* lpszName, int* piM
         if (piSkillMana) *piSkillMana = 0;
         return;
     }
-    // DAT_07cf1ff8 is the encrypted/shadow counterpart.  The loader mutates
+    // SkillShadowTable is the encrypted/shadow counterpart.  The loader mutates
     // its +0x26 field, so it must not drive combat costs/ranges.
     BYTE* const entry = (BYTE*)SkillAttribute.Raw + iType * 0x28;
 
@@ -341,7 +341,7 @@ void __cdecl GetSkillInformation(int iType, int iLevel, char* lpszName, int* piM
 //   dir                = v52         (angulo * 0.71111113)
 //   skillDistance      = v112        (SkillAttribute[40*skill + 38])
 // ~60% of the original decompile is anti-tamper hash table operations
-// (HashTable_Insert, FUN_004041e0, HashTable_GetNode, Packet_DecryptByte, Packet_DecryptBuffer,
+// (HashTable_Insert, AE_HashLookup, HashTable_GetNode, Packet_DecryptByte, Packet_DecryptBuffer,
 //  Packet_EncryptBuffer) and XOR key init + dead forward/reverse loops — all skipped.
 bool __stdcall Combat_UseElfSkillItem(intptr_t c, intptr_t pItem) {
     // c = CHARACTER* (hero entity), pItem = CHARACTER_ATTRIBUTE* (char attributes)
@@ -355,9 +355,9 @@ bool __stdcall Combat_UseElfSkillItem(intptr_t c, intptr_t pItem) {
 
     bool result = false;
 
-    // CharacterAttribute = DAT_07cf1ff4, Hero = DAT_07abf5d8
-    char* charAttrBase = (char*)DAT_07cf1ff4;
-    char* heroEntity   = DAT_07abf5d8;
+    // CharacterAttribute = CharacterAttributePtr, Hero = Hero
+    char* charAttrBase = (char*)CharacterAttributePtr;
+    char* heroEntity   = Hero;
 
     if (charAttrBase == nullptr || heroEntity == nullptr) {
         return false;
@@ -409,14 +409,14 @@ bool __stdcall Combat_UseElfSkillItem(intptr_t c, intptr_t pItem) {
             if (slot == -1) continue;  // no potion found
 
             // Check warehouse and trade are closed
-            if (DAT_07eaa119 != '\0') {  // WarehouseOpened
-                UIChatLogWindow_AddText((const char*)&DAT_07e11dfc, (const char*)&DAT_07d4c89c, 2);
+            if (WarehouseOpened != '\0') {  // WarehouseOpened
+                UIChatLogWindow_AddText((const char*)&ChatLogWidgetId, (const char*)&NotEnoughManaText, 2);
                 continue;
             }
 
             // anti-tamper hash table — skipped (HashTable_Insert_Short + TradeOpened check)
-            if (DAT_07eaa11b != '\0') {  // TradeOpened
-                UIChatLogWindow_AddText((const char*)&DAT_07e11dfc, (const char*)&DAT_07d4c89c, 2);
+            if (TradeOpened != '\0') {  // TradeOpened
+                UIChatLogWindow_AddText((const char*)&ChatLogWidgetId, (const char*)&NotEnoughManaText, 2);
                 continue;
             }
 
@@ -456,7 +456,7 @@ bool __stdcall Combat_UseElfSkillItem(intptr_t c, intptr_t pItem) {
         // IDA: SkillElf (0x0048BD70).
         // DESVIACION (fix del DLL, Patchs.cpp 0x0048C6F9): usar SelectedCharacter si CheckAttack permite atacarlo; conservar la ruta sin blanco.
         const int targetIndex = CheckAttack() ? (int)SelectedCharacter : (int)MovementSkillTarget;
-        WORD targetKey = *(WORD*)((char*)(uintptr_t)DAT_07abf5d0 + targetIndex * CHARACTER_STRIDE + EntityOffset(476));
+        WORD targetKey = *(WORD*)((char*)(uintptr_t)CharactersClient + targetIndex * CHARACTER_STRIDE + EntityOffset(476));
         if (targetKey == 0xFFFF) {
             continue;
         }
@@ -487,14 +487,14 @@ bool __stdcall Combat_UseElfSkillItem(intptr_t c, intptr_t pItem) {
             //     v35 = c.y - (TargetY * 100.0 + 50.0);
             //     v36 = c.x - (TargetX * 100.0 + 50.0);
             //     if (sqrt(v35*v35 + v36*v36) > Distance * 100.0) -> no dispara
-            float targetWorldX = (float)((int)TargetX) * _DAT_005524f0 + 50.0f;
-            float targetWorldY = (float)((int)TargetY) * _DAT_005524f0 + 50.0f;
+            float targetWorldX = (float)((int)TargetX) * GridToWorldScale + 50.0f;
+            float targetWorldY = (float)((int)TargetY) * GridToWorldScale + 50.0f;
 
             // Check range: distance from hero to target must be within skill range
             float dx = heroPosX - targetWorldX;
             float dy = heroPosY - targetWorldY;
             float dist = SQRT(dx * dx + dy * dy);
-            float maxRange = (float)(int)skillDistance * _DAT_005524f0;
+            float maxRange = (float)(int)skillDistance * GridToWorldScale;
 
             if (dist > maxRange) continue;  // target out of range
 
@@ -510,7 +510,7 @@ bool __stdcall Combat_UseElfSkillItem(intptr_t c, intptr_t pItem) {
 
             // GM name check: compare Hero->ID with "webzen" string
             // Hero->ID at entity offset +0x1C1
-            // DAT_00559db4 = comparison string
+            // GmNameCheckString = comparison string
             // (This is an anti-impersonation check — if hero name contains GM string, special path)
             // Skipping detailed string comparison; the game logic proceeds regardless
 

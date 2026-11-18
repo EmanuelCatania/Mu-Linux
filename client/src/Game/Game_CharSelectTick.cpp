@@ -3,22 +3,22 @@
 //
 // In-game per-frame tick called once the character enters the world.
 // Two phases:
-//   1) First call (DAT_083a7c4c == 0): send 0xC1/0xF3 char-select packet, init subsystems.
-//   2) Every call: wait for server ack (DAT_05826cb0 == 0x3d → DAT_083a7c10=1),
+//   1) First call (InitMainScene == 0): send 0xC1/0xF3 char-select packet, init subsystems.
+//   2) Every call: wait for server ack (CurrentProtocolState == 0x3d → EnableMainRender=1),
 //      then run the full per-frame update pipeline.
 //
-// Packet sent (first call, if DAT_083a410c == 0):
+// Packet sent (first call, if InGameModeFlag == 0):
 //   [0xC1][len][0xF3][charName(10B, zero-padded, XOR-enc)][slot_byte]
 //
 // Globals:
-//   DAT_083a7c4c  — one-time init guard
-//   DAT_083a7c10  — server ack flag (gates per-frame logic)
-//   DAT_05826cb0  — server response: 0x3c=sent, 0x3d=confirmed
+//   InitMainScene  — one-time init guard
+//   EnableMainRender  — server ack flag (gates per-frame logic)
+//   CurrentProtocolState  — server response: 0x3c=sent, 0x3d=confirmed
 //   CameraTopViewEnabled  — special viewport mode flag
 //   g_bUseChatListBox  — flag enabling anti-tamper block
 //   World  — World
-//   DAT_07eaa11b  — anti-tamper sequence counter
-//   DAT_07eaa116/117 — anti-tamper flags
+//   TradeOpened  — anti-tamper sequence counter
+//   CharacterOpened/117 — anti-tamper flags
 //   DAT_007eaa118..11c — anti-tamper bytes
 
 #include "stdafx.h"
@@ -38,9 +38,9 @@ void Game_CharSelectTick(void)
 {
     EmoteMenu::ApplyPending();   // emote elegido en la lista del chat
     // ── ONE-TIME INIT ─────────────────────────────────────────────────────────
-    if (DAT_083a7c4c == '\0') {
-        CErrorReport_Write(&DAT_055c9bf0, "> Character selected <%d> %s");
-        DAT_083a7c4c = 1;
+    if (InitMainScene == '\0') {
+        CErrorReport_Write(&ErrorReportCtx, "> Character selected <%d> %s");
+        InitMainScene = 1;
 
         // IDA 0x524E30 L80-219: el F3/03 (pedir entrar con el personaje) sale
         // ACA, antes del flush del chat y del clear del listbox. Asi la
@@ -49,8 +49,8 @@ void Game_CharSelectTick(void)
         // Desviacion: IDA copia strlen(nombre) bytes sin padding; mandamos el
         // name[40] completo con relleno en cero (el server copia el campo
         // entero y sin padding leeria basura del buffer).
-        if (DAT_083a410c == 0) {
-            DAT_05826cb0 = 0x3c;   // CurrentProtocolState = 60
+        if (InGameModeFlag == 0) {
+            CurrentProtocolState = 0x3c;   // CurrentProtocolState = 60
             BYTE pkt[4 + NetText::CharacterNameSize] = { 0xC1, (BYTE)(4 + NetText::CharacterNameSize), 0xF3, 0x03 };
             NetText::ToServer(pkt + 4, NetText::CharacterNameSize, EntityName::Selected());
             gNetwork.SendC1(pkt, sizeof(pkt));
@@ -61,9 +61,9 @@ void Game_CharSelectTick(void)
         // IDA 0x525384: mov [CameraAngle+8], 0xC2340000 (= float -45.0).
         CameraAngle[2] = -45.0f;  // yaw = -45° (iso rotation around Z)
         ClearInput(1);
-        DAT_00559c84 = 0;
-        DAT_07e11d71 = 0;
-        DAT_00559c8c = 0x100;
+        InputEnable = 0;
+        ImeModeFlag = 0;
+        LegacyInputTextWidth = 0x100;
         // IDA: InputTextMax[0] = 42, [1] = 10. Desde 0.97.40 son caracteres:
         // el mensaje entra en 199 bytes y el nombre del susurro en 40.
         Input_SetLimit(0, (int)NetText::ChatMessageSize - 1, 0x2a);
@@ -72,36 +72,36 @@ void Game_CharSelectTick(void)
 
         // 120× widget draw
         for (int i = 0x78; i > 0; i--)
-            UIChatLogWindow_AddText((const char*)&DAT_083a7c90, (const char*)&DAT_083a7c8c, 0);
+            UIChatLogWindow_AddText((const char*)&CharSelectLogLabel, (const char*)&CharSelectLogText, 0);
 
-        ((BYTE*)&DAT_07e913a8)[0] = 0;
-        DAT_07e91428 = 0;
-        // DAT_055c9ff0 = ChatListBox engine object.  Vtable slot at +0x28
+        ((BYTE*)&ScreenBannerText)[0] = 0;
+        CharSelectClearScratch = 0;
+        // ChatHistoryWidget = ChatListBox engine object.  Vtable slot at +0x28
         // (= slot 10) is ChatLB_clearList — a __fastcall method that
         // expects `this` in ECX.  The previous Ghidra-style stub dispatch
         // here was `__cdecl` with no args, which left ECX = garbage, and
         // the called clearList walked random "list" data → AV reading
         // 0x81EC8B55 (instruction bytes — i.e. node[1] pointed into
         // .text).  Use the proper fastcall dispatch.
-        if (DAT_055c9ff0 && ChatWidget_GetVTable(DAT_055c9ff0)) {
-            DWORD* obj = (DWORD*)DAT_055c9ff0;
+        if (ChatHistoryWidget && ChatWidget_GetVTable(ChatHistoryWidget)) {
+            DWORD* obj = (DWORD*)ChatHistoryWidget;
             void** vt  = ChatWidget_GetVTable(obj);
             typedef void (__fastcall *FnClear)(DWORD*);
             ((FnClear)vt[10])(obj);
-            Object_ClearMembers(DAT_055c9ff0);
+            Object_ClearMembers(ChatHistoryWidget);
         }
-        CErrorReport_Write(&DAT_055c9bf0, "> Main Scene init success");
+        CErrorReport_Write(&ErrorReportCtx, "> Main Scene init success");
         CErrorReport_WriteCurrentTime(1); // IDA: FUN_004055A0
     }
 
     // ── WAIT FOR SERVER ACK ───────────────────────────────────────────────────
-    // IDA 0x524E30 L281-287: EnableMainRender (DAT_083a7c10) se prende recien
+    // IDA 0x524E30 L281-287: EnableMainRender (EnableMainRender) se prende recien
     // cuando JoinMapServer deja CurrentProtocolState en 61. Mientras tanto no
     // corre el tick ni el render (Game_RenderTick tiene el mismo gate), asi que
     // queda en pantalla el ultimo frame de la carga.
-    if (DAT_05826cb0 == 0x3d) {
-        DAT_083a7c10 = 1;
-    } else if (DAT_083a7c10 == 0) {
+    if (CurrentProtocolState == 0x3d) {
+        EnableMainRender = 1;
+    } else if (EnableMainRender == 0) {
         return;
     }
 
@@ -109,28 +109,28 @@ void Game_CharSelectTick(void)
     Bisect_ChatMode("CST_pre_4f95e0");    // IDA 00524E30: EarthQuake * 0.2.  This is a fixed
     // per-frame decay, not g_DeltaTime; using the latter removes the visible
     // camera impulse generated by effects such as Hell Fire.
-    _DAT_083a0210 *= 0.2f;
+    EarthQuakeStrength *= 0.2f;
 
     Terrain_Water();  // world tick
     Bisect_ChatMode("CST_post_4f95e0");
-    DAT_07eaa160  = 0;
-    DAT_0055a3e4  = 0xffffffff;
-    DAT_07d78094  = 0;
+    CheckInventoryPtr  = 0;
+    HoveredSkillIndex  = 0xffffffff;
+    MouseOnWindowFlag  = 0;
 
     // DESVIACION (DLL Antilag, 0x00525483): sin interfaz se saltea como en la vista cenital.
     if (CameraTopViewEnabled == '\0' && !gUserSettings.GetAntilag(ANTILAG_INTERFACE)) {
         // Standard viewport mode
-        DAT_07d78094 = (DAT_083a4278 > 0x1af) ? 1 : 0;
-        DAT_055c9b80 = 0;
-        if (DAT_055c9ff0 && ChatWidget_GetVTable(DAT_055c9ff0)) {
+        MouseOnWindowFlag = (MouseY > 0x1af) ? 1 : 0;
+        ChatFocusIdB = 0;
+        if (ChatHistoryWidget && ChatWidget_GetVTable(ChatHistoryWidget)) {
             // vtable[+0x14] = slot 5 = ChatLB_tick (__fastcall, takes this+arg).
-            DWORD* obj = (DWORD*)DAT_055c9ff0;
+            DWORD* obj = (DWORD*)ChatHistoryWidget;
             void** vt  = ChatWidget_GetVTable(obj);
             typedef int (__fastcall *FnTick)(DWORD*, int /*edx*/, int);
             ((FnTick)vt[5])(obj, 0, 0);
         }
         Bisect_ChatMode("CST_post_chatLB");        UpdateWindowsMouse();
-        Bisect_ChatMode("CST_post_4ecb00");        Packet_ParseReceived((void*)(uintptr_t)DAT_00583d8c);
+        Bisect_ChatMode("CST_post_4ecb00");        Packet_ParseReceived((void*)(uintptr_t)g_csQuest);
         Bisect_ChatMode("CST_post_402fd0");        Chat_InputTick();
         Bisect_ChatMode("CST_post_4b14f0_ChatInputTick");
         // ── Reposición per-frame del ChatListBox ────────────────────────────
@@ -146,23 +146,23 @@ void Game_CharSelectTick(void)
         // (IDA sub_40D610), así que mover el widget es lo único que las mueve.
         if (g_bUseChatListBox == 1) {
             int y, x;
-            if (DAT_07eaa117 == '\0') {
+            if (InventoryOpened == '\0') {
                 y = 0x1a4; x = 0xba;
             } else {
-                if (DAT_07eaa116 == '\0') {
-                    // Anti-tamper: track DAT_07eaa11b ref-count
-                    unsigned idx = HashTable_GetIndex(&MAIN_HASH_CLASS, &DAT_07eaa11b);
+                if (CharacterOpened == '\0') {
+                    // Anti-tamper: track TradeOpened ref-count
+                    unsigned idx = HashTable_GetIndex(&MAIN_HASH_CLASS, &TradeOpened);
                     if (idx == 0xffffffff) {
                         void* node = AntiTamper_HashNode(); *((BYTE*)node+1)=1;
-                        HashTable_Insert(&MAIN_HASH_CLASS, node, &DAT_07eaa11b);
+                        HashTable_Insert(&MAIN_HASH_CLASS, node, &TradeOpened);
                     }
                     // TradeOpened (11b) + Warehouse (119) + ChaosMix (11a) +
                     // EventWindow (11c); después ShopOpened (118).  Per IDA,
                     // el primer grupo NO incluye 118 — acá se leía 118 en lugar
                     // de 11b.  Si TODOS están cerrados, el chat va a (186,420).
-                    if (DAT_07eaa11b == '\0' && DAT_07eaa119 == '\0' &&
-                        DAT_07eaa11a == '\0' && DAT_07eaa11c == '\0' &&
-                        ((BYTE*)&DAT_07eaa118)[0] == '\0')
+                    if (TradeOpened == '\0' && WarehouseOpened == '\0' &&
+                        ChaosMixOpened == '\0' && EventWindowOpened == '\0' &&
+                        ((BYTE*)&ShopOpened)[0] == '\0')
                     {
                         y = 0x1a4; x = 0xba;
                     } else {
@@ -174,17 +174,17 @@ void Game_CharSelectTick(void)
                     y = 0x1a4; x = 0;
                 }
             }
-            if (DAT_055c9ff0) {
-                Object_SetRectFields((void*)(uintptr_t)DAT_055c9ff0, x, y);
+            if (ChatHistoryWidget) {
+                Object_SetRectFields((void*)(uintptr_t)ChatHistoryWidget, x, y);
             }
-        } else if (DAT_055c9ff0) {
+        } else if (ChatHistoryWidget) {
             // ChatListBox apagado: historial como overlay arriba-izquierda.
-            Object_SetRectFields((void*)(uintptr_t)DAT_055c9ff0, (int)0xfffffff6, 0x51);
+            Object_SetRectFields((void*)(uintptr_t)ChatHistoryWidget, (int)0xfffffff6, 0x51);
         }
     }
 
-    if (DAT_083a7c24 != 0)
-        DAT_07d78094 = 1;
+    if (InGameUiState != 0)
+        MouseOnWindowFlag = 1;
 
     if (CameraTopViewEnabled == '\0')
         MoveItems();
@@ -201,9 +201,9 @@ void Game_CharSelectTick(void)
     // O sea LABEL_108 es SALTEAR.
     bool doLeaves;
     if (gMapManager.GetCurrentMap() == 0)
-        doLeaves = (DAT_07e118e8 != 4);
+        doLeaves = (WorldMapType != 4);
     else if (gMapManager.GetCurrentMap() == 2)
-        doLeaves = !(DAT_07e118e8 == 3 || DAT_07e118e8 >= 10);
+        doLeaves = !(WorldMapType == 3 || WorldMapType >= 10);
     else
         doLeaves = (gMapManager.GetCurrentMap() == 3 || gMapManager.GetCurrentMap() == 7 ||
                     gMapManager.GetCurrentMap() == 9 || gMapManager.GetCurrentMap() == 10);
@@ -221,8 +221,8 @@ void Game_CharSelectTick(void)
     //   CharacterAnimation — avanza entity[+0x108] (frame counter). Para todos.
     // El loop manual de abajo está desactivado (`false &&`).
     {
-        intptr_t heroEnt = (intptr_t)DAT_07abf5d8;
-        intptr_t base = (intptr_t)DAT_07abf5d0;
+        intptr_t heroEnt = (intptr_t)Hero;
+        intptr_t base = (intptr_t)CharactersClient;
         MoveCharactersClient();
         for (int s = 0; false && s < 400; ++s) {
             intptr_t e = base + s * CHARACTER_STRIDE;
@@ -258,7 +258,7 @@ void Game_CharSelectTick(void)
     Effect_TickFlare();
 
     // IDA: Game_CharSelectTick (0x00524E30): conserva las dos llamadas de diagnóstico.
-    if (DAT_0839bc86 != '\0' && DAT_07e11d30 == 0) {
+    if (TerrainNoDrawFlag != '\0' && EditFlag == 0) {
         CWsctlc__LogPrintOn();
         CWsctlc__LogPrintOn();
     }

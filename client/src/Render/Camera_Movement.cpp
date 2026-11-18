@@ -12,28 +12,28 @@
 // SceneFlag==2: random waypoint selection. Otherwise: fixed waypoint 5.
 void __stdcall MoveCamera(void) {
     // 0x0051E4E0 — Intro/login camera walk animation
-    // CameraWalk[] = DAT_005615ec (waypoints: 6 floats per entry = pos[3] + angle[3])
-    // CurrentCameraCount = DAT_005615e8, CurrentCameraNumber = DAT_083a7c3c
-    // CurrentCameraWalkType = DAT_083a7c38, CameraWalkCut = DAT_083a7af4
-    // CurrentCameraPosition = DAT_083a432c[3], CurrentCameraAngle = DAT_083a7ad0[3]
-    // CurrentCameraWalkDelta = DAT_083a7adc[6] (pos delta[3] + angle delta[3])
-    // _DAT_00552d44 = step scale, _DAT_00552a30 = lerp speed
-    // SceneFlag = DAT_07e11980, CameraFOV = DAT_00561554
+    // CameraWalk[] = CameraWalk0PosX (waypoints: 6 floats per entry = pos[3] + angle[3])
+    // CurrentCameraCount = CurrentCameraCount, CurrentCameraNumber = CameraNumber
+    // CurrentCameraWalkType = CameraWalkType, CameraWalkCut = CameraWalkCut
+    // CurrentCameraPosition = LegacyCurrentCamPos0[3], CurrentCameraAngle = LegacyCurrentCamAngle0[3]
+    // CurrentCameraWalkDelta = CurrentCameraWalkDelta[6] (pos delta[3] + angle delta[3])
+    // 0.0078125f = step scale, CameraLerpSpeed = lerp speed
+    // SceneFlag = LegacySceneFlag, CameraFOV = CameraFOVStorage
     // CameraAngle = float[3] at 0x083a42b8, CameraPosition = float[3] at 0x083a42d4
 
     // Usar los arrays concretos en vez de `(float*)&DAT_*`: los DAT_* son
     // referencias (float&/DWORD&) y tomar `&` sobre una referencia no siempre da el
     // address que uno espera con MSVC/extern (CurrentCameraAngle quedaba en
     // (0,0,0) y la escena se veía sin pitch).
-    float* CamWalk = CameraWalk_005615ec;        // concrete float[36]
+    float* CamWalk = CameraWalkTable;        // concrete float[36]
     float* CurPos = CurrentCameraPosition;       // concrete float[3]
     float* CurAngle = CurrentCameraAngle;        // concrete float[3]
-    float* CurDelta = DAT_083a7adc;              // CurrentCameraWalkDelta[6]
-    DWORD walkType = DAT_083a7c38;
-    int camNum = (int)DAT_083a7c3c;
+    float* CurDelta = CurrentCameraWalkDelta;              // CurrentCameraWalkDelta[6]
+    DWORD walkType = CameraWalkType;
+    int camNum = (int)CameraNumber;
 
     // First frame init: count==-1
-    if ((int)DAT_005615e8 == -1) {
+    if ((int)CurrentCameraCount == -1) {
         CurAngle[0] = CamWalk[3];
         CurAngle[1] = CamWalk[4];
         CurAngle[2] = CamWalk[5];
@@ -42,30 +42,30 @@ void __stdcall MoveCamera(void) {
         CurPos[2] = CamWalk[2];
         camNum = 1;
         walkType = 1;
-        DAT_083a7c3c = 1;
-        DAT_083a7c38 = 1;
+        CameraNumber = 1;
+        CameraWalkType = 1;
         for (int i = 0; i < 3; i++) {
-            CurDelta[i]     = (CamWalk[6 + i] - CurPos[i]) * _DAT_00552d44;
-            CurDelta[i + 3] = (CamWalk[9 + i] - CurAngle[i]) * _DAT_00552d44;
+            CurDelta[i]     = (CamWalk[6 + i] - CurPos[i]) * 0.0078125f;
+            CurDelta[i + 3] = (CamWalk[9 + i] - CurAngle[i]) * 0.0078125f;
         }
     }
 
-    DAT_005615e8 = DAT_005615e8 + 1;
+    CurrentCameraCount = CurrentCameraCount + 1;
 
     // Check if we should advance to next waypoint
     bool advance = false;
-    if (DAT_083a7af4 == 0) {
-        if (DAT_005615e8 >= 0x28) advance = true;
-    } else if (DAT_083a7af4 >= 1 && DAT_005615e8 >= 0x80) {
+    if (CameraWalkCut == 0) {
+        if (CurrentCameraCount >= 0x28) advance = true;
+    } else if (CameraWalkCut >= 1 && CurrentCameraCount >= 0x80) {
         advance = true;
     }
 
     if (advance) {
-        DAT_005615e8 = 0;
-        if (DAT_083a7af4 == 0) {
-            DAT_083a7af4 = 1;
+        CurrentCameraCount = 0;
+        if (CameraWalkCut == 0) {
+            CameraWalkCut = 1;
         } else if (SceneFlag == 2) {
-            // El decompile usaba DAT_07e11980 (una variable que NO existe como xref en el
+            // El decompile usaba LegacySceneFlag (una variable que NO existe como xref en el
             // binario; siempre 0). La instrucción real en PE @ 0x0051E5D5 es
             // `CMP [0x005615c0], 2` → SceneFlag.
             // SceneFlag==2 (login): random waypoint 1..4, random walk type 0..1
@@ -73,23 +73,23 @@ void __stdcall MoveCamera(void) {
             unsigned int rMod = r & 0x80000003;
             if ((int)rMod < 0) rMod = (rMod - 1 | 0xfffffffc) + 1;
             camNum = rMod + 1;
-            DAT_083a7c3c = camNum;
+            CameraNumber = camNum;
             r = rand();
             walkType = r & 0x80000001;
             if ((int)walkType < 0) walkType = (walkType - 1 | 0xfffffffe) + 1;
-            DAT_083a7c38 = walkType;
+            CameraWalkType = walkType;
         } else {
             // Other scenes: fixed waypoint 5, lerp mode
             walkType = 0;
             camNum = 5;
-            DAT_083a7c3c = 5;
-            DAT_083a7c38 = 0;
+            CameraNumber = 5;
+            CameraWalkType = 0;
         }
         // Recompute deltas for new target waypoint
         float* target = CamWalk + camNum * 6;
         for (int i = 0; i < 3; i++) {
-            CurDelta[i]     = (target[i] - CurPos[i]) * _DAT_00552d44;
-            CurDelta[i + 3] = (target[i + 3] - CurAngle[i]) * _DAT_00552d44;
+            CurDelta[i]     = (target[i] - CurPos[i]) * 0.0078125f;
+            CurDelta[i + 3] = (target[i + 3] - CurAngle[i]) * 0.0078125f;
         }
     }
 
@@ -98,8 +98,8 @@ void __stdcall MoveCamera(void) {
         // Lerp mode: smooth approach to target
         float* target = CamWalk + camNum * 6;
         for (int i = 0; i < 3; i++) {
-            CurPos[i]   = (target[i] - CurPos[i]) * _DAT_00552a30 + CurPos[i];
-            CurAngle[i] = (target[i + 3] - CurAngle[i]) * _DAT_00552a30 + CurAngle[i];
+            CurPos[i]   = (target[i] - CurPos[i]) * CameraLerpSpeed + CurPos[i];
+            CurAngle[i] = (target[i + 3] - CurAngle[i]) * CameraLerpSpeed + CurAngle[i];
         }
     } else {
         // Linear delta mode: add delta each frame (only X and Y)

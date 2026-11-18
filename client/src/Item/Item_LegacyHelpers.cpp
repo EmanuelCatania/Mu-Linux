@@ -36,13 +36,13 @@ extern void __cdecl operator_delete(void* ptr);
 // ── New helpers needed by SecondPassword implementations ─────────────────────
 
 // GetItemCount @ 0x00482FF0 — count of inventory items of given type+level
-// IDA-ported: walks the 8×8 inventory grid (base DAT_07EA9328..DAT_07EA9504,
+// IDA-ported: walks the 8×8 inventory grid (base InventoryGridBase..InventoryGridEnd,
 // 17 ints per row, 136 ints per column) and counts matches.
 // iType == -1: match any; iLevel == -1: match any.
 int __cdecl GetItemCount(int siType, int iLevel) {
     int result = 0;
     int columns = 8;
-    int *v3 = (int *)&DAT_07ea9504;
+    int *v3 = (int *)&InventoryGridEnd;
     do {
         int *v4 = v3;
         int v5 = 8;
@@ -66,7 +66,7 @@ int __cdecl GetItemCount(int siType, int iLevel) {
 // matching slot index (0..63) or -1. iLevel == -1 matches any level.
 int __cdecl GetItemSlot(int siType, int iLevel) {
     int v2 = 7;
-    int *v3 = (int *)&DAT_07ea9504;
+    int *v3 = (int *)&InventoryGridEnd;
 LABEL_2: {
         int v4 = 7;
         int result = v2 + 56;

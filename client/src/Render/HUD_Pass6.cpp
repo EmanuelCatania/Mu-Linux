@@ -3,13 +3,13 @@
 //
 // Each function in this file is a real port from IDA (1:1 structure) — the
 // anti-tamper hash-table dances around CharacterMachine / TradeOpened /
-// ShopOpened are SKIPPED because in our build dword_55C9BD4 == 0 makes
+// ShopOpened are SKIPPED because in our build HashTableCapacity == 0 makes
 // them no-ops anyway.  What remains is the actual visual render work.
 //
 // Functions ported (1:1 from IDA):
-//   * sub_4E9300        (156 b)  — pet panel: hit-test the 11-slot grid
-//   * sub_4F6420        (162 b)  — render the picked-item icon at the cursor
-//   * sub_5126E0        (467 b)  — billboard particle quad
+//   * HUD_PetPanelSlotHitTest (156 b) - pet panel: hit-test the 11-slot grid (IDA: sub_4E9300)
+//   * HUD_RenderPickedItemIcon (162 b) - render the picked-item icon at the cursor (IDA: sub_4F6420)
+//   * HUD_RenderBillboardParticle (467 b) - billboard particle quad (IDA: sub_5126E0)
 //   * sub_4F5CE0        (870 b)  — early-pass inventory grid render (3D items)
 //   * RenderInventoryInterface (190 b)  — panel skeleton (frame bitmaps)
 //   * RenderItemsBoxes  (251 b)  — empty/occupied cell tile renderer
@@ -24,7 +24,7 @@
 //   * RenderGoldenArcherWindow (3599 b) — golden archer panel (skeleton)
 //
 // "Skeleton" = real call structure (gating flag + RenderInventoryInterface
-// + RenderItemsBoxes/sub_4E38B0 + close-button); panels-specific
+// + RenderItemsBoxes/HUD_RenderInventoryGrid + close-button); panels-specific
 // extra widgets (drag-drop hit-test, sell prices, etc.) deferred.
 //
 // =============================================================================
@@ -57,26 +57,26 @@ extern "C" void Net_SendNpcTalkClose(void);
 
 // Origen (esquina superior izquierda) de los paneles Character / Guild.
 //
-// Son los globals reales (CharacterInfoStartX/Y = DAT_07ea982c/30,
-// GuildListStartX/Y = DAT_07e91788/84), no copias locales: los hit-tests de
+// Son los globals reales (CharacterInfoStartX/Y = CharacterInfoStartXStorage/30,
+// GuildListStartX/Y = GuildListStartXStorage/84), no copias locales: los hit-tests de
 // cierre (GuildCreator_HitTest / CharacterInfo_HitTest en Net/SecondPassword,
 // port de sub_4E4760 L617-629 y sub_4E5DE0 L336-357) los leen, y
 // CharacterInfo_HitTest/Party_MemberClickHandler hacen early-return cuando el
 // origen es 0.
-#define CharacterInfoStartX  (*(int*)&DAT_07ea982c)
-#define CharacterInfoStartY  (*(int*)&DAT_07ea9830)
-#define GuildListStartX      (*(int*)&DAT_07e91788)
-#define GuildListStartY      (*(int*)&DAT_07e91784)
+#define CharacterInfoStartX  (*(int*)&CharacterInfoStartXStorage)
+#define CharacterInfoStartY  (*(int*)&CharacterInfoStartYStorage)
+#define GuildListStartX      (*(int*)&GuildListStartXStorage)
+#define GuildListStartY      (*(int*)&GuildListStartYStorage)
 // PartyStartX/Y (= Inventory[32].DamageMin / .SuccessfulBlocking en el IDA,
 // leídos por sub_4E5500 L168-175 para el botón de cerrar del panel de party).
-#define PartyStartX          (*(int*)&DAT_07ea5b24)
-#define PartyStartY          (*(int*)&DAT_07ea5b28)
+#define PartyStartX          (*(int*)&PartyStartXStorage)
+#define PartyStartY          (*(int*)&PartyStartYStorage)
 
 // External helpers ported in earlier passes.
 extern "C" SIZE*  __cdecl RenderCenteredText(int x, int y, const char* text);
 extern "C" int    __cdecl GetScreenWidth(void);
 extern "C" double __cdecl RenderNumber2D(float, float, int, float, float);
-extern "C" int    __cdecl sub_4E38B0(float a1, float a2, const void* items, int a4, float sx, int a6);
+extern "C" int    __cdecl HUD_RenderInventoryGrid(float a1, float a2, const void* items, int a4, float sx, int a6);
 
 extern "C" void   __cdecl RenderTipText(int sx, int sy, const char* Text);
 extern "C" void   __cdecl RenderInputText(int x, int y, int Index);
@@ -84,26 +84,25 @@ extern "C" void   __cdecl CreateGuildMark(int nMarkIndex, bool blend);
 extern "C" void GuildMark_InitializePalette(bool blend);
 extern "C" int    InputTextWidth;
 extern "C" BYTE   InputTextHide[10];
-#define dword_7E91388 DAT_07e91388
-extern "C" DWORD DAT_07e91388;
-extern "C" char   DAT_07ea51f5[64];
-extern "C" char   DAT_07eaa0dc;
+#define dword_7E91388 ItemPickedFlag
+extern "C" DWORD ItemPickedFlag;
+extern "C" char   GuildMarkGrid[64];
+extern "C" char   GuildMarkColorIdx;
 // ShopOpened/WarehouseOpened/ChaosMixOpened/EventWindowOpened/PartyOpened/
 // GuildOpened/GuildCreatorOpened now #defined in globals.h to DAT_07eaa11x.
 extern "C" int    g_bServerDivisionEnable;
 extern "C" const char* Guild_GetMarkName(int row);
 extern "C" int GuildMark_FindRecordByKey(int key);
 // InventoryStartX/Y and TradeInventoryStartX/Y now #defined in globals.h
-// to DAT_07ea5288/5284 and DAT_07ea5290/528c respectively.
+// to InventoryStartX/5284 and TradeInventoryStartX/528c respectively.
 extern "C" int    dword_7EAA0CC, dword_7EAA0C8;
 extern "C" BYTE   Inventory[], OffsetInventoryItems[], OffsetTradeItems[], OffsetMixItems[], OffsetWarehouseItems[];
 extern "C" BYTE   ShopItems[];   // pool dedicado de la tienda
 extern "C" void   __cdecl UI_Main(int slot_idx, short* inv_base, unsigned int gridW);
-extern "C" DWORD  DAT_07eaa131;
+extern "C" DWORD  PinCheckboxState;
 
-#define TradeOpened              DAT_07eaa11b
 #define g_bEventChipDialogEnable _g_bEventChipDialogEnable
-#define ItemAttribute            ((ITEM_ATTRIBUTE*)DAT_07d78068)
+#define ItemAttribute            ((ITEM_ATTRIBUTE*)ItemAttributeBase)
 
 
 // pPickedItem global (item being dragged).  Stored as int (cast to short
@@ -117,23 +116,23 @@ extern "C" {
 
 extern "C" void __cdecl SyncPickedItemVisualState(void)
 {
-    pPickedItem = (int)(short)*(short*)DAT_07e91350;
-    Level = *(int*)(DAT_07e91350 + 4);
-    byte_7E9136B = *(BYTE*)(DAT_07e91350 + 27);
+    pPickedItem = (int)(short)*(short*)PickedItemData;
+    Level = *(int*)(PickedItemData + 4);
+    byte_7E9136B = *(BYTE*)(PickedItemData + 27);
 }
 
-// Aliases for IDA float constants used by sub_5126E0.
+// Aliases for IDA float constants used by HUD_RenderBillboardParticle.
 // ConvertX/Y map 640×480 game coords to actual screen pixels.
 static inline float ConvertX(float x) { return x * (float)((double)gWindow.GetWidth()  / 640.0); }
 static inline float ConvertY(float y) { return y * (float)((double)gWindow.GetHeight() / 480.0); }
 static inline void  BindTexture(int tex) { GL_BindTextureSlot(tex); }
 
 // =============================================================================
-// sub_4E9300 — pet panel slot hit-test.  Returns 0..10 for the 5×N grid
+// HUD_PetPanelSlotHitTest (IDA: sub_4E9300) - pet panel slot hit-test.  Returns 0..10 for the 5×N grid
 // slot (40 px stride), 11..N for the action-button row at y=235, or -1.
 // =============================================================================
-extern "C" int __cdecl sub_4E9300_(void);
-int __cdecl sub_4E9300_(void)
+extern "C" int __cdecl HUD_PetPanelSlotHitTest(void);
+int __cdecl HUD_PetPanelSlotHitTest(void)
 {
     for (int i = 0; i < 11; ++i) {
         int gx = 40 * (i % 5) + 223;
@@ -154,10 +153,10 @@ int __cdecl sub_4E9300_(void)
 }
 
 // =============================================================================
-// sub_4F6420 — render the picked-item icon following the cursor.
+// HUD_RenderPickedItemIcon (IDA: sub_4F6420) - render the picked-item icon following the cursor.
 // =============================================================================
-extern "C" void __cdecl sub_4F6420(int /*a1*/, int /*a2*/, int /*a3*/, int /*a4*/);
-void __cdecl sub_4F6420(int, int, int, int)
+extern "C" void __cdecl HUD_RenderPickedItemIcon(int /*a1*/, int /*a2*/, int /*a3*/, int /*a4*/);
+void __cdecl HUD_RenderPickedItemIcon(int, int, int, int)
 {
     SyncPickedItemVisualState();
     if (pPickedItem < 0) return;
@@ -173,11 +172,11 @@ void __cdecl sub_4F6420(int, int, int, int)
 }
 
 // =============================================================================
-// sub_5126E0 — billboard particle quad.  Renders a rotated textured quad
+// HUD_RenderBillboardParticle (IDA: sub_5126E0) - billboard particle quad.  Renders a rotated textured quad
 // at (a2, a3) with size (a4, a5) and rotation a6 (radians as int from IDA's
 // COERCE_FLOAT macros).
 // =============================================================================
-extern "C" void __cdecl sub_5126E0(int tex, float a2, float a3,
+extern "C" void __cdecl HUD_RenderBillboardParticle(int tex, float a2, float a3,
                                    float a4, float a5, int a6)
 {
     float v26 = ConvertX(a2);
@@ -278,42 +277,42 @@ char __cdecl sub_4F5CE0_(void)
     HUD_BeginGridPass(0);
     if (InventoryOpened) {
         RenderEquipment3D();
-        sub_4E38B0((float)((double)InventoryStartX + 15.0),
+        HUD_RenderInventoryGrid((float)((double)InventoryStartX + 15.0),
                    (float)((double)InventoryStartY + 200.0),
                    OffsetInventoryItems, 8, 8.0f, 0);
     }
     if (ShopOpened) {
-        sub_4E38B0((float)((double)dword_7EAA0C8 + 15.0),
+        HUD_RenderInventoryGrid((float)((double)dword_7EAA0C8 + 15.0),
                    (float)((double)dword_7EAA0CC + 50.0),
                    ShopItems, 8, 15.0f, 0);
     }
     if (TradeOpened) {
-        sub_4E38B0((float)((double)TradeInventoryStartX + 15.0),
+        HUD_RenderInventoryGrid((float)((double)TradeInventoryStartX + 15.0),
                    (float)((double)TradeInventoryStartY + 70.0),
                    Inventory, 8, 4.0f, 0);
-        sub_4E38B0((float)((double)TradeInventoryStartX + 15.0),
+        HUD_RenderInventoryGrid((float)((double)TradeInventoryStartX + 15.0),
                    (float)((double)TradeInventoryStartY + 270.0),
                    OffsetTradeItems, 8, 4.0f, 0);
     }
     if (WarehouseOpened) {
-        sub_4E38B0((float)((double)dword_7EAA0C8 + 15.0),
+        HUD_RenderInventoryGrid((float)((double)dword_7EAA0C8 + 15.0),
                    (float)((double)dword_7EAA0CC + 50.0),
                    OffsetWarehouseItems, 8, 15.0f, 0);
     }
     if (ChaosMixOpened) {
-        sub_4E38B0((float)((double)dword_7EAA0C8 + 15.0),
+        HUD_RenderInventoryGrid((float)((double)dword_7EAA0C8 + 15.0),
                    (float)((double)dword_7EAA0CC + 110.0),
                    OffsetMixItems, 8, 4.0f, 0);
     }
     if (EventWindowOpened) {
-        sub_4E38B0((float)((double)dword_7EAA0C8 + 15.0),
+        HUD_RenderInventoryGrid((float)((double)dword_7EAA0C8 + 15.0),
                    (float)((double)dword_7EAA0CC + 50.0),
                    OffsetMixItems, 8, 4.0f, 0);
     }
     return (char)ChaosMixOpened;
 }
 
-// FUN_004f5ce0_realbody no tiene callers: el wrapper FUN_004f5ce0(int,int,int,int)
+// FUN_004f5ce0_realbody no tiene callers: el wrapper Skill_RenderEffects(int,int,int,int)
 // que se usa está en HUD_Pass1.cpp.
 extern "C" void FUN_004f5ce0_realbody(void) { sub_4F5CE0_(); }
 
@@ -345,7 +344,7 @@ extern "C" void __cdecl RenderServerDivision(void)
 
     gFont.SelectFont(gFont.GetTextDC(), gFont.GetFont(FONT_BOLD));
     float xa = (float)((double)InventoryStartX + 25.0);
-    if (DAT_07eaa131 != 0) {
+    if (PinCheckboxState != 0) {
         m_dwTextColor = 0xFFFF55FFu;   // -16738604
         GL_DrawTexture(291, xa, 240.0f, 16.0f, 16.0f, 0.0f, 0.0f, 0.75f, 0.75f, 1, 1);
     } else {
@@ -361,7 +360,7 @@ extern "C" void __cdecl RenderServerDivision(void)
     RenderCenteredText((int)(xc + 60.0f), 355, GlobalText[229]);
 
     float xb = (float)((double)InventoryStartX + 35.0);
-    if (DAT_07eaa131 != 0) BufferedDraw::Color3f(1.0f, 1.0f, 1.0f);
+    if (PinCheckboxState != 0) BufferedDraw::Color3f(1.0f, 1.0f, 1.0f);
     else                          BufferedDraw::Color3f(0.5f, 0.5f, 0.5f);
     GL_DrawTexture(240, xb, 320.0f, 120.0f, 24.0f, 0.0f, 0.0f, 0.83203125f, 1.0f, 1, 1);
     RenderCenteredText((int)(xb + 60.0f), 325, GlobalText[228]);
@@ -384,7 +383,7 @@ extern "C" void __cdecl RenderInventoryWindow(void)
     InventoryStartY = 0;
     RenderInventoryInterface(sx, 0, 0);
     RenderEquipmentBox();
-    // Los casilleros de equipo los procesa sub_4CDC70 (FUN_004cdc70) desde
+    // Los casilleros de equipo los procesa sub_4CDC70 (Item_EquipSlotLogic) desde
     // sub_4E6550, en el tick; no aca en el render.
 
     // Input y comandos de la grilla: Inventory_HitTest, dentro de SIM.
@@ -449,7 +448,7 @@ extern "C" void __cdecl RenderInventoryWindow(void)
     {
         float xb = (float)((double)InventoryStartX + 60.0);
         float yb = (float)((double)InventoryStartY + 395.0);
-        GL_DrawTexture(DAT_07eaa134 ? 287 : 286, xb, yb, 24.0f, 24.0f,
+        GL_DrawTexture(RepairEnableFlag ? 287 : 286, xb, yb, 24.0f, 24.0f,
                      0.0f, 0.0f, 0.75f, 0.75f, 1, 1);
         if ((double)MouseX >= xb && (double)MouseX < xb + 24.0 &&
             (double)MouseY >= yb && (double)MouseY < yb + 24.0)
@@ -653,10 +652,9 @@ extern "C" void __cdecl RenderParty(int a1, int a2)
     }
 }
 
-// Es el global real 0x7EAA144 (= DAT_07eaa144), no una copia del archivo: lo
+// Es el global real 0x7EAA144 (= g_iKeyPadEnable), no una copia del archivo: lo
 // setea el handler del 0x55 y lo lee el hit-test de la creacion de guild en
 // `GuildCreator_HitTest`.
-#define g_iKeyPadEnable DAT_07eaa144
 static char g_GuildNotice[2][64] = {};
 
 // IDA: ProtocolCore 0x55. El servidor autoriza abrir la interfaz de creación
@@ -669,7 +667,7 @@ extern "C" void GuildCreator_OpenFromServer(void)
     // apagado. Ambos caminos escriben InputText[0], pero sólo el primero evita
     // que Enter abra o envíe chat mientras el editor conserva el foco.
     GuildInputEnable = 1;
-    DAT_00559c84 = 0;
+    InputEnable = 0;
     ClearInput(0);
     // El Personal Code deja este slot enmascarado; el nombre del guild es visible.
     InputTextHide[0] = 0;
@@ -707,7 +705,7 @@ extern "C" void GuildCreator_CloseFromResult(void)
     ClearInput(0);
     _InputTextMaxArr[0] = 10;
     GuildInputEnable = 0;
-    DAT_00559c84 = 0;
+    InputEnable = 0;
     GuildCreatorOpened = 0;
     g_iKeyPadEnable = 0;
     if (Hero)
@@ -733,9 +731,9 @@ extern "C" {
     int  GuildTotalScore = 0;
     int  g_nGuildMemberCount = 0;
 }
-// `byte_7E919BC` NO es un buffer propio: es la tabla global `DAT_07e919bc`
+// `0x07E919BC` NO es un buffer propio: es la tabla global `GuildInfoTable`
 // (stride 80), la misma que escribe Net_Process.
-#define byte_7E919BC  DAT_07e919bc
+#define byte_7E919BC  GuildInfoTable
 
 extern void SetPlayerColor(BYTE PK);
 
@@ -747,7 +745,7 @@ extern void SetPlayerColor(BYTE PK);
 // damage line (when applicable) + Charisma/Command (DK/MG) line.
 // Anti-tamper CharacterMachine hash-table refcount blocks (~60% of original
 // bytes) skipped — they no-op when the table is empty
-// (`dword_55C9BD4 == 0`) which is our default state.
+// (`HashTableCapacity == 0`) which is our default state.
 // =============================================================================
 extern "C" void __cdecl RenderCharacterInfoWindow(int iPosX, int iPosY)
 {
@@ -793,7 +791,7 @@ extern "C" void __cdecl RenderCharacterInfoWindow(int iPosX, int iPosY)
     // Zone label: "ServerName - Channel" via GlobalText[460]/[461].
     // GlobalText[460]/[461] es el FORMATO (contiene "%s - %d"), no un dato.
     // IDA `sub_4ECC60:280-287` hace:
-    //   if (sub_406B10(ServerSelectHi, dword_56169C))
+    //   if (sub_406B10(ServerSelectHi, ServerLocalSelect))
     //     sprintf(pszText, GlobalText[460], &ServerList[idx], channel);
     //   else
     //     sprintf(pszText, GlobalText[461], &ServerList[idx], channel);
@@ -801,7 +799,7 @@ extern "C" void __cdecl RenderCharacterInfoWindow(int iPosX, int iPosY)
     {
         DWORD srvIdx = ServerSelectHi;
         DWORD channel = ServerLocalSelect;
-        const char* srvName = (const char*)&DAT_083a45d8 + srvIdx * 0x21e;
+        const char* srvName = (const char*)&ServerListBuffer + srvIdx * 0x21e;
         const char* fmt = Packet_IsValidSockType((int)srvIdx, (int)channel)
                           ? GlobalText[460]
                           : GlobalText[461];
@@ -922,15 +920,15 @@ extern "C" void __cdecl RenderCharacterInfoWindow(int iPosX, int iPosY)
         float btnY = (float)(iPosY + 115 + 60 * row);
         bool hover = ((double)MouseX >= btnX && (double)MouseX < btnX + 24.0 &&
                       (double)MouseY >= btnY && (double)MouseY < btnY + 24.0);
-        // Tap clicks (DOWN+UP within one frame) lose DAT_083a4124 before this render
+        // Tap clicks (DOWN+UP within one frame) lose MouseLButtonPush before this render
         // runs — WM_LBUTTONUP clears it.  Use the latched click-event flag
-        // DAT_083a413c instead (set on UP, sticks until consumed). Hover-without-click
+        // MouseLButtonPop instead (set on UP, sticks until consumed). Hover-without-click
         // still highlights via 4124 for held clicks.
         // SOLO render + highlight: el CLICK (y el envío del F3/06) lo maneja
         // `CharacterInfo_HitTest` (port de sub_4E5DE0 L85-244), que es donde el
         // binario original tiene el hit-test de estos botones. Mandarlo también acá
         // duplicaría el paquete.
-        bool pressed = hover && (DAT_083a4124 != 0 || DAT_083a413c != 0);
+        bool pressed = hover && (MouseLButtonPush != 0 || MouseLButtonPop != 0);
         (void)statSlot;
         BufferedDraw::Color3f(1.0f, 1.0f, 1.0f);
         GL_DrawTexture(pressed ? 0x121 : 0x120,
@@ -953,7 +951,7 @@ extern "C" void __cdecl RenderCharacterInfoWindow(int iPosX, int iPosY)
     ITEM* pWeaponLeft  = (ITEM*)(CM + 536);
     ITEM* pWeaponRight = (ITEM*)(CM + 604);
     // Mid-drag drop overlay: if dragging from inventory grid, the picked item
-    // takes the slot's place for the preview. (dword_7EA9800 / pPickedItem
+    // takes the slot's place for the preview. (InventoryBasePtr / pPickedItem
     // not modeled in our build — skip this branch.)
 
     short typeL = (short)ItemBehaviorType(*(short*)pWeaponLeft);    // 0.97.20
@@ -1184,7 +1182,7 @@ extern "C" void __cdecl RenderGuildList(int StartX, int StartY)
     // ── Listado de miembros ───────────────────────────────────────────────
     // IDA `RenderGuildList` @0x4F0810 termina con:
     //     if ( g_nGuildMemberCount > 0 )
-    //         (*(void (**)(void))(*(_DWORD *)dword_55C9FF4 + 16))();
+    //         (*(void (**)(void))(*(_DWORD *)WhisperChatWidget + 16))();
     // o sea despacha el slot 4 de la vtable del widget de lista (el que dibuja
     // las filas de miembros).
     //
@@ -1192,8 +1190,8 @@ extern "C" void __cdecl RenderGuildList(int StartX, int StartY)
     // con la vtable off_5526EC (no la del CHAT, off_5525CC: 13 de los 30 slots
     // difieren, entre ellos los cuatro que usa este dispatch, 20/22/23/24). Ver
     // `UI/ChatListBox.cpp` (bloque "WIDGET DE LISTA DE GUILD").
-    if (g_nGuildMemberCount > 0 && DAT_055c9ff4) {
-        DWORD* obj = (DWORD*)(uintptr_t)DAT_055c9ff4;
+    if (g_nGuildMemberCount > 0 && WhisperChatWidget) {
+        DWORD* obj = (DWORD*)(uintptr_t)WhisperChatWidget;
         // La lista y sus botones siguen el mismo origen que el marco.
         obj[11] = (DWORD)(StartX + 10);
         obj[12] = (DWORD)(StartY + 387);
@@ -1253,10 +1251,10 @@ extern "C" void __cdecl RenderGuildCreation(int iPosX, int iPosY)
 
         // Guild mark editor grid (8×8) + palette.  The shared 97.04 source
         // confirms the same structure: 64 editable cells backed by the
-        // DAT_07ea51f5 byte buffer and a 16-color palette driven by
-        // DAT_07eaa0dc / MarkColor.
+        // GuildMarkGrid byte buffer and a 16-color palette driven by
+        // GuildMarkColorIdx / MarkColor.
         {
-            unsigned char* mark = (unsigned char*)&DAT_07ea51f5;
+            unsigned char* mark = (unsigned char*)&GuildMarkGrid;
             for (int gy = 0; gy < 8; ++gy) {
                 int sy = iPosY + 100 + gy * 15;
                 for (int gx = 0; gx < 8; ++gx) {
@@ -1274,7 +1272,7 @@ extern "C" void __cdecl RenderGuildCreation(int iPosX, int iPosY)
                 }
             }
             RenderGuildMark((float)(iPosX + 16), (float)(iPosY + 231),
-                                 23.0f, 23.0f, ((unsigned char)DAT_07eaa0dc & 0x0F));
+                                 23.0f, 23.0f, ((unsigned char)GuildMarkColorIdx & 0x0F));
         }
 
         m_dwBackColor = 0;
@@ -1298,7 +1296,7 @@ extern "C" void __cdecl RenderGuildCreation(int iPosX, int iPosY)
 // These six panels share a common skeleton: gate on their respective
 // *Opened flag, render the panel skeleton via RenderInventoryInterface at
 // (260, 0), render the panel-specific item grid via RenderItemsBoxes /
-// sub_4E38B0, render title + close button + tooltip.  The six panels'
+// HUD_RenderInventoryGrid, render title + close button + tooltip.  The six panels'
 // distinguishing widgets (price labels, accept buttons, ingredient
 // previews, jewel quality bar, event countdown) sit on top — each is its
 // own ~200-line port that adds drag-drop hit-test.  The skeletons here
@@ -1377,7 +1375,7 @@ extern "C" void __cdecl RenderTrade(void)
                    (char*)Guild_GetMarkName(remoteGuildRow), 0, 0, 0);
     }
 
-    const DWORD gold[2] = { DAT_07eaa0f0, DAT_07eaa0f4 };
+    const DWORD gold[2] = { TradeOtherGold, TradeMyGold };
     const int goldY[2] = { (int)TradeInventoryStartY + 160, (int)TradeInventoryStartY + 360 };
     for (int i = 0; i < 2; ++i) {
         const int x = TradeInventoryStartX + 50;
@@ -1395,7 +1393,7 @@ extern "C" void __cdecl RenderTrade(void)
     // El port no expone g_hFontBig; g_hFontBold conserva el contrato de texto legible.
     gFont.SelectFont(gFont.GetTextDC(), gFont.GetFont(FONT_BOLD));
     m_dwTextColor = 0xFFFFFFD2u;
-    RenderText(TradeInventoryStartX + 20, TradeInventoryStartY + 45, DAT_07ea9834, 0, 0, 0);
+    RenderText(TradeInventoryStartX + 20, TradeInventoryStartY + 45, TradePartnerName, 0, 0, 0);
     RenderText(TradeInventoryStartX + 20, TradeInventoryStartY + 250,
                const_cast<char*>(Hero ? EntityName::Get(Hero) : ""), 0, 0, 0);
     const int levelBand = TradeRemoteLevel < 50 ? 10 : TradeRemoteLevel < 100 ? 50 :
@@ -1436,9 +1434,9 @@ extern "C" void __cdecl RenderShopInterface(void)
     BufferedDraw::Color3f(1.0f, 1.0f, 1.0f);
 
     // IDA RenderShopInterface (0x4F1F50) L130-265: fila de botones en y+365.
-    // El hit-test lo hace FUN_004ec330 (sub_4EC330).
+    // El hit-test lo hace Shop_HitTestControls (sub_4EC330).
     {
-        const BYTE shopMode = ((BYTE*)&DAT_07eaa150)[2];     // BYTE2(dword_7EAA150)
+        const BYTE shopMode = ((BYTE*)&ServerContextId)[2];     // BYTE2(0x07EAA150)
         auto over = [](float bx, float by) {
             return (double)MouseX >= bx && (double)MouseX < bx + 24.0 &&
                    (double)MouseY >= by && (double)MouseY < by + 24.0;
@@ -1456,7 +1454,7 @@ extern "C" void __cdecl RenderShopInterface(void)
         GL_DrawTexture(shopMode == 1 ? 285 : 284, bx, by, 24.0f, 24.0f, 0.0f, 0.0f, 0.75f, 0.75f, 1, 1);
         if (over(bx, by)) tip(bx, by, 232);
 
-        if (DAT_07eaa132) {                                  // byte_7EAA132: herrero
+        if (BKeyToggleGuard) {                                  // 0x07EAA132: herrero
             bx = (float)((double)dword_7EAA0C8 + 85.0);
             GL_DrawTexture(RepairEnable_0 ? 287 : 286, bx, by, 24.0f, 24.0f,
                            0.0f, 0.0f, 0.75f, 0.75f, 1, 1);
@@ -1464,24 +1462,24 @@ extern "C" void __cdecl RenderShopInterface(void)
 
             // "Reparar todo": icono 286 tenido de azul, 287 mientras se aprieta.
             // (IDA ademas pone MouseLButtonPush = 0 aca; no se replica porque
-            // el click lo consume FUN_004ec330.)
+            // el click lo consume Shop_HitTestControls.)
             bx = (float)((double)dword_7EAA0C8 + 115.0);
             BufferedDraw::Color3f(0.5f, 0.69999999f, 1.0f);
             GL_DrawTexture(286, bx, by, 24.0f, 24.0f, 0.0f, 0.0f, 0.75f, 0.75f, 1, 1);
             if (over(bx, by)) {
-                if (DAT_083a4124)
+                if (MouseLButtonPush)
                     GL_DrawTexture(287, bx, by, 24.0f, 24.0f, 0.0f, 0.0f, 0.75f, 0.75f, 1, 1);
                 tip(bx, by, 237);
             }
             BufferedDraw::Color3f(1.0f, 1.0f, 1.0f);
 
-            // Caja con el costo de reparar todo (dword_7EAA0F8, lo calcula sub_4C4080).
+            // Caja con el costo de reparar todo (RepairGoldTotal, lo calcula sub_4C4080).
             bx -= 60.0f;
             by += 30.0f;
             GL_DrawTexture(271, bx, by, 113.0f, 18.0f, 0.0f, 0.0f, 0.8828125f, 0.5625f, 1, 1);
             m_dwBackColor = 0xFF282828u;      // -14145496
             m_dwTextColor = 0xFF96DCFFu;      // -6890241
-            const int cost = (int)DAT_07eaa0f8;
+            const int cost = (int)RepairGoldTotal;
             CHAR Buffer[64];
             if      (cost < 1000)       Platform::TextFormat(Buffer, "%d", cost % 1000);
             else if (cost < 1000000)    Platform::TextFormat(Buffer, "%d,%03d", cost % 1000000 / 1000, cost % 1000);
@@ -1554,12 +1552,12 @@ extern "C" void __cdecl RenderChaosMix(void)
     m_dwTextColor = 0xFFDCDCDCu;
     // IDA 004F27F0: la elección local del modal 143 cambia el encabezado y
     // el texto de ayuda, sin cambiar todavía la receta que valida el servidor.
-    const int chaosCategory = (int)DAT_083a7c2c;
+    const int chaosCategory = (int)ChaosMixCategory;
     const int chaosTitle = chaosCategory == 1 ? 736 : (chaosCategory ? 583 : 735);
     RenderText(dword_7EAA0C8 + 35, dword_7EAA0CC + 12, GlobalText[chaosTitle],
                120 * (int)gWindow.GetWidth() / 0x280, 1, (SIZE*)3);
 
-    if (DAT_07eaa140 >= 2) return; // el resultado/animación ocupa sólo la grilla
+    if (MixState >= 2) return; // el resultado/animación ocupa sólo la grilla
 
     const int mixType = (int)MixType;
     int rate = ChaosMixLegacyValue() / 20000;
@@ -1567,24 +1565,24 @@ extern "C" void __cdecl RenderChaosMix(void)
     int money = rate * 10000;
     if (mixType == -8 || mixType == -2 || mixType == 0) {
         rate = 0; money = 0;
-    } else if (mixType == 2 && DAT_07eaa168 > 0) {
+    } else if (mixType == 2 && MixRecipeLevel > 0) {
         static const int devilMoney[] = { 10000, 10000, 20000, 40000, 70000 };
-        const int i = (std::min)((int)DAT_07eaa168 - 1, 4);
-        rate = (DAT_07eaa168 == 1) ? 60 : rate;
+        const int i = (std::min)((int)MixRecipeLevel - 1, 4);
+        rate = (MixRecipeLevel == 1) ? 60 : rate;
         money = devilMoney[i];
     } else if (mixType == 3) {
-        rate = DAT_07eaa178 ? 75 : 50; money = 2000000;
+        rate = MixSocketFlag ? 75 : 50; money = 2000000;
     } else if (mixType == 4) {
-        rate = DAT_07eaa178 ? 70 : 45; money = 4000000;
+        rate = MixSocketFlag ? 70 : 45; money = 4000000;
     } else if (mixType == 5) {
         rate = 70; money = 500000;
     } else if (mixType == 6) {
         rate = 90; money = 3000000;
     } else if (mixType == 7) {
-        rate = DAT_07eaa174; money = 5000000;
-    } else if (mixType == 8 && DAT_07eaa168 > 0) {
+        rate = MixValueScore; money = 5000000;
+    } else if (mixType == 8 && MixRecipeLevel > 0) {
         static const int bloodMoney[] = { 50000, 8000, 20000, 40000, 80000, 120000, 160000 };
-        rate = 80; money = bloodMoney[(std::min)((int)DAT_07eaa168 - 1, 6)];
+        rate = 80; money = bloodMoney[(std::min)((int)MixRecipeLevel - 1, 6)];
     }
 
     // DESVIACION: las recetas consultadas por 0x88 muestran pendiente sin respuesta;
@@ -1667,7 +1665,7 @@ extern "C" void __cdecl RenderWarehouse(void)
     gFont.SelectFont(gFont.GetTextDC(), gFont.GetFont(FONT_BOLD));
     m_dwBackColor = 0xFF141414u;
     m_dwTextColor = 0xFFDCDCDCu;
-    const int lock = (DAT_00559f5f != 0) ? 1 : 0;
+    const int lock = (StoragePinOkFlag != 0) ? 1 : 0;
     if (lock) BufferedDraw::Color3f(1.0f, 1.0f, 0.0f);
     CHAR Title[128];
     Platform::TextFormat(Title, "%s (%s)", GlobalText[234], GlobalText[240 + lock]);
@@ -1770,7 +1768,7 @@ extern "C" void __cdecl RenderWarehouse(void)
             gFont.SelectFont(gFont.GetTextDC(), gFont.GetFont(FONT_NORMAL));
             RenderTipText((int)bx, (int)by - 13, GlobalText[kBtnTip[i]]);
         }
-        if (i == 2 && DAT_07eaa14c) {
+        if (i == 2 && PinInputModeState) {
             GL_DrawTexture(kTexPressed[v], bx, by, 24.0f, 24.0f,
                          0.0f, 0.0f, 0.75f, 0.75f, 1, 1);
         }
@@ -1823,7 +1821,7 @@ extern "C" void __cdecl RenderEventWindow(void)
         const int maxLevel = bloodCastle ? m_iBloodCastleLimitLevel[limitRow][1]
                                          : m_iDevilSquareLimitLevel[row][1];
 
-        const bool inRect = button.Contains((int)MouseX, (int)MouseY) && DAT_07e91388 == 0;
+        const bool inRect = button.Contains((int)MouseX, (int)MouseY) && ItemPickedFlag == 0;
 
         if (bloodCastle) {
             const bool permitted = (charLevel <= (unsigned)maxLevel && charLevel >= (unsigned)minLevel);
@@ -1884,9 +1882,9 @@ extern "C" void __cdecl RenderEventWindow(void)
         const float closeY = (float)dword_7EAA0CC + 395.0f;
         if ((float)MouseX >= closeX && (float)MouseX < closeX + 24.0f &&
             (float)MouseY >= closeY && (float)MouseY < closeY + 24.0f &&
-            DAT_083a4124 != 0)
+            MouseLButtonPush != 0)
         {
-            DAT_083a4124 = 0;
+            MouseLButtonPush = 0;
             // Al cerrar NO se manda [C1][03][97]: la ventana de evento (Devil Square /
             // Blood Castle) la abre un NPC via 0x30, `CloseInventoryRelatedWindows`
             // (0x4CBA60) no manda NADA al cerrarla, y el unico paquete que el binario

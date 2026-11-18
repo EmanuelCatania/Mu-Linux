@@ -48,7 +48,7 @@ unsigned s_clock = 0;
 
 BMD* PlayerModel()
 {
-    return AsModel(reinterpret_cast<BYTE*>(DAT_05828d58) + BMD_STRIDE * 390);
+    return AsModel(reinterpret_cast<BYTE*>(ModelsBase) + BMD_STRIDE * 390);
 }
 
 void Bind(int channel, int emote)
@@ -70,7 +70,7 @@ void Bind(int channel, int emote)
 bool ChannelInUse(int channel)
 {
     const int action = s_first + channel;
-    BYTE* base = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* base = (BYTE*)(uintptr_t)CharactersClient;
     if (!base) return false;
     for (int s = 0; s < 400; ++s) {
         BYTE* sp = base + s * CHARACTER_STRIDE;

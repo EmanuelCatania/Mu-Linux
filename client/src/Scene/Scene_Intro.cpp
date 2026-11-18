@@ -2,15 +2,15 @@
 // Scene_Intro @ 0x005137A0  (230 lines, decompile completo)
 //
 // Pantalla de intro: logo Webzen + badge "Everyone". Al terminar:
-//   DAT_083a410c == '\0' → SceneFlag = 2 (Login, flujo normal)
-//   DAT_083a410c != '\0' → SceneFlag = 5 (InGame directo, modo bypass/debug)
+//   InGameModeFlag == '\0' → SceneFlag = 2 (Login, flujo normal)
+//   InGameModeFlag != '\0' → SceneFlag = 5 (InGame directo, modo bypass/debug)
 //
 // ── DECOMPILE COMPLETO ────────────────────────────────────────────────────────
 //
 //   void __cdecl Scene_Intro(HDC param_1)
 //   {
-//     // Reset array DAT_083a7cd0 (stride 0x38, hasta 0x83bba00)
-//     puVar3 = (undefined1*)&DAT_083a7cd0;
+//     // Reset array BitmapsRefCount (stride 0x38, hasta 0x83bba00)
+//     puVar3 = (undefined1*)&BitmapsRefCount;
 //     do {
 //       *(undefined4*)(puVar3 + 4) = 0;
 //       *puVar3 = 0;
@@ -23,7 +23,7 @@
 //     OpenJPG("Local/Webzenlogo.jpg", 0xc, 0x2600, 0x2900, 0, '\x01');
 //     OpenJPG("Local/Everyone.jpg",   0xd, 0x2600, 0x2900, 0, '\x01');
 //
-//     DAT_083a42ea = 0;
+//     FogEnable = 0;
 //     GL_BeginViewport(0, 0, 0x280, 0x1e0);       // Viewport_Set(0,0,640,480)
 //     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 //     GL_Begin2D();                           // GL_SetupOrtho2D()
@@ -31,19 +31,19 @@
 //
 //     // Logo Webzen centrado (usa DAT_0056156c = screen_width)
 //     GL_DrawTexture(0xc,
-//       (float)DAT_0056156c * 0.5f - _DAT_005529bc,
-//       (float)DAT_0056156c * _DAT_00552d3c - _DAT_00552d38,
+//       (float)DAT_0056156c * 0.5f - 128.0f,
+//       (float)DAT_0056156c * IntroLogoFactorY - IntroLogoOffsetY,
 //       256.0, 195.0, 0.0, 0.0, 1.0, 0.76171875, '\0', '\0');
 //
 //     // Badge "Everyone" (esquina derecha)
 //     GL_DrawTexture(0xd,
-//       (float)DAT_0056156c - _DAT_00552908,
+//       (float)DAT_0056156c - 120.0f,
 //       0.0, 120.0, 60.0, 0.0, 0.0, 0.9375, 0.9375, '\0', '\0');
 //
 //     // Debug overlay (solo si bypass activo)
-//     if (DAT_083a410c != '\0') {
+//     if (InGameModeFlag != '\0') {
 //       gFont.SelectFont(DAT_055c9fec, DAT_055ca00c);
-//       UI_RenderText(0, 0, &DAT_005617a0, NULL, '\0', 0);
+//       UI_RenderText(0, 0, &IntroDebugString, NULL, '\0', 0);
 //     }
 //
 //     GL_End2D();   // GL_End2D()
@@ -55,8 +55,8 @@
 //     UnloadImage(0xc);   // Texture_Unload("Webzenlogo.jpg")
 //
 //     // PATH NORMAL: ir a Login
-//     if (DAT_083a410c == '\0') {
-//       CErrorReport_Write(&DAT_055c9bf0, "> Loading ok...");
+//     if (InGameModeFlag == '\0') {
+//       CErrorReport_Write(&ErrorReportCtx, "> Loading ok...");
 //       SceneFlag = 2;   // SceneFlag = Login
 //       Scene_LoadGameAssets() (IDA: OpenBasicData);
 //       return;
@@ -64,7 +64,7 @@
 //
 //     // PATH BYPASS: ir directo a InGame
 //     SceneFlag = 5;   // SceneFlag = InGame
-//     DAT_083a7c10 = 1;   // render enable flag
+//     EnableMainRender = 1;   // render enable flag
 //     Scene_LoadGameAssets() (IDA: OpenBasicData);
 //     OpenWorld();      // World_Load()
 //     HeroKey = 0;
@@ -82,23 +82,23 @@
 //
 // ── PATHS ─────────────────────────────────────────────────────────────────────
 //
-//   DAT_083a410c == '\0':  → Login (estado normal del juego)
-//   DAT_083a410c != '\0':  → InGame directo (debug/autotest, bypasea login)
+//   InGameModeFlag == '\0':  → Login (estado normal del juego)
+//   InGameModeFlag != '\0':  → InGame directo (debug/autotest, bypasea login)
 //                              + World_Load() + Entity_Create en pos hardcodeada
 //
 // ── GLOBALS ───────────────────────────────────────────────────────────────────
 //
-//   DAT_083a7cd0  — array reseteado al inicio (stride 0x38, hasta 0x83bba00)
-//   DAT_083a410c  — bypass flag (0=normal, 1=bypass a InGame)
+//   BitmapsRefCount  — array reseteado al inicio (stride 0x38, hasta 0x83bba00)
+//   InGameModeFlag  — bypass flag (0=normal, 1=bypass a InGame)
 //   SceneFlag  — SceneFlag
-//   DAT_083a7c10  — render enable flag
+//   EnableMainRender  — render enable flag
 //   HeroKey  — counter reset
 //   DAT_0056156c  — screen_width (para posicionamiento centrado)
-//   DAT_005617a0  — debug string (mostrado si bypass activo)
-//   _DAT_005529bc — offset X logo (centering adjust)
-//   _DAT_00552d3c — factor Y logo
-//   _DAT_00552d38 — offset Y logo
-//   _DAT_00552908 — offset X "Everyone" badge
+//   IntroDebugString  — debug string (mostrado si bypass activo)
+//   128.0f — offset X logo (centering adjust)
+//   IntroLogoFactorY — factor Y logo
+//   IntroLogoOffsetY — offset Y logo
+//   120.0f — offset X "Everyone" badge
 //
 // ── FUNCIÓN CROSS-REFERENCE ───────────────────────────────────────────────────
 //
@@ -152,10 +152,10 @@ void __cdecl Scene_Intro(HDC param_1)
     ClearInput(1);   // CharList_Init(1)
 
     // Load splash textures
-    OpenJPG(s_Local_Webzenlogo_jpg_00561774, 0xc, 0x2600, 0x2900, 0, '\x01');
-    OpenJPG(s_Local_Everyone_jpg_0056178c,   0xd, 0x2600, 0x2900, 0, '\x01');
+    OpenJPG(Img_LocalWebzenlogoJpg, 0xc, 0x2600, 0x2900, 0, '\x01');
+    OpenJPG(Img_LocalEveryoneJpg,   0xd, 0x2600, 0x2900, 0, '\x01');
 
-    DAT_083a42ea = 0;
+    FogEnable = 0;
     // Nota: el iTitle.wav (id 4) lo dispara el original con PlayBuffer(4,...)
     // en Game_SceneUpdate al entrar a Login — ruteado via PlayBuffer +
     // kUISounds mapping en Sound_DS3D.cpp. NO tocar aquí (sonaría 2x).
@@ -169,20 +169,20 @@ void __cdecl Scene_Intro(HDC param_1)
     // Webzen logo — centered
     uStack_4 = 0;
     GL_DrawTexture(0xc,
-        (float)gWindow.GetWidth() * _DAT_00552504 - _DAT_005529bc,
-        (float)gWindow.GetHeight() * _DAT_00552504 - _DAT_00552d38,
+        (float)gWindow.GetWidth() * HalfScale - 128.0f,
+        (float)gWindow.GetHeight() * HalfScale - IntroLogoOffsetY,
         256.0f, 195.0f, 0.0f, 0.0f, 1.0f, 0.76171875f, '\0', '\0');
 
     // ESRB "Everyone" badge — top right
     uStack_4 = 0;
     GL_DrawTexture(0xd,
-        (float)gWindow.GetWidth() - _DAT_00552908,
+        (float)gWindow.GetWidth() - 120.0f,
         0.0f, 120.0f, 60.0f, 0.0f, 0.0f, 0.9375f, 0.9375f, '\0', '\0');
 
     // Debug overlay (only in bypass mode)
-    if (DAT_083a410c != '\0') {
+    if (InGameModeFlag != '\0') {
         gFont.SelectFont((HDC)(uintptr_t)gFont.GetTextDC(), (HGDIOBJ)gFont.GetFont(FONT_NORMAL));
-        UI_RenderText(gWindow.PanelOrigin(Ui::WindowLeft), 0, (LPCSTR)&DAT_005617a0, (LPSIZE)0x0, '\0', 0);
+        UI_RenderText(gWindow.PanelOrigin(Ui::WindowLeft), 0, (LPCSTR)&IntroDebugString, (LPSIZE)0x0, '\0', 0);
     }
 
     GL_End2D();           // GL_End2D
@@ -195,8 +195,8 @@ void __cdecl Scene_Intro(HDC param_1)
     UnloadImage(0xc);   // Texture_Unload(Webzenlogo)
 
     // Normal path → Login
-    if (DAT_083a410c == '\0') {
-        CErrorReport_Write(&DAT_055c9bf0, "> Loading ok...");
+    if (InGameModeFlag == '\0') {
+        CErrorReport_Write(&ErrorReportCtx, "> Loading ok...");
         SceneFlag = 2;   // SceneFlag = Login
         Scene_LoadGameAssets();
         return;
@@ -204,7 +204,7 @@ void __cdecl Scene_Intro(HDC param_1)
 
     // Bypass/debug path → skip login, go straight to InGame
     SceneFlag = 5;    // SceneFlag = InGame
-    DAT_083a7c10 = 1;
+    EnableMainRender = 1;
     Scene_LoadGameAssets();
     OpenWorld();      // World_Load
     HeroKey = 0;
@@ -218,10 +218,10 @@ void __cdecl Scene_Intro(HDC param_1)
 
     // HashTable anti-tamper tracking (ref-count register/unregister, not game logic)
     uVar14 = 0;
-    if (DAT_055c9bd4 != 0) {
+    if (HashTableCapacity != 0) {
         do {
             bVar12 = false; iVar8 = 0; bVar13 = true;
-            pbVar11 = (byte *)(DAT_055c9bd0 + uVar4 * 4);
+            pbVar11 = (byte *)(HashTableKeys + uVar4 * 4);
             iVar7 = 4;
             pbVar9 = (byte*)&stack_ec; pbVar10 = pbVar11;
             do {
@@ -251,11 +251,11 @@ void __cdecl Scene_Intro(HDC param_1)
                 if ((byte)(cVar2 + 1U) < 2)
                     Packet_DecryptDword(puVar1, puVar6);
             }
-            uVar4 = (uVar4 + 1) % DAT_055c9bd4;
+            uVar4 = (uVar4 + 1) % HashTableCapacity;
             uVar14++;
-        } while (uVar14 < DAT_055c9bd4);
+        } while (uVar14 < HashTableCapacity);
     }
-    CErrorReport_Write(&DAT_055c9bf0, s_Hash_table_full______GetIndex_00558108);
+    CErrorReport_Write(&ErrorReportCtx, Err_HashTableFullGetIndex);
 
 LAB_00513a36:
     pvVar5 = AntiTamper_HashNode();
@@ -267,9 +267,9 @@ LAB_00513a50:
     *puVar1 = 0xd;
     uVar4 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(puVar1);
     uStack_4 = 0;
-    if (DAT_055c9bd4 != 0) {
+    if (HashTableCapacity != 0) {
         do {
-            iVar8 = 4; pbVar11 = (byte *)(DAT_055c9bd0 + uVar4 * 4);
+            iVar8 = 4; pbVar11 = (byte *)(HashTableKeys + uVar4 * 4);
             bVar12 = false; iVar7 = 0; bVar13 = true;
             pbVar9 = (byte*)&stack_ec; pbVar10 = pbVar11;
             do {
@@ -297,11 +297,11 @@ LAB_00513a50:
                 }
                 goto LAB_00513b4e;
             }
-            uVar4 = (uVar4 + 1) % DAT_055c9bd4;
+            uVar4 = (uVar4 + 1) % HashTableCapacity;
             uStack_4++;
-        } while (uStack_4 < DAT_055c9bd4);
+        } while (uStack_4 < HashTableCapacity);
     }
-    CErrorReport_Write(&DAT_055c9bf0, s_Hash_table_full______GetIndex_00558108);
+    CErrorReport_Write(&ErrorReportCtx, Err_HashTableFullGetIndex);
 
 LAB_00513b4e:
     puVar1 = (undefined4 *)(iStack_10 + EntityOffset(0x38c));

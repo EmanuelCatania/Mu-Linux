@@ -42,12 +42,12 @@
 //       vertex[i][4]  = texcoord index
 //
 // Global buffers:
-//   DAT_077e298c = IntensityTransform[meshIdx * 15000] (float per normal)
-//   DAT_060db65c = LightTransform RGB [vertex * 12 bytes = float R,G,B]
-//   DAT_0584621c = BoneVertex world positions [vertex * 3 floats]
-//   DAT_05828d5c = Chrome UV array [packed: U0,V0,U1,V1,...] (floats)
-//   DAT_0839bc8c = WaterTextureNumber (DWORD)
-//   DAT_083a7cc8 = Texture table (stride 0x38, byte[0] = bpp/type)
+//   IntensityTransformBuf = IntensityTransform[meshIdx * 15000] (float per normal)
+//   BoneLightData = LightTransform RGB [vertex * 12 bytes = float R,G,B]
+//   BoneVertBufBase = BoneVertex world positions [vertex * 3 floats]
+//   ChromeUvData = Chrome UV array [packed: U0,V0,U1,V1,...] (floats)
+//   WaterTextureNumber = WaterTextureNumber (DWORD)
+//   BitmapsBpp = Texture table (stride 0x38, byte[0] = bpp/type)
 //
 // Texture special values:
 //   0x12c (300) = BITMAP_HIDE → skip mesh
@@ -83,19 +83,20 @@
 #include "../functions.h"
 
 // Additional globals used by this function
-// DAT_060db65c defined via macro in globals.h (backed by g_BoneLightBuf).
-// DAT_05828d5c / DAT_06f433bc / DAT_06f433c0 defined via macros in globals.h
+// BoneLightData defined via macro in globals.h (backed by g_BoneLightBuf).
+// ChromeUvData / TransformedNormalBuf / LegacyBoneChromeNormalBuf defined via macros in globals.h
 // (chrome UV scratch + transformed-normal buffer). No re-declarar acá.
-extern float   _DAT_00552868;  // 0.0001f  (1/10000 for WorldTime wave)
-extern float   _DAT_00552544;  // alpha < this → use alpha channel
-extern float   _DAT_00552580;  // 0.0f
-extern float   _DAT_005528c0;  // chrome U scale
-extern float   _DAT_005528b4;  // chrome offset
-extern float   _DAT_00552504;  // chrome scale factor
-extern float   _DAT_0055256c;  // chrome V offset
-extern float   _DAT_005526e4;  // some chrome constant
-extern float   _DAT_00552540;  // blend tex scale
-extern float   _DAT_00552530;  // blend tex factor
+extern float   FloatEpsilon;  // 0.0001f  (1/10000 for WorldTime wave)
+extern float   AlphaChannelThreshold;  // alpha < this → use alpha channel
+extern float   FloatZeroB;  // 0.0f
+extern float   ChromeUScale;  // chrome U scale
+extern float   ImpulseDriftHorizA;  // 0.4f -- chrome offset  // _DAT_005528b4
+extern float   HalfScale;  // chrome scale factor
+extern float   ImpulseScaleBaseB;  // 1.0f -- chrome V offset  // _DAT_0055256c
+extern float   ImpulseDriftVertA;  // 0.2f -- some chrome constant  // _DAT_005526e4
+extern float   FragmentGravityA;  // 3.0f -- blend tex scale  // _DAT_00552540
+// blend tex factor 0.8f (DAT_00552530) is inlined as a literal: it is not
+// address-referenced anywhere, so no storage was kept for it.
 
 // Render mode tags (see header comment)
 #define RENDER_MODE_COLOR   1.4013e-45f
@@ -154,7 +155,7 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
     // DESVIACION: un modelo propio del catálogo con caras invertidas (hecho
     // para dos caras) se dibuja sin descarte de caras; el 0.97k no tiene
     // modelos así.  Los modelos vanilla no pasan por acá.
-    const int model = (int)(((uintptr_t)bmd_obj - (uintptr_t)DAT_05828d58) / sizeof(BMD));
+    const int model = (int)(((uintptr_t)bmd_obj - (uintptr_t)ModelsBase) / sizeof(BMD));
     const bool twoSidedMesh=model >= MODEL_MAX_VANILLA && gContentCatalog.IsTwoSidedMesh(model,meshIndex);
     // DESVIACION R4n: el ámbito mantiene dos caras durante todos los materiales
     // y recupera culling/caché coherentes al salir, también en retornos tempranos.
@@ -184,7 +185,7 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
     // scroll de texcoords del glow +N (chrome, textura 1170) sale sólido y
     // desincronizado entre partes.
     long long worldTime = (long long)WorldTime;
-    float fVar16 = (float)(int)(worldTime % 10000) * _DAT_00552868;
+    float fVar16 = (float)(int)(worldTime % 10000) * FloatEpsilon;
 
     // Texture lookup: local_10 = IndexTexture[Mesh.Texture]
     local_10 = (unsigned int)bmd->IndexTexture[mesh->TextureIndex];
@@ -198,7 +199,7 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
         }
         local_10 = (int)bmd->Skin + 0x12d;  // BITMAP_SKIN + Skin
     } else if (local_10 == 0x41) {  // BITMAP_WATER
-        local_10 = DAT_0839bc8c + 0x41;  // BITMAP_WATER + WaterTextureNumber
+        local_10 = WaterTextureNumber + 0x41;  // BITMAP_WATER + WaterTextureNumber
     }
 
     // Override texture if specified
@@ -216,7 +217,7 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
 
     // Enable blend wave if both conditions
     if (((meshIndex == blendMeshIndex) || (meshIndex == waveMeshIndex)) &&
-        ((uvU != _DAT_00552580 || (uvV != _DAT_00552580))))
+        ((uvU != FloatZeroB || (uvV != FloatZeroB))))
         bVar5 = true;
 
     // Lighting setup
@@ -234,8 +235,8 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
         param_2_b0 = '\0';
     } else if ((param_2_b0 != '\0') && (iVar12 = 0, 0 < mesh->NormalCount)) {
         // Per-vertex lighting: LightTransform[mesh * 15000 + normal] * BodyLight * boost
-        pfVar8  = (float *)(&DAT_077e298c + meshIndex * 15000);
-        pfVar10 = (float *)(&DAT_060db65c + 4 + meshIndex * 180000);  // G-component base
+        pfVar8  = (float *)(&IntensityTransformBuf + meshIndex * 15000);
+        pfVar10 = (float *)(&BoneLightData + 4 + meshIndex * 180000);  // G-component base
         do {
             iVar12++;
             pfVar10[-1] = *pfVar8 * bmd->BodyLight[0];  // R
@@ -253,13 +254,13 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
     // ZzzBMD.cpp RenderBody: iBlendMesh = i).  El 0.97 la parsea pero no la
     // usa; se aplica sólo a los modelos dinámicos para no tocar el vanilla.
     const bool brightMesh =
-        ((int)(((uintptr_t)bmd_obj - (uintptr_t)DAT_05828d58) / sizeof(BMD)) >= MODEL_MAX_VANILLA) &&
+        ((int)(((uintptr_t)bmd_obj - (uintptr_t)ModelsBase) / sizeof(BMD)) >= MODEL_MAX_VANILLA) &&
         mesh->TextureFlags != 0 && static_cast<const char*>(mesh->TextureFlags)[0] != 0;
 
     if ((bVar4 & 1) == 1) {
         // RENDER_COLOR: flat color, disable texture
         renderMode = MODE_COLOR;
-        const bool colorAlpha=alpha < _DAT_00552544;
+        const bool colorAlpha=alpha < AlphaChannelThreshold;
         BMDDevice::Select({BMDDevice::Pass::Color,uVar6,0,colorAlpha});
         if (colorAlpha) {
             BufferedDraw::Color4f(bmd->BodyLight[0],
@@ -284,22 +285,22 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
             // Recompute WorldTime-based phase for OIL (misma corrección: usar
             // WorldTime explícito, no ST0 basura). IDA: `(std::int64_t)WorldTime % 5000`.
             iVar12 = 0;
-            fVar11 = (float)(int)(worldTime % 5000) * _DAT_005528c0 - _DAT_005528b4;
+            fVar11 = (float)(int)(worldTime % 5000) * ChromeUScale - ImpulseDriftHorizA;
 
             // DESVIACION: las mismas fórmulas del bucle de abajo como filas
             // lineales en la normal rotada (x, y, z, constante) para que la
             // malla residente calcule la UV en la GPU.
             if ((uVar6 & 0x200) == 0x200) {
-                const float m[8] = {_DAT_00552530, 0.0f, _DAT_00552530, fVar11 + fVar11,
-                                    1.0f, 1.0f, 0.0f, fVar11 * _DAT_00552540};
+                const float m[8] = {0.8f, 0.0f, 0.8f, fVar11 + fVar11,
+                                    1.0f, 1.0f, 0.0f, fVar11 * FragmentGravityA};
                 std::memcpy(chromeMap, m, sizeof(chromeMap));
             } else if (uVar7 == 4) {
-                const float m[8] = {0.0f, 0.0f, _DAT_00552504, fVar16,
-                                    0.0f, _DAT_00552504, 0.0f, fVar16 + fVar16};
+                const float m[8] = {0.0f, 0.0f, HalfScale, fVar16,
+                                    0.0f, HalfScale, 0.0f, fVar16 + fVar16};
                 std::memcpy(chromeMap, m, sizeof(chromeMap));
             } else {
-                const float m[8] = {0.0f, 0.0f, _DAT_00552504, _DAT_005526e4,
-                                    0.0f, _DAT_00552504, 0.0f, _DAT_0055256c * _DAT_00552504};
+                const float m[8] = {0.0f, 0.0f, HalfScale, ImpulseDriftVertA,
+                                    0.0f, HalfScale, 0.0f, ImpulseScaleBaseB * HalfScale};
                 std::memcpy(chromeMap, m, sizeof(chromeMap));
             }
             hasChromeMap = true;
@@ -309,26 +310,26 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
                 // Disasm @ 0x00441194:  MOV ECX,0x5828d60   (NO 0x5828d58)
                 // Layout real del array: d5c=U0, d60=V0, d64=U1, d68=V1, ...
                 // Con la base en d58, pfVar10[-1] escribiría en DAT_05828d54 y *pfVar10 en
-                // DAT_05828d58, que es el puntero base a la tabla de modelos (g_Models).
-                pfVar10 = ((float *)&DAT_05828d5c) + 1;   // = &DAT_05828d60 (V0 slot)
-                // DAT_06f433c0 está declarado como `float`, así que &DAT_06f433c0 +
+                // ModelsBase, que es el puntero base a la tabla de modelos (g_Models).
+                pfVar10 = ((float *)&ChromeUvData) + 1;   // = &DAT_05828d60 (V0 slot)
+                // LegacyBoneChromeNormalBuf está declarado como `float`, así que &LegacyBoneChromeNormalBuf +
                 // meshIdx*180000 sería aritmética float* (= +meshIdx*720000 bytes). El stride
                 // real per-mesh son 180000 BYTES (disasm @ 0x004411a8: ADD EAX,0x6f433c0
                 // tras EBP*180000). Se castea a char* para que el +N sea byte arith.
-                pfVar8  = (float *)((char*)&DAT_06f433c0 + meshIndex * 180000);  // source normals
+                pfVar8  = (float *)((char*)&LegacyBoneChromeNormalBuf + meshIndex * 180000);  // source normals
                 do {
                     if ((uVar6 & 0x200) == 0x200) {
                         // OIL mode
-                        pfVar10[-1] = fVar11 + fVar11 + (pfVar8[1] + pfVar8[-1]) * _DAT_00552530;
-                        fVar9 = fVar11 * _DAT_00552540 + *pfVar8 + pfVar8[-1];
+                        pfVar10[-1] = fVar11 + fVar11 + (pfVar8[1] + pfVar8[-1]) * 0.8f;
+                        fVar9 = fVar11 * FragmentGravityA + *pfVar8 + pfVar8[-1];
                     } else if (uVar7 == 4) {
                         // CHROME mode
-                        pfVar10[-1] = pfVar8[1] * _DAT_00552504 + fVar16;
-                        fVar9 = *pfVar8 * _DAT_00552504 + fVar16 + fVar16;
+                        pfVar10[-1] = pfVar8[1] * HalfScale + fVar16;
+                        fVar9 = *pfVar8 * HalfScale + fVar16 + fVar16;
                     } else {
                         // OBJ mode
-                        pfVar10[-1] = pfVar8[1] * _DAT_00552504 + _DAT_005526e4;
-                        fVar9 = (*pfVar8 + _DAT_0055256c) * _DAT_00552504;
+                        pfVar10[-1] = pfVar8[1] * HalfScale + ImpulseDriftVertA;
+                        fVar9 = (*pfVar8 + ImpulseScaleBaseB) * HalfScale;
                     }
                     iVar12++;
                     *pfVar10 = fVar9;
@@ -338,7 +339,7 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
             }
 
             if ((bVar4 & 0x40) == 0x40) {
-                if (alpha < _DAT_00552544) {
+                if (alpha < AlphaChannelThreshold) {
                     bmd->BodyLight[0] = alpha * bmd->BodyLight[0];
                     bmd->BodyLight[1] = alpha * bmd->BodyLight[1];
                     bmd->BodyLight[2] = alpha * bmd->BodyLight[2];
@@ -352,7 +353,7 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
                 local_10 = 0x492;
             else if (((bVar4 & 8) == 8) && (texOverride == 0xffffffff))
                 local_10 = 0x4ce;
-            BMDDevice::Select({BMDDevice::Pass::Chrome,uVar6,static_cast<int>(local_10),alpha < _DAT_00552544});
+            BMDDevice::Select({BMDDevice::Pass::Chrome,uVar6,static_cast<int>(local_10),alpha < AlphaChannelThreshold});
 
         } else if (
             // El binario original compara como INT, no float. IDA sub_440D50:
@@ -388,11 +389,11 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
         } else if ((bVar4 & 2) == 2) {
             // RENDER_TEXTURE: explicit bind with blend
             renderMode = MODE_TEXTURE;
-            BMDDevice::Select({BMDDevice::Pass::Surface,uVar6,static_cast<int>(local_10),alpha < _DAT_00552544});
+            BMDDevice::Select({BMDDevice::Pass::Surface,uVar6,static_cast<int>(local_10),alpha < AlphaChannelThreshold});
 
         } else if ((bVar4 & 0x40) == 0x40) {
             // Bright-only chrome: skip if texture type is 4
-            if ((&DAT_083a7cc8)[local_10 * TEXTURE_STRIDE] == '\x04') {
+            if ((&BitmapsBpp)[local_10 * TEXTURE_STRIDE] == '\x04') {
                 return;
             }
             renderMode = MODE_METAL;
@@ -428,7 +429,7 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
     // original decide este blend — no sale del asset (el BMD v10 no tiene campo
     // de RenderType; se deriva del nombre de textura) ni de `RenderLinkObject`
     // (0x455430), que no toca BlendMesh. Queda como forzado explicito.
-    if (bmd_obj == (void*)(DAT_05828d58 + 816 * sizeof(BMD)) && meshIndex == 1) {
+    if (bmd_obj == (void*)(ModelsBase + 816 * sizeof(BMD)) && meshIndex == 1) {
         BMDDevice::Select({BMDDevice::Pass::Glow});
     }
 
@@ -439,9 +440,9 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
     const MeshDraw::Input meshInput{
         mesh,reinterpret_cast<const unsigned char*>(mesh->Triangles),
         mesh->TriangleCount,mesh->VertexCount,mesh->NormalCount,mesh->TexCoordCount,
-        reinterpret_cast<const float*>(&DAT_0584621c)+meshIndex*15000*3,
-        reinterpret_cast<const float*>(&DAT_060db65c)+meshIndex*15000*3,
-        reinterpret_cast<const float*>(mesh->TexCoords),&DAT_05828d5c,
+        reinterpret_cast<const float*>(&BoneVertBufBase)+meshIndex*15000*3,
+        reinterpret_cast<const float*>(&BoneLightData)+meshIndex*15000*3,
+        reinterpret_cast<const float*>(mesh->TexCoords),&ChromeUvData,
         renderMode,param_2_b0!='\0',bVar5!=0,alpha,uvU,uvV,
         bmd->BodyLight,bmd_obj,&attributes,
         reinterpret_cast<const unsigned char*>(mesh->Vertices),reinterpret_cast<const unsigned char*>(mesh->Normals),
@@ -465,7 +466,7 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
         // Color de la rama Blend (~0.1), triplicado: con la atenuacion el
         // original apenas se ve.  Desviacion respecto de IDA.
         for (int k = 0; k < 3; ++k) flashColor[k] = 3.0f * blendLight * bmd->BodyLight[k];
-        const float* v0 = reinterpret_cast<const float*>(&DAT_0584621c) + meshIndex * 15000 * 3;
+        const float* v0 = reinterpret_cast<const float*>(&BoneVertBufBase) + meshIndex * 15000 * 3;
         for (int i = 0; i < mesh->VertexCount; ++i)
             for (int k = 0; k < 3; ++k) flashCenter[k] += v0[i * 3 + k];
         for (int k = 0; k < 3; ++k) flashCenter[k] /= (float)mesh->VertexCount;
@@ -509,18 +510,18 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
                         }
                         if (param_2_b0 != '\0') {
                             iVar2 = meshIndex * 15000 + (int)*psVar14;
-                            if (alpha < _DAT_00552544) {
-                                BufferedDraw::Color4f(*(float *)(&DAT_060db65c + iVar2 * 12),
-                                          *(float *)(&DAT_060db65c + iVar2 * 12 + 4),
-                                          *(float *)(&DAT_060db65c + iVar2 * 12 + 8), alpha);
+                            if (alpha < AlphaChannelThreshold) {
+                                BufferedDraw::Color4f(*(float *)(&BoneLightData + iVar2 * 12),
+                                          *(float *)(&BoneLightData + iVar2 * 12 + 4),
+                                          *(float *)(&BoneLightData + iVar2 * 12 + 8), alpha);
                             } else {
-                                BufferedDraw::Color3fv((const float *)(&DAT_060db65c + iVar2 * 12));
+                                BufferedDraw::Color3fv((const float *)(&BoneLightData + iVar2 * 12));
                             }
                         }
                     } else if (renderMode == MODE_CHROME) {
                         // Chrome UV from precomputed chrome table
                         if (!chromeColorSent) {
-                            if (alpha < _DAT_00552544) {
+                            if (alpha < AlphaChannelThreshold) {
                                 BufferedDraw::Color4f(bmd->BodyLight[0],
                                           bmd->BodyLight[1],
                                           bmd->BodyLight[2], alpha);
@@ -529,19 +530,19 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
                             }
                             chromeColorSent = true;
                         }
-                        // Ghidra emitió `(&DAT_05828d5c + 4)[idx*2]`, que es aritmética float*
+                        // Ghidra emitió `(&ChromeUvData + 4)[idx*2]`, que es aritmética float*
                         // (+4 = +16 bytes) y leería V de d6c+idx*8 en vez de d60+idx*8.
                         // Disasm @ 0x004413bd-c4:
                         //   MOV ECX,[EAX*0x8 + 0x5828d60]   ; V
                         //   MOV EDX,[EAX*0x8 + 0x5828d5c]   ; U
                         // El array es {U,V,U,V,...} contiguo desde d5c → V está en idx*2+1.
-                        BufferedDraw::TexCoord2f((&DAT_05828d5c)[*psVar14 * 2 + 0],
-                                     (&DAT_05828d5c)[*psVar14 * 2 + 1]);
+                        BufferedDraw::TexCoord2f((&ChromeUvData)[*psVar14 * 2 + 0],
+                                     (&ChromeUvData)[*psVar14 * 2 + 1]);
                     }
 
                     // Emit vertex from BoneVertex buffer
                     {
-                        const float *_v = (const float*)(&DAT_0584621c + ((int)sVar3 + meshIndex * 15000) * 3);
+                        const float *_v = (const float*)(&BoneVertBufBase + ((int)sVar3 + meshIndex * 15000) * 3);
                         if (thunderFlash) {
                             float d2 = 0.0f;
                             for (int k = 0; k < 3; ++k) { const float d = _v[k] - flashCenter[k]; d2 += d * d; }
@@ -564,7 +565,7 @@ void __cdecl BMD__RenderMesh(void *bmd_obj, float meshIdx, int flags,
     // Restaurar el depth-mask al salir: el path chrome (flag&0x40) llama
     // DisableDepthMask() arriba y, si no se restaura, los meshes siguientes del
     // mismo frame se dibujan sin depth-write (efecto "ghost"). El binario lo hace
-    // en los setters de estado entre meshes, pero acá el cache DAT_083a42e8 puede
+    // en los setters de estado entre meshes, pero acá el cache DepthMaskCache puede
     // quedar desincronizado.
     BMDDevice::Select({BMDDevice::Pass::Exit});  // EnableDepthMask
 }

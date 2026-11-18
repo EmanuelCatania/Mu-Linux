@@ -233,7 +233,7 @@ PATH_FindPath(PathContext *ctx, int param_1, float param_2, int param_3, int par
 
   failValue = 0;
   if ((param_1 != 0) && (param_2 != 0.0f)) {
-    if (_DAT_00552580 == param_7) {
+    if (FloatZeroB == param_7) {
       // Single-target mode: mark target cell directly
       failValue = (uint)(ctx->Width * param_4);
       pbVar1 = (int)failValue + param_3;
@@ -264,7 +264,7 @@ PATH_FindPath(PathContext *ctx, int param_1, float param_2, int param_3, int par
           for (iVar5 = iVar13; local_14 = fVar11, iVar5 < 1; iVar5 = iVar5 + 1) {
             iVar6 = iVar12 * ctx->Width + iVar5 + param_3;
             if ((iVar6 < 0) || (ctx->Size <= iVar6)) {
-              CErrorReport_Write(&DAT_055c9bf0, &DAT_005597a0);
+              CErrorReport_Write(&ErrorReportCtx, &PathFinderDebugString);
             }
             else if (((char)param_5 == '\0') ||
                     ((int)(uint)ctx->Walk[iVar6] < param_6)) {
@@ -273,7 +273,7 @@ PATH_FindPath(PathContext *ctx, int param_1, float param_2, int param_3, int par
             }
             iVar6 = (iVar12 * ctx->Width - iVar5) + param_3;
             if ((iVar6 < 0) || (ctx->Size <= iVar6)) {
-              CErrorReport_Write(&DAT_055c9bf0, &DAT_005597a0);
+              CErrorReport_Write(&ErrorReportCtx, &PathFinderDebugString);
             }
             else if (((char)param_5 == '\0') ||
                     ((int)(uint)ctx->Walk[iVar6] < param_6)) {
@@ -289,7 +289,7 @@ PATH_FindPath(PathContext *ctx, int param_1, float param_2, int param_3, int par
               if (SQRT((float)local_1c) < param_7) {
                 iVar5 = iVar12 * ctx->Width + (int)fVar11 + param_3;
                 if ((iVar5 < 0) || (ctx->Size <= iVar5)) {
-                  CErrorReport_Write(&DAT_055c9bf0, &DAT_005597a0);
+                  CErrorReport_Write(&ErrorReportCtx, &PathFinderDebugString);
                 }
                 else if (((char)param_5 == '\0') ||
                         ((int)(uint)ctx->Walk[iVar5] < param_6)) {
@@ -298,7 +298,7 @@ PATH_FindPath(PathContext *ctx, int param_1, float param_2, int param_3, int par
                 }
                 iVar5 = (iVar12 * ctx->Width - (int)fVar11) + param_3;
                 if ((iVar5 < 0) || (ctx->Size <= iVar5)) {
-                  CErrorReport_Write(&DAT_055c9bf0, &DAT_005597a0);
+                  CErrorReport_Write(&ErrorReportCtx, &PathFinderDebugString);
                 }
                 else if (((char)param_5 == '\0') ||
                         ((int)(uint)ctx->Walk[iVar5] < param_6)) {
@@ -549,7 +549,7 @@ void __cdecl PathContext_Create(void)
 {
     auto *ctx = static_cast<PathContext *>(operator_new(sizeof(PathContext)));
     if (ctx == nullptr) {
-        DAT_05826df4 = nullptr;
+        PathFindContext = nullptr;
         return;
     }
     ctx->Queue.Count = 0;
@@ -558,7 +558,7 @@ void __cdecl PathContext_Create(void)
     ctx->Cost = nullptr;
     ctx->ParentX = nullptr;
     ctx->ParentY = nullptr;
-    DAT_05826df4 = ctx;
+    PathFindContext = ctx;
 }
 
 // ZzzAI::InitPath (0x0043F2D0) no va acá: es PathFinder_ResetContext, que la

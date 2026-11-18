@@ -47,15 +47,15 @@ char* __stdcall PickObject_Mouse(void) {
                    SceneObjects::Contains(obj)) {
                 // Check: object alive, visible, and alpha above threshold
                 if ((*(char *)&AsObject(obj)->Live != '\0') && (*(char *)&AsObject(obj)->Visible != '\0') &&
-                    (_DAT_005524f8 <= AsObject(obj)->Alpha))
+                    (0.01f <= AsObject(obj)->Alpha))
                 {
                     // Get model from entity type
                     short modelType = AsObject(obj)->Type;
-                    if (modelType < 0 || modelType >= ResourceTables::ModelCount() || !DAT_05828d58) {
+                    if (modelType < 0 || modelType >= ResourceTables::ModelCount() || !ModelsBase) {
                         obj = reinterpret_cast<char*>(AsObject(obj)->SceneNext);
                         continue;
                     }
-                    BMD* model = AsModel(DAT_05828d58) + modelType;
+                    BMD* model = AsModel(ModelsBase) + modelType;
 
                     // Copiar los campos del objeto al modelo conservando los bits de float.
                     memcpy(&model->BodyScale, &AsObject(obj)->Scale, sizeof(float));
@@ -85,11 +85,11 @@ char* __stdcall PickObject_Mouse(void) {
                     memcpy(obb, AsObject(obj)->OBB, sizeof(obb));
 
                     // Check ray intersection with bounding volume
-                    bool hit = Collision_SegmentToOBB((float*)&CameraRayOriginX, (float*)&DAT_083a4110, obb);
+                    bool hit = Collision_SegmentToOBB((float*)&CameraRayOriginX, (float*)&MouseRayEndPoint, obb);
                     if ((char)hit != '\0') {
                         // IDA 0x004FA7C0: actualiza el hit más cercano sin excluir caras.
                         if (BMD__CollisionDetectLineToMesh(
-                                model, (float*)&CameraRayOriginX, (float*)&DAT_083a4110,
+                                model, (float*)&CameraRayOriginX, (float*)&MouseRayEndPoint,
                                 true, -1, -1)) {
                             result = obj;
                         }

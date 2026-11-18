@@ -21,7 +21,7 @@ extern "C" void DbgLogPublic(const char* msg);
 // Connects to server at param_1 (IP string) on port param_2.
 // On failure: logs error, calls CErrorReport_WriteCurrentTime(1) (IDA: FUN_004055A0), plays music 0x71.
 // On success: bootstraps the send/recv hash table entries for the session key
-// bytes at DAT_05826ceb/cec (encrypt + decrypt key registration via
+// bytes at LegacyPacketSerialSend/cec (encrypt + decrypt key registration via
 // Packet_DecryptByte/Packet_EncryptByte).
 // Returns unaff_EBP (register spill — result from lower-level connect call).
 // IDA: CreateSocket (0x00423920)
@@ -65,7 +65,7 @@ void __cdecl CreateSocket(const char *param_1,unsigned int param_2)
   }
   if (iVar2 == 0) {
     DbgLogPublic("NET: CreateSocket CONNECT FAILED → abort/SetErrorMessage(0x71)");
-    CErrorReport_Write(&DAT_055c9bf0,s_Failed_to_connect__00559688);
+    CErrorReport_Write(&ErrorReportCtx,Err_FailedToConnect);
     CErrorReport_WriteCurrentTime(1); // IDA: FUN_004055A0
     SetErrorMessage(0x71);
     // Original-client behaviour: the server can't be reached (no listener,
@@ -82,7 +82,7 @@ void __cdecl CreateSocket(const char *param_1,unsigned int param_2)
     }
     // Skip the hash-table bootstrap below — it operates on a live session key
     // and there is no session if connect failed.  Returning here also avoids
-    // touching DAT_05826ceb/cec on a half-initialised ctx.
+    // touching LegacyPacketSerialSend/cec on a half-initialised ctx.
     return;
   }
   gNetwork.InitializePacketSerials();
@@ -114,17 +114,17 @@ void CNetwork::InitializePacketSerials()
   local_4[3] = 0;
   // Lo que sigue es ofuscación HashTable inlined sobre m_SendSerial/cec
   // (ref-count de session-key bytes). Neutralizado vía fake vtable en
-  // MAIN_HASH_CLASS + capacity (DAT_055c9bd4) = 0 → loops se saltean.
+  // MAIN_HASH_CLASS + capacity (HashTableCapacity) = 0 → loops se saltean.
   param_1 = &m_SendSerial;
   uVar3 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(&m_SendSerial);
   uVar6 = 0;
   param_1 = (char *)0x0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       bVar11 = false;
       iVar7 = 0;
       bVar12 = true;
-      pbVar5 = (byte *)(DAT_055c9bd0 + uVar3 * 4);
+      pbVar5 = (byte *)(HashTableKeys + uVar3 * 4);
       iVar2 = 4;
       ppcVar8 = reinterpret_cast<const byte*>(&param_1);
       pbVar9 = pbVar5;
@@ -166,11 +166,11 @@ void CNetwork::InitializePacketSerials()
         }
         goto LAB_00423a52;
       }
-      uVar3 = (uVar3 + 1) % DAT_055c9bd4;
+      uVar3 = (uVar3 + 1) % HashTableCapacity;
       uVar6 = uVar6 + 1;
-    } while (uVar6 < DAT_055c9bd4);
+    } while (uVar6 < HashTableCapacity);
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00423a34:
   pvVar4 = AntiTamper_HashNode();
   static_cast<BYTE*>(pvVar4)[1] = 1;
@@ -179,13 +179,13 @@ LAB_00423a52:
   m_SendSerial = 0;
   uVar3 = (**(code **)(MAIN_HASH_CLASS + 3 * sizeof(void*)))(&m_SendSerial);
   uVar6 = 0;
-  if (DAT_055c9bd4 != 0) {
+  if (HashTableCapacity != 0) {
     do {
       iVar2 = 4;
       bVar11 = false;
       iVar7 = 0;
       bVar12 = true;
-      pbVar5 = (byte *)(DAT_055c9bd0 + uVar3 * 4);
+      pbVar5 = (byte *)(HashTableKeys + uVar3 * 4);
       pbVar9 = (byte *)local_4;
       pbVar10 = pbVar5;
       do {
@@ -227,11 +227,11 @@ LAB_00423a52:
         }
         goto LAB_00423b59;
       }
-      uVar3 = (uVar3 + 1) % DAT_055c9bd4;
+      uVar3 = (uVar3 + 1) % HashTableCapacity;
       uVar6 = uVar6 + 1;
-    } while (uVar6 < DAT_055c9bd4);
+    } while (uVar6 < HashTableCapacity);
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
 LAB_00423b59:
   uVar3 = HashTable_GetIndex(&MAIN_HASH_CLASS,&m_ReceiveSerial);
   if (uVar3 == 0xffffffff) {

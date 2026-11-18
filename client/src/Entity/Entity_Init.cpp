@@ -4,7 +4,7 @@
 // IDA: CreateHero (0x0045F930)
 // SaveMonsters @ 0x0045fa20 — Monster_SaveSetBase
 //
-// Entity pool base: DAT_07abf5d0
+// Entity pool base: CharactersClient
 // Stride: 0x394 bytes per slot
 // Max slots: 0x59740 / 0x394 = 640
 
@@ -26,7 +26,7 @@ CreateHero(int Index, int Class, int Skin, float x, float y, float Rotate)
   unsigned char *puVar1;
   unsigned short uVar2;
 
-  puVar1 = (unsigned char *)(DAT_07abf5d0 + Index * CHARACTER_STRIDE);
+  puVar1 = (unsigned char *)(CharactersClient + Index * CHARACTER_STRIDE);
   CreateCharacterPointer(puVar1, 0x186, 0, 0, Rotate);
 
   // Object.Light[0..2] = 0.3f (0x3e99999a)
@@ -70,7 +70,7 @@ void __cdecl Monster_SaveSetBase(LPCSTR path)
   if (!file) return;
   fprintf(file, "2\n");
   for (int offset = 0; offset < 400 * CHARACTER_STRIDE; offset += CHARACTER_STRIDE) {
-    const unsigned char* entity = (const unsigned char*)(uintptr_t)DAT_07abf5d0 + offset;
+    const unsigned char* entity = (const unsigned char*)(uintptr_t)CharactersClient + offset;
     if (entity[0] && entity[0x84] == 32) {
       const unsigned char x = (unsigned char)(long long)(*(const float*)(entity + 0x10) * 0.0099999998);
       const unsigned char y = (unsigned char)(long long)(*(const float*)(entity + 0x14) * 0.0099999998);

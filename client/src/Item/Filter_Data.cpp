@@ -6,18 +6,18 @@
 // Reads a text-format filter/word-list data file (used for chat filtering).
 // Parser uses TextParser_GetToken (type 2=EOF).
 // For each token read, copies the string from TextParserTokenString into
-// DAT_07d73104 + DAT_07d78070 * 0x14 (stride 0x14, each entry 20 bytes),
-// then increments DAT_07d78070 (filter entry count).
+// WordFilterTable + WordFilterCount * 0x14 (stride 0x14, each entry 20 bytes),
+// then increments WordFilterCount (filter entry count).
 // Loop ends when TextParser_GetToken returns 2 (EOF).
 // IDA: sub_4799D0 (0x004799D0)
 void __cdecl Filter_LoadTextFile(const char *path)
 {
-    DAT_07d7806c = (FILE *)crt_fopen(path, DAT_005580ac);
-    if (!DAT_07d7806c) return;
+    BmdFileHandle = (FILE *)crt_fopen(path, FopenModeRb);
+    if (!BmdFileHandle) return;
 
     while (TextParser_GetToken() != 2) {
         // token string is in TextParserTokenString; copy to filter table entry
-        char *dst = DAT_07d73104 + DAT_07d78070 * 0x14;
+        char *dst = WordFilterTable + WordFilterCount * 0x14;
         // strlen(TextParserTokenString) then memcpy
         UINT len = 0xFFFFFFFF;
         const char *p = TokenString;
@@ -31,7 +31,7 @@ void __cdecl Filter_LoadTextFile(const char *path)
         for (UINT r = len & 3; r != 0; r--) {
             *dst++ = *src++;
         }
-        DAT_07d78070++;
+        WordFilterCount++;
     }
-    crt_fclose(DAT_07d7806c);
+    crt_fclose(BmdFileHandle);
 }

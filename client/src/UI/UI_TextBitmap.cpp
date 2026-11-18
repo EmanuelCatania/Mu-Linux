@@ -53,9 +53,9 @@ void __cdecl Font_RenderTextToBitmap(int p1, int p2, LPCSTR p3, int p4, int p5, 
 #ifdef MU_SDL_FONTS
     {
         int width = p1;
-        const int maxW = (int)(*(float*)(&DAT_083a7cc0));
+        const int maxW = (int)(*(float*)(&BitmapsWidth));
         if (maxW > 0 && width > maxW) width = maxW;
-        const int maxH = (int)(*(float*)(&DAT_083a7cc4));
+        const int maxH = (int)(*(float*)(&BitmapsHeight));
         pending.valid = true;
         pending.text = *p3 != '\n';
         pending.width = width;
@@ -70,7 +70,7 @@ void __cdecl Font_RenderTextToBitmap(int p1, int p2, LPCSTR p3, int p4, int p5, 
             if (p9) gFont.MeasureText(gFont.GetTextDC(), p9, Platform::TextLength(p9), &sz);
             pending.prefixWidth = p9 ? sz.cx : 0;
         }
-        pending.textColor = DAT_00559c78;
+        pending.textColor = m_dwTextColor;
         pending.prefixColor = SetTextColor_0;
         pending.backColor = m_dwBackColor;
         return;
@@ -115,7 +115,7 @@ void __cdecl Font_RenderTextToBitmap(int p1, int p2, LPCSTR p3, int p4, int p5, 
     }
 
     // Clamp height to Bitmaps[0].Height (float → int)
-    int maxH = (int)(*(float*)(&DAT_083a7cc4));
+    int maxH = (int)(*(float*)(&BitmapsHeight));
     int height = p2;
     if (maxH < p2) {
         height = maxH;
@@ -132,7 +132,7 @@ void __cdecl Font_RenderTextToBitmap(int p1, int p2, LPCSTR p3, int p4, int p5, 
     // del buffer y corrompia el heap; la victima cambiaba con el layout (de ahi
     // los crash en direcciones distintas, incluso dentro de gdi32 con handles
     // validos).  Desviacion deliberada: acotamos igual que el alto.
-    const int maxW = (int)(*(float*)(&DAT_083a7cc0));
+    const int maxW = (int)(*(float*)(&BitmapsWidth));
     if (maxW > 0 && bmpWidth > maxW) {
         bmpWidth = maxW;
     }
@@ -168,10 +168,10 @@ void __cdecl Font_RenderTextToBitmap(int p1, int p2, LPCSTR p3, int p4, int p5, 
                         // Text pixel: use prefix color if col < prefixWidth, else m_dwTextColor
                         if (col < prefixWidth) {
                             // 0x00559C7C — IDA `SetTextColor_0`: color del prefijo (nombre de guild).
-                            // DAT_00559c7c y SetTextColor_0 son la misma memoria (unificados en globals.h).
+                            // LegacySetTextColor0 y SetTextColor_0 son la misma memoria (unificados en globals.h).
                             color = SetTextColor_0;
                         } else {
-                            color = DAT_00559c78;  // m_dwTextColor
+                            color = m_dwTextColor;  // m_dwTextColor
                         }
                     }
                     *dst = color;
@@ -234,7 +234,7 @@ void __cdecl Font_RenderBitmapText(int a1, int a2, float Width, float Height, in
   {
     a1 = (int)gWindow.GetWidth() + off - (int)LODWORD(Width);
   }
-  if ( DAT_07e11d6e )
+  if ( HudTextVisibleFlag )
   {
     v10 = a2;
     if ( a2 < 0 )

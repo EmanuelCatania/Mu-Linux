@@ -2,7 +2,7 @@
 
 #include "stdafx.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -89,7 +89,7 @@ void __cdecl R_ConcatTransforms(float *p, float *r, float *o) {
 // Los buffers conservan sus direcciones completas; los extras se ignoran.
 void __cdecl EulerToQuat(const float* param_1, float* param_2, int ic, int id) {
     (void)ic; (void)id;
-    float k   = _DAT_00552ce0;
+    float k   = EulerHalfFactor;
     float sz  = sinf(param_1[2] * k), cz = cosf(param_1[2] * k);
     float sy  = sinf(param_1[1] * k), cy = cosf(param_1[1] * k);
     float sx  = sinf(param_1[0] * k), cx = cosf(param_1[0] * k);
@@ -106,17 +106,17 @@ void __cdecl EulerToQuat(const float* param_1, float* param_2, int ic, int id) {
 void __cdecl QuatToMatrix(const float* q, float* m, int ic, int id) {
     (void)ic; (void)id;
     float x2 = q[1]*q[1], z2 = q[2]*q[2];
-    m[0]  = _DAT_00552cf0 - (x2+x2) - (z2+z2);
+    m[0]  = QuatOne - (x2+x2) - (z2+z2);
     float t = q[0]*q[1] + q[2]*q[3]; m[4]  = t+t;
     m[8]  = (q[2]*q[0]+q[2]*q[0]) - (q[3]*q[1]+q[3]*q[1]);
     m[1]  = (q[0]*q[1]+q[0]*q[1]) - (q[2]*q[3]+q[2]*q[3]);
     float y2 = q[0]*q[0];           z2 = q[2]*q[2];
-    m[5]  = _DAT_00552cf0 - (y2+y2) - (z2+z2);
+    m[5]  = QuatOne - (y2+y2) - (z2+z2);
     t = q[0]*q[3] + q[2]*q[1];      m[9]  = t+t;
     t = q[3]*q[1] + q[2]*q[0];      m[2]  = t+t;
     m[6]  = (q[2]*q[1]+q[2]*q[1]) - (q[0]*q[3]+q[0]*q[3]);
     y2 = q[0]*q[0]; x2 = q[1]*q[1];
-    m[10] = _DAT_00552cf0 - (y2+y2) - (x2+x2);
+    m[10] = QuatOne - (y2+y2) - (x2+x2);
 }
 
 // QuatSlerp @ 0x004FA350 — QuatSlerp(q1[4], q2[4], t, out[4])
@@ -126,7 +126,7 @@ void __cdecl QuatSlerp(const float* q1, float* q2, float t, float* out) {
     float dot = q1[0]*q2[0] + q1[1]*q2[1] + q1[2]*q2[2] + q1[3]*q2[3];
     if (dot < 0.0f) { for(int i=0;i<4;i++) q2[i]=-q2[i]; dot=-dot; }
     float scale0, scale1;
-    if (dot < 1.0f - _DAT_00552d00) {
+    if (dot < 1.0f - SlerpEpsilon) {
         float angle = acosf(dot);
         float sinA  = sinf(angle);
         scale0 = sinf((1.0f - t) * angle) / sinA;
@@ -140,24 +140,24 @@ void __cdecl QuatSlerp(const float* q1, float* q2, float t, float* out) {
 
 
 // Entity_InitRenderState @ 0x004FF580 — Entity_InitRenderState(entity)
-// Scans render-state pool at DAT_083a2370 (stride 0xc, 128 slots).
+// Scans render-state pool at OperateEntryPool (stride 0xc, 128 slots).
 // Finds first free slot (byte[0]==0), marks it active and stores entity ptr.
 // Entity_InitRenderState (IDA-activated)
 void *__cdecl Entity_InitRenderState(void *a1)
 {
   DWORD *result; // eax
 
-  result = (DWORD *)&DAT_083a2370;
+  result = (DWORD *)&OperateEntryPool;
   while ( *(BYTE *)result )
   {
     result += 3;
-    if ( (intptr_t)result >= (intptr_t)&DAT_083a2cd0 )
+    if ( (intptr_t)result >= (intptr_t)&TableEndMarker )
     {
       return result;
     }
   }
   *(BYTE *)result = 1;
-  g_OperateObjects[((char*)result - (char*)&DAT_083a2370) / 12] = (uintptr_t)a1;
+  g_OperateObjects[((char*)result - (char*)&OperateEntryPool) / 12] = (uintptr_t)a1;
   result[2] = (DWORD)(uintptr_t)a1;
   return result;
 }

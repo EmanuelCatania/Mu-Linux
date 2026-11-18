@@ -22,16 +22,16 @@
 //   TimeRemain  — frame budget accumulator (adds actual frame ms each frame)
 //   TestTime  — total frame counter
 //   MoveSceneFrame  — anti-tamper tick counter
-//   DAT_055ca018  — socket error flag (abort if set)
-//   DAT_083a42ec  — screenshot mode toggle (Print Screen)
-//   DAT_083a7c48  — connection check enable
-//   DAT_083a7c58  — disconnect dialog shown flag
-//   DAT_07e118e8  — world/map type
-//   DAT_07c74ae4  — BGM track 1 enable flag
-//   DAT_07abf5d8  — local player entity pointer
+//   AppQuitFlag  — socket error flag (abort if set)
+//   ScreenshotModeFlag  — screenshot mode toggle (Print Screen)
+//   ConnectionCheckEnable  — connection check enable
+//   DisconnectDialogShown  — disconnect dialog shown flag
+//   WorldMapType  — world/map type
+//   WeatherIntensityCurrent  — BGM track 1 enable flag
+//   Hero  — local player entity pointer
 //   ChatTime  — countdown counter A
-//   DAT_07e11d7c  — countdown counter B
-//   DAT_0839bc8c  — frame index mod 32
+//   MacroCooldown  — countdown counter B
+//   WaterTextureNumber  — frame index mod 32
 
 #include "stdafx.h"
 #include "Entity/EntityName.h"
@@ -134,39 +134,39 @@ void __cdecl Game_MainLoop(HDC param_1)
         // a specific residue (0x39 mod 0x139). Not game logic.
         if (MoveSceneFrame % 0x139 == 0x39) {
             // Hash table rehash: reallocate with random offsets
-            if (DAT_055c9be0 != NULL)
-                operator_delete((BYTE*)DAT_055c9be0);
-            DAT_055c9be0 = (BYTE*)operator_new(_rand() % 0xcc7 + 0x159);
+            if (HashTableBaseAlloc != NULL)
+                operator_delete((BYTE*)HashTableBaseAlloc);
+            HashTableBaseAlloc = (BYTE*)operator_new(_rand() % 0xcc7 + 0x159);
 
-            BYTE* old_bcc = (BYTE*)DAT_055c9bcc;
-            BYTE* old_bd0 = (BYTE*)DAT_055c9bd0;
-            BYTE* old_be8 = (BYTE*)DAT_055c9be8;
-            BYTE* old_bec = (BYTE*)DAT_055c9bec;
+            BYTE* old_bcc = (BYTE*)HashTableValues;
+            BYTE* old_bd0 = (BYTE*)HashTableKeys;
+            BYTE* old_be8 = (BYTE*)HashValuesAlloc;
+            BYTE* old_bec = (BYTE*)HashKeysAlloc;
 
-            DAT_055c9be8 = (BYTE*)operator_new(DAT_055c9bd4 * 4 + 0x100);
-            DAT_055c9bec = (BYTE*)operator_new(DAT_055c9bd4 * 4 + 0x100);
+            HashValuesAlloc = (BYTE*)operator_new(HashTableCapacity * 4 + 0x100);
+            HashKeysAlloc = (BYTE*)operator_new(HashTableCapacity * 4 + 0x100);
 
             unsigned rnd1 = (unsigned)(_rand() & 0x3f);
             unsigned rnd2 = (unsigned)(_rand() & 0x3f);
-            DAT_055c9bcc = (uintptr_t)((BYTE*)DAT_055c9be8 + rnd1 * 4);
-            DAT_055c9bd0 = (uintptr_t)((BYTE*)DAT_055c9bec + rnd2 * 4);
+            HashTableValues = (uintptr_t)((BYTE*)HashValuesAlloc + rnd1 * 4);
+            HashTableKeys = (uintptr_t)((BYTE*)HashKeysAlloc + rnd2 * 4);
 
-            memset((void*)DAT_055c9bcc, 0, DAT_055c9bd4 * 4);
-            memset((void*)DAT_055c9bd0, 0, DAT_055c9bd4 * 4);
+            memset((void*)HashTableValues, 0, HashTableCapacity * 4);
+            memset((void*)HashTableKeys, 0, HashTableCapacity * 4);
 
-            _DAT_055c9be4 = ((_rand() % 0xf0) / 2) * 2 + 0x6f;
+            HashTableResizeScatter = ((_rand() % 0xf0) / 2) * 2 + 0x6f;
 
             // Re-insert all existing entries into new table
-            for (unsigned i = 0; i < (unsigned)DAT_055c9bd4; i++) {
+            for (unsigned i = 0; i < (unsigned)HashTableCapacity; i++) {
                 if (((DWORD*)old_bd0)[i] != 0) {
                     DWORD key = ((DWORD*)old_bd0)[i];
                     DWORD val = ((DWORD*)old_bcc)[i];
                     // HashTable_Insert equivalent
                     unsigned h = (**(unsigned(__cdecl**)(DWORD))(MAIN_HASH_CLASS + 3 * sizeof(void*)))(key);
-                    while (((DWORD*)DAT_055c9bd0)[h] != 0 && ((DWORD*)DAT_055c9bd0)[h] != key)
-                        h = (h + 1) % DAT_055c9bd4;
-                    ((DWORD*)DAT_055c9bcc)[h] = val;
-                    ((DWORD*)DAT_055c9bd0)[h] = key;
+                    while (((DWORD*)HashTableKeys)[h] != 0 && ((DWORD*)HashTableKeys)[h] != key)
+                        h = (h + 1) % HashTableCapacity;
+                    ((DWORD*)HashTableValues)[h] = val;
+                    ((DWORD*)HashTableKeys)[h] = key;
                 }
             }
             operator_delete(old_be8);
@@ -191,7 +191,7 @@ void __cdecl Game_MainLoop(HDC param_1)
         // IDA 0x52626B: cinco pasos de fisica por frame con fTime = 0.005
         // (0x3BA3D70A).  Ademas del recorrido de la lista (vacia en el 0.97k:
         // nadie registra objetos en g_PhysicsManager), cada paso mueve el
-        // viento flt_590AF0 que usa la tela (sub_4089B0).
+        // viento ClothWindKey que usa la tela (sub_4089B0).
         for (int i = 0; i < 5; i++) CPhysicsManager_Move(g_PhysicsManager, 0.005f);
 
         // Input update
@@ -207,15 +207,15 @@ void __cdecl Game_MainLoop(HDC param_1)
 
         // Print Screen conserva su captura independiente.
         if (PressKey(0x2c) & 0xff)
-            DAT_083a42ec ^= 1;
+            ScreenshotModeFlag ^= 1;
 
         // Decrement countdown counters
         if (ChatTime > 0) ChatTime--;
         EmoteSound_Update();   // sonidos de los emotes propios
-        if (DAT_07e11d7c > 0) DAT_07e11d7c--;
+        if (MacroCooldown > 0) MacroCooldown--;
 
         // Frame index mod 32
-        DAT_0839bc8c = (DAT_0839bc8c + 1) & 0x1f;
+        WaterTextureNumber = (WaterTextureNumber + 1) & 0x1f;
 
         // Anti-tamper: track MoveSceneFrame ref-count, then increment
         {
@@ -236,17 +236,17 @@ void __cdecl Game_MainLoop(HDC param_1)
         RenderSnapshots_EndStep();
         // IDA: Scene_Dispatch limpiaba Enter después del frame ligado a SIM.
         // DESVIACION: consumirlo una sola vez por paso, no por draw desacoplado.
-        DAT_055ca038=0;
+        EnterKeyPressedFlag=0;
 
         // Consume 40ms of budget, count frame
         TimeRemain  -= 0x28;
         TestTime  += 1;
-        crt_sprintf(tickBuf, (const char*)&DAT_00561b04);
+        crt_sprintf(tickBuf, (const char*)&TickFormatStub);
     }
 
     }
     // ── ABORT IF SOCKET ERROR ─────────────────────────────────────────────────
-    if (DAT_055ca018 != '\0') return;
+    if (AppQuitFlag != '\0') return;
 
     // ── PRE-RENDER SETUP ──────────────────────────────────────────────────────
     gReconnect.Tick();   // DESVIACION (DLL Reconnect.cpp, 0x00525995)
@@ -256,7 +256,7 @@ void __cdecl Game_MainLoop(HDC param_1)
         // IDA 0x525D40 L308:
         //   sprintf(GrabFileName, "Screen(%02d_%02d-%02d_%02d)-%04d.jpg",
         //           st.wMonth, st.wDay, st.wHour, st.wMinute, GrabScreen);
-        // GrabScreen (DAT_083a42f0) lo incrementa SaveScreen modulo 10000.
+        // GrabScreen (ScreenshotCounter) lo incrementa SaveScreen modulo 10000.
         //
         // DESVIACION DELIBERADA (pedido del usuario): el binario
         // guarda en la RAIZ del cliente -- GrabFileName no lleva ruta.  Para
@@ -281,26 +281,26 @@ void __cdecl Game_MainLoop(HDC param_1)
 #endif
         crt_sprintf((char*)&GrabFileName, "%sScreen(%02d_%02d-%02d_%02d)-%04d.jpg",
                     shotDir, (int)st.wMonth, (int)st.wDay, (int)st.wHour,
-                    (int)st.wMinute, (int)DAT_083a42f0);
+                    (int)st.wMinute, (int)ScreenshotCounter);
     }
     // IDA L309: sprintf(strText, GlobalText[459], GrabFileName).
     // GlobalText[459] es "%s: La captura fue guardada." -- lleva un %s con el
     // nombre del archivo. El port no pasaba el argumento, asi que el %s
     // consumia un valor cualquiera de la pila.
-    crt_sprintf(nameBuf, (const char*)&DAT_07d4b708, (const char*)&GrabFileName);
+    crt_sprintf(nameBuf, (const char*)&LegacyCharNameFmt, (const char*)&GrabFileName);
 
     // Build window title: serverName + " " + charName
     {
         // ServerSelectHi es signed en el original (Game_SceneUpdate lo setea a -1
         // cuando "no server selected"). Tratarlo como unsigned haría si=0x1e y
-        // leer OOB de DAT_083a45d8[0x3600] → strlen de basura → overflow del
+        // leer OOB de ServerListBuffer[0x3600] → strlen de basura → overflow del
         // titleBuf[64] → /GS cookie fail al retornar Game_MainLoop.
         int idx = (int)ServerSelectHi;
         int si  = (idx < 0x1e) ? idx : 0x1e;
         if (si < 0) si = 0;
-        const char* serverName = (const char*)&DAT_083a45d8 + si * 0x21e;
-        const char* charName   = DAT_07abf5d8 ? EntityName::Get(DAT_07abf5d8) : "";
-        // Copia defensiva con tope: %s puede ser largo si DAT_07abf5d8+0x1c1
+        const char* serverName = (const char*)&ServerListBuffer + si * 0x21e;
+        const char* charName   = Hero ? EntityName::Get(Hero) : "";
+        // Copia defensiva con tope: %s puede ser largo si Hero+0x1c1
         // apunta a bytes no-inicializados; wsprintfA no trunca.
         char srvTrim[32];  Platform::TextCopySecure(srvTrim, sizeof(srvTrim), serverName, 30); srvTrim[31] = 0;
         char chrTrim[32];  Platform::TextCopySecure(chrTrim, sizeof(chrTrim), charName,   30); chrTrim[31] = 0;
@@ -316,8 +316,8 @@ void __cdecl Game_MainLoop(HDC param_1)
     if ((Platform::GetInput().KeyState(VK_SHIFT) >> 8) != 0)
         shiftHeld = 1 - shiftHeld;
 
-    if (DAT_083a42ec != '\0' && shiftHeld == 1)
-        UIChatLogWindow_AddText((const char*)&DAT_083a7c94, nameBuf, 1);
+    if (ScreenshotModeFlag != '\0' && shiftHeld == 1)
+        UIChatLogWindow_AddText((const char*)&ScreenshotLogLabelA, nameBuf, 1);
 
     // ── GL CLEAR ──────────────────────────────────────────────────────────────
     if (gMapManager.GetCurrentMap() == 10) {
@@ -347,20 +347,20 @@ void __cdecl Game_MainLoop(HDC param_1)
     //
     // Defaults elegidos para coincidir con lo que GL_BeginViewport deja tras su
     // primer push (Scene_Login llama GL_BeginViewport como primera acción).
-    Gfx::Disable(Gfx::Cap::Blend);       DAT_083a412c = 0;    // blend OFF (setters lo activarán)
-    Gfx::Enable(Gfx::Cap::CullFace);    DAT_083a411c = 1;
-    Gfx::Enable(Gfx::Cap::Texture2D);   DAT_083a4125 = 1;
-    Gfx::Disable(Gfx::Cap::AlphaTest);  DAT_083a411d = 0;
-    Gfx::Enable(Gfx::Cap::DepthTest);   DAT_083a411e = 1;
-    Gfx::DepthMask(true);      DAT_083a42e8 = 1;
-    Gfx::Disable(Gfx::Cap::Fog);         /* DAT_083a42ea es "fog-is-on" flag global del scene */
+    Gfx::Disable(Gfx::Cap::Blend);       BlendModeCache = 0;    // blend OFF (setters lo activarán)
+    Gfx::Enable(Gfx::Cap::CullFace);    CullFaceEnableCache = 1;
+    Gfx::Enable(Gfx::Cap::Texture2D);   Texture2DEnableCache = 1;
+    Gfx::Disable(Gfx::Cap::AlphaTest);  AlphaTestEnableCache = 0;
+    Gfx::Enable(Gfx::Cap::DepthTest);   DepthTestEnableCache = 1;
+    Gfx::DepthMask(true);      DepthMaskCache = 1;
+    Gfx::Disable(Gfx::Cap::Fog);         /* FogEnable es "fog-is-on" flag global del scene */
     Gfx::Color4f(1.0f, 1.0f, 1.0f, 1.0f);
     // Invalidar cache de última textura ligada para forzar rebind
-    DAT_00561574 = 0xFFFFFFFFu;
+    BoundTextureSlotCache = 0xFFFFFFFFu;
 
     // NOTA: el workaround `glDisable(GL_CULL_FACE)` aquí era no-op: cada
     // Scene_* llama GL_BeginViewport después y ese re-habilita GL_CULL_FACE
-    // (+ cache DAT_083a411c=1). Movido al inicio de cada scene render
+    // (+ cache CullFaceEnableCache=1). Movido al inicio de cada scene render
     // (ver Scene_Login.cpp / Scene_CharSelect.cpp) donde sí surte efecto.
     // Los blend-setters 2D (GL_SetBlendSrcOver/710/790) ya llaman GL_DisableCullFace
     // (DisableCullFace) antes de dibujar sprites, pero la geometría 3D
@@ -384,16 +384,16 @@ void __cdecl Game_MainLoop(HDC param_1)
     }
     { RenderProfile::Scope measured(RenderProfile::Pass::Restore);Simulation_EndRender(); }
 
-    if (DAT_083a42ec != '\0') {
-        if (DAT_083a410c != '\0')
+    if (ScreenshotModeFlag != '\0') {
+        if (InGameModeFlag != '\0')
             Monster_SaveSetBase("Data2/MonsterSetBase2.txt");
         GL_CaptureScreenshot();
     }
 
-    if (DAT_083a42ec != '\0' && shiftHeld == 0)
-        UIChatLogWindow_AddText((const char*)&DAT_083a7c98, nameBuf, 1);
+    if (ScreenshotModeFlag != '\0' && shiftHeld == 0)
+        UIChatLogWindow_AddText((const char*)&ScreenshotLogLabelB, nameBuf, 1);
 
-    DAT_083a42ec = '\0';
+    ScreenshotModeFlag = '\0';
 
     CHK("ML/pre_swap");
     // ── SWAP BUFFERS ──────────────────────────────────────────────────────────
@@ -411,13 +411,13 @@ void __cdecl Game_MainLoop(HDC param_1)
     // En el original SocketClient es un Object* con un Type en +8; en nuestro port
     // es un buffer estático sin esa estructura, así que este chequeo leería basura.
     // La desconexión se detecta por el FD_CLOSE en WinMain, que setea
-    // DAT_055ca018 y ya bloquea Game_MainLoop al inicio.
+    // AppQuitFlag y ya bloquea Game_MainLoop al inicio.
     #if 0
-    if (DAT_083a7c48 != '\0' && SceneFlag == 5) {
+    if (ConnectionCheckEnable != '\0' && SceneFlag == 5) {
         if (CWsctlc_GetSocket(reinterpret_cast<uintptr_t>(SocketClient)) == -1) {
-            if (DAT_083a7c58 == 0) {
-                DAT_083a7c58 = 1;
-                CErrorReport_Write(&DAT_055c9bf0, "> Connection closed...");
+            if (DisconnectDialogShown == 0) {
+                DisconnectDialogShown = 1;
+                CErrorReport_Write(&ErrorReportCtx, "> Connection closed...");
                 CErrorReport_WriteCurrentTime(1); // IDA: FUN_004055A0
             }
             SetErrorMessage(0x71);
@@ -479,11 +479,11 @@ static void Game_TickAmbientAudio()
     // ── Sonidos ambientales por mapa ───────────────────────────────────────
     switch (gMapManager.GetCurrentMap()) {
     case 0:  // Lorencia
-        if (DAT_07e118e8 == 4) {
+        if (WorldMapType == 4) {
             Sound_StopBuffer(0); Sound_StopBuffer(1);
         } else {
             PlayBuffer(0, 0, 1);
-            if (DAT_07c74ae4 > 0)
+            if (WeatherIntensityCurrent > 0)
                 PlayBuffer(1, 0, 1);
         }
         break;
@@ -491,7 +491,7 @@ static void Game_TickAmbientAudio()
         PlayBuffer(3, 0, 1);
         break;
     case 2:  // Devias
-        if (DAT_07e118e8 == 3 || DAT_07e118e8 > 9)
+        if (WorldMapType == 3 || WorldMapType > 9)
             Sound_StopBuffer(0);
         else
             PlayBuffer(0, 0, 1);

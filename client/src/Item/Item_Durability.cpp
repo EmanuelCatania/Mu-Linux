@@ -102,8 +102,8 @@ int __cdecl Item_CalculateValue(void* item_v, int a2)
 // Port de IDA, sin uso mientras el server sea MuEmu.
 int __cdecl ItemValue_Vanilla(void* item_v, int a2)
 {
-    // Defensivo (igual que CalcMaxDurability/RenderItemInfo): si DAT_07d78068 está
-    // en 0, `DAT_07d78068 + type * 0x40` da un valor pequeño; se devuelve 0.
+    // Defensivo (igual que CalcMaxDurability/RenderItemInfo): si ItemAttributeBase está
+    // en 0, `ItemAttributeBase + type * 0x40` da un valor pequeño; se devuelve 0.
     if (!item_v || (uintptr_t)item_v < 0x100000) return 0;
     if (!ItemAttribute_Base())
         return 0;
@@ -117,7 +117,7 @@ int __cdecl ItemValue_Vanilla(void* item_v, int a2)
     // Bound type to ItemAttribute table size (1024).
     if (v3 < 0 || (unsigned short)v3 >= ITEM_MAX_EX) return 0;
 
-    ITEM_ATTRIBUTE* p = (ITEM_ATTRIBUTE*)(DAT_07d78068 + (unsigned short)v3 * 0x40);
+    ITEM_ATTRIBUTE* p = (ITEM_ATTRIBUTE*)(ItemAttributeBase + (unsigned short)v3 * 0x40);
     int Money = p->Money;
     if (Money) {
         if (a2) Money /= 3;
@@ -374,7 +374,7 @@ LABEL_148:
         && (v25 < 430 || v25 > 435)
         && a2 == 1)
     {
-        unsigned int maxDur = Item_CalculateMaxDurability((void*)a1, (ITEM_ATTRIBUTE*)(DAT_07d78068 + (unsigned short)v25 * 0x40), Level) & 0xffff;
+        unsigned int maxDur = Item_CalculateMaxDurability((void*)a1, (ITEM_ATTRIBUTE*)(ItemAttributeBase + (unsigned short)v25 * 0x40), Level) & 0xffff;
         double penalty = (1.0 - (double)AsItem(a1)->Durability / (double)maxDur)
                        * (double)v34 * -0.60000002;
         v5 += (int)(std::int64_t)penalty;
@@ -450,20 +450,20 @@ unsigned int __cdecl ConvertRepairGold_Vanilla(int Gold, int Durability, int Max
 }
 
 // IDA: FUN_004C4080
-// Scans equipped items (+0x218, stride 0x44, 12 slots) and extra items (DAT_07ea8410, 8 slots).
+// Scans equipped items (+0x218, stride 0x44, 12 slots) and extra items (LegacyInventoryItems, 8 slots).
 // For each occupied slot with curDur < maxDur, calls CalcMaxDurability + AppendDurabilityLine.
-// Accumulates repair-count into DAT_07eaa0f8.
+// Accumulates repair-count into RepairGoldTotal.
 void __cdecl Item_RecalculateRepairCost(void)
 {
     // (HashTable obfuscation unlock block skipped)
-    DAT_07eaa0f8 = 0;
+    RepairGoldTotal = 0;
 
     // Iterate 12 equipped item slots (base + 0x218, stride 0x44, total 0x330 bytes)
     for (int iVar7 = 0; iVar7 < 0x330; iVar7 += 0x44) {
-        short *psVar12 = reinterpret_cast<short *>(static_cast<BYTE *>(DAT_07cf1ffc) + 0x218 + iVar7);
+        short *psVar12 = reinterpret_cast<short *>(static_cast<BYTE *>(CharacterMachinePtr) + 0x218 + iVar7);
         short itemType = *psVar12;
         if (itemType != -1 && *(int *)((char *)psVar12 + 0x38) != 0) {
-            unsigned int maxDur = Item_CalculateMaxDurability(psVar12, (ITEM_ATTRIBUTE*)(DAT_07d78068 + (int)itemType * 0x40),
+            unsigned int maxDur = Item_CalculateMaxDurability(psVar12, (ITEM_ATTRIBUTE*)(ItemAttributeBase + (int)itemType * 0x40),
                                                (*(int *)(psVar12 + 2) >> 3) & 0xf);
             unsigned int curDur = (unsigned int)*(unsigned char *)((char *)psVar12 + 0x1a);
             unsigned int uVar8  = (unsigned int)itemType;
@@ -471,7 +471,7 @@ void __cdecl Item_RecalculateRepairCost(void)
             // Skip ring/wingtype/etc equipment IDs that don't degrade
             // IDA:
             //   gold = ItemValue(item, 2);
-            //   DAT_07eaa0f8 += ConvertRepairGold(gold, dur, maxDur, type, buf);
+            //   RepairGoldTotal += ConvertRepairGold(gold, dur, maxDur, type, buf);
             const int kind = ItemBehaviorType(itemType);    // 0.97.20
             if ((kind < ITEM_HELPER_ANGEL || kind > ITEM_HELPER_DINORANT) &&
                 kind != 426 && kind != 135 && kind != 143 &&
@@ -482,7 +482,7 @@ void __cdecl Item_RecalculateRepairCost(void)
                 char local_68[104]; // buffer for text
                 int gold = Item_CalculateValue((void*)psVar12, 2);
                 unsigned int repairGold = Item_CalculateRepairCost(gold, (int)curDur, (int)maxDur, itemType, local_68);
-                DAT_07eaa0f8 += (int)repairGold;
+                RepairGoldTotal += (int)repairGold;
                 (void)uVar8;
             }
         }
@@ -495,7 +495,7 @@ void __cdecl Item_RecalculateRepairCost(void)
     for (int i = 0; i < 64; i++, psVar12 += 0x22) {
         if (*(int *)((char *)psVar12 + 0x38) != 0) {
             short itemType = *psVar12;
-            unsigned int maxDur = Item_CalculateMaxDurability(psVar12, (ITEM_ATTRIBUTE*)(DAT_07d78068 + (int)itemType * 0x40),
+            unsigned int maxDur = Item_CalculateMaxDurability(psVar12, (ITEM_ATTRIBUTE*)(ItemAttributeBase + (int)itemType * 0x40),
                                                (*(int *)(psVar12 + 2) >> 3) & 0xf);
             unsigned int curDur = (unsigned int)*(unsigned char *)((char *)psVar12 + 0x1a);
             unsigned int uVar8  = (unsigned int)itemType;
@@ -510,7 +510,7 @@ void __cdecl Item_RecalculateRepairCost(void)
                 char local_68[104];
                 int gold = Item_CalculateValue((void*)psVar12, 2);
                 unsigned int repairGold = Item_CalculateRepairCost(gold, (int)curDur, (int)maxDur, itemType, local_68);
-                DAT_07eaa0f8 += (int)repairGold;
+                RepairGoldTotal += (int)repairGold;
                 (void)uVar8;
             }
         }

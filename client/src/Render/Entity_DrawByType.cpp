@@ -2,13 +2,13 @@
 // Entity_DrawByType.cpp — Draw_RenderObject @ 0x004fae00
 // Dispatches entity render based on entity type (*(short*)(param_1+2)).
 //
-// param_1 = entity data pointer (stride 0x394, entity array at DAT_07abf5d0)
+// param_1 = entity data pointer (stride 0x394, entity array at CharactersClient)
 // param_2 = second entity pointer (unused in most cases)
 // param_3 = extra param (used in type 0x14a HashTable block)
 // param_4 = flag byte (player-focused override for some types)
 //
 // Render model context:
-//   this = (void*)(DAT_05828d58 + entity_type * 0xbc)
+//   this = (void*)(ModelsBase + entity_type * 0xbc)
 //   this+0x48/4c/50 = tint RGB floats
 //   this+0x88       = render layer mask
 //
@@ -77,7 +77,7 @@ struct MoltSilhouette {
     unsigned char *edges;      // +28
 };
 
-extern void __cdecl FUN_0040a8f0(void *obj, float *p1, float *p2);   // sub_40A8F0
+extern void __cdecl Obj_DrawEdge(void *obj, float *p1, float *p2);   // sub_40A8F0
 
 // IDA sub_40A110 (0x40A110): agrega la arista `edge` del triangulo `triIdx` si
 // es de borde (sin vecino, o el vecino no mira a la luz).
@@ -124,10 +124,10 @@ static void MoltSilhouette_BuildMesh(MoltSilhouette *s, short mesh, unsigned cha
 static void MoltSilhouette_Build(MoltSilhouette *s, unsigned char *verts,
                                  unsigned char *model, unsigned char *o)
 {
-    unsigned char *hero = (unsigned char *)DAT_07abf5d8;
-    s->dir[0] = *(float *)(hero + 16) - _DAT_083a42d4;   // CameraPosition
-    s->dir[1] = *(float *)(hero + 20) - _DAT_083a42d8;
-    s->dir[2] = *(float *)(hero + 24) - _DAT_083a42dc;
+    unsigned char *hero = (unsigned char *)Hero;
+    s->dir[0] = *(float *)(hero + 16) - CameraPositionX;   // CameraPosition
+    s->dir[1] = *(float *)(hero + 20) - CameraPositionY;
+    s->dir[2] = *(float *)(hero + 24) - CameraPositionZ;
     Vec3_Normalize(s->dir);
     if (!(*(float *)&((OBJECT*)(uintptr_t)(o))->Alpha >= 0.0099999998f)) return;
     const short hidden = *(short *)(o + 88);
@@ -174,15 +174,15 @@ void MoltSilhouette_Invalidate(const void *entity) { moltSamples.erase(entity); 
 // No se consume azar ni se modifican marcas de triángulos en los draws extra.
 void MoltSilhouette_Tick(OBJECT* entity, void *model, float *bones, char translate) {
     OBJECT &o=*AsObject(entity);
-    if (!o.Live || o.Type!=319 || o.Alpha<_DAT_005524f8 || o.RenderType==0x80 ||
-        (DAT_07e11d30==0 && o.HiddenMesh==-2)) return;
+    if (!o.Live || o.Type!=319 || o.Alpha<0.01f || o.RenderType==0x80 ||
+        (EditFlag==0 && o.HiddenMesh==-2)) return;
     float bounds[15];
-    const float lod=_DAT_005597c8;
-    _DAT_005597c8=1.0f;
+    const float lod=EntityLodScale;
+    EntityLodScale=1.0f;
     Skeleton_Transform(model, bones, o.BoundingBoxMin, o.BoundingBoxMax, bounds, translate);
-    _DAT_005597c8=lod;
+    EntityLodScale=lod;
     MoltSilhouette silhouette={};
-    auto *vertices=(unsigned char *)&DAT_0584621c;
+    auto *vertices=(unsigned char *)&BoneVertBufBase;
     MoltSilhouette_Build(&silhouette, vertices, (unsigned char *)model, (unsigned char *)entity);
     MoltSample &sample=moltSamples[(void *)entity];
     sample.edges.clear(); sample.edgeIndex.clear();
@@ -235,15 +235,15 @@ void __cdecl Draw_RenderObject(void *param_1_v, int param_2, int param_3, char p
 {
     unsigned char *param_1 = (unsigned char *)param_1_v;
     // Model context for this entity type
-    void *model = (void *)(DAT_05828d58 + AsObject(param_1)->Type * BMD_STRIDE);
+    void *model = (void *)(ModelsBase + AsObject(param_1)->Type * BMD_STRIDE);
 
 
     // Invisible guard — IDA Draw_RenderObject L82:
     //     if ( !EditFlag && *(_DWORD *)(o + 88) == -2 ) return;
     // `+0x58` (88) es HiddenMesh; -2 = objeto entero invisible (marcadores como
-    // PoseBox01 / Light01-03). `DAT_07e11d30` es EditFlag y vale 0 fuera del
+    // PoseBox01 / Light01-03). `EditFlag` es EditFlag y vale 0 fuera del
     // editor, así que este return SÍ dispara.
-    if (DAT_07e11d30 == 0 && AsObject(param_1)->HiddenMesh == -2)
+    if (EditFlag == 0 && AsObject(param_1)->HiddenMesh == -2)
         return;
 
     // ── Tint overrides based on game sub-state / type ──────────────────────────
@@ -457,7 +457,7 @@ LAB_substate4_done:
         } else if (flashCtr != 0) {
             // Fading flash
             *(float *)&((BMD*)(uintptr_t)(model))->BodyLight[0] = 1.0f;
-            float fade = (float)(10 - (int)flashCtr) * _DAT_00552a10 + _DAT_005528b8;
+            float fade = (float)(10 - (int)flashCtr) * 0.05f + 0.3f;
             *(float *)&((BMD*)(uintptr_t)(model))->BodyLight[1] = fade;
             *(float *)&((BMD*)(uintptr_t)(model))->BodyLight[2] = fade;
             param_1[0x8b] = flashCtr - 1;
@@ -477,8 +477,8 @@ LAB_substate4_done:
     if (sType == 0x138 && AsObject(param_1)->SubType == 1) {
         // Wave-bobbing object (water lily etc.)
         BMD__BeginRender();
-        float wave = (float)(fsin((long double)WorldTime * (long double)_DAT_005528e0)
-                     * (long double)_DAT_005524f8 + (long double)_DAT_0055256c);
+        float wave = (float)(fsin((long double)WorldTime * (long double)ZBobFreq)
+                     * (long double)0.01f + (long double)1.0f);
         BMD__RenderMesh(model, 0.0f,        0x42,
                      AsObject(param_1)->Alpha, 0, wave,
                      AsObject(param_1)->BlendMeshTexCoordU,  AsObject(param_1)->BlendMeshTexCoordV, 0x56c);
@@ -741,8 +741,8 @@ LAB_postprocess:
     // ── Type 0x133: wave-bobbing shadow ───────────────────────────────────────
     if (AsObject(param_1)->Type == 0x133) {
         BMD__BeginRender();
-        float wave2 = (float)(fsin((long double)WorldTime * (long double)_DAT_005528e0)
-                      * (long double)_DAT_005528b8 + (long double)_DAT_00552504);
+        float wave2 = (float)(fsin((long double)WorldTime * (long double)ZBobFreq)
+                      * (long double)0.3f + (long double)HalfScale);
         int texFrame = *(short *)((intptr_t)((BMD*)(uintptr_t)(model))->IndexTexture + 0xc);   // IDA: (std::int16_t) de la malla 0
         BMD__RenderMesh(model, 0.0f, 2,
                      AsObject(param_1)->Alpha, 0, wave2,
@@ -750,7 +750,7 @@ LAB_postprocess:
                      texFrame);
         // Modulo-100 periodic shadow offset (based on frame counter)
         int framemod = (int)((long long)WorldTime % 100);
-        float modFrac = -(float)(framemod * _DAT_005524f8);
+        float modFrac = -(float)(framemod * 0.01f);
         BMD__RenderMesh(model, 4.2039e-45f, 0x44,
                      AsObject(param_1)->Alpha, 3, wave2,
                      AsObject(param_1)->BlendMeshTexCoordU, modFrac, 0xffffffff);

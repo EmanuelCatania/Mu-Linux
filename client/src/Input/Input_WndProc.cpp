@@ -12,7 +12,7 @@
 #include "Input/Input.h"
 
 // Helper de src/UI/Chat_InputTick.cpp — envía una línea de chat
-// escrita en InputText[0] (DAT_07db8710 slot 0) por WM_CHAR; la llama el
+// escrita en InputText[0] (InputTextBuffers slot 0) por WM_CHAR; la llama el
 // handler de Enter en WndProc cuando InputEnable=1 y el buffer no está vacío.
 extern "C" void Chat_SendChatLine(const char* text);
 #include "UI/ChatHistory.h"
@@ -72,60 +72,60 @@ void Input_OnEvent(const Platform::InputEvent& event)
     switch (event.type)
     {
     case Platform::InputEventType::MouseMove:     // 0x200
-        // g_MouseX = LOWORD(lParam) * 640 / g_ScreenW  → DAT_083a427c
-        // g_MouseY = HIWORD(lParam) * 480 / g_ScreenH  → DAT_083a4278
+        // g_MouseX = LOWORD(lParam) * 640 / g_ScreenW  → MouseX
+        // g_MouseY = HIWORD(lParam) * 480 / g_ScreenH  → MouseY
         {
             // En pantalla ancha, sobre los costados la columna sale de 0..639
             // (negativa o mayor): se guarda con signo.
             DWORD sh = gWindow.GetHeight() ? gWindow.GetHeight() : 480;
-            DAT_083a427c = (DWORD)gWindow.UiXFromPixel(event.x);
-            DAT_083a4278 = ((DWORD)event.y * 480) / sh;
+            MouseX = (DWORD)gWindow.UiXFromPixel(event.x);
+            MouseY = ((DWORD)event.y * 480) / sh;
         }
         gCamera3D.Drag(event.x, event.y);
         break;
 
     case Platform::InputEventType::LeftDown:   // 0x201
-        DAT_083a413c = 0;                    // cancelar "dialog close" anterior
-        if (DAT_083a42c4 == 0) {
-            DAT_083a4124 = 1;                // g_ClickFlag = 1
+        MouseLButtonPop = 0;                    // cancelar "dialog close" anterior
+        if (MouseLButton == 0) {
+            MouseLButtonPush = 1;                // g_ClickFlag = 1
         }
-        DAT_083a42c4 = 1;                    // g_DblClickPending = 1
-        DAT_055ca03c = DAT_083a427c;         // snapshot posición al down
-        DAT_055ca040 = DAT_083a4278;
+        MouseLButton = 1;                    // g_DblClickPending = 1
+        g_MouseX_at_down = MouseX;         // snapshot posición al down
+        g_MouseY_at_down = MouseY;
         break;
 
     case Platform::InputEventType::LeftUp:     // 0x202
-        DAT_083a4124 = 0;                    // g_ClickFlag = 0
+        MouseLButtonPush = 0;                    // g_ClickFlag = 0
         // Si no hubo drag desde el down, marcar "dialog close / click confirmado"
-        if (DAT_055ca03c == DAT_083a427c && DAT_055ca040 == DAT_083a4278) {
-            DAT_083a413c = 1;
+        if (g_MouseX_at_down == MouseX && g_MouseY_at_down == MouseY) {
+            MouseLButtonPop = 1;
         } else {
-            DAT_083a413c = 0;                // fue drag
+            MouseLButtonPop = 0;                // fue drag
         }
-        DAT_083a42c4 = 0;                    // clear pending
-        DAT_055ca03c = DAT_083a427c;
-        DAT_055ca040 = DAT_083a4278;
+        MouseLButton = 0;                    // clear pending
+        g_MouseX_at_down = MouseX;
+        g_MouseY_at_down = MouseY;
         break;
 
     case Platform::InputEventType::LeftDoubleClick: // 0x203
-        DAT_083a4299 = 1;                    // g_DblClickFlag
+        MouseDblClickFlag = 1;                    // g_DblClickFlag
         break;
 
     case Platform::InputEventType::RightDown:   // 0x204
         // 004149D0 WndProc: MouseRButtonPop = 0; if (!MouseRButton)
         // MouseRButtonPush = 1; MouseRButton = 1.  Attack (0049CBF0)
     // consume esos dos flags para arrancar y sostener el casteo de un skill.
-        if (DAT_083a42ac == 0) {
+        if (MouseRButton == 0) {
             MouseRButtonPush = 1;                // MouseRButtonPush
         }
-        DAT_083a42ac = 1;                    // MouseRButton
+        MouseRButton = 1;                    // MouseRButton
         break;
 
     case Platform::InputEventType::RightUp:     // 0x205
         // El original limpia Push y suelta MouseRButton (también setea el flag
         // Pop aparte, que hoy ningún camino de gameplay compilado lee).
         MouseRButtonPush = 0;
-        DAT_083a42ac = 0;
+        MouseRButton = 0;
         break;
 
     case Platform::InputEventType::Wheel:    // 0x20A
@@ -146,14 +146,14 @@ void Input_OnEvent(const Platform::InputEvent& event)
         break;
 
     // 0x10F = WM_IME_COMPOSITION — chat coreano DBCS
-    //   DAT_07e11cec[DAT_07e11d78*4] = HIWORD(wParam) >> 8
-    //   DAT_07e11ced[DAT_07e11d78*4] = LOWORD(wParam) & 0xFF
+    //   DbcsHighBytes[ActiveInputIndex*4] = HIWORD(wParam) >> 8
+    //   DAT_07e11ced[ActiveInputIndex*4] = LOWORD(wParam) & 0xFF
     //   toggle de IME vía IME_SetConversion @ 0x0047ED80
     case Platform::InputEventType::ImeStart:  // 0x10D
-        DAT_055ca019 = 1;
+        g_IME_Active = 1;
         break;
     case Platform::InputEventType::ImeEnd:    // 0x10E
-        DAT_055ca019 = 0;
+        g_IME_Active = 0;
         break;
 
     // WM_CHAR — entrada de texto para usuario/contraseña/chat/zen/guild.
@@ -162,14 +162,14 @@ void Input_OnEvent(const Platform::InputEvent& event)
     // en la pantalla de login, así que no se podía tipear usuario/contraseña.
     //
     // Globals mapping (IDA → ours):
-    //   InputIndex            → DAT_07e11d78   (active slot 0..9)
-    //   InputLength[i]        → ((DWORD*)DAT_07d780a8)[i]
-    //   InputText[i][j]       → DAT_07db8710 + i*0x100 + j
-    //   InputEnable           → DAT_00559c84
+    //   InputIndex            → ActiveInputIndex   (active slot 0..9)
+    //   InputLength[i]        → ((DWORD*)InputTextLengths)[i]
+    //   InputText[i][j]       → InputTextBuffers + i*0x100 + j
+    //   InputEnable           → InputEnable
     //   InputNumber           → InputNumber
     //   InputTextMax[0]       → InputTextMax (alias floatizado del DWORD 0x559c94)
-    //   byte_55CA019 (IME)    → DAT_055ca019
-    //   byte_55CA038 (Enter)  → DAT_055ca038   (lo lee el disparador de login de Game_SceneUpdate)
+    //   0x055CA019 (IME)    → g_IME_Active
+    //   0x055CA038 (Enter)  → EnterKeyPressedFlag   (lo lee el disparador de login de Game_SceneUpdate)
     case Platform::InputEventType::Text:          // 0x102
     {
         // Diagnóstico: confirma que WM_CHAR está llegando a la ventana y loguea
@@ -177,15 +177,15 @@ void Input_OnEvent(const Platform::InputEvent& event)
         // "la tecla se perdió" de "la tecla se ignoró".
 
         // Clampea el slot a [0,9] para evitar OOB si el índice por slot es basura.
-        DWORD  slot = DAT_07e11d78 & 0x0F;
+        DWORD  slot = ActiveInputIndex & 0x0F;
         if (slot > 9) slot = 0;
-        DWORD* lens = (DWORD*)DAT_07d780a8;
+        DWORD* lens = (DWORD*)InputTextLengths;
         int    len  = (int)lens[slot];
-        char*  buf  = (char*)DAT_07db8710 + slot * 0x100;
+        char*  buf  = (char*)InputTextBuffers + slot * 0x100;
 
-        if (!DAT_055ca019) {
+        if (!g_IME_Active) {
             // Limpia el buffer de composición del IME para este slot (stride 4)
-            *((char*)&DAT_07e11cec + slot * 4) = 0;
+            *((char*)&DbcsHighBytes + slot * 4) = 0;
         }
 
         if (event.character == 8) {           // Backspace
@@ -199,22 +199,22 @@ void Input_OnEvent(const Platform::InputEvent& event)
             break;
         }
         if (event.character == 9) {           // Tab — rotate active slot
-            if (DAT_00559c84 && InputNumber > 1) {
-                DAT_07e11d78 = (DAT_07e11d78 + 1) % InputNumber;
+            if (InputEnable && InputNumber > 1) {
+                ActiveInputIndex = (ActiveInputIndex + 1) % InputNumber;
                 PlayBuffer(0x19, 0, 0);   // PlayBuffer(25) — click sfx
             }
             break;
         }
         if (event.character == 0xD) {         // Enter — signals login/submit + chat toggle
-            DAT_055ca038 = 1;
+            EnterKeyPressedFlag = 1;
 
             // Baúl: guardar/sacar zen. Per IDA WndProc L2047-2051:
             //   InputIndex = 0;
             //   if (GoldInputEnable) { InputGold = atoi(InputText[0]); ... }
             // Así el diálogo de zen del baúl sabe cuánto tecleó el jugador.
             if (GoldInputEnable) {
-                DAT_07e11d78 = 0;                     // InputIndex = 0
-                char* goldBuf = (char*)DAT_07db8710;  // InputText[0]
+                ActiveInputIndex = 0;                     // InputIndex = 0
+                char* goldBuf = (char*)InputTextBuffers;  // InputText[0]
                 goldBuf[0xFF] = 0;
                 // IDA: WndProc (0x004149D0).
                 // DESVIACION (fix del DLL, Patchs.cpp 0x004EB8C7): validar diez dígitos y rango antes de convertir Zen.
@@ -229,10 +229,10 @@ void Input_OnEvent(const Platform::InputEvent& event)
                 }
                 InputGold = gold;
                 // LABEL_591: limpia el slot y cierra el input (el envío lo hace
-                // UI_InGameMenu case 116 leyendo DAT_055ca038 el frame siguiente).
+                // UI_InGameMenu case 116 leyendo EnterKeyPressedFlag el frame siguiente).
                 memset(goldBuf, 0, 0x100);
                 lens[0] = 0;
-                DAT_00559c84 = 0;                     // InputEnable = 0
+                InputEnable = 0;                     // InputEnable = 0
                 break;
             }
 
@@ -246,13 +246,13 @@ void Input_OnEvent(const Platform::InputEvent& event)
             // ErrorMessage 126/152 está capturando un Personal Code; en esos
             // casos el input no puede abrir ni enviar chat.
             const bool guildDeleteCodeDialog =
-                DAT_083a7c24 == 126 || DAT_083a7c24 == 152;
+                InGameUiState == 126 || InGameUiState == 152;
             if (SceneFlag == 5 && GuildInputEnable == 0 && !guildDeleteCodeDialog) {
                 bool empty = (lens[slot] == 0);
                 if (empty) {
-                    if (DAT_00559c84) {
+                    if (InputEnable) {
                         // Cierra el input de chat.
-                        DAT_00559c84 = 0;
+                        InputEnable = 0;
                     } else {
                         // Abre el input de chat — inicializa los campos de texto.
                         // Per IDA Game.cpp:4326-4327: InputTextMax[0]=42, [1]=10.
@@ -266,33 +266,33 @@ void Input_OnEvent(const Platform::InputEvent& event)
                         InputTextHide[0] = 0;
                         InputNumber = 2;                       // InputNumber = 2 (chat + whisper target)
                         // GoldInputEnable = 0 — ya está en 0 en el juego normal
-                        DAT_00559c84 = 1;                       // InputEnable = 1
-                        DAT_07e11d78 = 0;                       // InputIndex = 0
+                        InputEnable = 1;                       // InputEnable = 1
+                        ActiveInputIndex = 0;                       // InputIndex = 0
                         ChatHistory::ResetBrowse();
                     }
                     PlayBuffer(0x19, 0, 0);   // click sfx
-                } else if (DAT_00559c84) {
+                } else if (InputEnable) {
                     // Con texto + chat abierto → envía la línea (slot 0), limpia y
                     // cierra. Refleja las líneas 2046-2120 del WndProc de IDA condensadas
                     // en un solo camino (el original de IDA separa /whisper +
                     // /pvp + comandos de GM, pero por ahora los reenviamos al
                     // loop de canales de Chat_InputTick; el envío crudo anda
                     // bien para el caso del chat normal).
-                    char* line = (char*)DAT_07db8710 + slot * 0x100;
+                    char* line = (char*)InputTextBuffers + slot * 0x100;
                     // DESVIACION (Fase 4): historial del campo del mensaje (flechas).
                     if (slot == 0) ChatHistory::Push(line);
                     // "/N texto" guarda la macro N en vez de enviarse (desviacion).
                     if (Chat_TryAssignMacro(line)) {
                         memset(line, 0, 0x100);
                         lens[slot] = 0;
-                        DAT_00559c84 = 0;
+                        InputEnable = 0;
                         break;
                     }
                     // IDA WndProc L2265-2268: antes del SendChat (no en el
                     // susurro) revisa los gestos, salvo montado fuera de zona segura.
-                    if (((const char*)&DAT_07db8810)[0] == '\0') {
-                        WORD helper = *(WORD*)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->Helper.Type;
-                        if ((helper != 818 && helper != 819) || *(char*)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->SafeZone)
+                    if (((const char*)&PasswordInputBuffer)[0] == '\0') {
+                        WORD helper = *(WORD*)&((CHARACTER*)(uintptr_t)(Hero))->Helper.Type;
+                        if ((helper != 818 && helper != 819) || *(char*)&((CHARACTER*)(uintptr_t)(Hero))->SafeZone)
                             CheckChatText(line);
                     }
                     Chat_SendChatLine(line);
@@ -303,7 +303,7 @@ void Input_OnEvent(const Platform::InputEvent& event)
                     // Cierra el chat (coincide con el comportamiento "enviar + autocerrar";
                     // la queja del usuario era que Enter-con-texto NO
                     // close).
-                    DAT_00559c84 = 0;
+                    InputEnable = 0;
                     PlayBuffer(0x19, 0, 0);   // click sfx
                 }
             }
@@ -317,8 +317,8 @@ void Input_OnEvent(const Platform::InputEvent& event)
         // (el diálogo de zen del baúl abre con InputEnable=0 + GoldInputEnable=1,
         // sub_4EB5D0) y con GoldInputEnable sólo se aceptan dígitos '0'..'9'.
         const bool guildDeleteCodeDialog =
-            DAT_083a7c24 == 126 || DAT_083a7c24 == 152;
-        if (DAT_00559c84 || GoldInputEnable || GuildInputEnable || guildDeleteCodeDialog) {
+            InGameUiState == 126 || InGameUiState == 152;
+        if (InputEnable || GoldInputEnable || GuildInputEnable || guildDeleteCodeDialog) {
             // DESVIACION (Fase 4): Ctrl+V pega el portapapeles carácter por
             // carácter, con los mismos filtros y topes que el tipeo.
             if (event.character == 0x16) {
@@ -357,9 +357,9 @@ static bool Input_AppendCharacter(DWORD slot, uint32_t c)
         (c >= 0xD800 && c <= 0xDFFF) || c > 0x10FFFF)
         return true;   // se ignora sin cortar un pegado
 
-    DWORD* lens = (DWORD*)DAT_07d780a8;
+    DWORD* lens = (DWORD*)InputTextLengths;
     const int len = (int)lens[slot];
-    char* buf = (char*)DAT_07db8710 + slot * 0x100;
+    char* buf = (char*)InputTextBuffers + slot * 0x100;
 
     // InputTextMax[8] @ 0x00559c94 — leído como int desde el array tipado.
     int maxLen = _InputTextMaxArr[slot];
@@ -384,7 +384,7 @@ static bool Input_AppendCharacter(DWORD slot, uint32_t c)
 extern "C" bool Input_AppendText(DWORD slot, const char* utf8)
 {
     if (!utf8 || slot >= 8) return false;
-    DWORD* lens = (DWORD*)DAT_07d780a8;
+    DWORD* lens = (DWORD*)InputTextLengths;
     const DWORD previous = lens[slot];
     std::string_view rest(utf8);
     while (!rest.empty()) {
@@ -392,7 +392,7 @@ extern "C" bool Input_AppendText(DWORD slot, const char* utf8)
         const size_t n = TextEngine::Decode(rest, 0, cp);
         if (!n || !Input_AppendCharacter(slot, (uint32_t)cp)) {
             lens[slot] = previous;
-            ((char*)DAT_07db8710)[slot * 0x100 + previous] = 0;
+            ((char*)InputTextBuffers)[slot * 0x100 + previous] = 0;
             return false;
         }
         rest.remove_prefix(n);

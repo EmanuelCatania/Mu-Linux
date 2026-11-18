@@ -43,7 +43,7 @@
 //
 //   case 0x01:  entity = FindCharacterIndex(byte[3]*256 + byte[2])
 //               CreateChat(entity+0x1c1, puVar8+5, entity, 0, -1)
-//               → entity name/class update (entity stride 0x394 at DAT_07abf5d0)
+//               → entity name/class update (entity stride 0x394 at CharactersClient)
 //
 //   case 0x02:  World-enter / spawn position:
 //               Copies position payload into locals (0xf dwords)
@@ -61,8 +61,8 @@
 //               if byte[3]==1 && !(entity->flags & byte[2]): FUN_0043bde0(byte[2], entity)
 //               else: FUN_0043c070(flags, entity)
 //
-//   case 0x0b:  Packet buffer slot management (max 9 slots, DAT_07e11db4):
-//               if DAT_07e11db4 > 9: shift buffer array down
+//   case 0x0b:  Packet buffer slot management (max 9 slots, PacketBufSlotCount):
+//               if PacketBufSlotCount > 9: shift buffer array down
 //               Guarda puVar8 en DAT_07e016c8[slot], copia los datos a DAT_07e109cc[slot*0x100]
 //               FUN_00500a80()           — process buffered data
 //
@@ -71,7 +71,7 @@
 //
 //   case 0x0d:  FUN_00427a00(puVar8)
 //
-//   case 0x0f:  DAT_07c74ae0 = (byte[3] & 0xf) != 0 ? (byte[3]&0xf)*6 : 0
+//   case 0x0f:  WeatherIntensityTarget = (byte[3] & 0xf) != 0 ? (byte[3]&0xf)*6 : 0
 //               → chat/channel color/type mapping
 //
 //   case 0x10:  FUN_00427b90(puVar8)
@@ -105,7 +105,7 @@
 //
 //   case 0x21:  Entity removal list:
 //               Loop on byte[2] count: entityId = byte[5+n*2]*256 + byte[4+n*2]
-//               if entityId < 1000: DAT_07e12840[entityId*0x204] = 0
+//               if entityId < 1000: GroundItemPool[entityId*0x204] = 0
 //
 //   case 0x22:  FUN_0042f360(puVar8)
 //   case 0x23:  FUN_0042f690(puVar8)
@@ -117,8 +117,8 @@
 //   case 0x26:  FUN_00431780()          — equip item response handler
 //   case 0x27:  FUN_00431a90()
 //
-//   case 0x28:  FUN_004cce00(byte[3], &DAT_07ea8410, 8)   — item table slot update
-//               if byte[2] != 0: DAT_05826d1c = 0         — reset equip cooldown
+//   case 0x28:  FUN_004cce00(byte[3], &LegacyInventoryItems, 8)   — item table slot update
+//               if byte[2] != 0: EnableUse = 0         — reset equip cooldown
 //
 //   case 0x29:  FUN_004321f0(puVar8, iVar20)
 //
@@ -129,40 +129,40 @@
 //   case 0x30:  FUN_004301b0(puVar8, iVar20)
 //   case 0x31:  FUN_00427560(puVar8)
 //
-//   case 0x32:  InsertInventoryItem(&DAT_07ea8410, 8, 8, byte[3], puVar8+2, 0)
+//   case 0x32:  InsertInventoryItem(&LegacyInventoryItems, 8, 8, byte[3], puVar8+2, 0)
 //               PlayBuffer(0x1d, 0, 0)    — inventory update + UI refresh
 //
 //   case 0x33:  if byte[3] != 0:
-//                 DAT_07e91388 = 0
-//                 STRUCT_DECRYPT(&MAIN_HASH_CLASS, DAT_07cf1ffc)  — decode g_CharData
-//                 DAT_07cf1ffc[0x152] = *(puVar8+2)
+//                 ItemPickedFlag = 0
+//                 STRUCT_DECRYPT(&MAIN_HASH_CLASS, CharacterMachinePtr)  — decode g_CharData
+//                 CharacterMachinePtr[0x152] = *(puVar8+2)
 //                 STRUCT_ENCRYPT(&MAIN_HASH_CLASS, puVar23)       — re-encode g_CharData
 //                 PlayBuffer(0x1d, 0, 0)
 //
 //   case 0x34:  if packet[2] != 0:
-//                 STRUCT_DECRYPT; DAT_07cf1ffc[0x152] = *(puVar8+2)
+//                 STRUCT_DECRYPT; CharacterMachinePtr[0x152] = *(puVar8+2)
 //                 CalculateAll(puVar23)
 //                 STRUCT_ENCRYPT; PlayBuffer(0x25, 0, 0)
 //
 //   case 0x36:  Server-triggered re-login:
-//               Stores PIN buffer: DAT_07ea9834/38/3c ← puVar8[3/7/0xb]
-//               DAT_07ea983e = 0
+//               Stores PIN buffer: TradePartnerName/38/3c ← puVar8[3/7/0xb]
+//               PinResetFlag = 0
 //               SetErrorMessage(0x79)  — ShowErrorDialog(0x79)
-//               Después (si DAT_07e91388 >= 1) corta, si no: cae al 0x37
+//               Después (si ItemPickedFlag >= 1) corta, si no: cae al 0x37
 //               NOTA: el bloque XOR de envío de este case es el camino de
 //               respuesta al NACK de re-login del server — misma clave de 32 bytes, mismo loop de reintento.
 //
 //   case 0x37:  FUN_004332e0(puVar8)
 //
-//   case 0x38:  FUN_004cce00(byte[3], &DAT_07ea5298, 8)
+//   case 0x38:  FUN_004cce00(byte[3], &LegacyInventory, 8)
 //               PlayBuffer(0x1d, 0, 0)   — secondary inventory (bag/warehouse?)
 //
-//   case 0x39:  InsertInventoryItem(&DAT_07ea5298, 8, 4, byte[3], puVar8+2, 1)
+//   case 0x39:  InsertInventoryItem(&LegacyInventory, 8, 4, byte[3], puVar8+2, 1)
 //               PlayBuffer(0x1d, 0, 0)
 //
-//   case 0x3a:  DAT_07eaa0f4 = -(byte[3]!=0) & m_nTempMyTradeGold — toggle effect bit
+//   case 0x3a:  TradeMyGold = -(byte[3]!=0) & m_nTempMyTradeGold — toggle effect bit
 //
-//   case 0x3b:  DAT_07eaa0f0 = *(puVar8+2)   — 4-byte misc update
+//   case 0x3b:  TradeOtherGold = *(puVar8+2)   — 4-byte misc update
 //
 //   case 0x3c:  PIN/SecondPassword UI control:
 //               0 → m_bYourConfirm = 0
@@ -172,7 +172,7 @@
 //
 //   case 0x3d:  FUN_004337f0(puVar8)
 //
-//   case 0x40:  DAT_07eaa0e4 = byte[3]*0x100 + byte[2]
+//   case 0x40:  PartyInviteKey = byte[3]*0x100 + byte[2]
 //               SetErrorMessage(0x78)   — ShowErrorDialog(0x78)
 //
 //   case 0x41:  Shop slot display — inner switch byte[3] (0-5):
@@ -181,17 +181,17 @@
 //
 //   case 0x42:  FUN_00434660(puVar8)
 //
-//   case 0x43:  DAT_07eaa0e0 = 0
-//               Widget_Draw(&DAT_05826d78, &DAT_07d4e96c, 2)
+//   case 0x43:  PartyNumber = 0
+//               Widget_Draw(&Unknown32_05826D78, &DAT_07d4e96c, 2)
 //
 //   case 0x44:  Party/group HP bars:
 //               Loop byte[3] count: byte = puVar8[2+n]
-//               DAT_07e11e98[(upper nibble)*0x24] = min(lower nibble, 10)
+//               PartyHPBarsTable[(upper nibble)*0x24] = min(lower nibble, 10)
 //
 //   case 0x45:  FUN_00429c50((float)puVar8)
 //   case 0x46:  FUN_00436d60(puVar8)
 //
-//   case 0x50:  DAT_07eaa0d8 = byte[3]*0x100 + byte[2]
+//   case 0x50:  GuildInviteKey = byte[3]*0x100 + byte[2]
 //               SetErrorMessage(0x77)   — ShowErrorDialog(0x77)
 //
 //   case 0x51:  FUN_00434780(puVar8)
@@ -199,17 +199,17 @@
 //   case 0x53:  FUN_00434950(puVar8)
 //
 //   case 0x54:  Second password / PIN full reset:
-//               DAT_07eaa114-117 = 0
-//               HashTable_Insert_Short(&MAIN_HASH_CLASS, &DAT_07eaa118); DAT_07eaa118=0
-//               PACKET_ENCRYPT; DAT_07eaa119=0; DAT_00559f5f=0; DAT_07eaa14c=0
-//               HashTable_Insert_Short(&MAIN_HASH_CLASS, &DAT_07eaa11b); DAT_07eaa11b=0
-//               PACKET_ENCRYPT; DAT_07eaa124=1; DAT_07eaa144=0
+//               GuildOpened-117 = 0
+//               HashTable_Insert_Short(&MAIN_HASH_CLASS, &ShopOpened); ShopOpened=0
+//               PACKET_ENCRYPT; WarehouseOpened=0; StoragePinOkFlag=0; PinInputModeState=0
+//               HashTable_Insert_Short(&MAIN_HASH_CLASS, &TradeOpened); TradeOpened=0
+//               PACKET_ENCRYPT; GuildCreatorOpened=1; g_iKeyPadEnable=0
 //
 //   case 0x55:  Character list change (delete/create result):
-//               DAT_07eaa124=1; DAT_07eaa144=1; GuildInputEnable=1
-//               DAT_00559c84=0; ClearInput(0)
+//               GuildCreatorOpened=1; g_iKeyPadEnable=1; GuildInputEnable=1
+//               InputEnable=0; ClearInput(0)
 //               InputTextMax=8; InputNumber=0
-//               *(DAT_07abf5d8+0x1da) = 999
+//               *(Hero+0x1da) = 999
 //
 //   case 0x56:  FUN_00435280(puVar8)
 //
@@ -226,16 +226,16 @@
 //               GuildWar_UpdateEntityRelation(entity)
 //
 //   case 0x5d:  entity = FindCharacterIndex(byte[3]*256 + byte[2])
-//               DAT_07eaa114 = 0
-//               *(DAT_07abf5d0 + entity*0x394 + 0x1da) = 0xffff
-//               DAT_07eaa0d0 = 0xffffffff
+//               GuildOpened = 0
+//               *(CharactersClient + entity*0x394 + 0x1da) = 0xffff
+//               TradePartnerKey = 0xffffffff
 //
 //   case 0x60:  FUN_004353e0(puVar8)
 //   case 0x61:  FUN_00435390(puVar8)
 //   case 0x62:  FUN_004354f0(puVar8)
 //   case 0x63:  FUN_00435aa0(puVar8)
 //
-//   case 0x64:  DAT_05826ca4 = byte[3]; DAT_05826ca8 = byte[2]; DAT_05826d30 = 1
+//   case 0x64:  Unknown32_05826CA4 = byte[3]; Unknown32_05826CA8 = byte[2]; LegacyTradeActive = 1
 //
 //   case 0x71:  Party_PacketHandler()
 //   case 0x73:  FUN_00433a80(puVar8, iVar20)
@@ -268,49 +268,49 @@
 //   F1/00: FUN_00424010(puVar8)         — account list
 //
 //   F1/01: Login result — inner switch on byte[2]:
-//     0x00 → DAT_05826cb0=0x15, state=3  (login rejected)
-//     0x01 → DAT_05826cb0=0x14, LogIn=2, FUN_00412a70(), state=3
+//     0x00 → CurrentProtocolState=0x15, state=3  (login rejected)
+//     0x01 → CurrentProtocolState=0x14, LogIn=2, FUN_00412a70(), state=3
 //                                        (login OK, request char list)
-//     0x02 → DAT_05826cb0=0x16, state=3  (wrong password)
-//     0x03 → DAT_05826cb0=0x17, state=3  (account banned)
-//     0x04 → DAT_05826cb0=0x18, state=3
-//     0x05 → DAT_05826cb0=0x19, state=3
-//     0x06 → DAT_05826cb0=0x1a, state=3; CErrorReport_Write("Version_dismatch")
-//     0x07 → DAT_05826cb0=0x1b (default), state=3
-//     0x08 → DAT_05826cb0=0x1c, state=3
-//     0x09 → DAT_05826cb0=0x25, state=3
-//     0x0a → DAT_05826cb0=0x1d, state=3
-//     0x0b → DAT_05826cb0=0x1e, state=3
-//     0x0c → DAT_05826cb0=0x1f, state=3
-//     0x0d → DAT_05826cb0=0x20, state=3
-//     0x11 → DAT_05826cb0=0x26, state=3
-//     0xc0/0xd0 → DAT_05826cb0=0x22, state=3
-//     0xc1/0xd1 → DAT_05826cb0=0x23, state=3
-//     0xc2/0xd2 → DAT_05826cb0=0x24, state=3
+//     0x02 → CurrentProtocolState=0x16, state=3  (wrong password)
+//     0x03 → CurrentProtocolState=0x17, state=3  (account banned)
+//     0x04 → CurrentProtocolState=0x18, state=3
+//     0x05 → CurrentProtocolState=0x19, state=3
+//     0x06 → CurrentProtocolState=0x1a, state=3; CErrorReport_Write("Version_dismatch")
+//     0x07 → CurrentProtocolState=0x1b (default), state=3
+//     0x08 → CurrentProtocolState=0x1c, state=3
+//     0x09 → CurrentProtocolState=0x25, state=3
+//     0x0a → CurrentProtocolState=0x1d, state=3
+//     0x0b → CurrentProtocolState=0x1e, state=3
+//     0x0c → CurrentProtocolState=0x1f, state=3
+//     0x0d → CurrentProtocolState=0x20, state=3
+//     0x11 → CurrentProtocolState=0x26, state=3
+//     0xc0/0xd0 → CurrentProtocolState=0x22, state=3
+//     0xc1/0xd1 → CurrentProtocolState=0x23, state=3
+//     0xc2/0xd2 → CurrentProtocolState=0x24, state=3
 //
 //   F1/02: FUN_004247d0(puVar8, iVar20)  — server list data
 //
 //   F1/03: Character list result:
-//     byte[2]==0 → DAT_05826cb0=0x3f
+//     byte[2]==0 → CurrentProtocolState=0x3f
 //     byte[2]==1 → XOR decrypt 30 bytes with PacketXorKey3[i%3]
-//                  DAT_05826cb0=0x3e; copy decrypted name → DAT_05826bdc
+//                  CurrentProtocolState=0x3e; copy decrypted name → DecryptedCharName
 //
 //   F1/04: Version/token result:
-//     byte[2]==0 → DAT_05826cb0=0x41
-//     byte[2]==1 → XOR decrypt 10 bytes, DAT_05826cb0=0x40, copy → DAT_055ca050
-//     byte[2]==2 → DAT_05826cb0=0x42
-//     byte[2]==3 → DAT_05826cb0=0x43
+//     byte[2]==0 → CurrentProtocolState=0x41
+//     byte[2]==1 → XOR decrypt 10 bytes, CurrentProtocolState=0x40, copy → LoginTokenBuf
+//     byte[2]==2 → CurrentProtocolState=0x42
+//     byte[2]==3 → CurrentProtocolState=0x43
 //
 //   F1/05:
-//     byte[2]==0 → DAT_05826cb0=0x45
-//     byte[2]==1 → DAT_05826cb0=0x44
-//     byte[2]==2 → DAT_05826cb0=0x46
-//     byte[2]==3 → DAT_05826cb0=0x47
+//     byte[2]==0 → CurrentProtocolState=0x45
+//     byte[2]==1 → CurrentProtocolState=0x44
+//     byte[2]==2 → CurrentProtocolState=0x46
+//     byte[2]==3 → CurrentProtocolState=0x47
 //
 //   F1/12: Login/char-select gate:
-//     byte[2]==0 → DAT_05826cb0=0x0c
-//     byte[2]==1 → DAT_05826cb0=0x0b   (char select OK)
-//     byte[2]==2 → DAT_05826cb0=0x0d
+//     byte[2]==0 → CurrentProtocolState=0x0c
+//     byte[2]==1 → CurrentProtocolState=0x0b   (char select OK)
+//     byte[2]==2 → CurrentProtocolState=0x0d
 //
 // ── OPCODE 0xF3 — CHAR LIST / ENTER WORLD ────────────────────────────────────
 //
@@ -318,7 +318,7 @@
 //
 //   F3/00: FUN_00424240(puVar8)          — receive character list entries
 //   F3/01: FUN_00424390(puVar8)          — receive character detail
-//   F3/02: byte[2]==1 → DAT_05826cb0=0x39; else → DAT_05826d20=byte[2], 0x3a
+//   F3/02: byte[2]==1 → CurrentProtocolState=0x39; else → DeleteCharResult=byte[2], 0x3a
 //   F3/03: FUN_00425840(puVar8, iVar20)
 //   F3/04: FUN_004264d0()
 //   F3/05: FUN_00431180()
@@ -331,16 +331,16 @@
 //   F3/10: FUN_00426cf0(puVar8, iVar20)
 //   F3/11: FUN_004269f0(puVar8)
 //   F3/13: entity=FindCharacterIndex(byte[2]*256+byte[5]); ChangeCharacterExt(entity, puVar8+7)
-//   F3/14: DAT_07e91388=0; InsertInventoryItem(&DAT_07ea8410,8,8,byte[2],puVar8+5,0)
+//   F3/14: ItemPickedFlag=0; InsertInventoryItem(&LegacyInventoryItems,8,8,byte[2],puVar8+5,0)
 //          PlayBuffer(0x31, 0, 0)
-//   F3/20: DAT_05826d24 = byte[2]
-//   F3/22: DAT_05826c08 = puVar8[2]
+//   F3/20: SummonLife = byte[2]
+//   F3/22: SoccerTime = puVar8[2]
 //   F3/23: Server info block:
-//          DAT_05826cc0-cc4 ← puVar8+2 (8B)
-//          DAT_05826cc9-ccd ← puVar8+0xd (8B)
-//          DAT_05826ca4=byte[6]; DAT_05826ca8=byte[0x15]
-//          DAT_05826d33 = (byte[6] != 0xff)
-//          DAT_05826cc8 = 0
+//          ServerInfoField1-cc4 ← puVar8+2 (8B)
+//          ServerInfoField3-ccd ← puVar8+0xd (8B)
+//          Unknown32_05826CA4=byte[6]; Unknown32_05826CA8=byte[0x15]
+//          SoccerObserver = (byte[6] != 0xff)
+//          ServerInfoField2 = 0
 //   F3/30: FUN_00436fb0()
 //   F3/40: FUN_00436550(puVar8)
 //
@@ -354,7 +354,7 @@
 //          CreateSocket(ip, port) — connect to new server
 //          if result != 0: g_bGameServerConnected = 1
 //          crt_sprintf + Widget_Draw — show "connecting" UI
-//   F4/05: DAT_05826cb0=1; DAT_083a7c14=1   — back to Connecting state
+//   F4/05: CurrentProtocolState=1; LoginSubState=1   — back to Connecting state
 //
 // ── DEFAULT ───────────────────────────────────────────────────────────────────
 //
@@ -483,7 +483,7 @@
 //   HashTable_GetNode  → HashTable_Get
 //   Packet_EncryptByte  → HashTable_Free(entry, key)
 //   HashTable_GetIndex → Item_ReturnPickedItem area (addr in binary)
-//   FUN_0043de60  → Net_Throttle()
+//   Net_FlushQueue  → Net_Throttle()
 //   Net_Disconnect at 0043dc90
 //   operator_new  → MSVC heap alloc
 //
@@ -521,7 +521,7 @@
 //   0x0043e050  Entity_GetDirCode(float x1,y1, float x2,y2) → ushort
 //     dx = x2-x1; dy = y2-y1
 //     Math_Fabs(dx) = abs o sqrt
-//     Si |dx| < _DAT_00552868: retorna código de dirección vertical (N/S)
+//     Si |dx| < FloatEpsilon: retorna código de dirección vertical (N/S)
 //     Else: calcula atan2 → código de dirección ushort (8 direcciones)
 //
 //   0x0043e120  Angle_ShortestPath(int cur, int target, int maxStep) → int
@@ -552,7 +552,7 @@
 //
 //   0x0043e5c0  Entity_SmoothAngle(intptr_t entity)
 //     entity+0x161 (char flag): si 0 → lerp suave hacia target:
-//       entity+0x168 += (entity+0x164 - entity+0x168) * _DAT_005524f4
+//       entity+0x168 += (entity+0x164 - entity+0x168) * 0.1f
 //     Si flag != 0 → snap directo (o animación invertida)
 //
 //   0x0043e680  Entity_UpdatePath(int p1,p2,p3,p4)
@@ -583,11 +583,11 @@
 // ── PACKET QUEUE / ACTION QUEUE ──────────────────────────────────────────────
 //
 //   0x0043f2d0  PacketBuf_Free(void)
-//     Libera buffers en DAT_05826df4 (índices 0xff y 0x102)
+//     Libera buffers en PathFindContext (índices 0xff y 0x102)
 //     operator_delete para cada buffer no-NULL
 //
 //   0x0043f3e0  PacketQueue_Enqueue(uint id, float param2, uint p3, uint p4, void* data, float p6)
-//     Wrapper: llama PATH_FindPath(DAT_05826df4, id, param2, p3, p4, 1, 2, p6)
+//     Wrapper: llama PATH_FindPath(PathFindContext, id, param2, p3, p4, 1, 2, p6)
 //     local_4 = 2 (prioridad/tipo)
 //
 //   0x0043f500  ActionQueue_Insert(void* this, int id, float t, int p3, int p4, int p5, int p6, float p7)
@@ -602,7 +602,7 @@
 //
 //   0x0043fd70  AnimTimer_Update(void)
 //     Si FpsTimerInitialized == 0: init (FpsWindowStartTimeMs=timeGetTime(), FpsTimerInitialized=1)
-//     Si no: actualiza DAT_05826e10 (delta del timer de frame) vía timeGetTime()
+//     Si no: actualiza FpsWindowFrameCount (delta del timer de frame) vía timeGetTime()
 //     → timer global de animación, usado por Entity_AnimTick
 //
 //   0x0043fea0  LinkedList_Add(void* this, undefined4 data, int param_2)   __thiscall

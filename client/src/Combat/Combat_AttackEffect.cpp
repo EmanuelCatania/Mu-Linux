@@ -62,7 +62,7 @@ static inline unsigned int AE_ht_capacity() { return 0; }
 static inline void  AE_ht_noop2(const void*, uintptr_t)        {}
 static inline void  AE_ht_noop3(const void*, uintptr_t, uintptr_t) {}
 static inline unsigned char AE_SkillRead(const void* ctx, const void* p)
-{ return FUN_0045fae0((DWORD)(uintptr_t)ctx, (unsigned char*)p); }
+{ return AE_SkillRead((DWORD)(uintptr_t)ctx, (unsigned char*)p); }
 
 // Wrappers de tipo: Hex-Rays pasa enteros/DWORD donde functions.h declara
 // float*/void*. Se castea aca en vez de tocar los ~50 call sites.
@@ -82,20 +82,20 @@ static inline void AE_TransformPosition(uintptr_t model, const void* mat,
                                         float* pos, float* out, int flag)
 { BMD_TransformPosition((void*)(uintptr_t)model, (float*)mat, pos, out, (char)flag); }
 
-#define Models                        DAT_05828d58
-#define Matrix                        DAT_07abf444   // IDA `Matrix` @ 0x07ABF444
+#define Models                        ModelsBase
+#define Matrix                        TempBoneMatrixA   // IDA `Matrix` @ 0x07ABF444
 #define operator_new(n)               AE_new((size_t)(n))
 #undef  delete__
 #define delete__(p)                   AE_delete((DWORD)(uintptr_t)(p))
-#define FUN_004041e0(ctx, key)        AE_ht_index((const void*)(ctx), (DWORD)(key))
-#pragma push_macro("DAT_055c9bd4")
-#undef  DAT_055c9bd4
-#define DAT_055c9bd4                  AE_ht_capacity()
+#define AE_HashLookup(ctx, key)        AE_ht_index((const void*)(ctx), (DWORD)(key))
+#pragma push_macro("HashTableCapacity")
+#undef  HashTableCapacity
+#define HashTableCapacity                  AE_ht_capacity()
 #define HashTable_Insert(ctx, node, key)  AE_ht_noop3((const void*)(ctx), (DWORD)(uintptr_t)(node), (DWORD)(key))
 #define Packet_EncryptByte(node, key)       AE_ht_noop2((const void*)(uintptr_t)(node), (DWORD)(uintptr_t)(key))
 #define PACKET_ENCRYPT(ctx, key)      AE_ht_noop2((const void*)(ctx), (DWORD)(uintptr_t)(key))
-#define FUN_0045fae0(ctx, p)          AE_SkillRead((const void*)(ctx), (const void*)(p))
-#define FUN_00466300(pos)             FUN_00466300((float*)(uintptr_t)(pos))
+#define AE_SkillRead(ctx, p)          AE_SkillRead((const void*)(ctx), (const void*)(p))
+#define Effect_SpawnBombRingCompat(pos)             Effect_SpawnBombRingCompat((float*)(uintptr_t)(pos))
 #define CreateJoint                   AE_CreateJoint
 #define TransformPosition(a,b,c,d,e)  AE_TransformPosition((uintptr_t)(a), (const void*)(b), (c), (d), (e))
 #undef  CreateEffect
@@ -106,7 +106,7 @@ void __cdecl AttackEffect(intptr_t Owner)
   // Guard de port (no esta en IDA): si la tabla de modelos todavia no esta
   // cargada, `Models + 188*type` seria un puntero basura que TransformPosition
   // deferenciaria. La version parcial de Combat_LegacyAttackEffects.cpp tenia el mismo guard.
-  if (!Owner || !DAT_05828d58) return;
+  if (!Owner || !ModelsBase) return;
 
   intptr_t v2; // edi
   char v3; // al
@@ -400,11 +400,11 @@ void __cdecl AttackEffect(intptr_t Owner)
       v172 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       Owners = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
         while ( 1 )
         {
-          v173 = (const char *)(DAT_055c9bd0 + 4 * v172);
+          v173 = (const char *)(HashTableKeys + 4 * v172);
           v244 = v173;
           if ( !memcmp((const char *)&v245, v173, 4) )
           {
@@ -416,9 +416,9 @@ void __cdecl AttackEffect(intptr_t Owner)
             {
               break;
             }
-            v175 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+            v175 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
             if ( v175 == -1 ) return;
-            v176 = *(char **)(DAT_055c9bcc + 4 * v175);
+            v176 = *(char **)(HashTableValues + 4 * v175);
             if ( v176 == 0 ) return;
             v177 = v176[1] + 1;
             v176[1] = v177;
@@ -429,15 +429,15 @@ void __cdecl AttackEffect(intptr_t Owner)
               *v178 = *v176;
               v179 -= 35;
               *v178 = v179;
-              v180 = (DAT_00559050[0] ^ v179) - 71;
+              v180 = (PacketXorKey16[0] ^ v179) - 71;
               *v178 = v180;
               *v171 = v180;
               delete__(v178);
             }
             goto LABEL_265;
           }
-          v172 = (v172 + 1) % DAT_055c9bd4;
-          if ( ++Owners >= DAT_055c9bd4 )
+          v172 = (v172 + 1) % HashTableCapacity;
+          if ( ++Owners >= HashTableCapacity )
           {
             goto LABEL_263;
           }
@@ -457,17 +457,17 @@ LABEL_265:
       v242 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       v243 = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
-        while ( memcmp((const char *)&v245, (const char *)(DAT_055c9bd0 + 4 * v242), 4) )
+        while ( memcmp((const char *)&v245, (const char *)(HashTableKeys + 4 * v242), 4) )
         {
-          if ( !memcmp((const char *)&v244, (const char *)(DAT_055c9bd0 + 4 * v242), 4) )
+          if ( !memcmp((const char *)&v244, (const char *)(HashTableKeys + 4 * v242), 4) )
           {
             if ( v242 != -1 )
             {
-              v181 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+              v181 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
               if ( v181 == -1 ) return;
-              v182 = *(BYTE **)(DAT_055c9bcc + 4 * v181);
+              v182 = *(BYTE **)(HashTableValues + 4 * v181);
               if ( v182 == 0 ) return;
               v183 = v182[1] - 1;
               v182[1] = v183;
@@ -476,7 +476,7 @@ LABEL_265:
                 v184 = (BYTE *)operator_new(1u);
                 v185 = *v171 + 71;
                 *v184 = v185;
-                *v184 = (DAT_00559050[0] ^ v185) + 35;
+                *v184 = (PacketXorKey16[0] ^ v185) + 35;
                 *v171 = rand();
                 *v182 = *v184;
                 delete__(v184);
@@ -484,8 +484,8 @@ LABEL_265:
             }
             break;
           }
-          v6 = ++v243 < DAT_055c9bd4;
-          v242 = (v242 + 1) % DAT_055c9bd4;
+          v6 = ++v243 < HashTableCapacity;
+          v242 = (v242 + 1) % HashTableCapacity;
           if ( !v6 )
           {
             goto LABEL_269;
@@ -519,20 +519,20 @@ LABEL_269:
       v187 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       Ownerv = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
-        while ( memcmp((const char *)&v245, (const char *)(DAT_055c9bd0 + 4 * v187), 4) )
+        while ( memcmp((const char *)&v245, (const char *)(HashTableKeys + 4 * v187), 4) )
         {
-          if ( !memcmp((const char *)&v244, (const char *)(DAT_055c9bd0 + 4 * v187), 4) )
+          if ( !memcmp((const char *)&v244, (const char *)(HashTableKeys + 4 * v187), 4) )
           {
             if ( v187 == -1 )
             {
               break;
             }
             v189 = (char *)(Owner + EntityOffset(770));
-            v192 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+            v192 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
             if ( v192 == -1 ) return;
-            v193 = *(char **)(DAT_055c9bcc + 4 * v192);
+            v193 = *(char **)(HashTableValues + 4 * v192);
             if ( v193 == 0 ) return;
             v194 = v193[1] + 1;
             v193[1] = v194;
@@ -543,15 +543,15 @@ LABEL_269:
               *v195 = *v193;
               v196 -= 35;
               *v195 = v196;
-              v197 = (DAT_00559050[0] ^ v196) - 71;
+              v197 = (PacketXorKey16[0] ^ v196) - 71;
               *v195 = v197;
               *v189 = v197;
               delete__(v195);
             }
             goto LABEL_293;
           }
-          v6 = ++Ownerv < DAT_055c9bd4;
-          v187 = (v187 + 1) % DAT_055c9bd4;
+          v6 = ++Ownerv < HashTableCapacity;
+          v187 = (v187 + 1) % HashTableCapacity;
           if ( !v6 )
           {
             goto LABEL_291;
@@ -592,11 +592,11 @@ LABEL_293:
       v153 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       Ownerq = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
         while ( 1 )
         {
-          v154 = (const char *)(DAT_055c9bd0 + 4 * v153);
+          v154 = (const char *)(HashTableKeys + 4 * v153);
           v244 = v154;
           if ( !memcmp((const char *)&v245, v154, 4) )
           {
@@ -608,9 +608,9 @@ LABEL_293:
             {
               break;
             }
-            v156 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+            v156 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
             if ( v156 == -1 ) return;
-            v157 = *(char **)(DAT_055c9bcc + 4 * v156);
+            v157 = *(char **)(HashTableValues + 4 * v156);
             if ( v157 == 0 ) return;
             v158 = v157[1] + 1;
             v157[1] = v158;
@@ -621,15 +621,15 @@ LABEL_293:
               *v159 = *v157;
               v160 -= 35;
               *v159 = v160;
-              v161 = (DAT_00559050[0] ^ v160) - 71;
+              v161 = (PacketXorKey16[0] ^ v160) - 71;
               *v159 = v161;
               *v152 = v161;
               delete__(v159);
             }
             goto LABEL_238;
           }
-          v153 = (v153 + 1) % DAT_055c9bd4;
-          if ( ++Ownerq >= DAT_055c9bd4 )
+          v153 = (v153 + 1) % HashTableCapacity;
+          if ( ++Ownerq >= HashTableCapacity )
           {
             goto LABEL_236;
           }
@@ -649,17 +649,17 @@ LABEL_238:
       v241 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       v243 = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
-        while ( memcmp((const char *)&v245, (const char *)(DAT_055c9bd0 + 4 * v241), 4) )
+        while ( memcmp((const char *)&v245, (const char *)(HashTableKeys + 4 * v241), 4) )
         {
-          if ( !memcmp((const char *)&v244, (const char *)(DAT_055c9bd0 + 4 * v241), 4) )
+          if ( !memcmp((const char *)&v244, (const char *)(HashTableKeys + 4 * v241), 4) )
           {
             if ( v241 != -1 )
             {
-              v162 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+              v162 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
               if ( v162 == -1 ) return;
-              v163 = *(BYTE **)(DAT_055c9bcc + 4 * v162);
+              v163 = *(BYTE **)(HashTableValues + 4 * v162);
               if ( v163 == 0 ) return;
               v164 = v163[1] - 1;
               v163[1] = v164;
@@ -668,7 +668,7 @@ LABEL_238:
                 v165 = (BYTE *)operator_new(1u);
                 v166 = *v152 + 71;
                 *v165 = v166;
-                *v165 = (DAT_00559050[0] ^ v166) + 35;
+                *v165 = (PacketXorKey16[0] ^ v166) + 35;
                 *v152 = rand();
                 *v163 = *v165;
                 delete__(v165);
@@ -676,8 +676,8 @@ LABEL_238:
             }
             break;
           }
-          v6 = ++v243 < DAT_055c9bd4;
-          v241 = (v241 + 1) % DAT_055c9bd4;
+          v6 = ++v243 < HashTableCapacity;
+          v241 = (v241 + 1) % HashTableCapacity;
           if ( !v6 )
           {
             goto LABEL_242;
@@ -744,11 +744,11 @@ LABEL_242:
       v132 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       Ownero = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
         while ( 1 )
         {
-          v133 = (const char *)(DAT_055c9bd0 + 4 * v132);
+          v133 = (const char *)(HashTableKeys + 4 * v132);
           v244 = v133;
           if ( !memcmp((const char *)&v245, v133, 4) )
           {
@@ -760,9 +760,9 @@ LABEL_242:
             {
               break;
             }
-            v135 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+            v135 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
             if ( v135 == -1 ) return;
-            v136 = *(char **)(DAT_055c9bcc + 4 * v135);
+            v136 = *(char **)(HashTableValues + 4 * v135);
             if ( v136 == 0 ) return;
             v137 = v136[1] + 1;
             v136[1] = v137;
@@ -773,15 +773,15 @@ LABEL_242:
               *v138 = *v136;
               v139 -= 35;
               *v138 = v139;
-              v140 = (DAT_00559050[0] ^ v139) - 71;
+              v140 = (PacketXorKey16[0] ^ v139) - 71;
               *v138 = v140;
               *v131 = v140;
               delete__(v138);
             }
             goto LABEL_210;
           }
-          v132 = (v132 + 1) % DAT_055c9bd4;
-          if ( ++Ownero >= DAT_055c9bd4 )
+          v132 = (v132 + 1) % HashTableCapacity;
+          if ( ++Ownero >= HashTableCapacity )
           {
             goto LABEL_208;
           }
@@ -801,17 +801,17 @@ LABEL_210:
       v240 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       v243 = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
-        while ( memcmp((const char *)&v245, (const char *)(DAT_055c9bd0 + 4 * v240), 4) )
+        while ( memcmp((const char *)&v245, (const char *)(HashTableKeys + 4 * v240), 4) )
         {
-          if ( !memcmp((const char *)&v244, (const char *)(DAT_055c9bd0 + 4 * v240), 4) )
+          if ( !memcmp((const char *)&v244, (const char *)(HashTableKeys + 4 * v240), 4) )
           {
             if ( v240 != -1 )
             {
-              v141 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+              v141 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
               if ( v141 == -1 ) return;
-              v142 = *(BYTE **)(DAT_055c9bcc + 4 * v141);
+              v142 = *(BYTE **)(HashTableValues + 4 * v141);
               if ( v142 == 0 ) return;
               v143 = v142[1] - 1;
               v142[1] = v143;
@@ -820,7 +820,7 @@ LABEL_210:
                 v144 = (BYTE *)operator_new(1u);
                 v145 = *v131 + 71;
                 *v144 = v145;
-                *v144 = (DAT_00559050[0] ^ v145) + 35;
+                *v144 = (PacketXorKey16[0] ^ v145) + 35;
                 *v131 = rand();
                 *v142 = *v144;
                 delete__(v144);
@@ -828,8 +828,8 @@ LABEL_210:
             }
             break;
           }
-          v6 = ++v243 < DAT_055c9bd4;
-          v240 = (v240 + 1) % DAT_055c9bd4;
+          v6 = ++v243 < HashTableCapacity;
+          v240 = (v240 + 1) % HashTableCapacity;
           if ( !v6 )
           {
             goto LABEL_214;
@@ -872,7 +872,7 @@ LABEL_214:
     case 59:
       if ( AsCharacter(Owner)->SkillStage == 1 )
       {
-        FUN_00466300(Owner + 16);
+        Effect_SpawnBombRingCompat(Owner + 16);
       }
       if ( AsCharacter(Owner)->SkillStage == 14 && AsCharacter(Owner)->MonsterIndex == 59 )
       {
@@ -881,19 +881,19 @@ LABEL_214:
         Ownerl = AE_ht_hash(Owner + EntityOffset(770));
         v245 = 0;
         v243 = 0;
-        if ( DAT_055c9bd4 )
+        if ( HashTableCapacity )
         {
-          while ( memcmp((const char *)&v245, (const char *)(DAT_055c9bd0 + 4 * Ownerl), 4) )
+          while ( memcmp((const char *)&v245, (const char *)(HashTableKeys + 4 * Ownerl), 4) )
           {
-            if ( !memcmp((const char *)&v244, (const char *)(DAT_055c9bd0 + 4 * Ownerl), 4) )
+            if ( !memcmp((const char *)&v244, (const char *)(HashTableKeys + 4 * Ownerl), 4) )
             {
               if ( Ownerl == -1 )
               {
                 break;
               }
-              v119 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+              v119 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
               if ( v119 == -1 ) return;
-              v120 = *(char **)(DAT_055c9bcc + 4 * v119);
+              v120 = *(char **)(HashTableValues + 4 * v119);
               if ( v120 == 0 ) return;
               v121 = v120[1] + 1;
               v120[1] = v121;
@@ -904,15 +904,15 @@ LABEL_214:
                 *v122 = *v120;
                 v123 -= 35;
                 *v122 = v123;
-                v124 = (DAT_00559050[0] ^ v123) - 71;
+                v124 = (PacketXorKey16[0] ^ v123) - 71;
                 *v122 = v124;
                 *v117 = v124;
                 delete__(v122);
               }
               goto LABEL_181;
             }
-            v6 = ++v243 < DAT_055c9bd4;
-            Ownerl = (Ownerl + 1) % DAT_055c9bd4;
+            v6 = ++v243 < HashTableCapacity;
+            Ownerl = (Ownerl + 1) % HashTableCapacity;
             if ( !v6 )
             {
               goto LABEL_179;
@@ -933,17 +933,17 @@ LABEL_181:
         v239 = AE_ht_hash(Owner + EntityOffset(770));
         v245 = 0;
         v243 = 0;
-        if ( DAT_055c9bd4 )
+        if ( HashTableCapacity )
         {
-          while ( memcmp((const char *)&v245, (const char *)(DAT_055c9bd0 + 4 * v239), 4) )
+          while ( memcmp((const char *)&v245, (const char *)(HashTableKeys + 4 * v239), 4) )
           {
-            if ( !memcmp((const char *)&v244, (const char *)(DAT_055c9bd0 + 4 * v239), 4) )
+            if ( !memcmp((const char *)&v244, (const char *)(HashTableKeys + 4 * v239), 4) )
             {
               if ( v239 != -1 )
               {
-                v125 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+                v125 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
                 if ( v125 == -1 ) return;
-                v126 = *(BYTE **)(DAT_055c9bcc + 4 * v125);
+                v126 = *(BYTE **)(HashTableValues + 4 * v125);
                 if ( v126 == 0 ) return;
                 v127 = v126[1] - 1;
                 v126[1] = v127;
@@ -954,8 +954,8 @@ LABEL_181:
               }
               break;
             }
-            v6 = ++v243 < DAT_055c9bd4;
-            v239 = (v239 + 1) % DAT_055c9bd4;
+            v6 = ++v243 < HashTableCapacity;
+            v239 = (v239 + 1) % HashTableCapacity;
             if ( !v6 )
             {
               goto LABEL_185;
@@ -1018,7 +1018,7 @@ LABEL_185:
       {
         if ( v79 == 1 )
         {
-          FUN_00466300(Owner + 16);
+          Effect_SpawnBombRingCompat(Owner + 16);
           CreateEffect(241, (float *)(Owner + 16), (float *)(Owner + 28), (float *)(Owner + 232), 0, 0, (float *)-1, 0, 0);
         }
         v80 = (char *)(Owner + EntityOffset(770));
@@ -1026,11 +1026,11 @@ LABEL_185:
         v81 = AE_ht_hash(Owner + EntityOffset(770));
         v245 = 0;
         Ownerg = 0;
-        if ( DAT_055c9bd4 )
+        if ( HashTableCapacity )
         {
           while ( 1 )
           {
-            v82 = (const char *)(DAT_055c9bd0 + 4 * v81);
+            v82 = (const char *)(HashTableKeys + 4 * v81);
             v244 = v82;
             if ( !memcmp((const char *)&v245, v82, 4) )
             {
@@ -1042,9 +1042,9 @@ LABEL_185:
               {
                 break;
               }
-              v84 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+              v84 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
               if ( v84 == -1 ) return;
-              v85 = *(char **)(DAT_055c9bcc + 4 * v84);
+              v85 = *(char **)(HashTableValues + 4 * v84);
               if ( v85 == 0 ) return;
               v86 = v85[1] + 1;
               v85[1] = v86;
@@ -1055,15 +1055,15 @@ LABEL_185:
                 *v87 = *v85;
                 v88 -= 35;
                 *v87 = v88;
-                v89 = (DAT_00559050[0] ^ v88) - 71;
+                v89 = (PacketXorKey16[0] ^ v88) - 71;
                 *v87 = v89;
                 *v80 = v89;
                 delete__(v87);
               }
               goto LABEL_116;
             }
-            v81 = (v81 + 1) % DAT_055c9bd4;
-            if ( ++Ownerg >= DAT_055c9bd4 )
+            v81 = (v81 + 1) % HashTableCapacity;
+            if ( ++Ownerg >= HashTableCapacity )
             {
               goto LABEL_114;
             }
@@ -1083,17 +1083,17 @@ LABEL_116:
         v237 = AE_ht_hash(Owner + EntityOffset(770));
         v245 = 0;
         v243 = 0;
-        if ( DAT_055c9bd4 )
+        if ( HashTableCapacity )
         {
-          while ( memcmp((const char *)&v245, (const char *)(DAT_055c9bd0 + 4 * v237), 4) )
+          while ( memcmp((const char *)&v245, (const char *)(HashTableKeys + 4 * v237), 4) )
           {
-            if ( !memcmp((const char *)&v244, (const char *)(DAT_055c9bd0 + 4 * v237), 4) )
+            if ( !memcmp((const char *)&v244, (const char *)(HashTableKeys + 4 * v237), 4) )
             {
               if ( v237 != -1 )
               {
-                v90 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+                v90 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
                 if ( v90 == -1 ) return;
-                v91 = *(BYTE **)(DAT_055c9bcc + 4 * v90);
+                v91 = *(BYTE **)(HashTableValues + 4 * v90);
                 if ( v91 == 0 ) return;
                 v92 = v91[1] - 1;
                 v91[1] = v92;
@@ -1102,7 +1102,7 @@ LABEL_116:
                   v93 = (BYTE *)operator_new(1u);
                   v94 = *v80 + 71;
                   *v93 = v94;
-                  *v93 = (DAT_00559050[0] ^ v94) + 35;
+                  *v93 = (PacketXorKey16[0] ^ v94) + 35;
                   *v80 = rand();
                   *v91 = *v93;
                   delete__(v93);
@@ -1110,8 +1110,8 @@ LABEL_116:
               }
               break;
             }
-            v6 = ++v243 < DAT_055c9bd4;
-            v237 = (v237 + 1) % DAT_055c9bd4;
+            v6 = ++v243 < HashTableCapacity;
+            v237 = (v237 + 1) % HashTableCapacity;
             if ( !v6 )
             {
               goto LABEL_120;
@@ -1162,11 +1162,11 @@ LABEL_120:
       v99 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       Ownerj = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
         while ( 1 )
         {
-          v100 = (const char *)(DAT_055c9bd0 + 4 * v99);
+          v100 = (const char *)(HashTableKeys + 4 * v99);
           v244 = v100;
           if ( !memcmp((const char *)&v245, v100, 4) )
           {
@@ -1178,9 +1178,9 @@ LABEL_120:
             {
               break;
             }
-            v102 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+            v102 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
             if ( v102 == -1 ) return;
-            v103 = *(char **)(DAT_055c9bcc + 4 * v102);
+            v103 = *(char **)(HashTableValues + 4 * v102);
             if ( v103 == 0 ) return;
             v104 = v103[1] + 1;
             v103[1] = v104;
@@ -1191,15 +1191,15 @@ LABEL_120:
               *v105 = *v103;
               v106 -= 35;
               *v105 = v106;
-              v107 = (DAT_00559050[0] ^ v106) - 71;
+              v107 = (PacketXorKey16[0] ^ v106) - 71;
               *v105 = v107;
               *v98 = v107;
               delete__(v105);
             }
             goto LABEL_148;
           }
-          v99 = (v99 + 1) % DAT_055c9bd4;
-          if ( ++Ownerj >= DAT_055c9bd4 )
+          v99 = (v99 + 1) % HashTableCapacity;
+          if ( ++Ownerj >= HashTableCapacity )
           {
             goto LABEL_146;
           }
@@ -1219,17 +1219,17 @@ LABEL_148:
       v238 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       v243 = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
-        while ( memcmp((const char *)&v245, (const char *)(DAT_055c9bd0 + 4 * v238), 4) )
+        while ( memcmp((const char *)&v245, (const char *)(HashTableKeys + 4 * v238), 4) )
         {
-          if ( !memcmp((const char *)&v244, (const char *)(DAT_055c9bd0 + 4 * v238), 4) )
+          if ( !memcmp((const char *)&v244, (const char *)(HashTableKeys + 4 * v238), 4) )
           {
             if ( v238 != -1 )
             {
-              v108 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+              v108 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
               if ( v108 == -1 ) return;
-              v109 = *(BYTE **)(DAT_055c9bcc + 4 * v108);
+              v109 = *(BYTE **)(HashTableValues + 4 * v108);
               if ( v109 == 0 ) return;
               v110 = v109[1] - 1;
               v109[1] = v110;
@@ -1238,7 +1238,7 @@ LABEL_148:
                 v111 = (BYTE *)operator_new(1u);
                 v112 = *v98 + 71;
                 *v111 = v112;
-                *v111 = (DAT_00559050[0] ^ v112) + 35;
+                *v111 = (PacketXorKey16[0] ^ v112) + 35;
                 *v98 = rand();
                 *v109 = *v111;
                 delete__(v111);
@@ -1246,8 +1246,8 @@ LABEL_148:
             }
             break;
           }
-          v6 = ++v243 < DAT_055c9bd4;
-          v238 = (v238 + 1) % DAT_055c9bd4;
+          v6 = ++v243 < HashTableCapacity;
+          v238 = (v238 + 1) % HashTableCapacity;
           if ( !v6 )
           {
             goto LABEL_152;
@@ -1284,7 +1284,7 @@ LABEL_152:
       v26 = AsCharacter(Owner)->Object.CurrentAction;
       if ( (v26 == 3 || v26 == 4) && AsCharacter(Owner)->SkillStage == 5 )
       {
-        FUN_00466300(Owner + 16);
+        Effect_SpawnBombRingCompat(Owner + 16);
         CreateEffect(241, (float *)(Owner + 16), (float *)(Owner + 28), (float *)(Owner + 232), 0, 0, (float *)-1, 0, 0);
       }
       break;
@@ -1294,11 +1294,11 @@ LABEL_152:
       v28 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       Ownerc = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
         while ( 1 )
         {
-          v29 = (const char *)(DAT_055c9bd0 + 4 * v28);
+          v29 = (const char *)(HashTableKeys + 4 * v28);
           v244 = v29;
           if ( !memcmp((const char *)&v245, v29, 4) )
           {
@@ -1310,9 +1310,9 @@ LABEL_152:
             {
               break;
             }
-            v31 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+            v31 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
             if ( v31 == -1 ) return;
-            v32 = *(char **)(DAT_055c9bcc + 4 * v31);
+            v32 = *(char **)(HashTableValues + 4 * v31);
             if ( v32 == 0 ) return;
             v33 = v32[1] + 1;
             v32[1] = v33;
@@ -1323,15 +1323,15 @@ LABEL_152:
               *v34 = *v32;
               v35 -= 35;
               *v34 = v35;
-              v36 = (DAT_00559050[0] ^ v35) - 71;
+              v36 = (PacketXorKey16[0] ^ v35) - 71;
               *v34 = v36;
               *v27 = v36;
               delete__(v34);
             }
             goto LABEL_46;
           }
-          v28 = (v28 + 1) % DAT_055c9bd4;
-          if ( ++Ownerc >= DAT_055c9bd4 )
+          v28 = (v28 + 1) % HashTableCapacity;
+          if ( ++Ownerc >= HashTableCapacity )
           {
             goto LABEL_44;
           }
@@ -1351,17 +1351,17 @@ LABEL_46:
       v235 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       v243 = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
-        while ( memcmp((const char *)&v245, (const char *)(DAT_055c9bd0 + 4 * v235), 4) )
+        while ( memcmp((const char *)&v245, (const char *)(HashTableKeys + 4 * v235), 4) )
         {
-          if ( !memcmp((const char *)&v244, (const char *)(DAT_055c9bd0 + 4 * v235), 4) )
+          if ( !memcmp((const char *)&v244, (const char *)(HashTableKeys + 4 * v235), 4) )
           {
             if ( v235 != -1 )
             {
-              v37 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+              v37 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
               if ( v37 == -1 ) return;
-              v38 = *(BYTE **)(DAT_055c9bcc + 4 * v37);
+              v38 = *(BYTE **)(HashTableValues + 4 * v37);
               if ( v38 == 0 ) return;
               v39 = v38[1] - 1;
               v38[1] = v39;
@@ -1370,7 +1370,7 @@ LABEL_46:
                 v40 = (BYTE *)operator_new(1u);
                 v41 = *v27 + 71;
                 *v40 = v41;
-                *v40 = (DAT_00559050[0] ^ v41) + 35;
+                *v40 = (PacketXorKey16[0] ^ v41) + 35;
                 *v27 = rand();
                 *v38 = *v40;
                 delete__(v40);
@@ -1378,8 +1378,8 @@ LABEL_46:
             }
             break;
           }
-          v6 = ++v243 < DAT_055c9bd4;
-          v235 = (v235 + 1) % DAT_055c9bd4;
+          v6 = ++v243 < HashTableCapacity;
+          v235 = (v235 + 1) % HashTableCapacity;
           if ( !v6 )
           {
             goto LABEL_50;
@@ -1417,7 +1417,7 @@ LABEL_50:
       {
         if ( v44 == 11 )
         {
-          FUN_00466300(Owner + 16);
+          Effect_SpawnBombRingCompat(Owner + 16);
           CreateEffect(241, (float *)(Owner + 16), (float *)(Owner + 28), (float *)(Owner + 232), 0, 0, (float *)-1, 0, 0);
           v45 = 5;
           do
@@ -1497,11 +1497,11 @@ LABEL_50:
       v62 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       Ownere = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
         while ( 1 )
         {
-          v63 = (const char *)(DAT_055c9bd0 + 4 * v62);
+          v63 = (const char *)(HashTableKeys + 4 * v62);
           v244 = v63;
           if ( !memcmp((const char *)&v245, v63, 4) )
           {
@@ -1513,9 +1513,9 @@ LABEL_50:
             {
               break;
             }
-            v65 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+            v65 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
             if ( v65 == -1 ) return;
-            v66 = *(char **)(DAT_055c9bcc + 4 * v65);
+            v66 = *(char **)(HashTableValues + 4 * v65);
             if ( v66 == 0 ) return;
             v67 = v66[1] + 1;
             v66[1] = v67;
@@ -1526,15 +1526,15 @@ LABEL_50:
               *v68 = *v66;
               v69 -= 35;
               *v68 = v69;
-              v70 = (DAT_00559050[0] ^ v69) - 71;
+              v70 = (PacketXorKey16[0] ^ v69) - 71;
               *v68 = v70;
               *v61 = v70;
               delete__(v68);
             }
             goto LABEL_84;
           }
-          v62 = (v62 + 1) % DAT_055c9bd4;
-          if ( ++Ownere >= DAT_055c9bd4 )
+          v62 = (v62 + 1) % HashTableCapacity;
+          if ( ++Ownere >= HashTableCapacity )
           {
             goto LABEL_82;
           }
@@ -1554,17 +1554,17 @@ LABEL_84:
       v236 = AE_ht_hash(Owner + EntityOffset(770));
       v245 = 0;
       v243 = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
-        while ( memcmp((const char *)&v245, (const char *)(DAT_055c9bd0 + 4 * v236), 4) )
+        while ( memcmp((const char *)&v245, (const char *)(HashTableKeys + 4 * v236), 4) )
         {
-          if ( !memcmp((const char *)&v244, (const char *)(DAT_055c9bd0 + 4 * v236), 4) )
+          if ( !memcmp((const char *)&v244, (const char *)(HashTableKeys + 4 * v236), 4) )
           {
             if ( v236 != -1 )
             {
-              v71 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+              v71 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
               if ( v71 == -1 ) return;
-              v72 = *(BYTE **)(DAT_055c9bcc + 4 * v71);
+              v72 = *(BYTE **)(HashTableValues + 4 * v71);
               if ( v72 == 0 ) return;
               v73 = v72[1] - 1;
               v72[1] = v73;
@@ -1573,7 +1573,7 @@ LABEL_84:
                 v74 = (BYTE *)operator_new(1u);
                 v75 = *v61 + 71;
                 *v74 = v75;
-                *v74 = (DAT_00559050[0] ^ v75) + 35;
+                *v74 = (PacketXorKey16[0] ^ v75) + 35;
                 *v61 = rand();
                 *v72 = *v74;
                 delete__(v74);
@@ -1581,8 +1581,8 @@ LABEL_84:
             }
             break;
           }
-          v6 = ++v243 < DAT_055c9bd4;
-          v236 = (v236 + 1) % DAT_055c9bd4;
+          v6 = ++v243 < HashTableCapacity;
+          v236 = (v236 + 1) % HashTableCapacity;
           if ( !v6 )
           {
             goto LABEL_88;
@@ -1629,19 +1629,19 @@ LABEL_88:
       v5 = AE_ht_hash(Owner + EntityOffset(770));
       v243 = 0;
       Ownera = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
-        while ( memcmp((const char *)&v243, (const char *)(DAT_055c9bd0 + 4 * v5), 4) )
+        while ( memcmp((const char *)&v243, (const char *)(HashTableKeys + 4 * v5), 4) )
         {
-          if ( !memcmp((const char *)&v244, (const char *)(DAT_055c9bd0 + 4 * v5), 4) )
+          if ( !memcmp((const char *)&v244, (const char *)(HashTableKeys + 4 * v5), 4) )
           {
             if ( v5 == -1 )
             {
               break;
             }
-            v8 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+            v8 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
             if ( v8 == -1 ) return;
-            v9 = *(char **)(DAT_055c9bcc + 4 * v8);
+            v9 = *(char **)(HashTableValues + 4 * v8);
             if ( v9 == 0 ) return;
             v10 = v9[1] + 1;
             v9[1] = v10;
@@ -1652,15 +1652,15 @@ LABEL_88:
               *v11 = *v9;
               v12 -= 35;
               *v11 = v12;
-              v13 = (DAT_00559050[0] ^ v12) - 71;
+              v13 = (PacketXorKey16[0] ^ v12) - 71;
               *v11 = v13;
               *v4 = v13;
               delete__(v11);
             }
             goto LABEL_8;
           }
-          v6 = ++Ownera < DAT_055c9bd4;
-          v5 = (v5 + 1) % DAT_055c9bd4;
+          v6 = ++Ownera < HashTableCapacity;
+          v5 = (v5 + 1) % HashTableCapacity;
           if ( !v6 )
           {
             goto LABEL_6;
@@ -1681,17 +1681,17 @@ LABEL_8:
       v234 = AE_ht_hash(Owner + EntityOffset(770));
       v244 = 0;
       v243 = 0;
-      if ( DAT_055c9bd4 )
+      if ( HashTableCapacity )
       {
-        while ( memcmp((const char *)&v244, (const char *)(DAT_055c9bd0 + 4 * v234), 4) )
+        while ( memcmp((const char *)&v244, (const char *)(HashTableKeys + 4 * v234), 4) )
         {
-          if ( !memcmp((const char *)&v245, (const char *)(DAT_055c9bd0 + 4 * v234), 4) )
+          if ( !memcmp((const char *)&v245, (const char *)(HashTableKeys + 4 * v234), 4) )
           {
             if ( v234 != -1 )
             {
-              v14 = FUN_004041e0(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
+              v14 = AE_HashLookup(&MAIN_HASH_CLASS, Owner + EntityOffset(770));
               if ( v14 == -1 ) return;
-              v15 = *(BYTE **)(DAT_055c9bcc + 4 * v14);
+              v15 = *(BYTE **)(HashTableValues + 4 * v14);
               if ( v15 == 0 ) return;
               v16 = v15[1] - 1;
               v15[1] = v16;
@@ -1700,7 +1700,7 @@ LABEL_8:
                 v17 = (BYTE *)operator_new(1u);
                 v18 = *v4 + 71;
                 *v17 = v18;
-                *v17 = (DAT_00559050[0] ^ v18) + 35;
+                *v17 = (PacketXorKey16[0] ^ v18) + 35;
                 *v4 = rand();
                 *v15 = *v17;
                 delete__(v17);
@@ -1708,8 +1708,8 @@ LABEL_8:
             }
             break;
           }
-          v6 = ++v243 < DAT_055c9bd4;
-          v234 = (v234 + 1) % DAT_055c9bd4;
+          v6 = ++v243 < HashTableCapacity;
+          v234 = (v234 + 1) % HashTableCapacity;
           if ( !v6 )
           {
             goto LABEL_12;
@@ -1747,7 +1747,7 @@ LABEL_30:
       }
       break;
     case 103:
-      if ( FUN_0045fae0(&MAIN_HASH_CLASS, (BYTE *)(Owner + EntityOffset(770))) == 50 )
+      if ( AE_SkillRead(&MAIN_HASH_CLASS, (BYTE *)(Owner + EntityOffset(770))) == 50 )
       {
         TargetPosition[0] = (double)(rand() % 1024) + AsCharacter(Owner)->Object.Position[0] - 512.0;
         v198 = (double)(rand() % 1024) + AsCharacter(Owner)->Object.Position[1];
@@ -1768,7 +1768,7 @@ LABEL_75:
   if ( v202 >= 0 && v202 < 400 && CharactersClient )
   {
     v203 = CharactersClient + CHARACTER_STRIDE * v202;
-    if ( FUN_0045fae0(&MAIN_HASH_CLASS, (BYTE *)(Owner + EntityOffset(770))) == 17 )
+    if ( AE_SkillRead(&MAIN_HASH_CLASS, (BYTE *)(Owner + EntityOffset(770))) == 17 )
     {
       switch ( AsCharacter(Owner)->MonsterIndex )
       {
@@ -1985,7 +1985,7 @@ LABEL_75:
           return;
       }
     }
-    else if ( FUN_0045fae0(&MAIN_HASH_CLASS, (BYTE *)(Owner + EntityOffset(770))) == 3 )
+    else if ( AE_SkillRead(&MAIN_HASH_CLASS, (BYTE *)(Owner + EntityOffset(770))) == 3 )
     {
       switch ( AsCharacter(Owner)->MonsterIndex )
       {
@@ -2066,7 +2066,7 @@ LABEL_75:
           if ( AsCharacter(Owner)->SkillStage >= 8u )
           {
             memset(v248, 0, sizeof(v248));
-            TransformPosition(This, (float (*)[4])DAT_07abf3e4, v248, TargetPosition, 1);
+            TransformPosition(This, (float (*)[4])TempBoneMatrixB, v248, TargetPosition, 1);
             v221 = 4;
             do
             {
@@ -2139,15 +2139,14 @@ LABEL_75:
 #undef Matrix
 #undef operator_new
 #undef delete__
-#undef FUN_004041e0
-#pragma pop_macro("DAT_055c9bd4")
+#undef AE_HashLookup
+#pragma pop_macro("HashTableCapacity")
 #undef HashTable_Insert
 #undef Packet_EncryptByte
 #undef PACKET_ENCRYPT
-#undef FUN_0045fae0
-#undef FUN_00466300
+#undef AE_SkillRead
+#undef Effect_SpawnBombRingCompat
 #undef CreateJoint
 #undef TransformPosition
 #undef PlayBuffer
 #undef CreateEffect
-#define CreateEffect CreateEffect

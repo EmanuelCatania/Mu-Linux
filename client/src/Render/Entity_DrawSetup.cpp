@@ -11,7 +11,7 @@
 //                              undefined4 param_7, uint param_8)
 //
 // param_1 — entity pointer
-// param_2 — model slot index → this = DAT_05828d58 + param_2 * 0xbc
+// param_2 — model slot index → this = ModelsBase + param_2 * 0xbc
 // param_3 — float[3] light color (R,G,B)
 // param_4 — animation frame / scale
 // param_5 — raw flags (anim_mode = (param_5 >> 3) & 0xf)
@@ -148,7 +148,7 @@ void __cdecl RenderPartObjectEffect(intptr_t param_1, int param_2, float *param_
     // pecho de los personajes demo del server-select (sin armadura). Eliminados
     // para ser fieles a IDA.
 
-    this_ = reinterpret_cast<BYTE*>(DAT_05828d58 + param_2 * BMD_STRIDE);
+    this_ = reinterpret_cast<BYTE*>(ModelsBase + param_2 * BMD_STRIDE);
     sVar3 = *(short *)(param_1 + 2);
     effectType = sVar3;
 
@@ -213,11 +213,11 @@ void __cdecl RenderPartObjectEffect(intptr_t param_1, int param_2, float *param_
         rotU = sinf((float)gMapManager.GetCurrentMap() * 0.0001f);
         *(float *)(param_1 + 0x6c) = rotU;
         *(float *)(param_1 + 0x70) = (float)WorldTime * -0.0005f;
-        *(char *)(DAT_05828d58 + effectType * BMD_STRIDE + 0x88 + BMD_FIELD_SHIFT) = 0;
+        *(char *)(ModelsBase + effectType * BMD_STRIDE + 0x88 + BMD_FIELD_SHIFT) = 0;
         BMD__RenderBody(this_, 2, *(float *)&((OBJECT*)(uintptr_t)(param_1))->Alpha, *(int *)(param_1 + 100),
                      *(float *)(param_1 + 0x68), *(float *)(param_1 + 0x6c),
                      *(float *)(param_1 + 0x70), *(int *)(param_1 + 0x58), 1170);
-        *(char *)(DAT_05828d58 + effectType * BMD_STRIDE + 0x88 + BMD_FIELD_SHIFT) = -1;
+        *(char *)(ModelsBase + effectType * BMD_STRIDE + 0x88 + BMD_FIELD_SHIFT) = -1;
         *(float *)&((BMD*)(uintptr_t)(this_))->BodyLight[0] = 1.0f;
         *(float *)&((BMD*)(uintptr_t)(this_))->BodyLight[1] = 1.0f;
         *(float *)&((BMD*)(uintptr_t)(this_))->BodyLight[2] = 1.0f;
@@ -259,12 +259,12 @@ void __cdecl RenderPartObjectEffect(intptr_t param_1, int param_2, float *param_
         fxLight[0] = lum * 2.0f;
         fxLight[1] = lum * 0.32f;
         fxLight[2] = fxLight[1];
-        BMD__TransformPosition(this_, (float (*)[4])&DAT_06970acc, zeroPos, targetPos, false);
+        BMD__TransformPosition(this_, (float (*)[4])&BoneScratchSecA, zeroPos, targetPos, false);
         targetPos[0] += *(float *)(param_1 + 0x10);
         targetPos[1] += *(float *)(param_1 + 0x14);
         targetPos[2] += *(float *)(param_1 + 0x18);
         CreateSprite(1176, targetPos, scale, fxLight, param_1, 0.0f, 0);
-        BMD__TransformPosition(this_, (float (*)[4])&DAT_06970afc, zeroPos, targetPos, false);
+        BMD__TransformPosition(this_, (float (*)[4])&BoneScratchSlot060, zeroPos, targetPos, false);
         targetPos[0] += *(float *)(param_1 + 0x10);
         targetPos[1] += *(float *)(param_1 + 0x14);
         targetPos[2] += *(float *)(param_1 + 0x18);
@@ -281,12 +281,12 @@ void __cdecl RenderPartObjectEffect(intptr_t param_1, int param_2, float *param_
         fxLight[0] = lum * 2.0f;
         fxLight[1] = lum * 0.32f;
         fxLight[2] = fxLight[1];
-        BMD__TransformPosition(this_, (float (*)[4])&DAT_06970c4c, zeroPos, targetPos, false);
+        BMD__TransformPosition(this_, (float (*)[4])&BoneScratchFireB, zeroPos, targetPos, false);
         targetPos[0] += *(float *)(param_1 + 0x10);
         targetPos[1] += *(float *)(param_1 + 0x14);
         targetPos[2] += *(float *)(param_1 + 0x18);
         CreateSprite(1176, targetPos, scale, fxLight, param_1, 0.0f, 0);
-        BMD__TransformPosition(this_, (float (*)[4])&DAT_06970c7c, zeroPos, targetPos, false);
+        BMD__TransformPosition(this_, (float (*)[4])&BoneScratchFireC, zeroPos, targetPos, false);
         targetPos[0] += *(float *)(param_1 + 0x10);
         targetPos[1] += *(float *)(param_1 + 0x14);
         targetPos[2] += *(float *)(param_1 + 0x18);
@@ -349,9 +349,9 @@ void __cdecl RenderPartObjectEffect(intptr_t param_1, int param_2, float *param_
         bool didExtraRender = false;
         if (ItemLevel > 2 && effectType != 863) {
             if (ItemLevel < 5) {
-                // +3, +4 — mezcla con factor _DAT_00552534 ≈ 0.4
-                // Los 3 floats: (X, X*0.4, X*0.4) donde X = DAT_083a45d4 (anim brightness)
-                float baseB = DAT_083a45d4;
+                // +3, +4 — mezcla con factor 0.6f ≈ 0.4
+                // Los 3 floats: (X, X*0.4, X*0.4) donde X = LoginBgAnimValue (anim brightness)
+                float baseB = LoginBgAnimValue;
                 float mixR  = baseB;
                 float mixG  = baseB * 0.60000002f;
                 float mixB  = mixG;
@@ -364,7 +364,7 @@ void __cdecl RenderPartObjectEffect(intptr_t param_1, int param_2, float *param_
             }
             else if (ItemLevel < 7) {
                 // +5, +6 — mezcla diferente
-                float baseB = DAT_083a45d4;
+                float baseB = LoginBgAnimValue;
                 float mixR  = baseB * 0.5f;
                 float mixG  = baseB * 0.69999999f;
                 float mixB  = baseB;
@@ -450,11 +450,11 @@ LAB_after_render: ;
     // por encima con BMD__RenderBody flags=0x42.
     short pulseType = *(short*)(param_1 + 2);
     if (((param_6 & 0x3f) != 0) && ((pulseType < 0x310) || (0x316 < pulseType))) {
-        fVar10 = (float10)fsin((float10)WorldTime * (float10)_DAT_005528e0);
-        fVar10 = (fVar10 + (float10)_DAT_0055256c) * (float10)_DAT_00552504;
+        fVar10 = (float10)fsin((float10)WorldTime * (float10)ZBobFreq);
+        fVar10 = (fVar10 + (float10)1.0f) * (float10)HalfScale;
         *(float *)&((BMD*)(uintptr_t)(this_))->BodyLight[0] = (float)fVar10;
-        *(float *)&((BMD*)(uintptr_t)(this_))->BodyLight[1] = (float)(fVar10 * (float10)_DAT_005528b8);
-        *(float *)&((BMD*)(uintptr_t)(this_))->BodyLight[2] = (float)((float10)_DAT_0055256c - fVar10);
+        *(float *)&((BMD*)(uintptr_t)(this_))->BodyLight[1] = (float)(fVar10 * (float10)0.3f);
+        *(float *)&((BMD*)(uintptr_t)(this_))->BodyLight[2] = (float)((float10)1.0f - fVar10);
 
         // flags=0x42 (int flags, NOT a pointer!), f1=1.0, then anim data
         BMD__RenderBody(this_, 0x42, 1.0f,

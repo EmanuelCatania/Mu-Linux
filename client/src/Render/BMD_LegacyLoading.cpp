@@ -52,9 +52,9 @@ void __cdecl SetMaxTextures(int param_1) {
 // Port FIEL del IDA (raw 0x505E90):
 //   1. FileName = Dir + ModelFileName
 //   2. Itera variadic args (extra animation .smd paths) hasta NULL o "end"
-//   3. Si v11>0: OpenSMDModel(Type, FileName, v11, unk_83A4100) +
+//   3. Si v11>0: OpenSMDModel(Type, FileName, v11, LorenciaModelsLoadedFlag) +
 //      OpenSMDAnimation(Type, FileNameN, lockFlag) por cada N
-//   4. Si v11==0: OpenSMDModel(Type, FileName, 1, unk_83A4100) +
+//   4. Si v11==0: OpenSMDModel(Type, FileName, 1, LorenciaModelsLoadedFlag) +
 //      OpenSMDAnimation(Type, FileName, 0)
 //
 // NOTA: los archivos Data2/Item/<class>/<file>.smd NO existen en el
@@ -62,7 +62,7 @@ void __cdecl SetMaxTextures(int param_1) {
 // fopen dentro de OpenSMDModel/OpenSMDAnimation retornarán NULL → early return →
 // no-op silencioso. El path BMD (AccessModel) cubre la carga real de items.
 // (OpenSMDModel, OpenSMDAnimation — declared via functions.h.
-//  DAT_083a4100 — declared in globals.h.)
+//  LorenciaModelsLoadedFlag — declared in globals.h.)
 
 // Note: la signature original es variadic (`...` para extra anim paths) pero
 // TODOS los call sites en nuestro source pasan exactamente 3 args (sin anims
@@ -73,9 +73,9 @@ void __cdecl OpenModel(int Type, const char* Dir, const char* ModelFileName) {
     crt_sprintf(FileName, "%s%s", Dir ? Dir : "", ModelFileName ? ModelFileName : "");
     // Sin variadic args, v11=0 → call OpenSMDModel + OpenSMDAnimation con
     // FileName base solamente.
-    OpenSMDModel(Type, FileName, 1, (char)DAT_083a4100);
+    OpenSMDModel(Type, FileName, 1, (char)LorenciaModelsLoadedFlag);
     OpenSMDAnimation(Type, FileName, 0);
-    DAT_083a4100 = 0;
+    LorenciaModelsLoadedFlag = 0;
 
     // DESVIACION: el cliente 0.97k distribuido NO tiene Data2/Object*/ (solo
     // Data/Object*/ con archivos .bmd), así que las SMDs no cargan y Lorencia
@@ -83,7 +83,7 @@ void __cdecl OpenModel(int Type, const char* Dir, const char* ModelFileName) {
     // exclusivamente). Como fallback, si después del SMD load el slot sigue
     // vacío (mesh count = 0), se prueban varias transformaciones del nombre
     // .smd → .bmd para encontrar el archivo real (case-insensitive en Win32).
-    char* slot = (char*)((uintptr_t)DAT_05828d58 + (uintptr_t)BMD_STRIDE * Type);
+    char* slot = (char*)((uintptr_t)ModelsBase + (uintptr_t)BMD_STRIDE * Type);
     short meshCount = *(short*)(slot + 0x22);  // model[+0x22] = mesh count
     if (meshCount > 0) return;  // SMD load worked
 
@@ -221,10 +221,10 @@ int __cdecl TextParser_GetToken(void)
     float& TokenNumber   = ParserTokenNumber;
 
     // Los data parsers (Item_Data, Monster_Data, Skill_Data, Filter_Data,
-    // NPC_Data, Gate_Data) abren su archivo vía DAT_07d7806c (= SMDFile_0 de IDA).
-    // El otro símbolo "SMDFile" en DAT_0055c0a0 es un global distinto mal
+    // NPC_Data, Gate_Data) abren su archivo vía BmdFileHandle (= SMDFile_0 de IDA).
+    // El otro símbolo "SMDFile" en 0x0055C0A0 es un global distinto mal
     // nombrado — no se usa acá.
-    FILE* fp = DAT_07d7806c;
+    FILE* fp = BmdFileHandle;
 
     char  TempString[100];
     int   cha;
@@ -335,14 +335,14 @@ void __cdecl AccessModel(int param_1, const char *param_2, const char *param_3, 
 
     char local_40[64];
     if (param_4 == -1) {
-        crt_sprintf(local_40, s__s_bmd_0055a7f8, param_3);
+        crt_sprintf(local_40, Fmt_BmdName, param_3);
     } else {
-        const char *pcVar1 = (param_4 < 10) ? s__s0_d_bmd_0055a7ec : s__s_d_bmd_0055a7e0;
+        const char *pcVar1 = (param_4 < 10) ? Fmt_BmdNamePadZero : Fmt_BmdNameNum;
         crt_sprintf(local_40, pcVar1, param_3, param_4);
     }
-    BMD* model = AsModel(DAT_05828d58) + param_1;
+    BMD* model = AsModel(ModelsBase) + param_1;
     int numBonesInSlot = model->NumBones;
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         // HQ path original: si el SMD ya cargó bones, BMD__Save agrega la anim BMD.
         // DESVIACION: los .smd no existen en el cliente distribuido (ver OpenModel), así
         // que si el slot no tiene bones se cae al loader completo BMD__Open para traer
@@ -384,12 +384,12 @@ int __cdecl FindTextureByName(char *Name, char **dwTexture);
 // blancos o con textura corrupta. Verificado via debug.log (tex=0xffffcdcd).
 //
 // Globals:
-//   Models            = DAT_05828d58 (BMD table, stride 0xBC; Data ptr at +0x00)
+//   Models            = ModelsBase (BMD table, stride 0xBC; Data ptr at +0x00)
 //   TextureBegin      = TextureBegin (int, lower bound del scan)
 //   TextureCurrent    = TextureCurrent (int, next-free slot)
 //   Bitmaps[]         = g_BitmapsRaw (stride 0x38; filename en [+0x00..+0x1F])
-//   DAT_0055a7a4      = base path "Data2\"   (Data2/pak mode)
-//   DAT_0055a79c      = base path "Data\"    (Data mode)
+//   Data2PathPrefix      = base path "Data2\"   (Data2/pak mode)
+//   DataPathPrefix      = base path "Data\"    (Data mode)
 void __cdecl OpenTexture(int Model, const char* SubFolder, int Type, char Check) {
     // El Model slot ES la estructura BMD completa (stride 0xBC), NO un puntero a
     // datos. Los primeros 32 bytes del slot son el Name (string), no un data ptr.
@@ -399,7 +399,7 @@ void __cdecl OpenTexture(int Model, const char* SubFolder, int Type, char Check)
     //    slot +0x38 short* indexTexture (short[n])
     // Verificado en BMD__Open (BMD::Open): this[0x24]=numMeshes,
     // this[0x34]=texName[] y this[0x38]=indexTex[] se asignan directamente.
-    char* slot = (char*)(DAT_05828d58 + Model * BMD_STRIDE);
+    char* slot = (char*)(ModelsBase + Model * BMD_STRIDE);
     short numMeshes = *(short*)(slot + 0x24);
     // DIAG-canary inconditional: confirmar que llegamos a la función para Ship/Logo
     {
@@ -542,7 +542,7 @@ extern "C" void __cdecl SMD2BMDAnimation(int ID, char LockPosition);
 //   }
 void __cdecl OpenSMDModel(int ID, const char* FileName, int Actions, char Flip) {
     ResourceTables::EnsureModels(std::size_t(ID)+1);
-    BMD* slot = AsModel(DAT_05828d58) + ID;
+    BMD* slot = AsModel(ModelsBase) + ID;
     if (slot->NumMeshs > 0) return;  // Modelo ya cargado.
     if (!OpenSMDFile(FileName, 0, Flip)) return;
     strncpy(slot->Name, FileName, sizeof(slot->Name)-1);
@@ -560,10 +560,10 @@ void __cdecl OpenSMDModel(int ID, const char* FileName, int Actions, char Flip) 
 //   }
 void __cdecl OpenSMDAnimation(int ID, const char* FileName, char LockPosition) {
     ResourceTables::EnsureModels(std::size_t(ID)+1);
-    BMD* slot = AsModel(DAT_05828d58) + ID;
+    BMD* slot = AsModel(ModelsBase) + ID;
     if (slot->NumBones <= 0) return;  // Conservar el gate por huesos del port.
     // La cantidad de huesos pertenece al modelo elegido, no al último archivo leído.
-    if (!Smd::SelectModel(AsModel(DAT_05828d58)+ID)) return;
+    if (!Smd::SelectModel(AsModel(ModelsBase)+ID)) return;
     OpenSMDFile(FileName, 1, 0);
     SMD2BMDAnimation(ID, LockPosition);
 }

@@ -223,7 +223,7 @@ inline ITEM* AsItem(uintptr_t p) { return reinterpret_cast<ITEM*>(p); }
 inline ITEM* AsItem(void* p) { return static_cast<ITEM*>(p); }
 inline const ITEM* AsItem(const void* p) { return static_cast<const ITEM*>(p); }
 
-// IDA: ITEM_t, 0x204 bytes; items en el suelo, pool de 1000 en DAT_07e12840.
+// IDA: ITEM_t, 0x204 bytes; items en el suelo, pool de 1000 en GroundItemPool.
 // Mismo struct que en MU 5.2 (_struct.h). CreateItem (handler 0x20) escribe
 // Item.Type/Level/Durability/Option1 y Object.
 struct ITEM_t {
@@ -373,86 +373,48 @@ struct SERVER_LIST_t
 
 // State
 // SceneFlag ya está declarado en stdafx.h; World en globals.h.
-#define MouseX              DAT_083a427c     // int
-#define MouseY              DAT_083a4278     // int
-#define MouseLButtonPop     DAT_083a413c     // bool
-#define MouseLButtonPush    DAT_083a4124     // bool
-#define MouseRButton        DAT_083a42ac     // bool (approx)
-#define MouseLButton        DAT_083a42c4     // bool
 
 // Character
-#define DAT_07abf5d8        Hero                // IDA: DAT_07abf5d8 (0x07ABF5D8)
-#define DAT_07abf5d0        CharactersClient    // IDA: DAT_07abf5d0 (0x07ABF5D0)
-#define HeroIndex        HeroIndex         // IDA: HeroIndex (0x05826CA0)
-#define g_SimpleModulusCS        g_SimpleModulusCS // IDA: g_SimpleModulusCS (0x05826C10)
-#define g_SimpleModulusSC        g_SimpleModulusSC // IDA: g_SimpleModulusSC (0x05826C58)
-#define ChatWhisperID        ChatWhisperID     // IDA: ChatWhisperID (0x05826CB4)
-#define HeroKey        HeroKey           // IDA: HeroKey (0x05826CAC)
-#define DAT_05826cb0        CurrentProtocolState // IDA: DAT_05826cb0 (0x05826CB0)
-#define CurrentSkill        CurrentSkill      // IDA: CurrentSkill (0x05826D10)
-#define BuyCost        BuyCost           // IDA: BuyCost (0x05826D18)
-#define ChatTime        ChatTime          // IDA: ChatTime (0x05826D08)
-#define g_dwLatestMagicTick        g_dwLatestMagicTick // IDA: g_dwLatestMagicTick (0x05826CF4)
-#define LogInID        LogInID           // IDA: LogInID (0x05826CD4)
-#define LogIn        LogIn             // IDA: LogIn (0x05826CF8)
 #define SocketStartupFirst  First             // IDA: First (0x055CA15C)
-#define bBuxCode        bBuxCode          // IDA: bBuxCode (0x00558090)
-#define g_byPacketSerialRecv        g_byPacketSerialRecv // IDA: g_byPacketSerialRecv (0x05826CEC)
-#define m_nTempMyTradeGold        m_nTempMyTradeGold // IDA: m_nTempMyTradeGold (0x05826C9C)
-#define Version        Version           // IDA: Version (0x0055961C)
-#define Serial        Serial            // IDA: Serial (0x00559624)
 // SelectedCharacter is a named global declared in globals.h.
 // IDA provenance: DAT_00559c50.
 
 // Camera / OpenGL — underlying storage is DWORD but the binary treats the
 // bit pattern as float. Use lvalue-float reinterpretation so assignments like
 // `CameraFOV = 45.0f` write the IEEE-754 bits (not an integer cast).
-#define CameraFOV           (*(float*)&DAT_00561554)
-#define CameraViewNear      (*(float*)&DAT_0056154c)
-#define CameraViewFar       (*(float*)&DAT_00561550)
-#define EarthQuake          _DAT_083a0210    // float
-#define FogEnable           DAT_083a42ea     // bool
+#define CameraFOV           (*(float*)&CameraFOVStorage)
+#define CameraViewNear      (*(float*)&CameraViewNearStorage)
+#define CameraViewFar       (*(float*)&CameraViewFarStorage)
+#define EarthQuake          EarthQuakeStrength    // float
 
 // Connection: g_bGameServerConnected is declared in globals.h.
-#define ServerList          (*(SERVER_LIST_t(*)[MAX_SERVER_HI])&DAT_083a45d8)
+#define ServerList          (*(SERVER_LIST_t(*)[MAX_SERVER_HI])&ServerListBuffer)
 // `ServerNumber` es un nombre INVENTADO del port y describe mal el
 // campo.  `0x083A7C40` es la **cantidad de servidores** que trajo el F4/02
-// (`ReceiveServerList` L15: `unk_83A7C40 = ReceiveBuffer[5]`), y `Game_SceneUpdate`
+// (`ReceiveServerList` L15: `ServerListCount = ReceiveBuffer[5]`), y `Game_SceneUpdate`
 // lo pone en 0 al entrar al login.  Nadie lo LEE — se guarda y no se consume.
 //
 // El "numero de server" que decide con que nombre/color se dibuja cada rectangulo
 // del select-server es OTRA cosa: es `group = ServerCode / 20` (0..N), que indexa
-// la tabla de nombres `DAT_07d52c34` (stride 300) — ver `Recv_ServerList`.  El
+// la tabla de nombres `ServerNameTable` (stride 300) — ver `Recv_ServerList`.  El
 // grupo 12 es un caso especial: usa `GlobalText[559]` y va al slot 24.
-#define ServerListCount     DAT_083a7c40     // BYTE (use as char)
 #define ServerNumber        ServerListCount  // alias historico, no usar en codigo nuevo
 
 // Models
 // Address of bone-scratch base, reinterpreted as an array of 3x4 bone matrices.
-#define BoneTransform       ((float(*)[3][4])&DAT_06970a9c)
-// g_BitmapsRaw es el array real (stride 0x38). DAT_083a7ca0 es sólo el PRIMER DWORD
+#define BoneTransform       ((float(*)[3][4])&BoneScratchRoot)
+// g_BitmapsRaw es el array real (stride 0x38). LegacyBitmapTable es sólo el PRIMER DWORD
 // del slot[0], no el puntero — por eso indexamos sobre la dirección de g_BitmapsRaw.
 extern char* g_BitmapsRaw;
 #define Bitmaps             ((BITMAP_t*)&g_BitmapsRaw[0])
 
 // ── Companion-project aliases (IDA decompile compatibility) ──────────────────
 // Globals:
-#define DAT_00559c84         InputEnable          // IDA: DAT_00559c84 (0x00559C84)
-#define DAT_005616ac         SelectedHero         // IDA: DAT_005616ac (0x005616AC)
-#define DAT_083a7c14         LoginSubState        // IDA: DAT_083a7c14 (0x083A7C14)
-#define Attacking         Attacking            // IDA: Attacking (0x00559C58)
-#define DAT_05826d24         SummonLife           // IDA: DAT_05826d24 (0x05826D24)
-#define DAT_05826c08         SoccerTime           // IDA: DAT_05826c08 (0x05826C08)
-#define DAT_05826d33         SoccerObserver       // IDA: DAT_05826d33 (0x05826D33)
-#define DAT_07e11d6f         LockInputStatus      // IDA: DAT_07e11d6f (0x07E11D6F)
-#define DAT_07eaa138         RepairEnable         // IDA: DAT_07eaa138 (0x07EAA138)
-#define DAT_07e11998         SendGetItem          // IDA: DAT_07e11998 (0x07E11998)
-#define Teleport         Teleport             // IDA: Teleport (0x05826D14)
-// PrimaryTerrainLight es DAT_081cb608 (el buffer que lee el render y que
-// `Terrain_Water` (0x4F95E0) resetea por frame), NO `DAT_07eab250` (un DWORD
+// PrimaryTerrainLight es PrimaryTerrainLightStorage (el buffer que lee el render y que
+// `Terrain_Water` (0x4F95E0) resetea por frame), NO `Unknown32_07EAB250` (un DWORD
 // muerto). `AddTerrainLight` indexa `Buffer[768*y + 3*x]` con x,y hasta 255, asi
 // que el destino tiene que ser el array completo.
-#define PrimaryTerrainLight  ((float(*)[3])&DAT_081cb608[0])  // float[256*256][3]
+#define PrimaryTerrainLight  ((float(*)[3])&PrimaryTerrainLightStorage[0])  // float[256*256][3]
 // Functions (map companion-project names → FUN_ addresses from functions.h):
 // El VectorRotate del binario es 0x4FA0B0 (row-major); NO confundirlo con
 // Vector_InverseRotate, el port de VectorIRotate (0x4FA110), que es la TRANSPUESTA:
@@ -467,8 +429,6 @@ extern char* g_BitmapsRaw;
 // Con el clamp, la luz dinamica (fuego, antorchas, efectos) no llega a saturar.
 // El port de 0x4F76C0 es `AddTerrainLight` (Render/SMD_Parser.cpp).
 void __cdecl AddTerrainLight(float xf, float yf, float *Light, int Range, float *Buffer);   // decl local: structs.h no incluye functions.h
-#define AngleMatrix          AngleMatrix
-#define CreateEffect         CreateEffect
 #define CreateBomb           Effect_SpawnSmokeBurst
 #define AddTerrainAttributeRange Terrain_UpdateTileAttributeRect
 #define AddTerrainAttribute      Terrain_SetTileAttributeBits

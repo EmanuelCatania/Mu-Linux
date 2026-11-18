@@ -14,7 +14,7 @@ void __stdcall SetPositionIME_Wnd(float x, float y) {
 }
 
 // CheckIME_Status @ 0x0047EDC0 (~32 lines) — checks/saves/resets IME conversion status
-// Globals: DAT_07e11d94 = g_dwOldConv, DAT_00559cd8 = g_dwOldSent, DAT_07e11d98 = g_dwCurrConv
+// Globals: ImeOldConv = g_dwOldConv, ImeOldSentMode = g_dwOldSent, ImeCurrConv = g_dwCurrConv
 bool __cdecl CheckIME_Status(bool change, int mode) {
     bool bIme = false;
     const auto state = Platform::GetInput().ReadImeState(change);
@@ -22,31 +22,31 @@ bool __cdecl CheckIME_Status(bool change, int mode) {
     if (dwConv != 0 || dwSent != 0) {
         bIme = true;
         if (((BYTE)mode & 1) == 1) {
-            DAT_07e11d94 = dwConv;   // save old conversion status
+            ImeOldConv = dwConv;   // save old conversion status
         }
         if (((BYTE)mode & 2) == 2) {
-            DAT_00559cd8 = dwSent;   // save old sentence status
+            ImeOldSentMode = dwSent;   // save old sentence status
         }
         if (change) {
             dwConv = 0;
             dwSent = 0;
         }
     }
-    DAT_07e11d98 = dwConv;   // always update current conversion status
+    ImeCurrConv = dwConv;   // always update current conversion status
     return bIme;
 }
 
 // RenderIME_Status @ 0x0047EE52 (~64 lines) — debug: renders IME state on screen
 // Renders Korean/English mode, sentence mode, old sentence mode, lock status
 // at screen positions (100, 100/110/120/130).
-// Uses DAT_07e11d94 (g_dwOldConv), DAT_00559cd8 (g_dwOldSent).
+// Uses ImeOldConv (g_dwOldConv), ImeOldSentMode (g_dwOldSent).
 void __stdcall RenderIME_Status(void) {
     if (!Platform::GetInput().HasImeModeIndicator()) return;
     char local_64[100];
 
     // Line 1: Korean/English mode based on bit 0 of g_dwOldConv
     const char* pcVar5;
-    if ((DAT_07e11d94 & 1) == 1) {
+    if ((ImeOldConv & 1) == 1) {
         pcVar5 = "KOREAN";
     } else {
         pcVar5 = "ENGLISH";
@@ -68,13 +68,13 @@ void __stdcall RenderIME_Status(void) {
     gFont.MeasureText(gFont.GetTextDC(), local_64, iVar1, &sz);
 
     // Line 3: Old sentence mode
-    sprintf(local_64, "Old Sentence Mode : %d", DAT_00559cd8);
+    sprintf(local_64, "Old Sentence Mode : %d", ImeOldSentMode);
     RenderText(100, 0x78, local_64, 0, 1, NULL);
     iVar1 = Platform::TextLength(local_64);
     gFont.MeasureText(gFont.GetTextDC(), local_64, iVar1, &sz);
 
     // Line 4: Lock input status
-    sprintf(local_64, "LockInputStatus %d", (int)DAT_07e11d6f);
+    sprintf(local_64, "LockInputStatus %d", (int)LockInputStatus);
     RenderText(100, 0x82, local_64, 0, 1, NULL);
     iVar1 = Platform::TextLength(local_64);
     gFont.MeasureText(gFont.GetTextDC(), local_64, iVar1, &sz);

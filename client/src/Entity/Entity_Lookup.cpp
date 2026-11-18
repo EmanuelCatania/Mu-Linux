@@ -13,7 +13,7 @@
 // (50-byte original): also requires the active flag at +0 to be non-zero, AND
 // returns 400 (sentinel) on not-found — NOT 0 (slot 0 is the local player).
 int __cdecl Entity_FindById(int entity_id) {
-    BYTE* base = (BYTE*)DAT_07abf5d0;
+    BYTE* base = (BYTE*)CharactersClient;
     if (!base) return 400;
     for (int i = 0; i < 400; i++) {
         BYTE* ent = base + i * CHARACTER_STRIDE;

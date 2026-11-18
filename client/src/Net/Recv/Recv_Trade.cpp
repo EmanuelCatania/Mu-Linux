@@ -9,7 +9,7 @@
 
 void ReceiveTradeExit97k(const BYTE* Msg, int Size)
 {
-    if (DAT_07eaa165) {                              // EquipmentItem
+    if (ItemMoveInFlightFlag) {                              // EquipmentItem
         if (!s_bPacketAfterEquipmentItem) {
             s_bPacketAfterEquipmentItem = true;
             memcpy(s_byPacketAfterEquipmentItem, Msg, 4);
@@ -21,7 +21,7 @@ void ReceiveTradeExit97k(const BYTE* Msg, int Size)
 
     if (state == 0) {
         UIChatLogWindow_AddText(nullptr, GlobalText[494], 2);   // IDA: 494
-        DAT_07eaa0e8 = 0;
+        TradeConfirmLatch = 0;
 
         // IDA L29-35: cada item del trade del otro jugador (Type y Key en +0x38)
         // pasa por sub_4CC530, que recuerda los valiosos.  El port llamaba UI_Main
@@ -41,27 +41,27 @@ void ReceiveTradeExit97k(const BYTE* Msg, int Size)
     // `state == 4` con GlobalText[2108] seria de una version posterior (indice
     // FUERA del Text.bmd del 0.97k, que tiene 1000 filas).
 
-    DAT_07eaa11b = 0;
-    DAT_05826d30 = 0;
-    DAT_07e91388 = 0;
-    DAT_07eaa165 = 0;
-    DAT_07eaa0f0 = 0;
-    DAT_07eaa0f4 = 0; // IDA: m_nMyTradeGold
+    TradeOpened = 0;
+    LegacyTradeActive = 0;
+    ItemPickedFlag = 0;
+    ItemMoveInFlightFlag = 0;
+    TradeOtherGold = 0;
+    TradeMyGold = 0; // IDA: m_nMyTradeGold
     m_bYourConfirm = 0;
     m_bMyConfirm = 0;
     TradeYourWait = 0;
     TradeMyWait = 0;
     TradeRemoteGuildKey = 0;
     TradeRemoteLevel = 0;
-    DAT_07ea9834[0] = '\0';
+    TradePartnerName[0] = '\0';
     EnableUse = 0;
     g_ItemMoveSourcePool = 0;
     g_ItemMoveTargetPool = 0;
     InitGuildWar();
-    DAT_07eaa117 = 0;   // InventoryOpened (IDA ReceiveTradeExit: cierra el inventario)
+    InventoryOpened = 0;   // InventoryOpened (IDA ReceiveTradeExit: cierra el inventario)
     CloseInventoryRelatedWindows();
 
-    if (DAT_083a7c24 == 116) {
+    if (InGameUiState == 116) {
         SetErrorMessage(0);
         ClearInput(0);
         _InputTextMaxArr[0] = 42;
@@ -74,12 +74,12 @@ void ReceiveTradeExit97k(const BYTE* Msg, int Size)
 void NetRecv_36(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
 {
     // IDA: ProtocolCore 0x43B32D — C1:36 copia el nombre (diez bytes en
-    // el binario, 40 desde 0.97.40) en DAT_07EA9834 y abre ErrorMessage 121.
+    // el binario, 40 desde 0.97.40) en TradePartnerName y abre ErrorMessage 121.
     // MuEmu conserva ese nombre, aunque use C3 en la notificación al destinatario.
     if (Size < 3 + (int)NetText::CharacterNameSize) return;
-    NetText::FromServer(DAT_07ea9834, sizeof(DAT_07ea9834), Msg + 3, NetText::CharacterNameSize);
+    NetText::FromServer(TradePartnerName, sizeof(TradePartnerName), Msg + 3, NetText::CharacterNameSize);
     SetErrorMessage(121);
-    NetLog("NET: -> 0x36 TradeRequest name=%s", DAT_07ea9834);
+    NetLog("NET: -> 0x36 TradeRequest name=%s", TradePartnerName);
 }
 
 // 0x37
@@ -98,23 +98,23 @@ void NetRecv_37(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         CharacterOpened = 0;
         ShopOpened = 0;
         WarehouseOpened = 0;
-        DAT_07eaa11b = 1;
-        DAT_05826d30 = 1;
-        DAT_07eaa0e8 = 0;
-        DAT_07eaa0f0 = 0;
-        DAT_07eaa0f4 = 0; // IDA: m_nMyTradeGold
+        TradeOpened = 1;
+        LegacyTradeActive = 1;
+        TradeConfirmLatch = 0;
+        TradeOtherGold = 0;
+        TradeMyGold = 0; // IDA: m_nMyTradeGold
         m_bYourConfirm = 0;
         m_bMyConfirm = 0;
         TradeYourWait = 0;
         TradeMyWait = 0;
-        DAT_00559684 = 0xFFFFFFFF;
+        CachedShopSlotIndex = 0xFFFFFFFF;
         ItemMove_ClearPickedState();
         InventoryOpened = 1;
         // PMSG_TRADE_RESPONSE_SEND (0.97.40): name[40]@+4, level@+44,
         // GuildNumber@+48 (alineado a 4).
         const int NAME = (int)NetText::CharacterNameSize;
         if (Size >= 12 + NAME) {
-            NetText::FromServer(DAT_07ea9834, sizeof(DAT_07ea9834), Msg + 4, NAME);
+            NetText::FromServer(TradePartnerName, sizeof(TradePartnerName), Msg + 4, NAME);
             TradeRemoteGuildKey = *(DWORD*)(Msg + 8 + NAME);
             TradeRemoteLevel = *(WORD*)(Msg + 4 + NAME);
         }
@@ -155,7 +155,7 @@ void NetRecv_3A(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // IDA: ProtocolCore 0x43B3D0 — ACK del importe propio. El
     // servidor sólo devuelve un resultado; el valor está en el
     // temporal m_nTempMyTradeGold que UI_InGameMenu guardó antes del envío.
-    DAT_07eaa0f4 = (Msg[3] != 0) ? m_nTempMyTradeGold : 0;
+    TradeMyGold = (Msg[3] != 0) ? m_nTempMyTradeGold : 0;
 }
 
 // 0x3B
@@ -165,7 +165,7 @@ void NetRecv_3B(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // es decir dinero en +4. El byte +3 es el relleno de alineación
     // de PMSG_TRADE_MONEY_SEND (PBMSG_HEAD + DWORD).
     if (Size >= 8) {
-        DAT_07eaa0f0 = *(DWORD*)(Msg + 4);
+        TradeOtherGold = *(DWORD*)(Msg + 4);
     }
 }
 

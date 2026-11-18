@@ -85,7 +85,7 @@ void __cdecl RenderItemName(int i, const OBJECT* object, int ItemLevel, int Item
     const short v7 = *(short*)(o + 2);
 
     // &ItemAttribute[v7 - 400] — ITEM_ATTRIBUTE stride 0x40, Name en offset 0.
-    // Guard defensivo (no está en IDA): DAT_07d78068 se corrompe a valores
+    // Guard defensivo (no está en IDA): ItemAttributeBase se corrompe a valores
     // chicos en algunos caminos, igual que en los guards del tooltip.
     const char* name = "";
     {
@@ -258,7 +258,7 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
                                             int gridH, int slotType);
 
 unsigned int __stdcall Inventory_DropItem(void) {
-    BYTE* invBase = DAT_07ea9800;
+    BYTE* invBase = InventoryBasePtr;
     int gridW = 8;
     int gridH = (invBase == &OffsetMixItems[0]) ? 4 : 8;
     int originX = 0;
@@ -303,7 +303,7 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
     //     original binary. Our re-implementation reads them as globals instead.
     //   - Repeated XOR key init (0x893a6de7/0x739fb2bc/0xb6fea823) + single-iteration loops
     //     around every packet byte — compiler artifact / anti-tamper padding.
-    //   - Hash table operations (HashTable_Insert, FUN_004041e0, FUN_004042b0, HashTable_GetNode,
+    //   - Hash table operations (HashTable_Insert, AE_HashLookup, FUN_004042b0, HashTable_GetNode,
     //     Packet_DecryptByte, Packet_EncryptBuffer) interspersed around every packet send — anti-tamper
     //     hash table, skipped.
     //
@@ -321,45 +321,45 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
     // Return value: low byte used as bool success flag by caller.
 
     // --- Alias Ghidra globals to readable names ---
-    // pPickedItem       = DAT_07e91350 (short, type of item being dragged)
-    // ItemAttribute     = DAT_07d78068 (ITEM_ATTRIBUTE*, stride 0x40)
-    // OffsetInventoryItems = DAT_07ea8410 (inventory item array base)
-    // OffsetWarehouseItems = DAT_07ea5b30 (warehouse item array base, char type in globals)
-    // OffsetMixItems    = DAT_07ea9848 (chaos mix item array base)
-    // MixState          = DAT_07eaa140 (chaos mix active flag)
-    // EquipmentItem     = DAT_07eaa165 (equipment move in-progress guard)
+    // pPickedItem       = PickedItemData (short, type of item being dragged)
+    // ItemAttribute     = ItemAttributeBase (ITEM_ATTRIBUTE*, stride 0x40)
+    // OffsetInventoryItems = LegacyInventoryItems (inventory item array base)
+    // OffsetWarehouseItems = LegacyWarehouseItems (warehouse item array base, char type in globals)
+    // OffsetMixItems    = ChaosMixItems (chaos mix item array base)
+    // MixState          = MixState (chaos mix active flag)
+    // EquipmentItem     = ItemMoveInFlightFlag (equipment move in-progress guard)
     // InventoryOpened   = (extern) InventoryOpened
-    // WarehouseOpened   = DAT_07eaa119
-    // TradeOpened       = DAT_07eaa11b
-    // MouseX            = DAT_083a427c
-    // MouseY            = DAT_083a4278
-    // MouseLButtonPush  = DAT_083a4124
-    // DAT_083a42eb      = auto-drop trigger flag
-    // DAT_07e11e78      = target inventory slot index
-    // DAT_07ea5b18      = source inventory slot index (picked-from)
-    // DAT_07e91354      = picked item level (Level)
-    // DAT_07e9136a      = picked item durability/option byte
-    // DAT_07e9136b      = picked item extra dur byte
-    // DAT_07ea9800      = current inventory context pointer
-    // DAT_07ea8414      = inventory item level array (offset +4 from base)
-    // EnableUse         = DAT_05826d1c (extern EnableUse)
+    // WarehouseOpened   = WarehouseOpened
+    // TradeOpened       = TradeOpened
+    // MouseX            = MouseX
+    // MouseY            = MouseY
+    // MouseLButtonPush  = MouseLButtonPush
+    // AutoDropTriggerFlag      = auto-drop trigger flag
+    // TargetInvSlot      = target inventory slot index
+    // SourceInvSlot      = source inventory slot index (picked-from)
+    // PickedItemLevel      = picked item level (Level)
+    // PickedItemOptionByte      = picked item durability/option byte
+    // PickedItemDurExtra      = picked item extra dur byte
+    // InventoryBasePtr      = current inventory context pointer
+    // LegacyInventoryLevels      = inventory item level array (offset +4 from base)
+    // EnableUse         = EnableUse (extern EnableUse)
 
 
-    short pickedType = *(short*)DAT_07e91350;
-    ITEM_ATTRIBUTE* pAttr = (ITEM_ATTRIBUTE*)DAT_07d78068;
+    short pickedType = *(short*)PickedItemData;
+    ITEM_ATTRIBUTE* pAttr = (ITEM_ATTRIBUTE*)ItemAttributeBase;
     if (!pAttr || pickedType < 0) return 0;
     int itemWidth  = (int)pAttr[pickedType].Width;
     int itemHeight = (int)pAttr[pickedType].Height;
     if (itemWidth <= 0 || itemHeight <= 0) return 0;
 
     // Use the args directly.
-    BYTE* sourceInvBase = DAT_07ea9800;
+    BYTE* sourceInvBase = InventoryBasePtr;
     BYTE  sourceMoveFlag = InventoryPoolToMoveFlag(sourceInvBase);
     BYTE  targetMoveFlag = InventoryPoolToMoveFlag(invBase);
     int   gridWidth  = gridW;
     int   gridHeight = gridH;
 
-    // No escribir DAT_07ea9800 acá: IDA sub_4D6470 SOLO LEE dword_7EA9800 (los
+    // No escribir InventoryBasePtr acá: IDA sub_4D6470 SOLO LEE dword_7EA9800 (los
     // unicos writers son sub_4D23B0 L798/L1401 y Player_InputTick L711, todos en
     // el PICKUP). Es el pool de ORIGEN del item agarrado, y el dispatcher
     // sub_4DF410 llama a esta funcion hasta 4 veces por frame (main inv, trade,
@@ -370,9 +370,9 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
     //   gridY = (MouseY - origin_y) * 0.05 - itemH * 0.5 + 0.5
     // The 0.05 factor = 1/20 (cells are 20 px wide). The half-width offset
     // centers the multi-cell footprint on the cursor.
-    int mouseGridX = (int)(((double)((int)DAT_083a427c - origin_x)) * 0.05
+    int mouseGridX = (int)(((double)((int)MouseX - origin_x)) * 0.05
                             - (double)itemWidth  * 0.5 + 0.5);
-    int mouseGridY = (int)(((double)((int)DAT_083a4278 - origin_y)) * 0.05
+    int mouseGridY = (int)(((double)((int)MouseY - origin_y)) * 0.05
                             - (double)itemHeight * 0.5 + 0.5);
 
     // Bounds check: negative grid coords = outside the grid (mouse left/up
@@ -388,7 +388,7 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
     // (Pool aliases declared at file scope above.)
     // --- Check if target is MixItems with MixState active ---
     bool spaceFree = false;
-    if ((BYTE*)invBase == &OffsetMixItems[0] && DAT_07eaa140 != 0) {
+    if ((BYTE*)invBase == &OffsetMixItems[0] && MixState != 0) {
         // IDA sub_4D6470 L601-604: con MixState != 0 la grilla del Chaos se
         // trata como SIN lugar (`v487 = 0`).  Despues de un mix MixState queda
         // en >= 2 (ReceiveMix) hasta reabrir la maquina.  El port la daba por
@@ -432,7 +432,7 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
     }
 
     // --- Check for mouse click to confirm drop ---
-    if (DAT_083a42eb == '\0' && DAT_083a4124 == 0) {
+    if (AutoDropTriggerFlag == '\0' && MouseLButtonPush == 0) {
         // Sin click ni auto-drop: solo la vista previa.  IDA L661: return v487.
         return spaceFree ? 1u : 0u;
     }
@@ -478,7 +478,7 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
 
             if (validTarget) {
                 // Record which slot the currency is being applied to
-                DAT_07e11e78 = (DWORD)(
+                TargetInvSlot = (DWORD)(
                     (DWORD)*(invBase + targetSlot * 0x44 + 0x3f) * gridWidth + 0xc
                     + (DWORD)*(invBase + targetSlot * 0x44 + 0x3e)
                 );
@@ -486,12 +486,12 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
                 // Con el baul o el trade abiertos no se puede aplicar la
                 // jewel: IDA salta a LABEL_807, que muestra el mensaje. Por eso
                 // `canStack` queda en false en esos dos casos.
-                if (DAT_07eaa119 != '\0' || DAT_07eaa11b != '\0') {
+                if (WarehouseOpened != '\0' || TradeOpened != '\0') {
                     // IDA LABEL_807: jewel sobre un item con el baul o el trade
                     // abiertos.  Es el UNICO sitio de sub_4D6470 que muestra
                     // GlobalText[474]; el resto de la rama "no libre" sale en
                     // silencio (LABEL_808).
-                    UIChatLogWindow_AddText((const char*)&DAT_07eaa190, GlobalText[474], 2);
+                    UIChatLogWindow_AddText((const char*)&InventoryDropErrorText, GlobalText[474], 2);
                 } else {
                     // Aplicar una jewel es 0x26 PMSG_ITEM_USE_RECV, como IDA (sub_4D6470
                     // L5919-5931), no 0x24 (mover): dispara CharacterUseJewelOfBles/Soul/Life en
@@ -517,13 +517,13 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
                         pkt[0] = 0xC1;
                         pkt[1] = 5;                          // lo pisa el serial
                         pkt[2] = 0x26;                       // ItemUse
-                        pkt[3] = (BYTE)(int)DAT_07ea5b18;    // SourceSlot (la jewel)
-                        pkt[4] = (BYTE)(int)DAT_07e11e78;    // TargetSlot (el item)
+                        pkt[3] = (BYTE)(int)SourceInvSlot;    // SourceSlot (la jewel)
+                        pkt[4] = (BYTE)(int)TargetInvSlot;    // TargetSlot (el item)
                         gNetwork.Send(pkt, 5);
                         actionTaken = true;
 
                         // Sonido segun el item de origen (IDA LABEL_802).
-                        short sndItem = *(short*)((char*)OffsetInventoryItems + ((int)DAT_07ea5b18 - 0xc) * 0x44);
+                        short sndItem = *(short*)((char*)OffsetInventoryItems + ((int)SourceInvSlot - 0xc) * 0x44);
                         if (sndItem == 0x1c0) {
                             PlayBuffer(0x21, 0, 0);
                         } else if (sndItem > 0x1c0 && sndItem < 0x1ca) {
@@ -549,16 +549,16 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
 
     if (slotType == 0 && InventoryOpened != 0) {
         // Destino = inventario principal.  IDA ramifica por el pool de ORIGEN
-        // (dword_7EA9800), no por el destino: el port ramificaba por invBase,
+        // (InventoryBasePtr), no por el destino: el port ramificaba por invBase,
         // que con slotType 0 siempre es OffsetInventoryItems, asi que la rama
         // del password del baul estaba muerta y las comprobaciones de celda
         // propia/apilado corrian tambien para items que venian del baul.
-        DAT_07e11e78 = (DWORD)(mouseGridY * gridWidth + 0xc + mouseGridX);
+        TargetInvSlot = (DWORD)(mouseGridY * gridWidth + 0xc + mouseGridX);
 
         if (sourceInvBase == &OffsetInventoryItems[0]) {
             // IDA L669-692
-            bool isDifferentSlot = (DAT_07ea5b18 != DAT_07e11e78);          // v21
-            int targetOffset = ((int)DAT_07e11e78 - 0xc) * 0x44;
+            bool isDifferentSlot = (SourceInvSlot != TargetInvSlot);          // v21
+            int targetOffset = ((int)TargetInvSlot - 0xc) * 0x44;
             short targetType = *(short*)((char*)OffsetInventoryItems + targetOffset);   // v24
             bool sendIt = false;
             if (pickedType == targetType) {
@@ -568,7 +568,7 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
                 // se mandan aunque sea la misma celda.
                 if ((pickedType == 135 || pickedType == 143)
                     && (targetType == 135 || targetType == 143)
-                    && (int)DAT_07e91354 == *(int*)((char*)OffsetInventoryItems + targetOffset + 4))
+                    && (int)PickedItemLevel == *(int*)((char*)OffsetInventoryItems + targetOffset + 4))
                     sendIt = true;
             }
             if (!sendIt && !isDifferentSlot) {
@@ -578,12 +578,12 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
             }
         } else if (sourceInvBase == &OffsetWarehouseItems[0]) {
             // IDA L1186-1220: sacar del baul con el candado puesto pide el PIN.
-            if (DAT_00559f5f != '\0' && DAT_07eaa148 == '\0') {
-                DAT_07ea9810 = DAT_07e11e78;
-                DAT_07ea9808 = DAT_07ea5b18;
-                DAT_07ea9804 = 2;
-                DAT_07ea980c = 0;
-                short* shuffleArr = (short*)&DAT_07e91394;
+            if (StoragePinOkFlag != '\0' && ShopItemSelectionC == '\0') {
+                EquipTargetSlot = TargetInvSlot;
+                ShopContextB = SourceInvSlot;
+                ShopContextA = 2;
+                ShopContextC = 0;
+                short* shuffleArr = (short*)&PinShuffleDigits;
                 for (short i = 0; i < 10; i++)
                     shuffleArr[i] = i;
                 for (int n = 0; n < 20; n++) {
@@ -595,21 +595,21 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
                         shuffleArr[a] ^= shuffleArr[b];
                     }
                 }
-                DAT_07eaa14c = 1;
-                memset(DAT_07ea9814, 0, sizeof(DAT_07ea9814));
-                DAT_07ea9818 = 0;
-                DAT_07ea981c = 0;
-                DAT_07ea981e = 0;
+                PinInputModeState = 1;
+                memset(PinBytesPart0Bits, 0, sizeof(PinBytesPart0Bits));
+                PinBytes4to7 = 0;
+                PinBytes8to9 = 0;
+                PinByte10 = 0;
                 goto drop_done;
             }
         }
         // Origen inventario / baul / Chaos / trade: mismo 0x24 con destino 0.
         // (El m_nMyTradeWait = 150 de LABEL_288 lo aplica el helper de envio.)
-        if (DAT_07eaa165 != '\0') goto drop_done;
-        DAT_07eaa165 = '\x01';
+        if (ItemMoveInFlightFlag != '\0') goto drop_done;
+        ItemMoveInFlightFlag = '\x01';
         InventoryMove_SetPendingPools(sourceInvBase, invBase);
-        SendRequestEquipmentItem(sourceMoveFlag, (int)DAT_07ea5b18,
-            (ITEM*)DAT_07e91350, targetMoveFlag, (int)DAT_07e11e78);
+        SendRequestEquipmentItem(sourceMoveFlag, (int)SourceInvSlot,
+            (ITEM*)PickedItemData, targetMoveFlag, (int)TargetInvSlot);
         actionTaken = true;
         goto drop_done;
     }
@@ -619,7 +619,7 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
 
     // Destinos trade (1), baul (2) y Chaos (3): la celda es sin el +12.
     if (slotType != 1 && slotType != 2 && slotType != 3) goto drop_done;
-    DAT_07e11e78 = (DWORD)(mouseGridY * gridWidth + mouseGridX);
+    TargetInvSlot = (DWORD)(mouseGridY * gridWidth + mouseGridX);
 
     if (slotType == 1 && sourceInvBase == &OffsetInventoryItems[0]) {
         // IDA L5158-5163: del inventario al trade primero se retira la
@@ -629,24 +629,24 @@ unsigned int __stdcall Inventory_DropItemEx(int origin_x, int origin_y,
         gNetwork.Send(unconfirm, 4);
     }
 
-    if (DAT_07eaa165 != '\0') goto drop_done;
-    DAT_07eaa165 = '\x01';
+    if (ItemMoveInFlightFlag != '\0') goto drop_done;
+    ItemMoveInFlightFlag = '\x01';
     InventoryMove_SetPendingPools(sourceInvBase, invBase);
-    SendRequestEquipmentItem(sourceMoveFlag, (int)DAT_07ea5b18,
-        (ITEM*)DAT_07e91350, targetMoveFlag, (int)DAT_07e11e78);
+    SendRequestEquipmentItem(sourceMoveFlag, (int)SourceInvSlot,
+        (ITEM*)PickedItemData, targetMoveFlag, (int)TargetInvSlot);
     actionTaken = true;
 
 drop_done:
     // IDA sub_4D6470 LABEL_808: el quick-move del click derecho (sub_4D23B0
     // L1401-1438) mueve el mouse a un hueco libre del baul y prende
-    // byte_83A42EB para que este drop se haga solo.  Al terminar, el original
+    // AutoDropTriggerFlag para que este drop se haga solo.  Al terminar, el original
     // devuelve el cursor a donde estaba y apaga el flag.  Sin esto el flag
     // quedaba prendido y los drops siguientes se disparaban solos.
-    if (DAT_083a42eb) {
-        DAT_083a427c = g_PickupLatchX;
-        DAT_083a4278 = g_PickupLatchY;
+    if (AutoDropTriggerFlag) {
+        MouseX = g_PickupLatchX;
+        MouseY = g_PickupLatchY;
     }
-    DAT_083a42eb = 0;
+    AutoDropTriggerFlag = 0;
     (void)actionTaken;
     return retVal ? 1u : 0u;
 }

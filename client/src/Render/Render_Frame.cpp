@@ -10,26 +10,26 @@
 //
 // ── GLOBALS ──────────────────────────────────────────────────────────────────
 //
-//   DAT_083a7c10  — server-ack gate (return immediately if 0)
-//   DAT_07e11d1c  — frame render counter (HashTable ref; return if > 0x1e = 30)
-//   DAT_083a42ea  — cleared to 0 at frame start
+//   EnableMainRender  — server-ack gate (return immediately if 0)
+//   InputCooldownTicks  — frame render counter (HashTable ref; return if > 0x1e = 30)
+//   FogEnable  — cleared to 0 at frame start
 //   CameraTopViewEnabled  — special/debug view flag (affects viewport + skips some passes)
-//   DAT_083a4110  — out: world-space mouse ray direction [3 floats]
-//   DAT_083a427c  — mouse X (screen coords)
-//   DAT_083a4278  — mouse Y
-//   DAT_07abf5d8  — entity array (stride 0x394); slot used for camera
-//   DAT_0055283c  — float: viewport→FOV scale factor
+//   MouseRayEndPoint  — out: world-space mouse ray direction [3 floats]
+//   MouseX  — mouse X (screen coords)
+//   MouseY  — mouse Y
+//   Hero  — entity array (stride 0x394); slot used for camera
+//   ConvertXScaleBits  — float: viewport→FOV scale factor
 //   World  — World (drives clear color)
-//   DAT_07e11d30  — depth-test override flag
+//   EditFlag  — depth-test override flag
 //   g_bUseChatListBox  — anti-tamper gate
 //   SceneFlag  — SceneFlag
-//   DAT_055c9ff8  — object with flag at +8 (render watchdog?)
-//   DAT_083a7c50  — frame counter for render watchdog (reset at 10)
+//   UiRenderTextObj  — object with flag at +8 (render watchdog?)
+//   RenderWatchdogCount  — frame counter for render watchdog (reset at 10)
 //
 // ── ENTRY GUARD ──────────────────────────────────────────────────────────────
 //
-//   if (DAT_083a7c10 == '\0') return;   // server not yet confirmed
-//   HashTable ref-count block on DAT_07e11d1c (anti-tamper / frame limiter)
+//   if (EnableMainRender == '\0') return;   // server not yet confirmed
+//   HashTable ref-count block on InputCooldownTicks (anti-tamper / frame limiter)
 //   if (iVar5 > 0x1e) return;           // skip frame if counter too high
 //
 // ── CAMERA POSITION ──────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@
 //
 //   GL_BeginViewport(0, 0, width, 0x1b0 or 0x180) → GL_SetViewport (main 3D area)
 //     (0x1b0 = 432 full height; 0x180 = 384 when in debug/special mode)
-//   Camera_BuildMouseRay(mouseX, mouseY, &DAT_083a4110) → Camera_MouseRay(x, y, out)
+//   Camera_BuildMouseRay(mouseX, mouseY, &MouseRayEndPoint) → Camera_MouseRay(x, y, out)
 //
 // ── 3D RENDER PASSES (in order) ──────────────────────────────────────────────
 //
@@ -65,31 +65,31 @@
 //   Terrain_Render()    → Terrain_Render()          — tile grid terrain + objects
 //   Particle_RenderAll() (IDA: FUN_0046be40)       — particle system draw
 //   RenderBoids()    → Entity_UpdatePositions()   — avanza timers/pos de entidades
-//                         itera DAT_0839be18, campo -0x5a=active, -0x51=pos float
+//                         itera RenderPoolA, campo -0x5a=active, -0x51=pos float
 //                         tipo != 0x10a (cofre): actualiza float pos
 //   Entity_RenderAll_3D()    → Entity_RenderAll_3D()      — geometría 3D chars/NPCs
-//   if DAT_07e11d30:    RenderTerrain('\x01')       → GL_DepthTest(true)
+//   if EditFlag:    RenderTerrain('\x01')       → GL_DepthTest(true)
 //   if !debug_view:     Entity_Render()             → Entity_Render_Sprites() (billboards)
 //   RenderFishs()    → Entity_PrepareVisibleList() — proyecta world→screen, cull off-screen
-//                         itera DAT_083a2e92; llama TestFrustrum2D (frustum cull);
+//                         itera RenderPoolB; llama TestFrustrum2D (frustum cull);
 //                         si visible: Entity_PrepareRender(); glColor4f(shadow)
-//   RenderBugs()    → NPC_UpdateVisibleList()    — misma lógica para pool DAT_083a1378
+//   RenderBugs()    → NPC_UpdateVisibleList()    — misma lógica para pool NpcVisiblePool
 //                         tipo 0x186 o sub-state 0x330; rand() para variación
 //   FUN_0046cb70()    → SkillEffect_Render()       — proyectiles/efectos de habilidad
 //   FUN_00473710()    → ItemDrop_Render()           — items en el suelo
-//   RenderEffects()    → MapEffect_RenderAll()      — efectos de mapa (pool DAT_07b11698)
+//   RenderEffects()    → MapEffect_RenderAll()      — efectos de mapa (pool MapEffectPoolBase)
 //                         itera stride variable; Frustum_TestSphere(pos, 400.0) = cull a 400u
 //                         tipos < 0x104 con sub-dispatch
 //   FUN_00475110()    → Player_Render()             — jugador local
 //   FUN_0046c3e0()    → SpellCircle_RenderAll()    — círculos/efectos mágicos en suelo
-//                         itera DAT_07c608b4; tipo 0: Frame_UpdateTimer, tipo>2: GL_SetBlend2
+//                         itera JointRenderPool; tipo 0: Frame_UpdateTimer, tipo>2: GL_SetBlend2
 //                         tex ID = sub_type + 0x48d
 //   CheckSprites()    → Portal_Render()             — portales / warp pads
 //   GL_BeginSprite()    → Render_Flush()              — 1 instrucción, posiblemente glFlush
-//   if World == 2 && DAT_07e118e8 not in {3, >=10}:
+//   if World == 2 && WorldMapType not in {3, >=10}:
 //     FUN_0046cb70()  → SkillEffect_Render() again  — segunda pasada en in-world state
 //   Render_DrawSpritePool()    → Sigil_RenderAll()           — círculos de invocación/sigils
-//                         itera DAT_07c85894 stride 0x1bc; tipos 0/1/2 → blend distinto
+//                         itera LegacySigilPoolOff4 stride 0x1bc; tipos 0/1/2 → blend distinto
 //                         llama Render_DrawSprite (Sigil_Draw) + resetea active flag
 //   RenderParticles()    → Character_Animate()         — actualiza animaciones de personaje
 //                         función compleja con muchos floats; ~50 líneas
@@ -102,7 +102,7 @@
 //   GL_Begin2D()    → GL_SetupOrtho2D()           — establece proyección ortográfica 2D
 //                         glPushMatrix + glMatrixMode + glLoadIdentity + glViewport(0,0,w,h)
 //   RenderMonsterName()    → Target_Render()             — info de entidad seleccionada
-//                         DAT_07e11d6e=1; entity lookup via DAT_07abf5d0+idx*0x394
+//                         HudTextVisibleFlag=1; entity lookup via CharactersClient+idx*0x394
 //                         GetTextExtentPointA + texto nombre + HP
 //
 // ── 2D OVERLAY PASS ──────────────────────────────────────────────────────────
@@ -111,28 +111,28 @@
 //   RenderErrorMessage()    → CharInfo_TextRender()       — texto info personaje (stats panel)
 //                         múltiples LPCSTR, tagSIZE, texto centrado; ~40+ líneas
 //   Scene_MapTick()    → TeleportUI_Update()         — update/click handler del teleport
-//                         GL_ResetState() + DAT_07e11d6e=0; hit-test mouse vs bounds
-//                         (_DAT_00552cac, _DAT_00552c24, _DAT_00552c14, _DAT_00552ca8)
+//                         GL_ResetState() + HudTextVisibleFlag=0; hit-test mouse vs bounds
+//                         (InvCursorBoundXMin, InvCursorBoundXMax, 115.0f, InvCursorBoundYMax)
 //   UI_RenderNotices()    → PlayerName_Render()         — nombres de jugadores con parpadeo
 //                         SetBlendMode + gFont.SelectFont(bold) + glColor3f(1,1,1)
-//                         itera DAT_07db80d8 stride 0x104; parpadeo via DAT_07e11da0 % 10
+//                         itera SystemChatBuffer stride 0x104; parpadeo via BlinkFrameCounter % 10
 //   if (g_bUseChatListBox == 1) || (SceneFlag != 5): UI_RenderChatLogOverlay()
 //                     → SystemText_Render()         — notificaciones del sistema
 //                         glColor3f(1,1,1) + gFont.SelectFont(normal_font)
 //                         CHAR buf[256]; renderiza mensajes del sistema
 //   UI_UpdateFpsCounter()    → FPS_TimerReset()            — tick por segundo
 //                         gFont.SelectFont(normal_font); timeGetTime() % 1000:
-//                         si > 999ms: resetea DAT_07e016f0 + TotalPacketSize=0 (frame counter)
-//   RenderHelpWindow()    → CondText_Render()           — texto condicional (DAT_07e11d20==1)
-//                         GL_ResetState() + DAT_07eaa154=0; operaciones de string
+//                         si > 999ms: resetea LastFpsTickMsBits + TotalPacketSize=0 (frame counter)
+//   RenderHelpWindow()    → CondText_Render()           — texto condicional (HelpWindowMode==1)
+//                         GL_ResetState() + TextLineCount=0; operaciones de string
 //   Cursor_Render()    → AnimUI_Render() × 2        — elemento UI animado (6 frames)
 //                         SetBlendMode + glColor3f(1,1,1)
 //                         ftol()%6 → UV offset: {1,3,5}→local_4=0.5; {2,3,4}→local_8=0.5
 //   RenderInfomation3D()    → SpecialMap_Render3D()       — pasada 3D para mapas especiales
-//                         guard: DAT_083a7c24 ∈ {0x97, 0x99} && DAT_07eaa13c==1
+//                         guard: InGameUiState ∈ {0x97, 0x99} && ItemActionMode==1
 //                         glMatrixMode(GL_PROJECTION) + gluPerspective + LoadCameraMatrix
-//   Render watchdog: if (DAT_055c9ff8+8==1) && (++DAT_083a7c50 > 10):
-//     DAT_083a7c50 = 0; FUN_0040f670(DAT_055c9ff8) → Watchdog_Reset()
+//   Render watchdog: if (UiRenderTextObj+8==1) && (++RenderWatchdogCount > 10):
+//     RenderWatchdogCount = 0; FUN_0040f670(UiRenderTextObj) → Watchdog_Reset()
 //   GL_End2D()    → GL_PopMatrix2()             — glPopMatrix() × 2
 //   GL_PopMatrixAll()
 //   return 1
@@ -174,19 +174,19 @@
 //   RenderTerrain  → GL_DepthTest(enable)           — glEnable/Disable(GL_DEPTH_TEST)
 //   Terrain_Render  → Terrain_Render()
 //   Particle_RenderAll (IDA: FUN_0046be40) → particle system draw
-//   RenderBoids  → Entity_UpdatePositions()       — timer/pos update pool DAT_0839be18
+//   RenderBoids  → Entity_UpdatePositions()       — timer/pos update pool RenderPoolA
 //   Entity_RenderAll_3D  → Entity_RenderAll_3D()
 //   Entity_Render  → Entity_Render_Sprites()        — billboards 2D-in-3D
 //   RenderFishs  → Entity_PrepareVisibleList()    — frustum cull + PrepareRender
-//   RenderBugs  → NPC_UpdateVisibleList()        — cull NPCs pool DAT_083a1378
+//   RenderBugs  → NPC_UpdateVisibleList()        — cull NPCs pool NpcVisiblePool
 //   FUN_0046cb70  → SkillEffect_Render()
 //   FUN_00473710  → ItemDrop_Render()
-//   RenderEffects  → MapEffect_RenderAll()          — efectos mapa pool DAT_07b11698
+//   RenderEffects  → MapEffect_RenderAll()          — efectos mapa pool MapEffectPoolBase
 //   FUN_00475110  → Player_Render()
-//   FUN_0046c3e0  → SpellCircle_RenderAll()        — círculos mágicos pool DAT_07c608b4
+//   FUN_0046c3e0  → SpellCircle_RenderAll()        — círculos mágicos pool JointRenderPool
 //   CheckSprites  → Portal_Render()
 //   GL_BeginSprite  → Render_Flush()                 — 1 instrucción
-//   Render_DrawSpritePool  → Sigil_RenderAll()              — sigils pool DAT_07c85894 stride 0x1bc
+//   Render_DrawSpritePool  → Sigil_RenderAll()              — sigils pool LegacySigilPoolOff4 stride 0x1bc
 //   RenderParticles  → Character_Animate()            — animación de personaje (~50 líneas)
 //   RenderPoints  → Sign_RenderAll()               — letreros pool DAT_07c80158 stride 0x70
 //   Mouse_UpdateHoverTargets  → EntityInfo_Overlay()           — overlay info entidades (HashTable)
@@ -197,7 +197,7 @@
 //   UI_RenderNotices  → PlayerName_Render()           — nombres jugadores con parpadeo
 //   UI_RenderChatLogOverlay  → SystemText_Render()            — notificaciones sistema
 //   UI_UpdateFpsCounter  → FPS_TimerReset()              — tick/s: timeGetTime %1000 reset
-//   RenderHelpWindow  → CondText_Render()             — texto condicional DAT_07e11d20
+//   RenderHelpWindow  → CondText_Render()             — texto condicional HelpWindowMode
 //   Cursor_Render  → AnimUI_Render()              — elemento UI 6-frame animado (×2)
 //   RenderInfomation3D  → SpecialMap_Render3D()         — 3D pass mapas 0x97/0x99
 //   FUN_0040f670  → Watchdog_Reset(obj)
@@ -245,13 +245,13 @@ unsigned int Game_RenderTick(void)
 {
     // IDA 0x525A00: if (!EnableMainRender) return 0; sin swap se mantiene el
     // ultimo frame (la pantalla de carga) hasta que llega JoinMapServer.
-    if (DAT_083a7c10 == 0) return 0;
+    if (EnableMainRender == 0) return 0;
 
     // IDA L62-65: con LoadingWorld > 30 (portal pedido al server, CheckGate lo
     // pone en 9999999) devuelve 0 -> sin SwapBuffers, queda el ultimo frame.
     // El port cortaba adentro de Render_Scene3D pero devolvia 1, y el swap
     // mostraba un buffer sin dibujar (pantalla negra al usar un gate).
-    if (DAT_07e11d1c > 30) return 0;
+    if (InputCooldownTicks > 30) return 0;
 
     // Drena errores GL residuales antes del frame (pops sin push del frame previo
     // durante la transición login→in-game).
@@ -280,7 +280,7 @@ unsigned int Game_RenderTick(void)
 //   sub_4BF2D0   Render_MapLoadText
 //   RenderBooleans                           floating-numbers/booleans (0x4BD090, 534 b)
 //   sub_4F5820   Render_QuickButtons
-//   (*dword_55C9FF0 + 0x10)(self)            chat scroll listbox render
+//   (*ChatHistoryWidget + 0x10)(self)            chat scroll listbox render
 //   RenderMainFrameWindow                    main HUD frame (0x4BD2B0, 919 b)
 //   sub_4BE4F0   Render_ChatBox              chat input box
 //   RenderExperience                         exp bar/level text (0x4BF990, 1097 b)
@@ -343,8 +343,8 @@ void Render_GameFrame(void)
         GL_SetBlendAdditive();                        // EnableAlphaBlend (aditivo)
         BufferedDraw::Color3f(0.3f, 0.3f, 0.25f);
 
-        const float scrollA = (float)((long long)WorldTime % 100000) * _DAT_00552b88; // 0.0002
-        const float scrollB = (float)((long long)WorldTime % 100000) * _DAT_00552500; // 0.001
+        const float scrollA = (float)((long long)WorldTime % 100000) * ScrollWaveFreq; // 0.0002
+        const float scrollB = (float)((long long)WorldTime % 100000) * SinFreqWorldTime; // 0.001
 
         // El original usa `RenderBitmapUV` (0x5128C0), que mapea un cuadrilatero
         // SESGADO en V (el arrastre de la arena), no `RenderBitmap` (0x5125A0).
@@ -375,8 +375,8 @@ void Render_GameFrame(void)
     // The widget object is constructed in WinMain via ChatListBox_Construct;
     // see UI/ChatListBox.cpp for the per-slot port.  Without this dispatch
     // the chat history scroll UI never paints.
-    if (DAT_055c9ff0) {
-        DWORD* obj = (DWORD*)DAT_055c9ff0;
+    if (ChatHistoryWidget) {
+        DWORD* obj = (DWORD*)ChatHistoryWidget;
         void** vt  = ChatWidget_GetVTable(obj);
         if (vt) {
             typedef void (__fastcall *FnVoid)(DWORD*);
@@ -409,13 +409,13 @@ void Render_HPBars_OLD(void)
     // 2026-04-29 DISABLED: corrompía GL state.
     return;
     if (SceneFlag != 5) return;
-    if (DAT_07abf5d8 == nullptr) return;
-    if (DAT_07abf5d0 == 0) return;
-    BYTE* basePtr = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    if (Hero == nullptr) return;
+    if (CharactersClient == 0) return;
+    BYTE* basePtr = (BYTE*)(uintptr_t)CharactersClient;
     for (int s = 0; s < 400; ++s) {
         BYTE* slot = basePtr + s * CHARACTER_STRIDE;
         if (slot[0] == 0) continue;                 // inactive
-        if (slot == (BYTE*)DAT_07abf5d8) continue;  // skip hero
+        if (slot == (BYTE*)Hero) continue;  // skip hero
         if (slot[0x84] == 0) continue;              // not visible
 
         // World pos at +0x10 (xyz floats). Add height offset so bar floats above head.
@@ -535,7 +535,7 @@ void Render_Scene3D(void)
         DWORD now = Platform::GetTimer().Ticks();
         if (now - s_lastR3 > 1000) {
             s_lastR3 = now;
-            BYTE* hero = (BYTE*)DAT_07abf5d8;
+            BYTE* hero = (BYTE*)Hero;
             char b[300];
             float hx = hero ? *(float*)(hero + 0x10) : 0.0f;
             float hy = hero ? *(float*)(hero + 0x14) : 0.0f;
@@ -544,20 +544,20 @@ void Render_Scene3D(void)
     }
 
     // ── 1. Anti-tamper LoadingWorld counter (skip frame if > 30) ─────────────
-    if (DAT_07e11d1c > 0x1e) return;
+    if (InputCooldownTicks > 0x1e) return;
 
-    DAT_083a42ea = 0;   // FogEnable = false
+    FogEnable = 0;   // FogEnable = false
     // DESVIACION (DLL MapFog, ahora catálogo 0.97.20): con niebla definida por
     // el server se prende (el DLL parcheaba este 0 por un 1).
     // Con la cámara 3D y la niebla por profundidad, ésta reemplaza a la del
     // server: bruma hacia el color de fondo propio del mapa, sin teñir el fondo.
-    if (gContentCatalog.HasMapFog() && !(gCamera3D.IsEnabled() && Gfx::DepthFog())) DAT_083a42ea = 1;
+    if (gContentCatalog.HasMapFog() && !(gCamera3D.IsEnabled() && Gfx::DepthFog())) FogEnable = 1;
 
     // ── 2. Camera position ────────────────────────────────────────────────────
     // Cámara autoritativa preparada al finalizar el paso de simulación.
     float camPos[3];
-    if (DAT_07abf5d8) {
-        BYTE* hero = (BYTE*)DAT_07abf5d8;
+    if (Hero) {
+        BYTE* hero = (BYTE*)Hero;
         // Nuestro port actual de MoveMainCamera no reconstruye todavía el
         // bool "spectator/start-position" del binario original y devuelve true
         // siempre en gameplay normal. Usar +0x170 acá rompe el frustum de los
@@ -588,7 +588,7 @@ void Render_Scene3D(void)
     } else if (worldId == 10) {
         cr = 0.012f; cg = 0.099f;  cb = 0.172f;
     }
-    if (DAT_083a42ea) {
+    if (FogEnable) {
         // DLL MapFog glClearColorFog: el fondo toma el color de la niebla.
         float fog[4];
         gContentCatalog.GetFogColor(worldId, fog);
@@ -605,7 +605,7 @@ void Render_Scene3D(void)
     // El topview usa el viewport ALTO (480 = pantalla completa). Antes 0x180 (384).
     int vpHeight = (topView || noInterface || gWindow.IsWide()) ? 0x1e0 : 0x1b0;
     GL_BeginViewport(0, 0, w, vpHeight);
-    Camera_BuildMouseRay(DAT_083a427c, DAT_083a4278, (float*)&DAT_083a4110);
+    Camera_BuildMouseRay(MouseX, MouseY, (float*)&MouseRayEndPoint);
     // DESVIACION: sombras proyectadas (opción). Lo que se dibuja hasta
     // EndShadowScene proyecta y recibe sombra; centradas en el héroe.
     Gfx::BeginShadowScene(camPos);
@@ -652,7 +652,7 @@ void Render_Scene3D(void)
     if (gCamera3D.IsEnabled()) {
         // Empieza a la mitad del alcance normal y llega al borde del ampliado
         // (distancia de dibujado), donde ya sólo queda el terreno.
-        // El frustum del culling llega al 90 % del alcance (_DAT_005526e8):
+        // El frustum del culling llega al 90 % del alcance (0.9f):
         // la niebla tiene que completarse antes.
         const float end = CameraViewFar * 0.85f;
         const float scale = gCamera3D.IsEnabled() ? gUserSettings.DrawDistanceScale() : 1.0f;
@@ -704,12 +704,12 @@ void Render_Scene3D(void)
     if (!noInterface) Render_GameFrame();        // full HUD render
     RenderInformation();                        // HUD/notices/chat/help/cursor/info3D
 
-    if (DAT_055c9ff8 != 0 && *(BYTE*)(DAT_055c9ff8 + 8) == 1) {
-        if (++DAT_083a7c50 > 10) {
-            DAT_083a7c50 = 0;
+    if (UiRenderTextObj != 0 && *(BYTE*)(UiRenderTextObj + 8) == 1) {
+        if (++RenderWatchdogCount > 10) {
+            RenderWatchdogCount = 0;
         }
     } else {
-        DAT_083a7c50 = 0;
+        RenderWatchdogCount = 0;
     }
 
     GL_End2D();                              // EndBitmap

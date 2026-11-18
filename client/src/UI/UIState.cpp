@@ -5,12 +5,12 @@ namespace UIState {
 
 bool HasTextInput()
 {
-    // DLL Defines.h: CheckInputInterfaces; DAT_07e11d71 es TabInputEnable.
-    return InputEnable || GuildInputEnable || GoldInputEnable || DAT_07e11d71;
+    // DLL Defines.h: CheckInputInterfaces; ImeModeFlag es TabInputEnable.
+    return InputEnable || GuildInputEnable || GoldInputEnable || ImeModeFlag;
 }
 
-bool HasModalDialog() { return DAT_083a7c24 != 0; } // ErrorMessage
-bool IsItemMovePending() { return DAT_07eaa165 != 0; } // EquipmentItem
+bool HasModalDialog() { return InGameUiState != 0; } // ErrorMessage
+bool IsItemMovePending() { return ItemMoveInFlightFlag != 0; } // EquipmentItem
 bool IsMixBusy() { return MixState != 0; }
 
 // IDA: GetScreenWidth (0x004CB520), flag de apertura de quest.
@@ -51,6 +51,6 @@ bool CanQueryChaosRate()
     return ChaosMixOpened && !IsItemMovePending() && !IsMixBusy();
 }
 
-void CaptureMouseForUI() { DAT_07d78094 = 1; } // MouseOnWindow
+void CaptureMouseForUI() { MouseOnWindowFlag = 1; } // MouseOnWindow
 
 } // namespace UIState

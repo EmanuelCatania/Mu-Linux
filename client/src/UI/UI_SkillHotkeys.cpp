@@ -11,7 +11,7 @@
 // Returns hotkey slot index (0..19), or 0 if not found (igual que IDA).
 // Original wraps access in anti-tamper encrypt/decrypt; we skip that.
 // Ghidra: CharacterAttribute->Skill[iVar5+4] == unaff_retaddr (phantom param = Skill)
-// Real access: *(BYTE*)(DAT_07cf1ff4 + 0x57 + iVar5) == Skill
+// Real access: *(BYTE*)(CharacterAttributePtr + 0x57 + iVar5) == Skill
 // IDA: FindHotKey @ 0x004B1170 — int __cdecl FindHotKey(int Skill)
 //   v17 = 0;                                        // <- valor por defecto
 //   v4  = 0;
@@ -32,7 +32,7 @@
 int __stdcall FindHotKey(int Skill) {
     // anti-tamper hash table — skipped (encrypt CharacterMachine before read)
 
-    char* charAttr = (char*)DAT_07cf1ff4;  // IDA: CharacterAttribute
+    char* charAttr = (char*)CharacterAttributePtr;  // IDA: CharacterAttribute
     if (!charAttr)
         return 0;
 
@@ -58,13 +58,13 @@ void __cdecl RenderSkillIcon(int iIndex, float x, float y, float width, float he
 
     // anti-tamper hash table — skipped (encrypt CharacterMachine before read)
 
-    // Skill ID = CharacterAttribute->Skill[iIndex] (CharacterAttribute = DAT_07cf1ff4,
+    // Skill ID = CharacterAttribute->Skill[iIndex] (CharacterAttribute = CharacterAttributePtr,
     // el array Skill arranca en +0x57; Ghidra lo muestra como Skill[unaff_retaddr + 4]).
     // Se acota iIndex (puede venir de Hero[913] con basura): sin eso
     // CA[0x57+iIndex] se sale del buffer y el skillId basura indexa
     // SkillAttribute fuera de rango.
     if (iIndex < 0 || iIndex >= 60) return;
-    char* charAttr = (char*)DAT_07cf1ff4;
+    char* charAttr = (char*)CharacterAttributePtr;
     if (!charAttr) return;
     unsigned int skillId = (unsigned char)*(charAttr + 0x57 + iIndex);
 
@@ -77,7 +77,7 @@ void __cdecl RenderSkillIcon(int iIndex, float x, float y, float width, float he
     // rojizo si el heroe no tiene Uniria (818) ni Dinorant (819) en el slot de
     // helper (Hero + 696 = c+0x2B8).
     if (skillId == 0x2f) {
-        const BYTE* hero = (const BYTE*)(uintptr_t)DAT_07abf5d8;
+        const BYTE* hero = (const BYTE*)(uintptr_t)Hero;
         const short helperType = hero ? *(const short*)(hero + EntityOffset(696)) : -1;
         if (helperType != 818 && helperType != 819)
             Gfx::Color3f(1.0f, 0.5f, 0.5f);
@@ -97,10 +97,10 @@ void __cdecl RenderSkillIcon(int iIndex, float x, float y, float width, float he
 
     // RenderBitmap(298, x, y, width, height, u, v, uWidth, vHeight, 1, 1)
     GL_DrawTexture(0x12a, fX, fY, fWidth, fHeight,
-                 atlasU * _DAT_00552b7c,
-                 atlasV * _DAT_00552b7c,
-                 fWidth * _DAT_00552b7c,
-                 (fHeight - _DAT_0055256c) * _DAT_00552b7c,
+                 atlasU * 0.00390625f,
+                 atlasV * 0.00390625f,
+                 fWidth * 0.00390625f,
+                 (fHeight - 1.0f) * 0.00390625f,
                  1, 1);
 
     // anti-tamper hash table — skipped (encrypt CharacterMachine before read)
@@ -111,7 +111,7 @@ void __cdecl RenderSkillIcon(int iIndex, float x, float y, float width, float he
     //   0x93 SkillLevel[64]
     //   0xD3 HotKey[4][64]  — 4 characters × 64 slots, stride 64 bytes
     // HotKey[SelectedHero][iIndex+4] = charAttr + 0xD3 + SelectedHero*64 + (iIndex + 4)
-    unsigned int selectedHero = (unsigned int)DAT_005616ac;  // SelectedHero index (0..3)
+    unsigned int selectedHero = (unsigned int)SelectedHero;  // SelectedHero index (0..3)
     if (selectedHero > 3) selectedHero = 0;  // safety clamp
     int hotkey = (unsigned char)*(charAttr + 0xD3 + selectedHero * 64 + iIndex + 4);
     if (hotkey == 0) hotkey = 0xFF;  // empty slot → no-hotkey sentinel
@@ -119,7 +119,7 @@ void __cdecl RenderSkillIcon(int iIndex, float x, float y, float width, float he
     // anti-tamper hash table — skipped (decrypt CharacterMachine after read)
 
     if (hotkey != 0xFF) {
-        RenderNumber2D(x + _DAT_00552650, y + _DAT_00552a4c, hotkey, 9.0f, 10.0f);
+        RenderNumber2D(x + 4.0f, y + SkillHotkeyNumY, hotkey, 9.0f, 10.0f);
     }
-    DAT_00559c6c = (char)hotkey;
+    LastHotkeyChar = (char)hotkey;
 }

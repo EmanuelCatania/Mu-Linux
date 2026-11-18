@@ -10,11 +10,11 @@
 // Also maintains a 5-second sliding FPS average window.
 //
 // Globals:
-//   DAT_05826e00/04/10/14 — FPS accumulator ring buffer
-//   _DAT_005528a8 — reciprocal of 1000 (ms→s)
+//   FpsWindowStartMs/04/10/14 — FPS accumulator ring buffer
+//   MsToSeconds — reciprocal of 1000 (ms→s)
 //   FloatZero — float 0.0 (guard for division)
-//   _DAT_00552898 — FPS window interval (5.0 seconds)
-//   _DAT_00552890 — delta-time scale (1/1000)
+//   FpsWindowSec — FPS window interval (5.0 seconds)
+//   DeltaTimeScale — delta-time scale (1/1000)
 
 #include "stdafx.h"
 #include "Platform/ITimer.h"
@@ -32,12 +32,12 @@ void Timer_UpdateFrameTiming(void)
   undefined8 local_8;
 
   if (FpsTimerInitialized == 0) {
-    DAT_05826e10 = 0;
+    FpsWindowFrameCount = 0;
     FpsWindowStartTimeMs = Platform::GetTimer().MultimediaTicks();
     FpsTimerInitialized = 1;
   }
-  DAT_05826e10 = DAT_05826e10 + 1;
-  DAT_05826e14 = DAT_05826e14 + 1;
+  FpsWindowFrameCount = FpsWindowFrameCount + 1;
+  FpsFrameCountB = FpsFrameCountB + 1;
   DVar2 = Platform::GetTimer().MultimediaTicks();
   // DESVIACION DELIBERADA.  El binario hace
   // `fild qword [timeGetTime()]; fstp dword WorldTime`, o sea guarda los ms
@@ -58,20 +58,20 @@ void Timer_UpdateFrameTiming(void)
   local_8 = (double)(ulonglong)(DWORD)(DVar2 - WorldTimeEpochMs);
   WorldTime = (float)(longlong)local_8;
   FrameTimeCurrentMs = Platform::GetTimer().MultimediaTicks();
-  dVar1 = (double)(int)(FrameTimeCurrentMs - FpsWindowStartTimeMs) * _DAT_005528a8;
+  dVar1 = (double)(int)(FrameTimeCurrentMs - FpsWindowStartTimeMs) * MsToSeconds;
   if (dVar1 == FloatZero) {
     local_8 = -1.0;
   }
   else {
-    local_8 = (double)DAT_05826e10 / dVar1;
+    local_8 = (double)FpsWindowFrameCount / dVar1;
   }
-  if ((_DAT_00552898 < dVar1) && (10 < DAT_05826e10)) {
-    FpsWindowStartTimeMs = DAT_05826e00;
-    DAT_05826e10 = DAT_05826e14;
-    DAT_05826e00 = Platform::GetTimer().MultimediaTicks();
-    DAT_05826e14 = 0;
+  if ((FpsWindowSec < dVar1) && (10 < FpsWindowFrameCount)) {
+    FpsWindowStartTimeMs = FpsWindowStartMs;
+    FpsWindowFrameCount = FpsFrameCountB;
+    FpsWindowStartMs = Platform::GetTimer().MultimediaTicks();
+    FpsFrameCountB = 0;
   }
-  DeltaT = (float)(int)(FrameTimeCurrentMs - FrameTimePreviousMs) * _DAT_00552890;
+  DeltaT = (float)(int)(FrameTimeCurrentMs - FrameTimePreviousMs) * DeltaTimeScale;
   if (FrameTimeCurrentMs == FrameTimePreviousMs) {
     DeltaT = 0.000100000005;
   }

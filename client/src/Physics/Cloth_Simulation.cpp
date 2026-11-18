@@ -62,7 +62,7 @@ void __cdecl Cloth_PinTopRow(void* widget, float (*Matrix)[4])
 
     OBJECT* v15 = ClothSystem(_this).Owner;        // entity
     BMD_TransformPosition(
-        static_cast<void*>(AsModel(DAT_05828d58) + v15->Type),
+        static_cast<void*>(AsModel(ModelsBase) + v15->Type),
         (float *)Matrix,
         Position,
         WorldPosition,
@@ -219,12 +219,12 @@ void __fastcall VerletNode_AddAccel(void *a, float x, float y, float z) {
 
 // ClothNode_Integrate @ 0x00407AF0 — ClothNode_Integrate: paso de Euler semi-implícito.
 // Layout: +0x04 accel[3], +0x10 vel[3], +0x1C pos[3], +0x28 pinned(byte).
-// _DAT_00559070 = 400.0 (leído del binario). Port FIEL de IDA `sub_407AF0`.
+// ClothGravityScalar = 400.0 (leído del binario). Port FIEL de IDA `sub_407AF0`.
 void __fastcall ClothNode_Integrate(void *a, float v) {
     char *p = (char*)a;
     if (ClothPoint(p).Flags & 1) return;  // nodo fijado — no se integra
     for (int i = 0; i < 3; i++) {
-        double acc = _DAT_00559070 * ClothPoint(p).Acceleration[i];
+        double acc = ClothGravityScalar * ClothPoint(p).Acceleration[i];
         double vel = acc * v + ClothPoint(p).Velocity[i];
         ClothPoint(p).Velocity[i] = (float)vel;
         ClothPoint(p).Position[i] = (float)(vel * v + ClothPoint(p).Position[i]);
@@ -257,7 +257,7 @@ void __cdecl ClothNode_ApplyForces(uintptr_t _this, int a2, short a3)
   else              v11 = 0;
 
   const double v4   = (double)v11;
-  const float  wind[3] = { DAT_00590af4, DAT_00590af8, DAT_00590afc };
+  const float  wind[3] = { ClothWindSin, ClothWindCos, ClothWindZ };
   for (int i = 0; i < 3; ++i)
   {
     double drag = ClothPoint(_this).Velocity[i] * 0.0099999998;
@@ -265,9 +265,9 @@ void __cdecl ClothNode_ApplyForces(uintptr_t _this, int a2, short a3)
   }
 
   if ((a3 & 0x300) == 256)
-    ClothPoint(_this).Acceleration[2] = (float)((_DAT_00590af0 + 0.1) * v4 + ClothPoint(_this).Acceleration[2]);
+    ClothPoint(_this).Acceleration[2] = (float)((ClothWindKey + 0.1) * v4 + ClothPoint(_this).Acceleration[2]);
 
-  double v9 = _DAT_0055906c * _DAT_00559068;
+  double v9 = ClothFixedDt * ClothGravityG;
   if ((a3 & 0xC00) == 1024)
     ClothPoint(_this).Acceleration[2] = (float)(ClothPoint(_this).Acceleration[2] - v9 * 180.0);
   else
@@ -488,17 +488,17 @@ intptr_t __cdecl VerletNode_CtorExt(DWORD *_this)
 // ── vtable del ANCLA de tela (off_552514) ─────────────────────────────────
 // Leída del binario original (`Cliente armado/main.exe`, MD5 eb95ac…; su
 // contenido es data y no aparece en los decompiles):
-//     off_552508 (base) = { 0x00407DC0, 0x0040DB50, 0x00410AE0 }
+//     ClothBodyVTable (base) = { 0x00407DC0, 0x0040DB50, 0x00410AE0 }
 //     off_552514 (ext)  = { 0x00407EA0, 0x00410D80, 0x00407F20 }
 // El slot 2 es el que importa: `sub_409310` lo invoca por ancla y por nodo
 // para resolver la colisión con la esfera del cuerpo. 0x40DB50/0x410AE0/
 // 0x410D80 no están portadas y ningún call site de este build las usa: van
 // como no-ops para que el objeto sea válido.
 void __cdecl ClothAnchor_Collide(void *_this, void *node);
-void __fastcall FUN_00407ea0(void* ecx, int edx, BYTE param_1);
+void __fastcall ClothAnchor_DtorSlot0(void* ecx, int edx, BYTE param_1);
 // Adaptador: el dtor está portado como __fastcall (this en ECX, `edx` dummy) y
 // los call sites de este build invocan la vtable como `__cdecl (this, flags)`.
-static void __cdecl ClothAnchor_VSlot0(void *a, char flags) { FUN_00407ea0(a, 0, (BYTE)flags); }
+static void __cdecl ClothAnchor_VSlot0(void *a, char flags) { ClothAnchor_DtorSlot0(a, 0, (BYTE)flags); }
 static void __cdecl ClothAnchor_VSlot1(void *a) { (void)a; }   // 0x410D80 — sin portar, sin call sites
 void *g_ClothAnchorVTable[3] = {
     (void *)ClothAnchor_VSlot0,
@@ -506,9 +506,9 @@ void *g_ClothAnchorVTable[3] = {
     (void *)ClothAnchor_Collide
 };
 
-// vtable del NODO de tela (DAT_005524e8 del binario) = { 0x00408680 }.
-void __cdecl FUN_00408680(void *_this, char flags);
-void *g_ClothNodeVTable[1] = { (void *)FUN_00408680 };
+// vtable del NODO de tela (ClothNodeVtable del binario) = { 0x00408680 }.
+void __cdecl ClothNode_ScalarDtor(void *_this, char flags);
+void *g_ClothNodeVTable[1] = { (void *)ClothNode_ScalarDtor };
 
 // ClothAnchor_Ctor @ 0x00407E50 — ClothAnchor_Ctor: full constructor (base + ext).
 // ClothAnchor_Ctor (IDA-activated)
@@ -1041,7 +1041,7 @@ void DivineSkirt_Tick(const OBJECT* entity, int modelType, const PART_t* part, v
     CapturePose(*c, model, bones);
     const float angleZ = entity->Angle[2];
     for (int i = 0; i < 5; ++i) {
-        if (!Step(*c, _DAT_00590af0, frame, angleZ, 0.005f)) {
+        if (!Step(*c, ClothWindKey, frame, angleZ, 0.005f)) {
             Destroy(*c);
             return;
         }

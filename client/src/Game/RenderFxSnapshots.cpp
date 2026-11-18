@@ -30,14 +30,14 @@ Pool *Pools() {
     // Los offsets se toman de los creadores/lectores activos, no de los anclajes
     // históricos DAT que pueden apuntar al interior del primer slot.
     static Pool pools[] = {
-        {DAT_07b11670,OBJECT_STRIDE,kEffectPoolSize,2,2,4,0xfc},
-        {DAT_07b27150,JOINT_STRIDE,kJointPoolSize,4,4,8,0x40},
-        {DAT_07abf5f0,0x70,kParticlePoolSize,4,4,8,0x3c},
-        {DAT_07c5ab3c,0x70,200,4,4,-1,-1},
+        {EffectPoolBase,OBJECT_STRIDE,kEffectPoolSize,2,2,4,0xfc},
+        {JointPoolBase,JOINT_STRIDE,kJointPoolSize,4,4,8,0x40},
+        {SpritePoolBase,0x70,kParticlePoolSize,4,4,8,0x3c},
+        {SkillEffectPool,0x70,200,4,4,-1,-1},
         {g_WeatherSlotPool,OBJECT_STRIDE,40,2,2,4,0xfc},
-        {DAT_083a1218,OBJECT_STRIDE,10,2,2,4,0xfc},
-        {DAT_083a2e90,OBJECT_STRIDE,10,2,2,4,0xfc},
-        {g_RenderPool_07c608a8,0x2f0,100,4,4,-1,12},
+        {ButterflyObjectPool,OBJECT_STRIDE,10,2,2,4,0xfc},
+        {FishObjectPool,OBJECT_STRIDE,10,2,2,4,0xfc},
+        {g_RenderPool,0x2f0,100,4,4,-1,12},
         {g_PlayerRenderPool,OBJECT_STRIDE,100,2,2,4,0xfc},
         {g_PointerPool,0x70,100,4,4,-1,-1}
     };
@@ -49,12 +49,12 @@ intptr_t models=0;
 std::uint64_t epoch=0;
 bool published=false;
 bool Ready() {
-    return SceneFlag==2 ? DAT_083a7c49!=0 : SceneFlag==4 ?
-        CharSelectSceneInitialized && DAT_05826cb0>50 :
-        SceneFlag==5 && DAT_083a7c10 && DAT_07e11d1c<=30;
+    return SceneFlag==2 ? InitLogIn!=0 : SceneFlag==4 ?
+        CharSelectSceneInitialized && CurrentProtocolState>50 :
+        SceneFlag==5 && EnableMainRender && InputCooldownTicks<=30;
 }
 bool Context() {
-    return Ready() && scene==SceneFlag && world==gMapManager.GetCurrentMap() && models==DAT_05828d58;
+    return Ready() && scene==SceneFlag && world==gMapManager.GetCurrentMap() && models==ModelsBase;
 }
 Identity ReadIdentity(const Pool& pool, int index) {
     Identity id;
@@ -85,7 +85,7 @@ void RenderFxSnapshots_BeginStep() {
             if (id.live) memcpy(pool.previous.data()+index*pool.bytes,pool.base+index*pool.bytes,pool.bytes);
         }
     }
-    scene=SceneFlag; world=gMapManager.GetCurrentMap(); models=DAT_05828d58;
+    scene=SceneFlag; world=gMapManager.GetCurrentMap(); models=ModelsBase;
 }
 void RenderFxSnapshots_EndStep() {
     const bool context=Context();

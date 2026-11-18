@@ -22,7 +22,7 @@ void NetRecv_40(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // la clave es big-endian y RenderErrorMessage(0x78) resuelve
     // esta clave al nombre del personaje para el prompt.
     if (Size < 5) return;
-    DAT_07eaa0e4 = (DWORD)((Msg[3] << 8) | Msg[4]);
+    PartyInviteKey = (DWORD)((Msg[3] << 8) | Msg[4]);
     SetErrorMessage(120);
 }
 

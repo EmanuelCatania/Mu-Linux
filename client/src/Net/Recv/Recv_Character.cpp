@@ -61,7 +61,7 @@ bool s_HasPendingSkillKey = false;
 void ApplySkillKeyMap(void)
 {
     if (!s_HasPendingSkillKey || !CharacterAttribute) return;
-    const int hero = (int)DAT_005616ac;                  // SelectedHero
+    const int hero = (int)SelectedHero;                  // SelectedHero
     if (hero < 0 || hero > 4) return;
 
     BYTE* attr   = (BYTE*)(uintptr_t)CharacterAttribute;
@@ -106,8 +106,8 @@ void Recv_NewCharacterCalc(const BYTE* Msg, int Size)
 // ── Globals del state machine de login (mapping IDA → nuestro codebase) ────
 // IDA                            | nuestro
 // -------------------------------|----------------------------
-// CurrentProtocolState           | DAT_05826cb0 (server response code)
-// dword_83A7C14                  | DAT_083a7c14 (login sub-state)
+// CurrentProtocolState           | CurrentProtocolState (server response code)
+// 0x083A7C14                  | LoginSubState (login sub-state)
 // HeroKey                        | g_HeroKey (nuevo)
 
 unsigned short g_HeroKey = 0;
@@ -144,12 +144,12 @@ short s_PendingHeroGuildMarkRow = -1;
 //   +15..25 CharSet[11]       — equipment data; CharSet[0] codifica clase
 //
 // Acciones:
-//   1. Reset entity slot active flags (DAT_07abf5d0+0x2D2 = 0)
+//   1. Reset entity slot active flags (CharactersClient+0x2D2 = 0)
 //   2. Para cada record: CreateHero(slot, class, 0, x, y, rotate)
 //      donde x=slot*100, y=slot*50-50, rotate=(slot-1)*15
 //   3. Escribe Level (entity+0x1BE), CtlCode (entity+0x1C0), Name (entity+0x1C1..)
 //   4. (TODO) ChangeCharacterExt(slot, &CharSet[1]) — visualiza equipment
-//   5. DAT_05826cb0 = 51 (entra a estado char-select activo)
+//   5. CurrentProtocolState = 51 (entra a estado char-select activo)
 // ---------------------------------------------------------------------------
 void Recv_CharList(const BYTE* Msg, int Size)
 {
@@ -162,7 +162,7 @@ void Recv_CharList(const BYTE* Msg, int Size)
 
     // 1) Limpiar flags de los 5 slots previos
     for (int i = 0; i < MAX_PREVIEW; ++i) {
-        BYTE* slot = (BYTE*)(uintptr_t)(DAT_07abf5d0 + i * CHAR_STRIDE);
+        BYTE* slot = (BYTE*)(uintptr_t)(CharactersClient + i * CHAR_STRIDE);
         // El campo +0 (active) lo (re)setea CreateHero. Aquí limpiamos el flag
         // de "char seleccionado" que el F3/01 ChangeCharacter marca con 1.
         slot[CHAR_SLOT_AT] = 0;
@@ -172,7 +172,7 @@ void Recv_CharList(const BYTE* Msg, int Size)
     NetLog("NET:    F3/00 char count=%d", count);
 
     if (count == 0) {
-        DAT_05826cb0 = 51;
+        CurrentProtocolState = 51;
         return;
     }
 
@@ -228,7 +228,7 @@ void Recv_CharList(const BYTE* Msg, int Size)
     }
 
     // CurrentProtocolState = 51 → Scene_CharSelect lo usa como gate de render
-    DAT_05826cb0 = 51;
+    CurrentProtocolState = 51;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,11 +253,11 @@ void Recv_CreateChar(const BYTE* Msg)
         // Posición preview: y = slot*50 - 50, x = slot*100
         float x = (float)slot * 100.0f;
         float y = (float)slot * 50.0f - 50.0f;
-        // dword_7ABF20C: low byte = class, high byte = skin
-        int klass = (int)(DAT_07abf20c & 0xFF);
-        int skin  = (int)((DAT_07abf20c >> 8) & 0xFF);
+        // CharSelPageSlot: low byte = class, high byte = skin
+        int klass = (int)(CharSelPageSlot & 0xFF);
+        int skin  = (int)((CharSelPageSlot >> 8) & 0xFF);
         unsigned char* c = CreateHero((int)slot, klass, skin, x, y, 0.0f);
-        DAT_05826cb0 = 53;  // CurrentProtocolState — char created OK
+        CurrentProtocolState = 53;  // CurrentProtocolState — char created OK
         if (!c) {
             NetLog("NET:    F3/01 slot=%d CreateHero FAILED", slot);
             return;
@@ -269,10 +269,10 @@ void Recv_CreateChar(const BYTE* Msg)
         EntityName::Set(c, name);
         NetLog("NET:    F3/01 slot=%d class=%d created", slot, klass);
     } else if (result == 2) {
-        DAT_05826cb0 = 55;  // blocked / name-taken
+        CurrentProtocolState = 55;  // blocked / name-taken
         NetLog("NET:    F3/01 create blocked (result=2)");
     } else {
-        DAT_05826cb0 = 54;  // generic failure
+        CurrentProtocolState = 54;  // generic failure
         NetLog("NET:    F3/01 create failed (result=%d)", result);
     }
 }
@@ -281,18 +281,18 @@ void Recv_CreateChar(const BYTE* Msg)
 // F3/02 — ReceiveDeleteCharacter (inline en ProtocolCore @ 0x004389A0:1581)
 // Layout (C1): [0]=C1 [1]=len [2]=F3 [3]=02 [4]=result
 //   result==1 → success → CurrentProtocolState = 57 (0x39)
-//   else      → failed  → DAT_05826d20 = result; CurrentProtocolState = 58 (0x3A)
+//   else      → failed  → DeleteCharResult = result; CurrentProtocolState = 58 (0x3A)
 // La eliminación visual del slot ocurre en respuesta al state 57 vía Scene_CharSelect.
 // ---------------------------------------------------------------------------
 void Recv_DeleteChar(const BYTE* Msg)
 {
     BYTE result = Msg[4];
     if (result == 1) {
-        DAT_05826cb0 = 57;
+        CurrentProtocolState = 57;
         NetLog("NET:    F3/02 delete OK");
     } else {
-        DAT_05826d20 = result;
-        DAT_05826cb0 = 58;
+        DeleteCharResult = result;
+        CurrentProtocolState = 58;
         NetLog("NET:    F3/02 delete failed reason=%d", result);
     }
 }
@@ -409,10 +409,10 @@ void Recv_JoinMapServer(const BYTE* Msg, int bEncrypted)
         // PMSG_CHARACTER_INFO_SEND (F3/03) trae Money (DWORD) en offset 40 — la
         // struct NO es pack(1): tras MaxBP (WORD@36) hay 2 bytes de padding porque
         // Money (DWORD) se alinea a 4 → offset 40. El zen se muestra desde
-        // CharacterMachine+1352 (= DAT_07cf1ffc+1352).
-        if (DAT_07cf1ffc != 0) {
+        // CharacterMachine+1352 (= CharacterMachinePtr+1352).
+        if (CharacterMachinePtr != 0) {
             DWORD money = *(const DWORD*)(RB + 40);
-            *(DWORD*)((BYTE*)(uintptr_t)DAT_07cf1ffc + 1352) = money;
+            *(DWORD*)((BYTE*)(uintptr_t)CharacterMachinePtr + 1352) = money;
             NetLog("NET:    F3/03 Money=%u -> CharacterMachine+1352", money);
         }
 
@@ -421,10 +421,10 @@ void Recv_JoinMapServer(const BYTE* Msg, int bEncrypted)
         // entity+0x2EA >= 6 (Entity_UpdateRender.cpp). Entity_Spawn inicializa ese
         // campo en 3 para los mobs, pero el HÉROE no pasa por ese path, así que se
         // guarda el PKLevel real que manda el server.
-        if (DAT_07abf5d8) {
+        if (Hero) {
             BYTE pk = RB[44];
             if (pk > 6) pk = 0;                   // valor fuera de rango → normal
-            *(BYTE*)((BYTE*)(uintptr_t)DAT_07abf5d8 + EntityOffset(0x2ea)) = pk;
+            *(BYTE*)((BYTE*)(uintptr_t)Hero + EntityOffset(0x2ea)) = pk;
             NetLog("NET:    F3/03 PKLevel=%u -> hero+0x2EA", (unsigned)pk);
         }
 
@@ -459,13 +459,13 @@ void Recv_JoinMapServer(const BYTE* Msg, int bEncrypted)
     // nuevo hero se crea via CreateCharacterPointer a unas líneas más abajo
     // (paso 4-5) en un slot random. Los mobs/players del world via 0x12/0x13
     // viewport packets llegan DESPUÉS del OpenWorld y populan el pool limpio.
-    if (DAT_07abf5d0) {
+    if (CharactersClient) {
         // Full memset del pool para garantizar todos los bytes limpios.
         // 400 slots × 0x394 = ~366 KB. CreateCharacterPointer + viewport spawn
         // packets repopulan los campos relevantes después.
-        memset((void*)(uintptr_t)DAT_07abf5d0, 0, 400 * CHARACTER_STRIDE);
+        memset((void*)(uintptr_t)CharactersClient, 0, 400 * CHARACTER_STRIDE);
         // Reset hero pointer too — el siguiente CreateCharacterPointer setea uno nuevo.
-        DAT_07abf5d8 = nullptr;
+        Hero = nullptr;
     }
 
     // OpenWorld bloquea ~2 segundos cargando BMDs. Los dos pumps de mensajes
@@ -493,7 +493,7 @@ void Recv_JoinMapServer(const BYTE* Msg, int bEncrypted)
     // (4-5) Random hero slot + spawn at packet position.
     HeroIndex = (DWORD)(_rand() % 400);
     unsigned int heroIndex = HeroIndex;
-    unsigned char* heroPtr = (unsigned char*)(uintptr_t)DAT_07abf5d0 + (heroIndex * CHARACTER_STRIDE);
+    unsigned char* heroPtr = (unsigned char*)(uintptr_t)CharactersClient + (heroIndex * CHARACTER_STRIDE);
     float Rotation = ((float)direction - 1.0f) * 45.0f;
     CreateCharacterPointer(heroPtr, 390, PosX, PosY, Rotation);
 
@@ -530,7 +530,7 @@ void Recv_JoinMapServer(const BYTE* Msg, int bEncrypted)
     AsCharacter(heroPtr)->PK = Msg[44];      // skill bonus / curse-of-equipment slot
     heroPtr[EntityOffset(448)] = Msg[45];      // magic bonus / second-pwd flag
     AsCharacter(heroPtr)->Object.Kind = 1;            // alive flag
-    DAT_07abf5d8 = (char*)heroPtr;   // bind global Hero pointer
+    Hero = (char*)heroPtr;   // bind global Hero pointer
 
     // Si C1:5C llegó durante OpenWorld, la tabla de marks ya contiene la
     // marca real; falta únicamente restaurar su fila sobre el nuevo Character.
@@ -565,12 +565,12 @@ void Recv_JoinMapServer(const BYTE* Msg, int bEncrypted)
     // entrada al mundo funciona sin el efecto visual.
 
     // (10) Avanzar state machine.
-    DAT_05826cb0 = 61;           // CurrentProtocolState → enter-world fade
+    CurrentProtocolState = 61;           // CurrentProtocolState → enter-world fade
     // IDA ReceiveJoinMapServer L380: LockInputStatus = 0 (0x07E11D6F, el gate
     // del IME que WndProc pone en 1 al abrir el chat).  CheckIME_Status(1, 0)
     // queda pendiente: nuestro CheckIME_Status no reproduce todavia el
     // guardado/restaurado del estado de conversion.
-    DAT_07e11d6f = 0;            // LockInputStatus
+    LockInputStatus = 0;            // LockInputStatus
 
     // Envíos post-F3/03: el binario original 0.97k (FUN_00425840 Recv_JoinMapServer)
     // en el path bEncrypted=TRUE (= C3 packet, como manda MuEmu) NO envía
@@ -645,9 +645,9 @@ void Recv_Revival(const BYTE* Msg, int Size)
            (unsigned)*(const WORD*)(Msg + 8), (unsigned)*(const WORD*)(Msg + 10));
 
     // (1) Reset de input + estado de teleport, y baja del slot del héroe viejo.
-    DAT_083a42c4 = 0;                                  // MouseLButton = 0
+    MouseLButton = 0;                                  // MouseLButton = 0
     Teleport = 0;                                  // Teleport = 0
-    if (DAT_07abf5d8) *(BYTE*)DAT_07abf5d8 = 0;        // *(BYTE *)Hero = 0
+    if (Hero) *(BYTE*)Hero = 0;        // *(BYTE *)Hero = 0
 
     // (2) Stats desde el paquete.
     if (CharacterAttribute) {
@@ -662,29 +662,29 @@ void Recv_Revival(const BYTE* Msg, int Size)
             gHeroVitals.SetCurrent(VITAL_AG, *(const DWORD*)(Msg + 32));
         }
     }
-    if (DAT_07cf1ffc) {
+    if (CharacterMachinePtr) {
         // Money → CharacterMachine + 1352 (mismo campo que puebla el F3/03).
-        *(DWORD*)((BYTE*)(uintptr_t)DAT_07cf1ffc + 1352) = *(const DWORD*)(Msg + 20);
+        *(DWORD*)((BYTE*)(uintptr_t)CharacterMachinePtr + 1352) = *(const DWORD*)(Msg + 20);
     }
 
-    if (!DAT_07abf5d0) return;
+    if (!CharactersClient) return;
 
     // (3) Desactiva las 400 entidades del pool (el server reenvía el viewport).
     for (int i = 0; i < 400; ++i)
-        *((BYTE*)(uintptr_t)DAT_07abf5d0 + i * CHARACTER_STRIDE) = 0;
+        *((BYTE*)(uintptr_t)CharactersClient + i * CHARACTER_STRIDE) = 0;
 
     // (4) Se preservan dos campos del héroe viejo antes de re-crearlo:
     //     +474 (WORD) y +746 (BYTE, skill/curse slot que llega en el F3/03).
     WORD savedW474 = 0;
     BYTE saved746  = 0;
-    if (DAT_07abf5d8) {
-        savedW474 = *(const WORD*)((BYTE*)DAT_07abf5d8 + EntityOffset(474));
-        saved746  = *((const BYTE*)DAT_07abf5d8 + EntityOffset(746));
+    if (Hero) {
+        savedW474 = *(const WORD*)((BYTE*)Hero + EntityOffset(474));
+        saved746  = *((const BYTE*)Hero + EntityOffset(746));
     }
 
     // (5) Re-crea al héroe EN EL MISMO SLOT (HeroIndex no cambia).
     unsigned char* heroPtr =
-        (unsigned char*)(uintptr_t)DAT_07abf5d0 + (HeroIndex * CHARACTER_STRIDE);
+        (unsigned char*)(uintptr_t)CharactersClient + (HeroIndex * CHARACTER_STRIDE);
     const float Rotation = ((float)direction - 1.0f) * 45.0f;
     CreateCharacterPointer(heroPtr, 390, PosX, PosY, Rotation);
 
@@ -699,7 +699,7 @@ void Recv_Revival(const BYTE* Msg, int Size)
     *(WORD *)&AsCharacter(heroPtr)->GuildMarkIndex = savedW474;
     AsCharacter(heroPtr)->SafeZone = 1;                                  // SafeZone (ver +0x34E)
 
-    DAT_07abf5d8 = (char*)heroPtr;                     // re-bind del puntero Hero
+    Hero = (char*)heroPtr;                     // re-bind del puntero Hero
 
     // (7) Reconstruye el cuerpo desde CharacterMachine y corta la animación
     //     de muerte; después el efecto visual de aparición.
@@ -720,7 +720,7 @@ void Recv_Revival(const BYTE* Msg, int Size)
 
     // (9) Cambio de mapa (respawn en otro mapa) + altura del terreno.
     if ((int)gMapManager.GetCurrentMap() == (int)map) {
-        DAT_05826d24 = 0;   // SummonLife = 0
+        SummonLife = 0;   // SummonLife = 0
         return;
     }
 
@@ -750,7 +750,7 @@ void Recv_Revival(const BYTE* Msg, int Size)
         z = RequestTerrainHeight(AsCharacter(heroPtr)->Object.Position[0], AsCharacter(heroPtr)->Object.Position[1]) + 30.0f;
     }
     AsCharacter(heroPtr)->Object.Position[2] = z;
-    DAT_05826d24 = 0;       // SummonLife = 0
+    SummonLife = 0;       // SummonLife = 0
 }
 
 // ---------------------------------------------------------------------------
@@ -860,8 +860,8 @@ void Recv_LevelUp(const BYTE* Msg, int Size)
            (unsigned)*(DWORD*)(CA + 52));
 
     // Efecto visual de subida de nivel: 15 joints 1249 + el aura 1264.
-    if (DAT_07abf5d8) {
-        BYTE* hero = (BYTE*)DAT_07abf5d8;
+    if (Hero) {
+        BYTE* hero = (BYTE*)Hero;
         for (int i = 0; i < 15; ++i) {
             Joint_Create(1249, (float*)(hero + 16), (float*)(hero + 16),
                          (float*)(hero + 28), 0, (intptr_t)hero,
@@ -1014,11 +1014,11 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             // sea no se actualizaba en vivo.  El campo es +746
             // (0x2EA), el mismo que gatea el tinte rojo del render
             // (Entity_UpdateRender: `>= 6`).
-            if (Size < 7 || !DAT_07abf5d0) break;
+            if (Size < 7 || !CharactersClient) break;
             const int pkKey = Msg[5] + (Msg[4] << 8);
             const int pkIdx = FindCharacterIndex(pkKey);
             if (pkIdx < 0 || pkIdx >= 400) break;
-            BYTE* pkEnt = (BYTE*)(uintptr_t)DAT_07abf5d0 + (size_t)pkIdx * CHARACTER_STRIDE;
+            BYTE* pkEnt = (BYTE*)(uintptr_t)CharactersClient + (size_t)pkIdx * CHARACTER_STRIDE;
             const BYTE pkLevel = Msg[6];
             AsCharacter(pkEnt)->PK            = pkLevel;
             AsCharacter(pkEnt)->Level = (WORD)(pkLevel >= 6);
@@ -1069,7 +1069,7 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             //   +4 slot  .  +5.. ItemInfo
             if (Size < 5 + ITEM_INFO_SIZE) break;
             NetLog("NET:  -> F3/14 ItemModify slot=%d", Msg[4]);
-            DAT_07e91388 = 0;            // suelta el item agarrado
+            ItemPickedFlag = 0;            // suelta el item agarrado
             InsertInventoryItem(OffsetInventoryItems, 8, 8, Msg[4],
                          (BYTE*)Msg + 5, 0);
             PlayBuffer(49, 0, 0);
@@ -1082,7 +1082,7 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             // sin el, la barra del monstruo invocado nunca se
             // dibuja (el gate del HUD es `if (SummonLife)`).
             if (Size < 5) break;
-            DAT_05826d24 = Msg[4];       // SummonLife
+            SummonLife = Msg[4];       // SummonLife
             NetLog("NET:  -> F3/20 SummonLife=%u", (unsigned)Msg[4]);
             break;
 
@@ -1091,8 +1091,8 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             // +4.  IDA lo llama `SoccerTime` (0x05826C08) y lo lee
             // igual: `*((WORD *)ReceiveBuffer + 2)`.
             if (Size < 6) break;
-            DAT_05826c08 = *(const WORD*)(Msg + 4);   // SoccerTime
-            NetLog("NET:  -> F3/22 TimeView=%u", (unsigned)DAT_05826c08);
+            SoccerTime = *(const WORD*)(Msg + 4);   // SoccerTime
+            NetLog("NET:  -> F3/22 TimeView=%u", (unsigned)SoccerTime);
             break;
 
         case 0x23: {
@@ -1111,9 +1111,9 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             SoccerTeamName[1][8] = 0;    // 2 bytes; aca se corta en NUL
             GuildWarScore[0] = Msg[12];
             GuildWarScore[1] = Msg[21];
-            DAT_05826d33 = (char)(Msg[12] != 255);   // SoccerObserver
+            SoccerObserver = (char)(Msg[12] != 255);   // SoccerObserver
             NetLog("NET:  -> F3/23 GuildWarScore %d-%d obs=%d",
-                   GuildWarScore[0], GuildWarScore[1], (int)DAT_05826d33);
+                   GuildWarScore[0], GuildWarScore[1], (int)SoccerObserver);
             break;
         }
 
@@ -1199,8 +1199,8 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             }
             BYTE count = Msg[4];
             NetLog("NET:  → F3/11 SkillList count=%d size=%d", count, Size);
-            if (!DAT_07cf1ff4) break;
-            BYTE* CA = (BYTE*)(uintptr_t)DAT_07cf1ff4;
+            if (!CharacterAttributePtr) break;
+            BYTE* CA = (BYTE*)(uintptr_t)CharacterAttributePtr;
 
             // The server uses the same F3:11 packet for a delta:
             // count=0xFE adds one skill and count=0xFF removes one.
@@ -1218,8 +1218,8 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
                     if (CA[87 + i] != 0) ++total;
                 }
                 CA[86] = (BYTE)total;
-                if (DAT_07abf5d8) {
-                    BYTE* hero = (BYTE*)(uintptr_t)DAT_07abf5d8;
+                if (Hero) {
+                    BYTE* hero = (BYTE*)(uintptr_t)Hero;
                     if (hero[EntityOffset(913)] >= 20) hero[EntityOffset(913)] = 0;
                 }
                 NetLog("NET:    F3/11 Skill%s slot=%d skill=%d total=%d",
@@ -1248,11 +1248,11 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
                 }
             }
             CA[86] = count;
-            if (DAT_07abf5d8) {
-                BYTE* hero = (BYTE*)(uintptr_t)DAT_07abf5d8;
+            if (Hero) {
+                BYTE* hero = (BYTE*)(uintptr_t)Hero;
                 if (hero[EntityOffset(913)] >= 20) hero[EntityOffset(913)] = 0;
             }
-            if ((DWORD)DAT_005616ac > 4) DAT_005616ac = 0;   // 5 slots: 0..4 (era >= 4, pisaba el quinto)
+            if ((DWORD)SelectedHero > 4) SelectedHero = 0;   // 5 slots: 0..4 (era >= 4, pisaba el quinto)
             // La lista recien ahora esta completa: re-traducir las
             // teclas de skill que llegaron en el F3/30 (MuEmu lo
             // manda antes que este paquete).
@@ -1347,11 +1347,11 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             ApplySkillKeyMap();
 
             // 2) Opciones de juego.
-            DAT_07e11e18 = ((p[10] & 1) == 1);          // m_bAutoAttack
+            AutoAttackFlag = ((p[10] & 1) == 1);          // m_bAutoAttack
             m_bWhisperSound = (char)((p[10] & 4) == 4);    // m_bWhisperSound (0x07E11D80); antes un DAT_07e11e26 sin xrefs en IDA
-            DAT_00559c60 = p[11] + 448;                 // QKey  (item type)
-            DAT_00559c64 = p[12] + 448;                 // WKey
-            DAT_00559c68 = p[13] + 448;                 // EKey
+            QKeyItemType = p[11] + 448;                 // QKey  (item type)
+            WKeyItemType = p[12] + 448;                 // WKey
+            EKeyItemType = p[13] + 448;                 // EKey
 
             // 3) Chat window: líneas visibles + transparencia + on/off del listbox.
             //    IDA: si ChatWindow==0xFF usa 36 (=0x24 → 6 líneas, alpha 0.4).
@@ -1361,8 +1361,8 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             int transp    = cw & 0x0F;
             if (chatLines) {
                 g_bUseChatListBox = 1;
-                if (DAT_055c9ff0) {          // vtable +56 = setVisibleCnt (slot 14)
-                    DWORD* cobj = (DWORD*)DAT_055c9ff0;
+                if (ChatHistoryWidget) {          // vtable +56 = setVisibleCnt (slot 14)
+                    DWORD* cobj = (DWORD*)ChatHistoryWidget;
                     void** cvt  = ChatWidget_GetVTable(cobj);
                     if (cvt) {
                         typedef int (__fastcall *FnSetCnt)(DWORD*, int, int);
@@ -1372,8 +1372,8 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             } else {
                 g_bUseChatListBox = 0;            // sin recuadro (modo clásico)
             }
-            if (DAT_055c9ff0)
-                *(float*)((BYTE*)DAT_055c9ff0 + 188) = (float)transp * 0.1f;
+            if (ChatHistoryWidget)
+                *(float*)((BYTE*)ChatHistoryWidget + 188) = (float)transp * 0.1f;
 
             // 4) POSICIÓN de la ventana de chat según el modo.
             // IDA CheckFunctionButtons (0x4C04A0, handler de F4):
@@ -1382,15 +1382,15 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             // sub_40C690 = setPosition → obj[11]=x, obj[12]=y.
             // Nuestro ctor hardcodeaba (186,420) fijo, así que en modo clásico
             // los mensajes salían abajo en vez de arriba-izquierda.
-            if (DAT_055c9ff0) {
-                DWORD* cobj = (DWORD*)DAT_055c9ff0;
+            if (ChatHistoryWidget) {
+                DWORD* cobj = (DWORD*)ChatHistoryWidget;
                 if (g_bUseChatListBox) { cobj[11] = 186;          cobj[12] = 420; }
                 // Pantalla ancha: pegada al borde izquierdo de la ventana.
                 else              { cobj[11] = (DWORD)Ui::ClassicChatX(gWindow.GetRightShift()); cobj[12] = Ui::ClassicChatY;  }
             }
 
             NetLog("NET:    F3/30 opt=%02X Q=%d W=%d E=%d chatWin=%02X lines=%d transp=%d listbox=%d",
-                   p[10], DAT_00559c60, DAT_00559c64, DAT_00559c68,
+                   p[10], QKeyItemType, WKeyItemType, EKeyItemType,
                    cw, chatLines, transp, (int)g_bUseChatListBox);
             break;
         }
@@ -1451,7 +1451,7 @@ void NetRecv_2C(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // +26 Energia (mismos offsets que el F3/03 y el F3/06).
     static const int kStatOff[4]  = { 26, 24, 22, 20 };
 
-    BYTE* CA = (BYTE*)(uintptr_t)DAT_07cf1ffc;
+    BYTE* CA = (BYTE*)(uintptr_t)CharacterMachinePtr;
     NetLog("NET:  -> 0x2C Fruit result=%02X outcome=%d stat=%d amount=%d size=%d",
            Msg[3], outcome, statIdx, amount, Size);
 
@@ -1604,42 +1604,42 @@ void NetRecv_1C(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         }
 
         // Temporizadores de "cargando mundo" (IDA LABEL_108).
-        // DAT_07e11d1c = LoadingWorld: Render_GameFrame saltea el
+        // InputCooldownTicks = LoadingWorld: Render_GameFrame saltea el
         // frame mientras sea > 30, que es la "pantalla de carga".
-        DAT_07e11dc8 = Platform::GetTimer().Ticks();
-        DAT_07e11dc4 = 0;
-        DAT_07e11d1c = 30;
+        NpcKeepaliveTick = Platform::GetTimer().Ticks();
+        NpcDialogActiveFlag = 0;
+        InputCooldownTicks = 30;
 
         // ReceiveTeleport @ 00428210: restore the complete UI/
         // el estado de selección recién después de abrir el mundo nuevo. Las
         // direcciones de abajo son los globals originales, no los
         // similarly named 07E119xx input-state variables.
-        // (Aca habia un `DAT_05826d04 = 0` sin contraparte: la rama
+        // (Aca habia un `LegacyTeleport = 0` sin contraparte: la rama
         //  de gate de IDA, L476-503, no toca Teleport ni 0x5826D04.)
-        DAT_07e11d28 = 0;                 // MouseUpdateTime
-        DAT_00559bec = 6;                 // MouseUpdateTimeMax
+        MoveDebounceCounter = 0;                 // MouseUpdateTime
+        MouseUpdateTimeMax = 6;                 // MouseUpdateTimeMax
         InventoryOpened = 0;
         ShopOpened = 0;
         WarehouseOpened = 0;
-        DAT_00559f5f = 0;
-        DAT_07eaa14c = 0;
+        StoragePinOkFlag = 0;
+        PinInputModeState = 0;
         EventWindowOpened = 0;
         CreateEffect(1265, (float*)(hero + 16), (float*)(hero + 28),
                      (float*)(hero + 232), nullptr, (float*)hero,
                      (float*)-1, nullptr, 0);
         *(DWORD *)&AsCharacter(hero)->Object.Alpha = 0;
-        DAT_083a3ff0 = 0;                  // EnableEvent
+        WeatherModeState = 0;                  // EnableEvent
         SelectedItem = -1;                 // SelectedItem
         SelectedNpc = -1;                 // SelectedNpc
         SelectedCharacter = -1;                 // SelectedCharacter
         SelectedOperate = -1;                 // SelectedOperate
         Attacking = -1;                 // Attacking
-        DAT_00559c6d = -1;
+        UiAlphaByte = -1;
         // IDA hace un store de DWORD en 07EAA134. En este port de C++
         // sólo está representado su byte vivo RepairEnable_0; no
         // desbordar los globals host, que no son contiguos.
-        DAT_07eaa134 = 0;
-        *(BYTE*)&DAT_07eaa138 = 0;         // RepairEnable
+        RepairEnableFlag = 0;
+        *(BYTE*)&RepairEnable = 0;         // RepairEnable
     } else {
         // El server usa gate=0 para el teleport de skill. IDA
         // completa ese efecto visual y limpia Teleport acá.
@@ -1665,8 +1665,8 @@ void NetRecv_26(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (Size < 6) return;
     sub = Msg[3];
     NetLog("NET:  → 0x26 Life sub=0x%02x", sub);
-    if (DAT_07cf1ff4 == 0) return;
-    BYTE* charAttr = (BYTE*)(uintptr_t)DAT_07cf1ff4;
+    if (CharacterAttributePtr == 0) return;
+    BYTE* charAttr = (BYTE*)(uintptr_t)CharacterAttributePtr;
     if (sub == 0xFD) {
         EnableUse = 0;
     } else if (sub == 0xFE) {
@@ -1701,8 +1701,8 @@ void NetRecv_27(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (Size < 8) return;
     sub = Msg[3];
     NetLog("NET:  → 0x27 Mana sub=0x%02x", sub);
-    if (DAT_07cf1ff4 == 0) return;
-    BYTE* charAttr = (BYTE*)(uintptr_t)DAT_07cf1ff4;
+    if (CharacterAttributePtr == 0) return;
+    BYTE* charAttr = (BYTE*)(uintptr_t)CharacterAttributePtr;
     if (sub == 0xFE) {
         *(WORD*)(charAttr + 34) = (WORD)((Msg[4] << 8) | Msg[5]);
         *(WORD*)(charAttr + 38) = (WORD)((Msg[6] << 8) | Msg[7]);
@@ -1722,7 +1722,7 @@ void NetRecv_27(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         if (Size >= 16) gHeroVitals.SetCurrent(VITAL_MANA, *(const DWORD*)(Msg + 8));
         int slot = (int)sub - 12;
         if (slot >= 0 && slot < 64) {
-            BYTE* invBase = (BYTE*)&DAT_07ea9328;
+            BYTE* invBase = (BYTE*)&InventoryGridBase;
             BYTE* dur = invBase + slot * 68 + 11;
             if (*dur > 0) (*dur)--;
             if (*dur == 0) {

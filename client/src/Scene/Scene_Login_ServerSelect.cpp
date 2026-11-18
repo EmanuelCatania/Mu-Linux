@@ -2,11 +2,11 @@
 // Scene_Login_ServerSelect @ 0x0051F020   (375 lines decompiled)
 //
 // Renders the server-selection panel shown in Login sub-state 0.
-// Called directly from Scene_Login when DAT_083a7c14 == 0.
+// Called directly from Scene_Login when LoginSubState == 0.
 //
 // ─── SERVER LIST DATA ──────────────────────────────────────────────────────────
 //
-//  Base array : DAT_083a45d8
+//  Base array : ServerListBuffer
 //  Stride     : 0x21e bytes per server-group entry
 //  Count      : 24 entries  (0x83a7ac6 - 0x83a45d8) / 0x21e
 //
@@ -25,15 +25,15 @@
 //  So channel[i] load is at: entry+0x2e + i*0x1a
 //      channel[i] id  is at: entry+0x2c + i*0x1a  (ushort)
 //
-//  DAT_083a45ec = &DAT_083a45d8 + 0x14  (alias: start of num_channels field)
-//  DAT_083a4606 = &DAT_083a45d8 + 0x2e  (alias: start of load bytes)
+//  ServerEntryActiveFlag = &ServerListBuffer + 0x14  (alias: start of num_channels field)
+//  ServerChannelLoad = &ServerListBuffer + 0x2e  (alias: start of load bytes)
 //
 // ─── SELECTION STATE ───────────────────────────────────────────────────────────
 //
 //  ServerSelectHi  g_SelectedServer     — index of highlighted server group (-1 = none)
 //  ServerSelectLo  g_SelectedChannel    — index of highlighted channel within group
-//  DAT_00559c8c                       — set to 0x100 on entry (scissor/clip enable?)
-//  DAT_00559c78                       — set to 0xffffffff (clip mask full)
+//  LegacyInputTextWidth                       — set to 0x100 on entry (scissor/clip enable?)
+//  m_dwTextColor                       — set to 0xffffffff (clip mask full)
 //  SetBackgroundTextColor                       — set to 0 then 0x80000000
 //
 // ─── RENDERING LAYOUT (640×480 reference coords) ───────────────────────────────
@@ -44,15 +44,15 @@
 //      "%s %d Non-PVP %s" → non-PVP channel with number and load status
 //      "%s %d PVP %s"    → PVP channel with number and load status
 //    Format string addresses encode load status:
-//      s__s__s_00561914   = full  (server full)
-//      s__s__s_0056191c   = normal
-//      s__s__s_00561924   = low load
-//      s__s__d__s_0056192c = PVP + channel_num + full
-//      s__s__d__s_00561940 = PVP + channel_num + normal
-//      s__s__d__s_00561954 = PVP + channel_num + low
-//      s__s__d__s_00561968 = Non-PVP + channel_num + full
-//      s__s__d__s_00561974 = Non-PVP + channel_num + normal
-//      s__s__d__s_00561980 = Non-PVP + channel_num + low
+//      Fmt_ServerRowFull_A   = full  (server full)
+//      Fmt_ServerRowFull_B   = normal
+//      Fmt_ServerRowFull_C   = low load
+//      Fmt_ServerRow_A = PVP + channel_num + full
+//      Fmt_ServerRow_B = PVP + channel_num + normal
+//      Fmt_ServerRow_C = PVP + channel_num + low
+//      Fmt_ServerRow_D = Non-PVP + channel_num + full
+//      Fmt_ServerRow_E = Non-PVP + channel_num + normal
+//      Fmt_ServerRow_F = Non-PVP + channel_num + low
 //
 //  PASS 2 — tag PVP servers:
 //    For each entry: if server_name[X] == '2' → pvp_flag=1, else pvp_flag=0
@@ -81,27 +81,27 @@
 //
 //    Per channel row:
 //      Color (R,G,B):
-//        load & 0x80 → (1.0 * _DAT_00552928, 1.0 * _DAT_00552504)  = RED   (full)
+//        load & 0x80 → (1.0 * 0.7f, 1.0 * HalfScale)  = RED   (full)
 //        load < 100  → (1.0, 1.0, var)                              = GREEN (low)
-//          special: if channel_id%20==0 or ==0xe: B = _DAT_00552928 (teal)
-//        else        → (_DAT_005528b4, _DAT_005528b4, _DAT_005528b4)= WHITE (normal)
+//          special: if channel_id%20==0 or ==0xe: B = 0.7f (teal)
+//        else        → (0.4f, 0.4f, 0.4f)= WHITE (normal)
 //      Selected channel: same colors but at full brightness (fVar3=1.0)
 //      Non-selected: fVar3=0.8 (dimmed)
 //      Tex 0x12 quad at (230, y, 134, 20)
 //      Text: UI_RenderText(0x129 - textWidth/2, y+1, channelNameBuf)
 //
 //    Load bar (for non-full servers, below channel text):
-//      Position: x = _DAT_00552d48, y = channel_y + _DAT_00552d4c
+//      Position: x = ServerSelectX, y = channel_y + ServerSelectRowStep
 //      Filled dots  (0..load/5): Tex 0xf6 at (x+i*5, y, 3, 3)
-//        Color fades: brighter at right end (iStack00000020 counts 20→0 * fVar3 * _DAT_005524f4)
-//      Empty dots (load/5..20): Tex 0xf6, gray (fVar3 * _DAT_005524f4)
+//        Color fades: brighter at right end (iStack00000020 counts 20→0 * fVar3 * 0.1f)
+//      Empty dots (load/5..20): Tex 0xf6, gray (fVar3 * 0.1f)
 //
 //  PASS 5 — selected server IP display:
-//    Compares selected server name vs DAT_07d52c38 (currently connected server)
+//    Compares selected server name vs ServerSelectRenderFlag (currently connected server)
 //    If match:
 //      glColor3f(1.0, 0.3, 0.1)  — orange-red
-//      UI_RenderText(0x96, y-0x2e, DAT_07d530e8)   — server IP line 1
-//      UI_RenderText(0x96, y-0x1f, DAT_07d53214)   — server IP line 2
+//      UI_RenderText(0x96, y-0x2e, LegacyServerGroupStr)   — server IP line 1
+//      UI_RenderText(0x96, y-0x1f, LegacyServerChanStr)   — server IP line 2
 //
 // ─── HELPER FUNCTIONS ──────────────────────────────────────────────────────────
 //  __chkstk_probe (0x00541c10)
@@ -123,7 +123,7 @@
 
 // Scene_Login_ServerSelect @ 0x0051F020
 // Renders the server-group + channel selection panel inside the login screen.
-// Server list: DAT_083a45d8, stride 0x21e, 24 entries.
+// Server list: ServerListBuffer, stride 0x21e, 24 entries.
 // Stack allocates ~48 KB of display strings (triggers __chkstk_probe).
 int Scene_Login_ServerSelect(void)
 {
@@ -155,7 +155,7 @@ int Scene_Login_ServerSelect(void)
     // Grupos de servidor x canales x 100 bytes por nombre.
     //
     // DESBORDE (2026-10-02): estaba en 24 grupos, pero el loop de Pass 1 recorre
-    // 25 -- su cota es `DAT_083a45d8 + 0x34ee` y 0x34ee/0x21e = 25, y el array
+    // 25 -- su cota es `ServerListBuffer + 0x34ee` y 0x34ee/0x21e = 25, y el array
     // global da para eso (0x3600 = 13824 >= 25*0x21e).  El grupo 24 escribia en
     // chan_buf + 24*20*100 = 48000, o sea el primer byte DESPUES del buffer.
     // En Debug el padding del frame se lo comia; en Release reventaba la cookie
@@ -170,9 +170,9 @@ int Scene_Login_ServerSelect(void)
 
     iVar8  = 0;
     puVar9 = (undefined1*)chan_buf;
-    DAT_00559c8c = 0x100;
+    LegacyInputTextWidth = 0x100;
     iStack00000004 = 0;
-    puVar12 = (undefined1*)&DAT_083a45d8;
+    puVar12 = (undefined1*)&ServerListBuffer;
 
     // ── PASS 1: format channel name strings ──────────────────────────────────
     // IDA reference (0x0051F020):
@@ -232,13 +232,13 @@ int Scene_Login_ServerSelect(void)
             iStack00000004++;
             puVar9 = puStack00000010 + 2000;
             iVar8  = iVar8 + 0x14;
-        } while (reinterpret_cast<char*>(puVar12) < DAT_083a45d8 + 0x34ee);
+        } while (reinterpret_cast<char*>(puVar12) < ServerListBuffer + 0x34ee);
     }
 
     // ── PASS 2: tag PVP/non-PVP groups, count each ───────────────────────────
     iVar8  = 0;   // PVP count
     iVar10 = 0;   // non-PVP count
-    pcVar7 = (char*)&DAT_083a45ec;   // pvp_flag field of first entry (+0x14 from base)
+    pcVar7 = (char*)&ServerEntryActiveFlag;   // pvp_flag field of first entry (+0x14 from base)
     do {
         if (*pcVar7 != '\0') {
             // strlen of server name (pcVar7 - 0x14)
@@ -260,7 +260,7 @@ int Scene_Login_ServerSelect(void)
             }
         }
         pcVar7 = pcVar7 + 0x21e;
-    } while (pcVar7 < DAT_083a45d8 + 0x3502);
+    } while (pcVar7 < ServerListBuffer + 0x3502);
 
     // ── PASS 3: draw two-column server group list ─────────────────────────────
     puStack00000010 = puVar9;
@@ -286,10 +286,10 @@ int Scene_Login_ServerSelect(void)
         fVar4          = (float)iStartY;   // non-PVP base Y, leído por Pass 4
     }
 
-    DAT_00559c78 = 0xffffffff;
+    m_dwTextColor = 0xffffffff;
     iVar8 = 0;
     SetBackgroundTextColor = 0;
-    lpString = (LPCSTR)&DAT_083a45d8;
+    lpString = (LPCSTR)&ServerListBuffer;
 
     do {
         if (lpString[0x14] != '\0') {
@@ -330,18 +330,18 @@ LAB_0051f314:
         }
         lpString = lpString + 0x21e;
         iVar8++;
-    } while (lpString < DAT_083a45d8 + 0x34ee);
+    } while (lpString < ServerListBuffer + 0x34ee);
 
     // ── PASS 4: draw channel sub-list for selected server ─────────────────────
     iVar8 = ServerSelectHi;
     if (ServerSelectHi != -1) {
         iVar8 = ServerSelectHi * 0x21e;
-        if ((&DAT_083a45ed)[iVar8] == '\0') {
+        if ((&ServerEntryGroupFlag)[iVar8] == '\0') {
             // Non-PVP server: find Y position by counting preceding non-PVP entries
             iStack00000004 = 0;
-            pcVar7 = (char*)&DAT_083a45ec;
+            pcVar7 = (char*)&ServerEntryActiveFlag;
             do {
-                pbVar14 = (byte*)&DAT_083a45d8 + iVar8;
+                pbVar14 = (byte*)&ServerListBuffer + iVar8;
                 pbVar11 = (byte *)(pcVar7 - 0x14);
                 do {
                     bVar2 = *pbVar11;
@@ -359,22 +359,22 @@ LAB_0051f4b0:
                 if ((*pcVar7 != '\0') && (pcVar7[1] == '\0'))
                     iStack00000004++;
                 pcVar7 = pcVar7 + 0x21e;
-            } while (pcVar7 < DAT_083a45d8 + 0x3502);
+            } while (pcVar7 < ServerListBuffer + 0x3502);
             iVar5 = 0;
 LAB_0051f4d9:
-            // DAT_083a45ec es `*(DWORD*)(...)` lvalue → &DAT es DWORD*, así que
+            // ServerEntryActiveFlag es `*(DWORD*)(...)` lvalue → &DAT es DWORD*, así que
             // (&DAT)[iVar8] avanzaría iVar8*4 bytes. Disasm @ 0x0051f44e/4db
             // muestra `MOV AL, byte ptr [ECX + 0x83a45ec]` con ECX=iVar8 (byte
             // offset): se castea la base a char* para byte arith.
-            uVar6  = (uint)*((unsigned char*)&DAT_083a45ec + iVar8);
+            uVar6  = (uint)*((unsigned char*)&ServerEntryActiveFlag + iVar8);
             iVar10 = iVar5 * 0x10 + uVar6 * -10 + 8 + (int)fVar4;
         } else {
             // PVP server: find Y position by counting preceding PVP entries
             iStack00000004 = 0;
-            pcVar7 = (char*)&DAT_083a45ec;
+            pcVar7 = (char*)&ServerEntryActiveFlag;
             do {
                 pbVar11 = (byte *)(pcVar7 - 0x14);
-                pbVar14 = (byte*)&DAT_083a45d8 + iVar8;
+                pbVar14 = (byte*)&ServerListBuffer + iVar8;
                 do {
                     bVar2 = *pbVar11; bVar15 = bVar2 < *pbVar14;
                     if (bVar2 != *pbVar14) { iVar10 = (1 - (uint)bVar15) - (uint)(bVar15 != 0); goto LAB_0051f428; }
@@ -390,10 +390,10 @@ LAB_0051f428:
                 if ((*pcVar7 != '\0') && (pcVar7[1] == '\x01'))
                     iStack00000004++;
                 pcVar7 = pcVar7 + 0x21e;
-            } while (pcVar7 < DAT_083a45d8 + 0x3502);
+            } while (pcVar7 < ServerListBuffer + 0x3502);
             iVar5 = 0;
 LAB_0051f44c:
-            uVar6  = (uint)*((unsigned char*)&DAT_083a45ec + iVar8);  // byte arith (ver arriba)
+            uVar6  = (uint)*((unsigned char*)&ServerEntryActiveFlag + iVar8);  // byte arith (ver arriba)
             iVar10 = iVar5 * 0x10 + uVar6 * -10 + 8 + (int)fStack00000008;
         }
 
@@ -413,28 +413,28 @@ LAB_0051f44c:
                     fVar3 = 0.8f;   // not selected → dim
 
                 // Color by load
-                // DAT_083a4606 es `*(WORD*)(...)` y DAT_083a4604 es `*(DWORD*)(...)`
+                // ServerChannelLoad es `*(WORD*)(...)` y ServerChannelId es `*(DWORD*)(...)`
                 // lvalues: indexar `(&DAT)[idx]` o `&DAT+idx` multiplicaría el offset por
                 // 2/4. Disasm @ 0x0051f538/540:
                 //   MOV AX,word ptr [ECX+EBP*1+0x83a4604]   ; channel_id
                 //   MOV CL,byte ptr [ECX+EBP*1+0x83a4606]   ; load byte
                 // ECX=server*0x21e, EBP=chan*0x1a (ambos byte offsets).
-                if ((*((unsigned char*)&DAT_083a4606 + (int)fStack00000018 + iVar8) & 0x80) == 0x80) {
+                if ((*((unsigned char*)&ServerChannelLoad + (int)fStack00000018 + iVar8) & 0x80) == 0x80) {
                     // FULL: red-ish
-                    fVar18 = fVar3 * _DAT_00552928;
-                    fVar20 = fVar3 * _DAT_00552504;
-                } else if ((*((unsigned char*)&DAT_083a4606 + (int)fStack00000018 + iVar8) & 0x7f) < 100) {
+                    fVar18 = fVar3 * 0.7f;
+                    fVar20 = fVar3 * HalfScale;
+                } else if ((*((unsigned char*)&ServerChannelLoad + (int)fStack00000018 + iVar8) & 0x7f) < 100) {
                     // LOW: greenish; special teal for channel_id % 20 == 0 or 14
                     fVar18 = fVar3;
-                    if (((uint)*(ushort *)((char*)&DAT_083a4604 + (int)fStack00000018 + iVar8) % 0x14 == 0) ||
+                    if (((uint)*(ushort *)((char*)&ServerChannelId + (int)fStack00000018 + iVar8) % 0x14 == 0) ||
                         (fVar20 = fVar3,
-                         (uint)*(ushort *)((char*)&DAT_083a4604 + (int)fStack00000018 + iVar8) % 0x14 == 0xe))
+                         (uint)*(ushort *)((char*)&ServerChannelId + (int)fStack00000018 + iVar8) % 0x14 == 0xe))
                     {
-                        fVar20 = fVar3 * _DAT_00552928;
+                        fVar20 = fVar3 * 0.7f;
                     }
                 } else {
                     // NORMAL: white
-                    fStack00000008 = fVar3 * _DAT_005528b4;
+                    fStack00000008 = fVar3 * 0.4f;
                     fVar18 = fStack00000008; fVar20 = fStack00000008;
                 }
                 Gfx::Color3f(fVar3, fVar18, fVar20);
@@ -464,21 +464,21 @@ LAB_0051f44c:
 
                 // Load bar (only for non-full servers)
                 // WORD lvalue → byte arith (char* cast), igual que arriba.
-                if ((*((unsigned char*)&DAT_083a4606 + ServerSelectHi * 0x21e + (int)fVar4) & 0x80) != 0x80) {
-                    uVar6 = *((unsigned char*)&DAT_083a4606 + ServerSelectHi * 0x21e + (int)fVar4) & 0x7f;
+                if ((*((unsigned char*)&ServerChannelLoad + ServerSelectHi * 0x21e + (int)fVar4) & 0x80) != 0x80) {
+                    uVar6 = *((unsigned char*)&ServerChannelLoad + ServerSelectHi * 0x21e + (int)fVar4) & 0x7f;
                     if (100 < uVar6) uVar6 = 100;
                     uVar6 = uVar6 / 5;   // 0..20 dots
                     fStack00000008 = 0.0f;
                     if (uVar6 != 0) {
                         // Filled dots (gradient: darker on left, brighter on right)
-                        fVar20 = fVar18 + _DAT_00552d4c;
+                        fVar20 = fVar18 + ServerSelectRowStep;
                         iStack0000001c = 0;
                         iStack00000020 = 0x14;
                         do {
                             iVar8 = (int)fStack00000008;
-                            fStack0000000c = (float)iStack00000020 * fVar3 * _DAT_005524f4;
-                            Gfx::Color3f((float)(int)fStack00000008 * fVar3 * _DAT_005524f4, fStack0000000c, fStack0000000c);
-                            GL_DrawTexture(0xf6, (float)iStack0000001c + _DAT_00552d48,
+                            fStack0000000c = (float)iStack00000020 * fVar3 * 0.1f;
+                            Gfx::Color3f((float)(int)fStack00000008 * fVar3 * 0.1f, fStack0000000c, fStack0000000c);
+                            GL_DrawTexture(0xf6, (float)iStack0000001c + ServerSelectX,
                                          fVar20, 3.0f, 3.0f, 0.0f, 0.0f, 1.0f, 1.0f, '\x01', '\x01');
                             fStack00000008 = (float)(iVar8 + 1);
                             iStack00000020--;
@@ -487,14 +487,14 @@ LAB_0051f44c:
                         } while ((int)fStack00000008 < (int)uVar6);
                     }
                     // Empty dots (gray)
-                    fStack00000008 = fVar3 * _DAT_005524f4;
+                    fStack00000008 = fVar3 * 0.1f;
                     Gfx::Color3f(fStack00000008, fStack00000008, fStack00000008);
                     if (uVar6 < 0x14) {
-                        fVar18 = fVar18 + _DAT_00552d4c;
+                        fVar18 = fVar18 + ServerSelectRowStep;
                         fVar3  = (float)(uVar6 * 5);
                         fStack0000000c = fVar18;
                         do {
-                            GL_DrawTexture(0xf6, (float)(int)fVar3 + _DAT_00552d48,
+                            GL_DrawTexture(0xf6, (float)(int)fVar3 + ServerSelectX,
                                          fVar18, 3.0f, 3.0f, 0.0f, 0.0f, 1.0f, 1.0f, '\x01', '\x01');
                             fVar3 = (float)((int)fVar3 + 5);
                         } while ((int)fVar3 < 100);
@@ -505,18 +505,18 @@ LAB_0051f44c:
                 iVar8 = ServerSelectHi * 0x21e;
                 iStack00000004 += 0x14;
                 fStack00000018 = (float)((int)fVar4 + 0x1a);
-            } while (iVar5 < (int)(uint)*((unsigned char*)&DAT_083a45ec + iVar8));  // byte arith
+            } while (iVar5 < (int)(uint)*((unsigned char*)&ServerEntryActiveFlag + iVar8));  // byte arith
         }
 
         // ── PASS 5: selected server IP display ───────────────────────────────
-        DAT_00559c78 = 0xffffffff;
+        m_dwTextColor = 0xffffffff;
         SetBackgroundTextColor = 0x80000000;
         // Literales float (no bit-patterns 0x3fxxxxxx).
         Gfx::Color3f(1.0f, 0.2f, 0.1f);   // orange-red (IP text)
 
         fVar4   = (float)(int)(intptr_t)puStack00000010;
-        pbVar14 = (byte*)&DAT_07d52c38;
-        pbVar11 = (byte*)&DAT_083a45d8 + ServerSelectHi * 0x21e;
+        pbVar14 = (byte*)&ServerSelectRenderFlag;
+        pbVar11 = (byte*)&ServerListBuffer + ServerSelectHi * 0x21e;
         do {
             bVar2 = *pbVar11; bVar15 = bVar2 < *pbVar14;
             if (bVar2 != *pbVar14) { iVar8 = (1 - (uint)bVar15) - (uint)(bVar15 != 0); goto LAB_0051f8b4; }
@@ -529,8 +529,8 @@ LAB_0051f44c:
 LAB_0051f8b4:
         if (iVar8 == 0) {
             // Currently connected to this server → show IP
-            UI_RenderText(0x96, (intptr_t)puStack00000010 - 0x2e, (char*)&DAT_07d530e8, (LPSIZE)0x0, '\0', 0);
-            UI_RenderText(0x96, (int)fVar4 - 0x1f, (char*)&DAT_07d53214, (LPSIZE)0x0, '\0', 0);
+            UI_RenderText(0x96, (intptr_t)puStack00000010 - 0x2e, (char*)&LegacyServerGroupStr, (LPSIZE)0x0, '\0', 0);
+            UI_RenderText(0x96, (int)fVar4 - 0x1f, (char*)&LegacyServerChanStr, (LPSIZE)0x0, '\0', 0);
             iVar8  = 0;
         }
     }

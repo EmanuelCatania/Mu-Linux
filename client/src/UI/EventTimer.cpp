@@ -274,7 +274,7 @@ void CEventTimer::Toggle()
     }
     if (!UIState::CanOpenSidePanel()) return;
     // Comparte la columna x=450 con inventario/personaje/guild/party: se alternan.
-    if (InventoryOpened && (int)DAT_07e91388 > 0) Item_ReturnPickedItem();
+    if (InventoryOpened && (int)ItemPickedFlag > 0) Item_ReturnPickedItem();
     InventoryOpened = 0;
     CharacterOpened = 0;
     GuildOpened = 0;

@@ -6,10 +6,10 @@
 #include "functions.h"
 
 // ExitProgram @ 0x004F6CB0 — ExitProgram
-// Shows the fatal error message at lpText_07d2aa08 then destroys the main window.
+// Shows the fatal error message at ExitErrorMsgBuf then destroys the main window.
 void __cdecl ExitProgram(void)
 {
-    Platform::GetWindow().ShowError(lpText_07d2aa08, NULL, true, false);
+    Platform::GetWindow().ShowError(ExitErrorMsgBuf, NULL, true, false);
     gWindow.RequestCloseApplication();  // WM_DESTROY
 }
 

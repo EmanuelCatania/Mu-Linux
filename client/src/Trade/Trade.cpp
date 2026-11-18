@@ -20,7 +20,7 @@
 //
 // ── SHOP ITEM TABLE ──────────────────────────────────────────────────────────
 //
-//   Base: DAT_07e919b8  (entity_id column; stride 0x50 between slots)
+//   Base: TradeSlotEntityIds  (entity_id column; stride 0x50 between slots)
 //   Slot layout (0x50 bytes per slot):
 //     +0x00  dword  entity_id       — which entity sells this item
 //     +0x04  char[4] name[0..3]     — item name first 4 bytes
@@ -29,20 +29,20 @@
 //     +0x0D  byte[64] item_nibbles  — 0x40 nibbles (= 0x20 bytes raw item data)
 //                                     packed: even nibble = high4, odd nibble = low4
 //
-//   Shop name search target: lpString_05826bfc (char[4], 4-byte aligned)
-//   Cached slot index:        DAT_00559684  (-1 = not found)
+//   Shop name search target: GuildNameCacheA (char[4], 4-byte aligned)
+//   Cached slot index:        CachedShopSlotIndex  (-1 = not found)
 //
 // ── GLOBAL TRADE STATE ───────────────────────────────────────────────────────
 //
-//   DAT_05826d30  byte  trade_active     1 = trade window open
-//   DAT_05826d31  byte  duel_mode        1 = duel (vs regular trade)
-//   DAT_05826d32  byte  trade_param      from packet byte[0xc] in Trade_Open
-//   DAT_05826c04  byte  trade_accepted   0 = not yet accepted
-//   DAT_05826c00  dword temporal de solicitud heredada (la atribución anterior a 0x61 era errónea)
-//   lpString_05826bfc  char[4]  active_shop_name  4-byte NPC name key
-//   DAT_00559684  int   cached_shop_slot_index
-//   DAT_07eaa0d0  dword  — set to 0xffffffff on trade entity clear (0x5d)
-//   DAT_07eaa114  byte  — set to 0 on trade entity clear (0x5d)
+//   LegacyTradeActive  byte  trade_active     1 = trade window open
+//   LegacyDuelMode  byte  duel_mode        1 = duel (vs regular trade)
+//   LegacyTradeParam  byte  trade_param      from packet byte[0xc] in Trade_Open
+//   LegacyTradeAccepted  byte  trade_accepted   0 = not yet accepted
+//   LegacyTradeRequester  dword temporal de solicitud heredada (la atribución anterior a 0x61 era errónea)
+//   GuildNameCacheA  char[4]  active_shop_name  4-byte NPC name key
+//   CachedShopSlotIndex  int   cached_shop_slot_index
+//   TradePartnerKey  dword  — set to 0xffffffff on trade entity clear (0x5d)
+//   GuildOpened  byte  — set to 0 on trade entity clear (0x5d)
 //
 // ── ENTITY TRADE OFFSETS (new, stride 0x394) ─────────────────────────────────
 //
@@ -56,7 +56,7 @@
 //     stride 0x12C between entries at DAT_07d4fd58:
 //     0 → DAT_07d4fd58   1 → DAT_07d4fe84   2 → DAT_07d4ffb0
 //     3 → DAT_07d500dc   4 → DAT_07d50208   5 → DAT_07d50334   6 → DAT_07d50460
-//     Label strings at DAT_05826dc8, stride 4 (short identifier per result)
+//     Label strings at TradeResultLabels, stride 4 (short identifier per result)
 //
 //   Trade_ItemUpdate result codes (byte[3] in 0x63 packet):
 //     0 → DAT_07d506b8   (no iVar8 change → sends opcode 0x6b+0x75)
@@ -93,19 +93,19 @@ void __cdecl UI_OpenWindow(char* title, int mode);
 #define SHOP_SLOT_COUNT   0x400   // approximate; bound check at 0x7ea51ec
 
 // Global trade state
-extern BYTE  g_trade_active;            // DAT_05826d30
-extern BYTE  g_duel_mode;              // DAT_05826d31
-extern BYTE  g_trade_param;            // DAT_05826d32
-extern BYTE  g_trade_accepted;         // DAT_05826c04
-extern DWORD g_trade_requester;        // DAT_05826c00
-extern char  g_active_shop_name[4];    // lpString_05826bfc (at 0x05826bfc)
-extern int   g_cached_shop_slot;       // DAT_00559684
-extern BYTE* g_EntityBase;             // DAT_07abf5d0 (legacy alias, may be null)
-extern intptr_t g_LocalEntity;            // DAT_07abf5d8 (player entity ptr)
+extern BYTE  g_trade_active;            // LegacyTradeActive
+extern BYTE  g_duel_mode;              // LegacyDuelMode
+extern BYTE  g_trade_param;            // LegacyTradeParam
+extern BYTE  g_trade_accepted;         // LegacyTradeAccepted
+extern DWORD g_trade_requester;        // LegacyTradeRequester
+extern char  g_active_shop_name[4];    // GuildNameCacheA (at 0x05826bfc)
+extern int   g_cached_shop_slot;       // CachedShopSlotIndex
+extern BYTE* g_EntityBase;             // CharactersClient (legacy alias, may be null)
+extern intptr_t g_LocalEntity;            // Hero (player entity ptr)
 
-// g_EntityBase nunca apunta al array de entidades: la base real es DAT_07abf5d0
+// g_EntityBase nunca apunta al array de entidades: la base real es CharactersClient
 // (la setea WinMain), y ENTITY la usa directo.
-#define ENTITY(idx)  ((BYTE*)DAT_07abf5d0 + (idx) * CHARACTER_STRIDE)
+#define ENTITY(idx)  ((BYTE*)CharactersClient + (idx) * CHARACTER_STRIDE)
 
 
 // ============================================================
@@ -126,7 +126,7 @@ int Shop_RegisterItem(DWORD entity_id, DWORD* name, BYTE* item_data)
 {
     return 0;  // AUTO-SKIP: absolute end-bound loop (Ghidra artifact — pool not populated in our build).
     BYTE* table = (BYTE*)SHOP_TABLE_BASE - 4;  // base adjusted: entity_id 4 bytes before name
-    // DAT_07e919b8 = entity_id col; DAT_07e919bc = name col (same slot, +4 offset)
+    // TradeSlotEntityIds = entity_id col; GuildInfoTable = name col (same slot, +4 offset)
 
     int slot = 0;
     BYTE* entry = (BYTE*)0x07e919bc;  // name column base
@@ -274,7 +274,7 @@ void PacketHandler_0x5c(BYTE* pkt)
 // Packet: [C1][len][5d][entity_hi][entity_lo]
 //   entity_id = byte[3]*256 + byte[2]
 //   entity[+0x1da] = 0xffff
-//   DAT_07eaa114 = 0; DAT_07eaa0d0 = 0xffffffff
+//   GuildOpened = 0; TradePartnerKey = 0xffffffff
 // ============================================================
 void PacketHandler_0x5d(BYTE* pkt)
 {
@@ -287,8 +287,8 @@ void PacketHandler_0x5d(BYTE* pkt)
     *(SHORT*)&((CHARACTER*)(uintptr_t)(ent))->GuildMarkIndex = (SHORT)0xFFFF;
     // Símbolos del linker para 0x07eaa114 y 0x07eaa0d0 (no las direcciones
     // literales del binario).
-    DAT_07eaa114 = 0;
-    DAT_07eaa0d0 = 0xFFFFFFFF;
+    GuildOpened = 0;
+    TradePartnerKey = 0xFFFFFFFF;
 }
 
 
@@ -359,7 +359,7 @@ int Shop_FindSlotByName(BYTE* name)
 //   0 = request sent (or "Player is busy")
 //   1 = accepted
 //   2-6 = rejection reasons / errors
-// Label table at DAT_05826dc8, stride 4 (short UI label per result).
+// Label table at TradeResultLabels, stride 4 (short UI label per result).
 // ============================================================
 static void LegacyMisclassified_TradeRequestResult(BYTE* pkt)
 {
@@ -417,9 +417,9 @@ static void LegacyMisclassified_TradeRequestResult(BYTE* pkt)
 // ============================================================
 static void LegacyMisclassified_TradeIncomingReq(BYTE* pkt)
 {
-    *(DWORD*)g_active_shop_name = *(DWORD*)(pkt + 3);  // lpString_05826bfc
-    g_trade_requester = *(DWORD*)(pkt + 7);             // DAT_05826c00
-    g_trade_accepted = 0;                                // DAT_05826c04
+    *(DWORD*)g_active_shop_name = *(DWORD*)(pkt + 3);  // GuildNameCacheA
+    g_trade_requester = *(DWORD*)(pkt + 7);             // LegacyTradeRequester
+    g_trade_accepted = 0;                                // LegacyTradeAccepted
 
     SetErrorMessage(0x80);  // ShowErrorDialog — "wants to trade" / "wants to duel" dialog
 
@@ -452,7 +452,7 @@ static void LegacyMisclassified_TradeOpen(BYTE* pkt)
     char window_title[100];
 
     g_trade_accepted = 0;
-    *(DWORD*)g_active_shop_name = *(DWORD*)(pkt + 3);  // lpString_05826bfc
+    *(DWORD*)g_active_shop_name = *(DWORD*)(pkt + 3);  // GuildNameCacheA
     g_trade_requester = *(DWORD*)(pkt + 7);
 
     g_trade_active = 1;

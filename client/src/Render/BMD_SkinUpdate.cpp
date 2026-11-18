@@ -15,14 +15,14 @@ void BMD_SkinUpdate(void)
     // For each skinned vertex: scale position, map through parent-bone matrix,
     // then write world position.  Also writes vertex normal from bone frame.
     int iVar10 = 0;
-    if (0 < DAT_00590c10) {
-        float *pfVar14 = &DAT_055c4068;          // output world vertex array (stride 0x1b)
-        float *pfVar11 = &DAT_00593008;          // source vertex array       (stride 3)
-        short *psVar16 = &DAT_00590c32;          // parent bone index array   (stride 0x11)
+    if (0 < SkinnedVertexCount) {
+        float *pfVar14 = &BoneWorldVtxBase;          // output world vertex array (stride 0x1b)
+        float *pfVar11 = &SrcVertexPosTable;          // source vertex array       (stride 3)
+        short *psVar16 = &ParentBoneIdxTable;          // parent bone index array   (stride 0x11)
         do {
-            float local_48 = pfVar11[-1] * _DAT_0055259c;
-            float local_44 = pfVar11[ 0] * _DAT_0055259c;
-            float local_40 = pfVar11[ 1] * _DAT_0055259c;
+            float local_48 = pfVar11[-1] * GlobalMeshScale;
+            float local_44 = pfVar11[ 0] * GlobalMeshScale;
+            float local_40 = pfVar11[ 1] * GlobalMeshScale;
             float local_3c, local_38, local_34;
             float local_30[12];
 
@@ -40,21 +40,21 @@ void BMD_SkinUpdate(void)
                 // Child bone: build local matrix then combine with parent
                 int iBone = (int)*psVar16;
                 Matrix_BuildFromEuler(&local_48, local_30);
-                R_ConcatTransforms((float *)(&DAT_055c4038 + iBone * 0x6c), local_30, pfVar14 - 0xc);
+                R_ConcatTransforms((float *)(&BoneWorldMatBase + iBone * 0x6c), local_30, pfVar14 - 0xc);
                 EulerToMatrix(&local_48, local_30);
-                R_ConcatTransforms(local_30, (float *)(&DAT_055c4068 + iBone * 0x6c), pfVar14);
+                R_ConcatTransforms(local_30, (float *)(&BoneWorldVtxBase + iBone * 0x6c), pfVar14);
                 // Transform normal by bone matrix, add bone world-space origin
-                Vector_Transform(pfVar11 - 0x259, (float *)(&DAT_055c4038 + iBone * 0x6c), &local_3c);
-                pfVar14[0xc] = local_3c + (&DAT_055c4098)[iBone * 0x1b];
-                pfVar14[0xd] = local_38  + (&DAT_055c409c)[iBone * 0x1b];
-                pfVar14[0xe] = local_34  + (&DAT_055c40a0)[iBone * 0x1b];
+                Vector_Transform(pfVar11 - 0x259, (float *)(&BoneWorldMatBase + iBone * 0x6c), &local_3c);
+                pfVar14[0xc] = local_3c + (&BoneWorldPosX)[iBone * 0x1b];
+                pfVar14[0xd] = local_38  + (&BoneWorldPosY)[iBone * 0x1b];
+                pfVar14[0xe] = local_34  + (&BoneWorldPosZ)[iBone * 0x1b];
             }
 
             iVar10++;
             psVar16 += 0x11;   // next parent-bone entry
             pfVar11 += 3;      // next source vertex (3 floats)
             pfVar14 += 0x1b;   // next output vertex (0x1b floats)
-        } while (iVar10 < DAT_00590c10);
+        } while (iVar10 < SkinnedVertexCount);
     }
 
     // ── Phase 2: per-triangle normal reconstruction ───────────────────────────
@@ -62,23 +62,23 @@ void BMD_SkinUpdate(void)
     // holds the bone index (short).  Subtract bone origin, transform by bone
     // rotation matrix, normalize the result normal vector.
     iVar10 = 0;
-    if (0 < DAT_00593968) {
-        float *pfVar11 = &DAT_00608c70;
+    if (0 < TriangleCount) {
+        float *pfVar11 = &TriangleVertDataTable;
         do {
             int iVar12 = 3;   // 3 vertices per triangle
             do {
                 int iVar5 = (int)*(short *)((BYTE*)pfVar11 - 2);  // bone index for this vertex
-                float local_48 = pfVar11[0] - (&DAT_055c4098)[iVar5 * 0x1b];
-                float local_44 = pfVar11[1] - (&DAT_055c409c)[iVar5 * 0x1b];
-                float local_40 = pfVar11[2] - (&DAT_055c40a0)[iVar5 * 0x1b];
+                float local_48 = pfVar11[0] - (&BoneWorldPosX)[iVar5 * 0x1b];
+                float local_44 = pfVar11[1] - (&BoneWorldPosY)[iVar5 * 0x1b];
+                float local_40 = pfVar11[2] - (&BoneWorldPosZ)[iVar5 * 0x1b];
                 // Transform position by bone rotation matrix
-                Vector_Transform(&local_48, (float *)(&DAT_055c4068 + iVar5 * 0x6c), pfVar11);
+                Vector_Transform(&local_48, (float *)(&BoneWorldVtxBase + iVar5 * 0x6c), pfVar11);
                 // Transform normal (stored at +3..+5) by same bone rotation
                 local_48 = pfVar11[3];
                 local_44 = pfVar11[4];
                 local_40 = pfVar11[5];
                 Vector_Transform(&local_48,
-                             (float *)(&DAT_055c4068 + *(short *)((BYTE*)pfVar11 - 2) * 0x6c),
+                             (float *)(&BoneWorldVtxBase + *(short *)((BYTE*)pfVar11 - 2) * 0x6c),
                              pfVar11 + 3);
                 // Normalize the output normal
                 Vec3_Normalize(pfVar11 + 3);
@@ -86,14 +86,14 @@ void BMD_SkinUpdate(void)
                 iVar12--;
             } while (iVar12 != 0);
             iVar10++;
-        } while (iVar10 < DAT_00593968);
+        } while (iVar10 < TriangleCount);
     }
 
     // ── Phase 3: build material-group vertex/UV/normal index tables ───────────
     // Reset per-mesh counters (stride 0x637d2 * sizeof(short))
-    short sVar4 = (short)DAT_00593968;
-    short *puVar6 = &DAT_0080a428;
-    DAT_008097a0 = 0;
+    short sVar4 = (short)TriangleCount;
+    short *puVar6 = &UvIndexCount;
+    MaterialGroupCount = 0;
     do {
         puVar6[-1] = 0;   // vert count
         puVar6[ 0] = 0;   // UV count
@@ -105,15 +105,15 @@ void BMD_SkinUpdate(void)
     int local_54 = 0;
     if (0 < (int)sVar4) {
         int   local_4c = 0x3416;
-        float *local_50 = &DAT_00608c70;
-        BYTE  *local_58 = (BYTE *)&DAT_0059396a;
+        float *local_50 = &TriangleVertDataTable;
+        BYTE  *local_58 = (BYTE *)&TriangleMatNameTable;
 
         do {
             // --- Find or create material group for this triangle's material name ---
-            int iVar12 = (int)DAT_008097a0;
+            int iVar12 = (int)MaterialGroupCount;
             int iVar10_inner = 0;
             if (0 < iVar12) {
-                BYTE *pbVar13  = &DAT_008097a2;
+                BYTE *pbVar13  = &MaterialNameTable;
                 BYTE *pbVar7   = local_58;
                 BYTE *pbVar17  = pbVar13;
             do_strcmp:
@@ -142,8 +142,8 @@ void BMD_SkinUpdate(void)
                 } while (iVar10_inner < iVar12);
             }
             // New group — store material name into table
-            *(short *)(&DAT_0080a424 + iVar12 * 0x31be9) = DAT_008097a0;
-            // strcpy material name into DAT_008097a2[iVar12 * 0x20]
+            *(short *)(&PackedVertexBuffer + iVar12 * 0x31be9) = MaterialGroupCount;
+            // strcpy material name into MaterialNameTable[iVar12 * 0x20]
             {
                 unsigned int uLen = 0xffffffff;
                 BYTE *pbSrc = local_58;
@@ -158,7 +158,7 @@ void BMD_SkinUpdate(void)
                     pbSrc = pbEnd;
                 } while (bv != 0);
                 uLen = ~uLen; // strlen(name)+1
-                BYTE *pDst = &DAT_008097a2 + iVar12 * 0x20;
+                BYTE *pDst = &MaterialNameTable + iVar12 * 0x20;
                 BYTE *pData = pbEnd + 1 - uLen; // = local_58
                 for (unsigned int u = uLen >> 2; u != 0; u--) {
                     *(DWORD*)pDst = *(DWORD*)pData;
@@ -168,7 +168,7 @@ void BMD_SkinUpdate(void)
                     *pDst++ = *pData++;
                 }
             }
-            DAT_008097a0 = DAT_008097a0 + 1;
+            MaterialGroupCount = MaterialGroupCount + 1;
             iVar10_inner = iVar12;
 
         found_group:
@@ -177,16 +177,16 @@ void BMD_SkinUpdate(void)
             int iVar5 = 0;
             do {
                 // --- Vertex position lookup / insert ---
-                int iVar15 = *(short *)((BYTE*)&DAT_0080a424 + iVar12 + 2) - 1;
+                int iVar15 = *(short *)((BYTE*)&PackedVertexBuffer + iVar12 + 2) - 1;
                 if (-1 < iVar15) {
-                    float *pfVar11 = (float *)(&DAT_0080a424 + iVar10_inner * 0x31be9 + iVar15 * 4 + 5);
+                    float *pfVar11 = (float *)(&PackedVertexBuffer + iVar10_inner * 0x31be9 + iVar15 * 4 + 5);
                     do {
                         if ((*local_50 == pfVar11[-1]) &&
                             (local_50[1] == *pfVar11) &&
                             (local_50[2] == pfVar11[1])) {
                             // Found existing vertex
-                            (&DAT_00879588)[iVar10_inner * 0x637d2 + iVar5 +
-                                (short)(&DAT_0080a42c)[iVar10_inner * 0x637d2] * 4] = (short)iVar15;
+                            (&VertexIndexTable)[iVar10_inner * 0x637d2 + iVar5 +
+                                (short)(&VertexIndexCount)[iVar10_inner * 0x637d2] * 4] = (short)iVar15;
                             goto done_vert;
                         }
                         iVar15--;
@@ -195,33 +195,33 @@ void BMD_SkinUpdate(void)
                 }
                 // Vertex not found — append to buffer
                 {
-                    (&DAT_00879588)[iVar10_inner * 0x637d2 + iVar5 +
-                        (short)(&DAT_0080a42c)[iVar10_inner * 0x637d2] * 4] =
-                        *(short *)((BYTE*)&DAT_0080a424 + iVar12 + 2);
-                    *(short *)(&DAT_0080a424 + iVar10_inner * 0x31be9 +
-                        *(short *)((BYTE*)&DAT_0080a424 + iVar12 + 2) * 4 + 3) =
+                    (&VertexIndexTable)[iVar10_inner * 0x637d2 + iVar5 +
+                        (short)(&VertexIndexCount)[iVar10_inner * 0x637d2] * 4] =
+                        *(short *)((BYTE*)&PackedVertexBuffer + iVar12 + 2);
+                    *(short *)(&PackedVertexBuffer + iVar10_inner * 0x31be9 +
+                        *(short *)((BYTE*)&PackedVertexBuffer + iVar12 + 2) * 4 + 3) =
                         *(short *)((BYTE*)local_50 - 2); // bone index (2 bytes before x)
-                    (&DAT_0080a424)[iVar10_inner * 0x31be9 +
-                        (*(short *)((BYTE*)&DAT_0080a424 + iVar12 + 2) + 1) * 4] = local_50[0];
-                    (&DAT_0080a424)[iVar10_inner * 0x31be9 +
-                        *(short *)((BYTE*)&DAT_0080a424 + iVar12 + 2) * 4 + 5] = local_50[1];
-                    (&DAT_0080a424)[iVar10_inner * 0x31be9 +
-                        *(short *)((BYTE*)&DAT_0080a424 + iVar12 + 2) * 4 + 6] = local_50[2];
-                    short *pVCnt = (short *)((BYTE*)&DAT_0080a424 + iVar12 + 2);
+                    (&PackedVertexBuffer)[iVar10_inner * 0x31be9 +
+                        (*(short *)((BYTE*)&PackedVertexBuffer + iVar12 + 2) + 1) * 4] = local_50[0];
+                    (&PackedVertexBuffer)[iVar10_inner * 0x31be9 +
+                        *(short *)((BYTE*)&PackedVertexBuffer + iVar12 + 2) * 4 + 5] = local_50[1];
+                    (&PackedVertexBuffer)[iVar10_inner * 0x31be9 +
+                        *(short *)((BYTE*)&PackedVertexBuffer + iVar12 + 2) * 4 + 6] = local_50[2];
+                    short *pVCnt = (short *)((BYTE*)&PackedVertexBuffer + iVar12 + 2);
                     *pVCnt = *pVCnt + 1;
                 }
             done_vert:
 
                 // --- UV lookup / insert ---
-                iVar15 = (short)(&DAT_0080a428)[iVar10_inner * 0x637d2] - 1;
+                iVar15 = (short)(&UvIndexCount)[iVar10_inner * 0x637d2] - 1;
                 if (-1 < iVar15) {
-                    float *pfVar11 = (float *)(&DAT_0080a424 + iVar10_inner * 0x31be9 + iVar15 * 5 + 0x9c45);
+                    float *pfVar11 = (float *)(&PackedVertexBuffer + iVar10_inner * 0x31be9 + iVar15 * 5 + 0x9c45);
                     do {
                         if ((local_50[3] == pfVar11[-1]) &&
                             (local_50[4] == *pfVar11) &&
                             (local_50[5] == pfVar11[1])) {
-                            (&DAT_00896a48)[iVar10_inner * 0x637d2 + iVar5 +
-                                (short)(&DAT_0080a42c)[iVar10_inner * 0x637d2] * 4] = (short)iVar15;
+                            (&UvIndexTable)[iVar10_inner * 0x637d2 + iVar5 +
+                                (short)(&VertexIndexCount)[iVar10_inner * 0x637d2] * 4] = (short)iVar15;
                             goto done_uv;
                         }
                         iVar15--;
@@ -230,30 +230,30 @@ void BMD_SkinUpdate(void)
                 }
                 // UV not found — append
                 {
-                    short uvIdx = (&DAT_0080a428)[iVar10_inner * 0x637d2];
-                    (&DAT_00896a48)[iVar10_inner * 0x637d2 + iVar5 +
-                        (short)(&DAT_0080a42c)[iVar10_inner * 0x637d2] * 4] = uvIdx;
-                    (&DAT_00831530)[iVar10_inner * 0x637d2 + uvIdx * 10] =
+                    short uvIdx = (&UvIndexCount)[iVar10_inner * 0x637d2];
+                    (&UvIndexTable)[iVar10_inner * 0x637d2 + iVar5 +
+                        (short)(&VertexIndexCount)[iVar10_inner * 0x637d2] * 4] = uvIdx;
+                    (&UvLinkedVertTable)[iVar10_inner * 0x637d2 + uvIdx * 10] =
                         *(short *)((BYTE*)local_50 - 2);
-                    (&DAT_00831534)[iVar10_inner * 0x31be9 + uvIdx * 5] = local_50[3];
-                    (&DAT_0080a424)[iVar10_inner * 0x31be9 + (uvIdx + 0x1f41) * 5] =
-                        *(float *)((BYTE*)&DAT_00593968 + (local_4c + iVar5) * 0x12);
-                    (&DAT_0083153c)[iVar10_inner * 0x31be9 + uvIdx * 5] = local_50[5];
-                    (&DAT_00831540)[iVar10_inner * 0x637d2 + uvIdx * 10] =
-                        (&DAT_00879588)[iVar10_inner * 0x637d2 + iVar5 +
-                            (short)(&DAT_0080a42c)[iVar10_inner * 0x637d2] * 4];
-                    (&DAT_0080a428)[iVar10_inner * 0x637d2] = uvIdx + 1;
+                    (&UvCoordDataTable)[iVar10_inner * 0x31be9 + uvIdx * 5] = local_50[3];
+                    (&PackedVertexBuffer)[iVar10_inner * 0x31be9 + (uvIdx + 0x1f41) * 5] =
+                        *(float *)((BYTE*)&TriangleCount + (local_4c + iVar5) * 0x12);
+                    (&UvExtraZChannel)[iVar10_inner * 0x31be9 + uvIdx * 5] = local_50[5];
+                    (&UvLinkedVertIndex)[iVar10_inner * 0x637d2 + uvIdx * 10] =
+                        (&VertexIndexTable)[iVar10_inner * 0x637d2 + iVar5 +
+                            (short)(&VertexIndexCount)[iVar10_inner * 0x637d2] * 4];
+                    (&UvIndexCount)[iVar10_inner * 0x637d2] = uvIdx + 1;
                 }
             done_uv:
 
                 // --- Normal lookup / insert ---
-                iVar15 = (short)(&DAT_0080a42a)[iVar10_inner * 0x637d2] - 1;
+                iVar15 = (short)(&NormalIndexCount)[iVar10_inner * 0x637d2] - 1;
                 if (-1 < iVar15) {
-                    float *pfVar11 = (float *)(&DAT_00862270 + iVar10_inner * 0x31be9 + iVar15 * 2);
+                    float *pfVar11 = (float *)(&NormalDataTable + iVar10_inner * 0x31be9 + iVar15 * 2);
                     do {
                         if ((local_50[6] == *pfVar11) && (local_50[7] == pfVar11[1])) {
-                            (&DAT_008b3f08)[iVar10_inner * 0x637d2 + iVar5 +
-                                (short)(&DAT_0080a42c)[iVar10_inner * 0x637d2] * 4] = (short)iVar15;
+                            (&NormalIndexTable)[iVar10_inner * 0x637d2 + iVar5 +
+                                (short)(&VertexIndexCount)[iVar10_inner * 0x637d2] * 4] = (short)iVar15;
                             goto done_norm;
                         }
                         iVar15--;
@@ -262,12 +262,12 @@ void BMD_SkinUpdate(void)
                 }
                 // Normal not found — append
                 {
-                    short nIdx = (&DAT_0080a42a)[iVar10_inner * 0x637d2];
-                    (&DAT_008b3f08)[iVar10_inner * 0x637d2 + iVar5 +
-                        (short)(&DAT_0080a42c)[iVar10_inner * 0x637d2] * 4] = nIdx;
-                    (&DAT_00862270)[iVar10_inner * 0x31be9 + nIdx * 2] = local_50[6];
-                    (&DAT_00862274)[iVar10_inner * 0x31be9 + nIdx * 2] = local_50[7];
-                    (&DAT_0080a42a)[iVar10_inner * 0x637d2] = nIdx + 1;
+                    short nIdx = (&NormalIndexCount)[iVar10_inner * 0x637d2];
+                    (&NormalIndexTable)[iVar10_inner * 0x637d2 + iVar5 +
+                        (short)(&VertexIndexCount)[iVar10_inner * 0x637d2] * 4] = nIdx;
+                    (&NormalDataTable)[iVar10_inner * 0x31be9 + nIdx * 2] = local_50[6];
+                    (&NormalYChannel)[iVar10_inner * 0x31be9 + nIdx * 2] = local_50[7];
+                    (&NormalIndexCount)[iVar10_inner * 0x637d2] = nIdx + 1;
                 }
             done_norm:
                 iVar5++;
@@ -276,10 +276,10 @@ void BMD_SkinUpdate(void)
 
             local_4c += 3;
             // Mark this face as having 3 vertices in the face count byte
-            *((BYTE *)&DAT_0080a424 +
-              (short)(&DAT_0080a42c)[iVar10_inner * 0x637d2] + 0x6b6cc + iVar12) = 3;
-            (&DAT_0080a42c)[iVar10_inner * 0x637d2] =
-                (&DAT_0080a42c)[iVar10_inner * 0x637d2] + 1;
+            *((BYTE *)&PackedVertexBuffer +
+              (short)(&VertexIndexCount)[iVar10_inner * 0x637d2] + 0x6b6cc + iVar12) = 3;
+            (&VertexIndexCount)[iVar10_inner * 0x637d2] =
+                (&VertexIndexCount)[iVar10_inner * 0x637d2] + 1;
 
             local_58 += 0x20;   // next material name slot
             local_54++;

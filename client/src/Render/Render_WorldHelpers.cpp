@@ -51,11 +51,11 @@ extern void __cdecl operator_delete(void* ptr);
 
 // ── In-game render helpers (declared in functions.h, called from Render_Scene3D) ──
 // RenderBoids @ 0x00500AA0 — RenderBoids
-// Port FIEL del IDA: itera DAT_0839BE18 pool stride 444B (40 entries).
+// Port FIEL del IDA: itera RenderPoolA pool stride 444B (40 entries).
 // Decoración de fauna/efectos del mapa: birds, fish, butterflies, magic gates.
 //
 // Pool layout (per IDA): cada entry = 111 floats = 444 bytes.
-// v0 inicia en `(float*)dword_839BE18` y avanza 111 floats por iter, hasta unk_83A0378.
+// v0 inicia en `(float*)RenderPoolA` y avanza 111 floats por iter, hasta unk_83A0378.
 // Offsets relevantes (relativos a v0):
 //   *((WORD*)v0 - 179)     type code (offset -358 from v0)
 //   *((BYTE*)v0 - 360)     active flag
@@ -79,7 +79,7 @@ void __cdecl RenderBoids(void)
     // Atlans e Icarus son los dos mundos donde `Weather_Update` spawnea estas
     // criaturas (el DLL de inyeccion NOPea esas dos ramas en 0x00501292 con el
     // comentario "Fix Atlans and Icarus Goldens Overflow").
-    if (!DAT_05828d58) return;
+    if (!ModelsBase) return;
 
     // El bound de IDA es `< &unk_83A0378` = 40 slots; lo expresamos como un
     // contador para no construir un puntero fuera del array.
@@ -122,8 +122,8 @@ void __cdecl RenderBoids(void)
                 //
                 // (56588 = 188 * 301, o sea el modelo del dragon.)
                 if (entType == 301 && *((int*)v0 - 89) == 1) {
-                    void* mdl301 = (void*)((uintptr_t)DAT_05828d58 + BMD_STRIDE * 301);
-                    void* mdlEnt = (void*)((uintptr_t)DAT_05828d58 + BMD_STRIDE * entType);
+                    void* mdl301 = (void*)((uintptr_t)ModelsBase + BMD_STRIDE * 301);
+                    void* mdlEnt = (void*)((uintptr_t)ModelsBase + BMD_STRIDE * entType);
                     RenderPartObjectBodyColor(mdl301, reinterpret_cast<uintptr_t>(v0 - 90),
                                               301, AsObject(v0 - 90)->Alpha, 0x48, 1.0f, -1);
                     RenderPartObjectBodyColor(mdlEnt, reinterpret_cast<uintptr_t>(v0 - 90),
@@ -144,13 +144,13 @@ void __cdecl RenderBoids(void)
 
                 // World != 10: render shadow on terrain.
                 if (gMapManager.GetCurrentMap() != 10) {
-                    BYTE* model = (BYTE*)((uintptr_t)DAT_05828d58 + BMD_STRIDE * entType);
+                    BYTE* model = (BYTE*)((uintptr_t)ModelsBase + BMD_STRIDE * entType);
                     // DESVIACION R4k: habilitar mezcla sin cambiar sus factores,
                     // y recuperar activación/caché al salir de esta sombra.
                     const Materials::InheritedBlendScope shadowBlend;
                     if(!shadowBlend){
                         Gfx::Enable(Gfx::Cap::Blend);
-                        DAT_083a412c = 1;   // referencia: no describe los factores reales
+                        BlendModeCache = 1;   // referencia: no describe los factores reales
                     }
                     BufferedDraw::Color4f(0.0f, 0.0f, 0.0f, 0.2f);
                     float wx = v0[-86];
@@ -176,7 +176,7 @@ void __cdecl RenderBoids(void)
 }
 
 // Entity_Render @ 0x005038E0 — Entity_Render. Port FIEL del IDA.
-// Itera Items[] pool (DAT_07e12840, 1000 entries × 516 bytes), per-entry:
+// Itera Items[] pool (GroundItemPool, 1000 entries × 516 bytes), per-entry:
 //   1. Frustum-cull con sub_4F9590 (=Frustum_TestSphere) radio 400.
 //   2. Resolve model slot por type (special handling 624..783, 860).
 //   3. BMD_Animation con bone matrix.
@@ -190,7 +190,7 @@ void __cdecl RenderBoids(void)
 void __cdecl Entity_Render(void)
 {
     int v14 = 1, v15 = 0, v16 = 0;
-    BYTE* Items = (BYTE*)DAT_07e12840;
+    BYTE* Items = (BYTE*)GroundItemPool;
     BYTE* end   = Items + 1000 * GROUND_ITEM_STRIDE;
     BYTE* v0    = Items + 333;
 
@@ -215,9 +215,9 @@ void __cdecl Entity_Render(void)
                 }
                 if (v5 < 0 || v5 >= 1200) goto next_entry;
 
-                BYTE* model = (BYTE*)((uintptr_t)DAT_05828d58 + (uintptr_t)v5 * BMD_STRIDE);
+                BYTE* model = (BYTE*)((uintptr_t)ModelsBase + (uintptr_t)v5 * BMD_STRIDE);
                 AsModel(model)->CurrentAction = 0;
-                AsModel(model)->Skin = (char)((*(BYTE*)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->Class) & 7);
+                AsModel(model)->Skin = (char)((*(BYTE*)&((CHARACTER*)(uintptr_t)(Hero))->Class) & 7);
                 AsModel(model)->CurrentAction = AsObject(v1)->CurrentAction;
                 *(float*)&((BMD*)(uintptr_t)(model))->BodyOrigin[0] = *v2;
                 *(DWORD*)&((BMD*)(uintptr_t)(model))->BodyOrigin[1] = *(DWORD*)(v0 - 241);
@@ -231,7 +231,7 @@ void __cdecl Entity_Render(void)
                 // AnimationFrame / PriorFrame: IDA los toma en v0+3 y v0+7 —
                 // offsets de BYTE (disasm 0x5039E9/0x5039ED: `mov ecx,[esi+7]`,
                 // `mov edx,[esi+3]`), no de float.
-                BMD_Animation(model, reinterpret_cast<float*>(&DAT_06970a9c),
+                BMD_Animation(model, reinterpret_cast<float*>(&BoneScratchRoot),
                              AsObject(v1)->AnimationFrame, *(unsigned int*)&AsObject(v1)->PriorAnimationFrame,
                              AsObject(v1)->PriorAction, (unsigned int*)angles_in, headA, 0, 0);
 
@@ -285,8 +285,8 @@ void __cdecl Entity_Render(void)
                 if (gMapManager.GetCurrentMap() == 10) {  // World 10 (Icarus) — bamboleo
                     // IDA: sin((v15 + WorldTime) * flt_5528E0) * flt_552488 + z
                     *(float*)(v1 + 24) = (float)(sin(((double)v15 + (double)WorldTime)
-                                                     * (double)_DAT_005528e0)
-                                                 * (double)_DAT_00552488 + v22);
+                                                     * (double)ZBobFreq)
+                                                 * (double)10.0f + v22);
                 }
 
                 // IDA (L161-163) pasa `*((short*)v1 + 1)` = v1+2 = el TYPE del entity
@@ -308,7 +308,7 @@ void __cdecl Entity_Render(void)
                     float scr[3];
                     scr[0] = v20;                              // world X
                     scr[1] = v21;                              // world Y
-                    scr[2] = v22 + _DAT_0055284c;              // world Z + name-tag offset
+                    scr[2] = v22 + 30.0f;              // world Z + name-tag offset
                     int sx = 0, sy = 0;
                     extern void __cdecl Camera_ProjectWorldToScreen(float*, int*, int*);
                     Camera_ProjectWorldToScreen(scr, &sx, &sy);
@@ -342,8 +342,8 @@ void __cdecl ItemDrop_Render(void)
 {
     // DESVIACION (DLL Antilag, ret en 0x00473710): sin joints de skills.
     if (gUserSettings.GetAntilag(ANTILAG_SKILLS)) return;
-    JOINT* joints = AsJoint(DAT_07b27150);
-    const int kEntries = (int)(sizeof(DAT_07b27150) / sizeof(JOINT));   // kJointPoolSize
+    JOINT* joints = AsJoint(JointPoolBase);
+    const int kEntries = (int)(sizeof(JointPoolBase) / sizeof(JOINT));   // kJointPoolSize
 
     for (int eIdx = 0; eIdx < kEntries; ++eIdx) {
         JOINT* j = &joints[eIdx];
@@ -628,7 +628,7 @@ extern "C" BOOL ChaosBoxRequestClose(void) {
         return TRUE;
     }
 
-    if (!ChaosBoxIsEmptyForClose() || DAT_07e91388 > 0) {
+    if (!ChaosBoxIsEmptyForClose() || ItemPickedFlag > 0) {
         UIChatLogWindow_AddText("", GlobalText[593], 2);
         return FALSE;
     }
@@ -636,7 +636,7 @@ extern "C" BOOL ChaosBoxRequestClose(void) {
     // ErrorMessage=143 is the local Chaos category selector layered over the
     // server-owned box.  It must not outlive a valid Chaos close request.
     // SetErrorMessage(0) pops only this layer and preserves any queued dialog.
-    if (DAT_083a7c24 == 143) {
+    if (InGameUiState == 143) {
         SetErrorMessage(0);
     }
 
@@ -668,12 +668,12 @@ extern "C" SIZE* __cdecl RenderCenteredText(int iPos_x, int iPos_y, const char* 
 extern "C" int __cdecl GetScreenWidth(void);
 static int s_altNameToggle = 0;
 void ItemNames_TickInput() {
-    if (SceneFlag == 5 && DAT_083a7c10 && DAT_07e11d1c <= 30 && PressKey(VK_MENU))
+    if (SceneFlag == 5 && EnableMainRender && InputCooldownTicks <= 30 && PressKey(VK_MENU))
         s_altNameToggle = !s_altNameToggle;
 }
 void __cdecl RenderMonsterName(int /*unused*/, int /*unused*/, int /*unused*/, int /*unused*/)
 {
-    DAT_07e11d6e = 1;
+    HudTextVisibleFlag = 1;
     BufferedDraw::Color3f(1.0f, 1.0f, 1.0f);
     GL_ResetState();  // DisableAlphaBlend
 
@@ -688,7 +688,7 @@ void __cdecl RenderMonsterName(int /*unused*/, int /*unused*/, int /*unused*/, i
     // tampoco lo restaura) y el texto sale como m_dwTextColor x glColor, así que
     // dibujar antes los items teñiría el nombre del monstruo.
     extern void __cdecl RenderItemName(int, const OBJECT*, int, int, bool);
-    BYTE* itemPool = (BYTE*)&DAT_07e12840[0];
+    BYTE* itemPool = (BYTE*)&GroundItemPool[0];
     const int hovered = (int)SelectedItem;
 
     // IDA LABEL_37: nombre del item bajo el cursor (Sort=0, sobre el item).
@@ -705,7 +705,7 @@ void __cdecl RenderMonsterName(int /*unused*/, int /*unused*/, int /*unused*/, i
     // ── PASO 1: uno solo, por prioridad (IDA L28-155) ────────────────────────
     //   NPC  >  (item solo)  >  personaje.  Con personaje seleccionado y
     //   `Attacking != -1` (LABEL_8) se dibuja el item en vez del personaje.
-    char* base = (char*)(uintptr_t)DAT_07abf5d0;
+    char* base = (char*)(uintptr_t)CharactersClient;
     const int npc = (int)SelectedNpc;
     const int chr = (int)SelectedCharacter;
 
@@ -737,16 +737,16 @@ void __cdecl RenderMonsterName(int /*unused*/, int /*unused*/, int /*unused*/, i
                 // ANTERIOR en vez de forzar 0, para que los items queden igual que cuando no
                 // se apunta a nada.
                 const DWORD savedBack = SetBackgroundTextColor;
-                const DWORD savedText = DAT_00559c78;
+                const DWORD savedText = m_dwTextColor;
                 SetBackgroundTextColor = 0xFF000064;  // m_dwBackColor (rojo oscuro, ABGR)
-                DAT_00559c78 = 0xFFC8E6FF;  // m_dwTextColor (celeste)
+                m_dwTextColor = 0xFFC8E6FF;  // m_dwTextColor (celeste)
                 // IDA LABEL_35: `RenderCenteredText(v13 / 2, 10, v3)`, con v13
                 // del MISMO arbol que GetScreenWidth (0x4CB520): 260 con
                 // inventario + panel lateral, 450 con cualquier panel, 640 sin
                 // ninguno.
                 RenderCenteredText(GetScreenWidth() / 2, 10, name);
                 SetBackgroundTextColor = savedBack;
-                DAT_00559c78 = savedText;
+                m_dwTextColor = savedText;
             } else if (kind != 2) {
                 // IDA: TODO lo que no es monstruo va a CreateChat (el port lo
                 // limitaba a kind == 1).
@@ -773,7 +773,7 @@ void __cdecl RenderMonsterName(int /*unused*/, int /*unused*/, int /*unused*/, i
 
 // RenderFishs @ 0x00502200 — RenderFishs
 // Renderiza peces decorativos (Lorencia ponds, Devias mountains, etc).
-// Pool: DAT_083a2e90 (10 entries × 0x1BC bytes = 4440 bytes total).
+// Pool: FishObjectPool (10 entries × 0x1BC bytes = 4440 bytes total).
 // Cada slot:
 //   +0     active flag (byte)
 //   +2     type code (WORD)
@@ -790,7 +790,7 @@ void __cdecl RenderMonsterName(int /*unused*/, int /*unused*/, int /*unused*/, i
 //      to pos with terrain height, call sub_441F00 (shadow render).
 void __cdecl RenderFishs(int /*unused*/, int /*unused*/, int /*unused*/, int /*unused*/)
 {
-    char* base = (char*)&DAT_083a2e90[0];
+    char* base = (char*)&FishObjectPool[0];
     for (int i = 0; i < 10; ++i) {
         char* slot = base + i * OBJECT_STRIDE;
         // Increment rotation +90 (per IDA, applied unconditionally).
@@ -815,7 +815,7 @@ void __cdecl RenderFishs(int /*unused*/, int /*unused*/, int /*unused*/, int /*u
                     typeCode != 188 && typeCode != 189 && __world != 10) {
                     GL_SetBlendSrcOver('\x01');                  // EnableAlphaTest(1)
                     BufferedDraw::Color4f(0.0f, 0.0f, 0.0f, 0.2f);     // shadow color
-                    float* modelData = (float*)(DAT_05828d58 + BMD_STRIDE * (int)typeCode);
+                    float* modelData = (float*)(ModelsBase + BMD_STRIDE * (int)typeCode);
                     if (modelData) {
                         AsModel(modelData)->BodyOrigin[2] = RequestTerrainHeight(posX, posY);  // height
                         AsModel(modelData)->BodyOrigin[0] = posX;
@@ -862,7 +862,7 @@ void __cdecl RenderFishs(int /*unused*/, int /*unused*/, int /*unused*/, int /*u
 // devuelve. Por eso guarda/restaura pos (16/20/24), angle (28/32/36) y type.
 void __cdecl RenderWheelWeapon(intptr_t o)
 {
-    if (!o || !DAT_05828d58 || !DAT_07abf5d8) return;
+    if (!o || !ModelsBase || !Hero) return;
 
     // ── guardar el estado original del slot ──
     const int savedX     = *(int *)&AsObject(o)->Position[0];
@@ -894,10 +894,10 @@ void __cdecl RenderWheelWeapon(intptr_t o)
     const float alpha = sample ? sample->alpha : AsObject(o)->Alpha;
 
     // Volcar posición/acción/skin al slot del modelo compartido.
-    BYTE* mdl = (BYTE*)(uintptr_t)DAT_05828d58 + BMD_STRIDE * model_id;
+    BYTE* mdl = (BYTE*)(uintptr_t)ModelsBase + BMD_STRIDE * model_id;
     *(float*)(mdl + 116 + BMD_FIELD_SHIFT) = zUp;
     *(BYTE*) (mdl + 160 + BMD_FIELD_SHIFT) = sample ? sample->action : AsObject(o)->CurrentAction;                       // CurrentAction
-    *(BYTE*) (mdl + 152 + BMD_FIELD_SHIFT) = (BYTE)(*(BYTE*)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->Class & 7); // clase
+    *(BYTE*) (mdl + 152 + BMD_FIELD_SHIFT) = (BYTE)(*(BYTE*)&((CHARACTER*)(uintptr_t)(Hero))->Class & 7); // clase
     *(int*)  (mdl + 108 + BMD_FIELD_SHIFT) = *(int *)&AsObject(o)->Position[0];
     *(int*)  (mdl + 112 + BMD_FIELD_SHIFT) = *(int *)&AsObject(o)->Position[1];
 
@@ -905,7 +905,7 @@ void __cdecl RenderWheelWeapon(intptr_t o)
     ItemObjectAttributeForRender(AsObject(o));                          // ItemObjectAttribute
 
     float angles_in[3] = { AsObject(o)->Angle[0], AsObject(o)->Angle[1], AsObject(o)->Angle[2] };
-    BMD_Animation(mdl, reinterpret_cast<float*>(&DAT_06970a9c),
+    BMD_Animation(mdl, reinterpret_cast<float*>(&BoneScratchRoot),
                  AsObject(o)->AnimationFrame, *(unsigned int *)&AsObject(o)->PriorAnimationFrame,
                  AsObject(o)->PriorAction,
                  (unsigned int*)angles_in, (float*)(o + 40), 0, 0);
@@ -936,11 +936,11 @@ void __cdecl EffectPool_RenderAll(void)
     // DESVIACION (DLL Antilag, ret en 0x0046BBA0): sin efectos de skills.
     if (gUserSettings.GetAntilag(ANTILAG_SKILLS)) return;
     // HeadAngle (0x07B11698) está en offset +40 dentro del
-    // effect pool DAT_07b11670 (kEffectPoolSize entries; IDA: 200).
+    // effect pool EffectPoolBase (kEffectPoolSize entries; IDA: 200).
     // En IDA: HeadAngle iter es float*, offsets negativos cubren la cabecera del
     // entry. v0 inicia en (float*)(pool + 40), recorre 200 entries de 111 floats.
-    if (!DAT_05828d58) return;
-    float* HeadAngle = (float*)((char*)DAT_07b11670 + 40);
+    if (!ModelsBase) return;
+    float* HeadAngle = (float*)((char*)EffectPoolBase + 40);
     if (!HeadAngle) return;
 
     // Pool: 200 entries x 0x1bc bytes = 444B stride = 111 floats por entry.
@@ -1014,10 +1014,10 @@ void __cdecl EffectPool_RenderAll(void)
 
         // Type 266: gate effect with BMD_Animation + RenderPartObject.
         if (type == 266) {
-            BYTE* model = (BYTE*)((uintptr_t)DAT_05828d58 + BMD_STRIDE * 266 + 0x0);
+            BYTE* model = (BYTE*)((uintptr_t)ModelsBase + BMD_STRIDE * 266 + 0x0);
             float angles_in[3]  = { v0[-3], v0[-2], v0[-1] };
             float headA[3]      = { v0[0],  v0[1],  v0[2]  };
-            BMD_Animation(model, reinterpret_cast<float*>(&DAT_06970a9c),
+            BMD_Animation(model, reinterpret_cast<float*>(&BoneScratchRoot),
                          AsObject(v0 - 10)->AnimationFrame, *(unsigned int*)&AsObject(v0 - 10)->PriorAnimationFrame,
                          AsObject(v0 - 10)->PriorAction,
                          (unsigned int*)angles_in, headA, 0, 0);
@@ -1177,7 +1177,7 @@ void __cdecl StopBuffer(int Buffer, int /*Object*/) { Sound_StopBuffer(Buffer); 
 
 // DESVIACION: fauna y luces de skills se preparan con pose SIM a 25 Hz.
 void Fauna_TickSprites() {
-    if (!DAT_05828d58) return;
+    if (!ModelsBase) return;
     if (SceneFlag == 5) {
         for (int i = 0; i < 40; ++i) {
             intptr_t entity = (intptr_t)(g_WeatherSlotPool + i * OBJECT_STRIDE);
@@ -1188,7 +1188,7 @@ void Fauna_TickSprites() {
             float brightness = (float)(rand() % 32 + (o.Type == 175 ? 64 : 128)) * 0.01f;
             float color[3] = {brightness * 0.2f, brightness * 0.4f, brightness * 0.4f};
             if (o.Type == 175) { CreateSprite(1150, o.Position, 1.0f, color, entity, 0, 0); continue; }
-            void *model = (void *)(DAT_05828d58 + o.Type * BMD_STRIDE);
+            void *model = (void *)(ModelsBase + o.Type * BMD_STRIDE);
             EquipmentModelContext context(model);
             const float angle = o.Angle[2];
             o.Angle[2] += 90.0f;
@@ -1204,7 +1204,7 @@ void Fauna_TickSprites() {
     }
     if (SceneFlag != 2 && SceneFlag != 4 && SceneFlag != 5) return;
     for (int i = 0; i < 10; ++i) {
-        intptr_t entity = (intptr_t)((char *)DAT_083a1218 + i * OBJECT_STRIDE);
+        intptr_t entity = (intptr_t)((char *)ButterflyObjectPool + i * OBJECT_STRIDE);
         OBJECT &o = *AsObject(entity);
         if (!o.Live) continue;
         o.Visible = (BYTE)TestFrustrum2D(o.Position[0] * 0.01f, o.Position[1] * 0.01f, -20.0f);
@@ -1217,15 +1217,15 @@ void Fauna_TickSprites() {
 
 void EffectPool_TickRenderState() {
     if (SceneFlag != 4 && SceneFlag != 5) return;
-    if (gUserSettings.GetAntilag(ANTILAG_SKILLS) || !DAT_05828d58) return;
+    if (gUserSettings.GetAntilag(ANTILAG_SKILLS) || !ModelsBase) return;
     for (int i = 0; i < kEffectPoolSize; ++i) {
-        OBJECT &o = *(OBJECT *)((char *)DAT_07b11670 + i * OBJECT_STRIDE);
+        OBJECT &o = *(OBJECT *)((char *)EffectPoolBase + i * OBJECT_STRIDE);
         if (!o.Live) continue;
         o.Visible = (BYTE)Frustum_TestSphere(o.Position, 400.0f);
         if (!o.Visible) continue;
-        if ((o.Type==239 || (o.Type==244 && (float)o.LifeTime>_DAT_00552488)) && o.Owner) {
+        if ((o.Type==239 || (o.Type==244 && (float)o.LifeTime>10.0f)) && o.Owner) {
             const int model = *((BYTE *)o.Owner + 136) + ITEM_MODEL_BASE;
-            if (model >= 0 && model < 1024 && DAT_07abf5d8) {
+            if (model >= 0 && model < 1024 && Hero) {
                 if (o.Type==239) o.Direction[2] -= 30.0f;
                 MaterialVisuals_PrepareWeaponObject(&o,model);
             }

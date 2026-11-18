@@ -11,20 +11,20 @@
 // 0x176+=special NPCs (Sevina, BloodCastle) via OpenModel.
 void __cdecl OpenNpc(int Type) {
     // 0x005091D0 — Load NPC model + textures by Type
-    // Models = DAT_05828d58, each entry is a BMD struct.
-    // DAT_0055a7c4 = g_tex_ext_mode (0=plain, 1=compressed OZJ/OZT)
+    // Models = ModelsBase, each entry is a BMD struct.
+    // g_tex_ext_mode = g_tex_ext_mode (0=plain, 1=compressed OZJ/OZT)
     // If g_tex_ext_mode!=0 and model already has bones (Data+0x26 > 0), skip loading.
 
-    DWORD* pModels = (DWORD*)DAT_05828d58;
-    // Check if already loaded: DAT_0055a7c4 != 0 and *(short*)(Models[Type].Data + 0x26) > 0
+    DWORD* pModels = (DWORD*)ModelsBase;
+    // Check if already loaded: g_tex_ext_mode != 0 and *(short*)(Models[Type].Data + 0x26) > 0
     // Models[Type].Data is at pModels + Type * BMD_STRIDE — but the actual struct size is
     // unknown here. The Ghidra code references Models[Type].Data at a pointer field.
     // For simplicity, we follow the Ghidra decompile pattern with the guard check.
-    // The guard check is: if (DAT_0055a7c4 != 0 && bone_count > 0) return;
+    // The guard check is: if (g_tex_ext_mode != 0 && bone_count > 0) return;
     // We skip this check since we can't reliably compute BMD struct offset without BMD_STRIDE.
     // The original binary does this check before the switch.
-    char* model = (char*)DAT_05828d58 + BMD_STRIDE * Type;
-    if (DAT_0055a7c4 != 0 && *(short*)(model + 0x26) > 0)
+    char* model = (char*)ModelsBase + BMD_STRIDE * Type;
+    if (g_tex_ext_mode != 0 && *(short*)(model + 0x26) > 0)
         return;
 
     switch (Type) {
@@ -105,36 +105,36 @@ void __cdecl OpenNpc(int Type) {
         AccessModelWithTextures(0x15d, "Data\\Npc\\", "DevilNpc", 1);
         break;
     case 0x176:
-        if (DAT_0055a7c4 == '\0') {
-            OpenModel(0x176, "Data2\\Npc\\", "Sevina", "Sevina", (void*)&DAT_00559088);
+        if (g_tex_ext_mode == '\0') {
+            OpenModel(0x176, "Data2\\Npc\\", "Sevina", "Sevina", (void*)&SentinelEndString);
         }
         AccessModelWithTextures(0x176, "Data\\Npc\\", "Sevina", 1);
         OpenTexture(Type, (void*)"Data\\Npc\\", 0x2600, true);
-        DAT_0055a7c4 = '\x01';
+        g_tex_ext_mode = '\x01';
         break;
     case 0x177:
-        if (DAT_0055a7c4 == '\0') {
-            OpenModel(0x177, "Data2\\Npc\\", "BloodCastle1", "BloodCastle1", (void*)&DAT_00559088);
+        if (g_tex_ext_mode == '\0') {
+            OpenModel(0x177, "Data2\\Npc\\", "BloodCastle1", "BloodCastle1", (void*)&SentinelEndString);
         }
         AccessModelWithTextures(0x177, "Data\\Npc\\", "BloodCastle", 1);
         OpenTexture(Type, (void*)"Data\\Npc\\", 0x2600, true);
-        DAT_0055a7c4 = '\x01';
+        g_tex_ext_mode = '\x01';
         break;
     case 0x178:
-        if (DAT_0055a7c4 == '\0') {
-            OpenModel(0x178, "Data2\\Npc\\", "BloodCastle2", "BloodCastle2", (void*)&DAT_00559088);
+        if (g_tex_ext_mode == '\0') {
+            OpenModel(0x178, "Data2\\Npc\\", "BloodCastle2", "BloodCastle2", (void*)&SentinelEndString);
         }
         AccessModelWithTextures(0x178, "Data\\Npc\\", "BloodCastle", 2);
         OpenTexture(Type, (void*)"Data\\Npc\\", 0x2600, true);
-        DAT_0055a7c4 = '\x01';
+        g_tex_ext_mode = '\x01';
         break;
     case 0x179:
-        if (DAT_0055a7c4 == '\0') {
-            OpenModel(0x179, "Data2\\Npc\\", "DeviasTrader1", "DeviasTrader1", "DeviasTrader1", (void*)&DAT_00559088);
+        if (g_tex_ext_mode == '\0') {
+            OpenModel(0x179, "Data2\\Npc\\", "DeviasTrader1", "DeviasTrader1", "DeviasTrader1", (void*)&SentinelEndString);
         }
         AccessModelWithTextures(0x179, "Data\\Npc\\", "DeviasTrader", 1);
         OpenTexture(Type, (void*)"Data\\Npc\\", 0x2600, true);
-        DAT_0055a7c4 = '\x01';
+        g_tex_ext_mode = '\x01';
         break;
     }
 
@@ -153,6 +153,6 @@ void __cdecl OpenNpc(int Type) {
     // NOTA (patch separado): el loop PlaySpeed del original (IDA offsets +0x26/+0x30)
     // NO se aplica acá. En nuestro layout real +0x26=NumBones y +0x30=Bones
     // (BMD_Load.cpp:225/233), no NumActions/Actions — se audita/aplica aparte.
-    if (*(short*)(DAT_05828d58 + Type * BMD_STRIDE + 0x24) > 0)   // NumMeshes > 0
+    if (*(short*)(ModelsBase + Type * BMD_STRIDE + 0x24) > 0)   // NumMeshes > 0
         OpenTexture(Type, (void*)"Npc\\", 0x2600 /*GL_NEAREST*/, true);
 }

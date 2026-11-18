@@ -10,7 +10,7 @@
 // CheckMixRecipe @ 0x004E40F0
 // Validates chaos/mix recipe ingredients in the mix inventory grid.
 // Scans all items, counts by category (wings, jewels, excellent items, +level items).
-// Sets DAT_0055a3fc (max height), DAT_0055a3f8 (max width).
+// Sets ItemAttrMaxHeight (max height), ItemAttrMaxWidth (max width).
 #if 0
 int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
     // 0x004E40F0 — Validates chaos/mix recipe ingredients in the mix inventory grid.
@@ -56,8 +56,8 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
     int totalValue     = 0;  // local_28 — accumulated item value for wing recipe
     int wingValue      = 0;  // local_24 — wing base value
 
-    DAT_0055a3fc = 1;  // max height
-    DAT_0055a3f8 = 1;  // max width
+    ItemAttrMaxHeight = 1;  // max height
+    ItemAttrMaxWidth = 1;  // max width
 
     unsigned int itemLevel = 0;
     int strideBytes = param_2 * 0x44;
@@ -78,12 +78,12 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
                         totalItems++;
 
                         // Update max dimensions
-                        std::uintptr_t attrBase = iVar5 * 0x40 + DAT_07d78068;
-                        if (DAT_0055a3f8 <= (int)(unsigned int)*(unsigned char*)(attrBase + 0x20)) {
-                            DAT_0055a3f8 = (int)(unsigned int)*(unsigned char*)(attrBase + 0x20);
+                        std::uintptr_t attrBase = iVar5 * 0x40 + ItemAttributeBase;
+                        if (ItemAttrMaxWidth <= (int)(unsigned int)*(unsigned char*)(attrBase + 0x20)) {
+                            ItemAttrMaxWidth = (int)(unsigned int)*(unsigned char*)(attrBase + 0x20);
                         }
-                        if ((int)DAT_0055a3fc <= (int)(unsigned int)*(unsigned char*)(attrBase + 0x21)) {
-                            DAT_0055a3fc = (int)(unsigned int)*(unsigned char*)(attrBase + 0x21);
+                        if ((int)ItemAttrMaxHeight <= (int)(unsigned int)*(unsigned char*)(attrBase + 0x21)) {
+                            ItemAttrMaxHeight = (int)(unsigned int)*(unsigned char*)(attrBase + 0x21);
                         }
 
                         itemLevel = *(int*)(psVar12 + 2) >> 3 & 0xF;
@@ -99,7 +99,7 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
                             } else {
                                 goto check_type;
                             }
-                            DAT_07eaa178 = 0;
+                            MixSocketFlag = 0;
                             bVar4 = true;
                             hasSocket = true;
                         }
@@ -114,7 +114,7 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
                         case 0x180: case 0x181: case 0x182:
                             // Wings
                             wingCount++;
-                            DAT_07eaa170 = 0;
+                            WingMixFlagBits = 0;
                             wingValue = ItemValue((ITEM*)psVar12, 0);
                             {
                                 unsigned int socketCount = (unsigned int)*(unsigned char*)(psVar12 + 0x12);
@@ -124,9 +124,9 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
                                         unsigned char bVal = *(unsigned char*)((int)psVar12 + si + 0x25);
                                         if (bVal > 0x3B) {
                                             if (bVal < 0x3E) {
-                                                DAT_07eaa170 = (unsigned int)*(unsigned char*)((int)psVar12 + si + 0x2D);
+                                                WingMixFlagBits = (unsigned int)*(unsigned char*)((int)psVar12 + si + 0x2D);
                                             } else if (bVal == 0x41) {
-                                                DAT_07eaa170 = (unsigned int)*(unsigned char*)((int)psVar12 + si + 0x2D) << 2;
+                                                WingMixFlagBits = (unsigned int)*(unsigned char*)((int)psVar12 + si + 0x2D) << 2;
                                             }
                                         }
                                         si++;
@@ -187,7 +187,7 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
                                 // Check for excellent items (option bytes 0x3C..0x3F)
                                 bool foundExcellent = false;
                                 if (sVar2 < 0x180 && itemLevel > 3) {
-                                    DAT_07eaa178 = 0;
+                                    MixSocketFlag = 0;
                                     bVar4 = true;
                                     hasSocket = true;
                                 }
@@ -225,9 +225,9 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
                             if (sc != 0) {
                                 for (int si3 = 0; si3 < (int)sc; si3++) {
                                     if (*(char*)((int)psVar12 + si3 + 0x25) == 0x40) {
-                                        DAT_07eaa170 = 1;  // _DAT_07eaa170 for wing path
+                                        WingMixFlagBits = 1;  // WingMixFlag for wing path
                                         if (hasSocket) {
-                                            DAT_07eaa178 = 1;
+                                            MixSocketFlag = 1;
                                         }
                                     }
                                 }
@@ -253,7 +253,7 @@ done_scan:
             if (dsKeyA == 1 && dsKeyB == 1) {
                 // Devil Square key recipe
                 if (levelD1 == levelD2) {
-                    DAT_07eaa168 = levelD1 + 1;
+                    MixRecipeLevel = levelD1 + 1;
                     return 2;
                 }
                 return -2;
@@ -261,7 +261,7 @@ done_scan:
             if (featherCount == 1 && clawCount == 1) {
                 // Feather + Claw recipe
                 if (levelB0 == levelB1) {
-                    DAT_07eaa168 = levelB0 + 1;
+                    MixRecipeLevel = levelB0 + 1;
                     return 8;
                 }
                 return -8;
@@ -279,9 +279,9 @@ done_scan:
 check_wing_recipe:
     if (luckCharmCount == 1 && wingCount == 1 &&
         totalItems == excellentArmor + 3 && excellentSpecial == 0) {
-        DAT_07eaa174 = wingValue / 4000000 + totalValue / 40000;
-        if (DAT_07eaa174 > 0x59) {
-            DAT_07eaa174 = 0x5A;
+        MixValueScore = wingValue / 4000000 + totalValue / 40000;
+        if (MixValueScore > 0x59) {
+            MixValueScore = 0x5A;
         }
         return 7;
     }
@@ -346,8 +346,8 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
     int wingValue = 0;
     int excellentValue = 0;
 
-    DAT_0055a3fc = 1;
-    DAT_0055a3f8 = 1;
+    ItemAttrMaxHeight = 1;
+    ItemAttrMaxWidth = 1;
 
     if (param_3 > 0) {
         int rowStrideBytes = 68 * param_2;
@@ -360,14 +360,14 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
                 if (itemType != (short)0xFFFF && *(int *)&AsItem(itemPtr)->Key > 0) {
                     ++*(int*)(counts + 1);
 
-                    std::uintptr_t attrBase = DAT_07d78068 + itemType * 0x40;
+                    std::uintptr_t attrBase = ItemAttributeBase + itemType * 0x40;
                     const int kind = ItemBehaviorType(itemType);   // 0.97.20: rangos y recetas por comportamiento
                     int attrW = *(unsigned char*)(attrBase + 0x20);
                     int attrH = *(unsigned char*)(attrBase + 0x21);
                     // 004E40F0 compares directly against ITEM_ATTRIBUTE; it
                     // does not clamp these dimensions to the usual 1..8 grid.
-                    if (DAT_0055a3f8 <= attrW) DAT_0055a3f8 = attrW;
-                    if (DAT_0055a3fc <= attrH) DAT_0055a3fc = attrH;
+                    if (ItemAttrMaxWidth <= attrW) ItemAttrMaxWidth = attrW;
+                    if (ItemAttrMaxHeight <= attrH) ItemAttrMaxHeight = attrH;
 
                     int itemLevel = (AsItem(itemPtr)->Level >> 3) & 0xF;
                     char* socketFlagPtr = 0;
@@ -376,14 +376,14 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
                     if (kind < ITEM_WING_ELF || kind <= ITEM_WING_DARKNESS) {
                         if (itemLevel == 9) {
                             ++*(int*)(counts + 21);
-                            DAT_07eaa178 = 0;
+                            MixSocketFlag = 0;
                             scanSocketFlag = true;
-                            socketFlagPtr = (char*)&DAT_07eaa178;
+                            socketFlagPtr = (char*)&MixSocketFlag;
                         } else if (itemLevel == 10) {
                             ++*(int*)(counts + 25);
-                            DAT_07eaa178 = 0;
+                            MixSocketFlag = 0;
                             scanSocketFlag = true;
-                            socketFlagPtr = (char*)&DAT_07eaa178;
+                            socketFlagPtr = (char*)&MixSocketFlag;
                         }
                     }
 
@@ -393,16 +393,16 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
                     case ITEM_WING_SATAN:
                     {
                         ++*(int*)(counts + 53);
-                        DAT_07eaa170 = 0;
+                        WingMixFlagBits = 0;
                         wingValue = ItemValue((ITEM*)itemPtr, 0);
                         int socketCount = AsItem(itemPtr)->SpecialNum;
                         for (int i = 0; i < socketCount; ++i) {
                             unsigned char v = *(unsigned char*)(itemPtr + 37 + i);
                             if (v >= 0x3C) {
                                 if (v <= 0x3D) {
-                                    DAT_07eaa170 = *(unsigned char*)(itemPtr + 45 + i);
+                                    WingMixFlagBits = *(unsigned char*)(itemPtr + 45 + i);
                                 } else if (v == 0x41) {
-                                    DAT_07eaa170 = 4 * *(unsigned char*)(itemPtr + 45 + i);
+                                    WingMixFlagBits = 4 * *(unsigned char*)(itemPtr + 45 + i);
                                 }
                             }
                         }
@@ -448,9 +448,9 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
                     {
                         bool foundExcellent = false;
                         if (kind < ITEM_WING_ELF && itemLevel >= 4) {
-                            DAT_07eaa178 = 0;
+                            MixSocketFlag = 0;
                             scanSocketFlag = true;
-                            socketFlagPtr = (char*)&DAT_07eaa178;
+                            socketFlagPtr = (char*)&MixSocketFlag;
                         }
 
                         int socketCount = AsItem(itemPtr)->SpecialNum;
@@ -481,7 +481,7 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
                         int socketCount = AsItem(itemPtr)->SpecialNum;
                         for (int i = 0; i < socketCount; ++i) {
                             if (*(unsigned char*)(itemPtr + 37 + i) == 0x40) {
-                                DAT_07eaa170 = 1;
+                                WingMixFlagBits = 1;
                                 if (socketFlagPtr) {
                                     *socketFlagPtr = 1;
                                 }
@@ -502,12 +502,12 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
     if (totalItems == 3 && jewelOfChaos == 1) {
         if (*(int*)(counts + 13) == 1 && *(int*)(counts + 17) == 1) {
             if (levelD1 != levelD2) return -2;
-            DAT_07eaa168 = levelD1 + 1;
+            MixRecipeLevel = levelD1 + 1;
             return 2;
         }
         if (*(int*)(counts + 69) == 1 && *(int*)(counts + 73) == 1) {
             if (levelB0 != levelB1) return -8;
-            DAT_07eaa168 = levelB0 + 1;
+            MixRecipeLevel = levelB0 + 1;
             return 8;
         }
     }
@@ -517,8 +517,8 @@ int __cdecl CheckMixRecipe(short* param_1, int param_2, int param_3) {
         && *(int*)(counts + 53) == 1
         && totalItems == *(int*)(counts + 57) + 3
         && !*(int*)(counts + 61)) {
-        DAT_07eaa174 = wingValue / 4000000 + excellentValue / 40000;
-        if (DAT_07eaa174 >= 90) DAT_07eaa174 = 90;
+        MixValueScore = wingValue / 4000000 + excellentValue / 40000;
+        if (MixValueScore >= 90) MixValueScore = 90;
         return 7;
     }
 

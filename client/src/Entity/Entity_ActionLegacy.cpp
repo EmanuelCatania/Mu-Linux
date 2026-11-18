@@ -2,7 +2,7 @@
 
 #include "stdafx.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -46,7 +46,7 @@ extern void MapFileDecrypt(BYTE* buf, int size);
 // Sets animation action on an OBJECT. Checks action < Models[type].numActions,
 // with exceptions for actions 77 and 76. If action changes, saves prior state.
 //
-// Models base = DAT_05828d58 (already a pointer, no extra indirection).
+// Models base = ModelsBase (already a pointer, no extra indirection).
 // Per disasm @ 0x0043e830-0x0043e836:
 //   ECX = [0x05828d58]                       ; table base
 //   slot offset = type * 47 * 4 = type*0xBC
@@ -58,9 +58,9 @@ extern void MapFileDecrypt(BYTE* buf, int size);
 void* __cdecl SetAction(OBJECT* entity_ptr, int anim_id)
 {
     if (entity_ptr == 0) return NULL;
-    if (DAT_05828d58 == 0) return NULL;           // tabla aún no inicializada
+    if (ModelsBase == 0) return NULL;           // tabla aún no inicializada
     short objType = AsObject(entity_ptr)->Type; // OBJECT.Type
-    short numActions = *(short*)(DAT_05828d58 + (int)objType * BMD_STRIDE + 0x26);
+    short numActions = *(short*)(ModelsBase + (int)objType * BMD_STRIDE + 0x26);
 
     // Allow action if < numActions, or if it's 77 (0x4D) or 76 (0x4C)
     if (anim_id >= numActions && anim_id != 77 && anim_id != 76)

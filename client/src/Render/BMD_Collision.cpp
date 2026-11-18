@@ -25,7 +25,7 @@ bool __cdecl BMD__CollisionDetectLineToMesh(BMD* pThis, float Position[3], float
     //   +0x04: short vertIndex1
     //   +0x06: short vertIndex2
     //   +0x08: short vertIndex3
-    // Vertex buffer: DAT_0584621c (float[3] per entry, stride 12 bytes)
+    // Vertex buffer: BoneVertBufBase (float[3] per entry, stride 12 bytes)
     // Each mesh adds 15000 to the vertex base index offset.
 
 
@@ -37,7 +37,7 @@ bool __cdecl BMD__CollisionDetectLineToMesh(BMD* pThis, float Position[3], float
             if (mesh == Mesh && triangle == Triangle) continue;
             const auto* indices = reinterpret_cast<const short*>(entry.Triangles +
                 triangle * sizeof(ModelRuntimeTriangle) + 2);
-            auto* worldVertices = reinterpret_cast<float*>(&DAT_0584621c);
+            auto* worldVertices = reinterpret_cast<float*>(&BoneVertBufBase);
             float* corners[4];
             for (int corner = 0; corner < 4; ++corner)
                 corners[corner] = worldVertices + (mesh * 15000 + indices[corner]) * 3;

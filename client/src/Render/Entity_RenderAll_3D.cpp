@@ -7,24 +7,24 @@
 //
 // ── ARRAY DE ENTIDADES ────────────────────────────────────────────────────────
 //
-//   Base:   DAT_07abf5d0
+//   Base:   CharactersClient
 //   Stride: 0x394 bytes por entidad
 //   Límite: iVar3 < 0x59740  → ~409 entidades máximo
-//   Local player: DAT_07abf5d8 (apunta a la primera entrada del array + stride del slot)
+//   Local player: Hero (apunta a la primera entrada del array + stride del slot)
 //
 // ── DECOMPILE COMPLETO ────────────────────────────────────────────────────────
 //
 //   void Entity_RenderAll_3D(void)
 //   {
 //     int iVar3 = 0;
-//     DAT_07abf5d4 = 0;          // reset contador de entidades visibles
-//     DAT_07abf5e8 = 0;          // reset flag extra
+//     VisibleEntityCount = 0;          // reset contador de entidades visibles
+//     RenderExtraFlagBits = 0;          // reset flag extra
 //     int iVar2 = 0;             // índice entidad
 //     do {
-//       char *pcVar1 = (char*)(DAT_07abf5d0 + iVar3);   // puntero entidad
+//       char *pcVar1 = (char*)(CharactersClient + iVar3);   // puntero entidad
 //
-//       if (pcVar1 == DAT_07abf5d8                       // es el player local
-//        && (DAT_07abf5d8[0x1c0] & 4) != 0              // flag de colisión/física activo
+//       if (pcVar1 == Hero                       // es el player local
+//        && (Hero[0x1c0] & 4) != 0              // flag de colisión/física activo
 //        && SceneFlag == 5) {                         // SceneFlag == InGame
 //
 //         // Override de física: fuerza velocidades a valores fijos
@@ -41,7 +41,7 @@
 //       else if (pcVar1[0] != '\0'                      // entidad activa
 //             && pcVar1[0x160] != '\0') {               // entidad visible (frustum)
 //
-//         DAT_07abf5d4 += 1;                            // contador visibles
+//         VisibleEntityCount += 1;                            // contador visibles
 //         // Determina si es el jugador local (slot especial)
 //         uint is_local = (iVar2 == SelectedCharacter || iVar2 == SelectedNpc) ? 1 : 0;
 //         RenderCharacter(entity, entity, is_local);        // Entity_UpdateRender
@@ -64,10 +64,10 @@
 //
 // ── GLOBALS ───────────────────────────────────────────────────────────────────
 //
-//   DAT_07abf5d0  — base del array de entidades
-//   DAT_07abf5d4  — contador de entidades visibles este frame (reset aquí)
-//   DAT_07abf5d8  — puntero a la entidad del jugador local (dentro del array)
-//   DAT_07abf5e8  — flag extra (reset a 0)
+//   CharactersClient  — base del array de entidades
+//   VisibleEntityCount  — contador de entidades visibles este frame (reset aquí)
+//   Hero  — puntero a la entidad del jugador local (dentro del array)
+//   RenderExtraFlagBits  — flag extra (reset a 0)
 //   SceneFlag  — SceneFlag (5 = InGame)
 //   SelectedCharacter  — slot index A del jugador local (para identificación)
 //   SelectedNpc  — slot index B del jugador local
@@ -96,18 +96,18 @@ void Entity_RenderAll_3D(void)
 
     ObjectPose_BeginBatch();
     iVar3 = 0;
-    DAT_07abf5d4 = 0;
-    _DAT_07abf5e8 = 0;
+    VisibleEntityCount = 0;
+    RenderExtraFlag = 0;
     iVar2 = 0;
 
     do {
-        pcVar1 = (char *)(DAT_07abf5d0 + iVar3);
+        pcVar1 = (char *)(CharactersClient + iVar3);
 
 
         // DESVIACION: las branches del IDA original tienen condiciones que en nuestro
         // build nunca matchean (flag bit 2, visibility flag), así que el héroe se
         // detecta ANTES que cualquier otra cosa y se fuerza su render.
-        if (pcVar1 == DAT_07abf5d8 && SceneFlag == 5 && *pcVar1 != '\0') {
+        if (pcVar1 == Hero && SceneFlag == 5 && *pcVar1 != '\0') {
             // Reset velocity / motion fields (per IDA original).
             pcVar1[EntityOffset(0x130)] = '\0'; pcVar1[EntityOffset(0x131)] = '\0';
             pcVar1[EntityOffset(0x132)] = 'z';  pcVar1[EntityOffset(0x133)] = 'D';
@@ -124,7 +124,7 @@ void Entity_RenderAll_3D(void)
             // y el Hero está EXCLUIDO de esos: va 0.
             RenderCharacter((undefined4 *)pcVar1, (undefined4 *)pcVar1, (undefined4 *)0);
         } else if ((*pcVar1 != '\0') && (pcVar1[EntityOffset(0x160)] != '\0')) {
-            DAT_07abf5d4 = DAT_07abf5d4 + 1;
+            VisibleEntityCount = VisibleEntityCount + 1;
             // is_local_player = (slot == SelectedCharacter || slot == SelectedNpc)
             puVar4 = ((iVar2 == SelectedCharacter) || (iVar2 == SelectedNpc))
                      ? (undefined4 *)0x1 : (undefined4 *)0x0;

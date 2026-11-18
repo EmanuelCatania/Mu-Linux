@@ -1,10 +1,10 @@
-// ChatListBox.h — engine chat-widget object behind dword_55C9FF0.
+// ChatListBox.h — engine chat-widget object behind ChatHistoryWidget.
 // See ChatListBox.cpp for the rationale and full vtable layout.
 #pragma once
 
 extern "C" {
 // Allocate, default-construct, return the chat-widget object.  Caller stores
-// the pointer into DAT_055c9ff0.  Returns NULL on OOM.
+// the pointer into ChatHistoryWidget.  Returns NULL on OOM.
 void* ChatListBox_Construct(void);
 
 // Vtable del widget. El puntero vive en una cabecera nativa delante del objeto.

@@ -37,7 +37,7 @@ void NetRecv_0F(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             // Per IDA: RainTarget = 6 * intensity (= 0..90)
             // Nuestro build: buscar un global similar. Por ahora no
             // tenemos RainTarget específicamente, pero Weather.cpp
-            // usa el área DAT_07eaa178 para el estado del clima.
+            // usa el área MixSocketFlag para el estado del clima.
             // Por ahora logueamos y salteamos; el clima va a andar vía MoveWeather.
         }
     }

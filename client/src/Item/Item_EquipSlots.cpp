@@ -31,7 +31,7 @@ void Terrain_BeginBufferedPass();
 extern "C" void GuildCreator_CloseFromResult(void);
 
 // Inventory pool bases — defined in src/Render/HUD_Pass3.cpp.
-// Lo usan los llamadores de FUN_004d23b0 de abajo para recorrer los arrays de grilla correctos.
+// Lo usan los llamadores de Inventory_ClickHandler de abajo para recorrer los arrays de grilla correctos.
 extern "C" BYTE OffsetInventoryItems[];
 extern "C" BOOL ChaosBoxRequestClose(void);
 extern "C" BYTE Inventory[];
@@ -45,10 +45,10 @@ extern "C" BYTE OffsetMixItems[];
 // click derecho para equipar (RightClickMove.cpp).
 bool Equip_CanPlace(const ITEM* item, int a5)
 {
-    if (!item || !CharacterMachine || !CharacterAttribute || !DAT_07abf5d8 || !DAT_07d78068) return false;
+    if (!item || !CharacterMachine || !CharacterAttribute || !Hero || !ItemAttributeBase) return false;
     BYTE* const CM = (BYTE*)CharacterMachine;
     BYTE* const CA = (BYTE*)CharacterAttribute;
-    ITEM_ATTRIBUTE* const IA = (ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068;
+    ITEM_ATTRIBUTE* const IA = (ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase;
     // 0.97.20: las reglas por rango de tipo usan el vanilla que imita un
     // agregado; la clase requerida es la del propio item.
     const short pt    = (short)ItemBehaviorType(item->Type);
@@ -59,9 +59,9 @@ bool Equip_CanPlace(const ITEM* item, int a5)
     const BYTE* req   = IA[item->Type].RequireClass;
     bool ok = true;
 
-    if ((*(BYTE*)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->Class & 7) == 3) {       // Magic Gladiator
+    if ((*(BYTE*)&((CHARACTER*)(uintptr_t)(Hero))->Class & 7) == 3) {       // Magic Gladiator
         if (!req[3] && !req[0] && !req[1]) ok = false;
-    } else if (!req[*(BYTE*)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->Class & 7]) {
+    } else if (!req[*(BYTE*)&((CHARACTER*)(uintptr_t)(Hero))->Class & 7]) {
         ok = false;
     }
 
@@ -123,7 +123,7 @@ bool Equip_CanPlace(const ITEM* item, int a5)
     return !invalid;
 }
 
-// FUN_004d1fc0 @ 0x004D1FC0 — Render Character Equipment Slots (12 slots).
+// Item_RenderEquipSlots @ 0x004D1FC0 — Render Character Equipment Slots (12 slots).
 // Port FIEL del IDA: 12 llamadas a sub_4CDC70(x, y, w, h, slotIdx) renderizando
 // los slots del Character panel. STRUCT_DECRYPT/ENCRYPT (HashTable obfuscation)
 // skipped per project policy.
@@ -150,60 +150,60 @@ bool Equip_CanPlace(const ITEM* item, int a5)
 //     dos manos, flechas, stats, nivel, restricciones de mapa), pinta la casilla
 //     (Color 2 = valido, 3 = invalido) y con click manda el 0x24.
 extern "C" void __cdecl SyncPickedItemVisualState(void);
-extern "C" void __cdecl FUN_004cdc70(float sx, float sy, float w, float h, int slotIdx)
+extern "C" void __cdecl Item_EquipSlotLogic(float sx, float sy, float w, float h, int slotIdx)
 {
-    if ((int)EnableUse > 0 || DAT_07eaa165 /* EquipmentItem */) return;
-    if (!CharacterMachine || !CharacterAttribute || !DAT_07abf5d8 || !DAT_07d78068) return;
+    if ((int)EnableUse > 0 || ItemMoveInFlightFlag /* EquipmentItem */) return;
+    if (!CharacterMachine || !CharacterAttribute || !Hero || !ItemAttributeBase) return;
 
     const int  a5  = slotIdx;
-    const int  x0  = (int)DAT_07ea5288 + (int)sx;          // InventoryStartX + a1
-    const int  y0  = (int)DAT_07ea5284 + (int)sy;          // InventoryStartY + a2
-    const int  mx  = (int)DAT_083a427c;
-    const int  my  = (int)DAT_083a4278;
+    const int  x0  = (int)InventoryStartX + (int)sx;          // InventoryStartX + a1
+    const int  y0  = (int)InventoryStartY + (int)sy;          // InventoryStartY + a2
+    const int  mx  = (int)MouseX;
+    const int  my  = (int)MouseY;
     const bool inside = mx >= x0 && (double)x0 + w > (double)mx &&
                         my >= y0 && (double)y0 + h > (double)my;
     BYTE* const CM   = (BYTE*)CharacterMachine;
     BYTE* const CA   = (BYTE*)CharacterAttribute;
     BYTE* const slot = CM + 536 + 68 * a5;
-    ITEM_ATTRIBUTE* const IA = (ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068;
-    ITEM* const picked = (ITEM*)DAT_07e91350;              // pPickedItem
+    ITEM_ATTRIBUTE* const IA = (ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase;
+    ITEM* const picked = (ITEM*)PickedItemData;              // pPickedItem
 
     // ── Sin item levantado ────────────────────────────────────────────────
-    if ((int)DAT_07e91388 <= 0) {
+    if ((int)ItemPickedFlag <= 0) {
         const short type = *(short*)slot;
         if (type == -1 || !inside) return;
-        DAT_07eaa164 = 1;                                   // byte_7EAA164
+        InventorySpecialModeFlag = 1;                                   // 0x07EAA164
         // DESVIACION (DLL RightClickMove.cpp CheckUnequipItem): click derecho
         // manda el item al primer hueco libre del inventario.
-        const bool rightClick = !DAT_083a4124 && MouseRButtonPush != 0;
+        const bool rightClick = !MouseLButtonPush && MouseRButtonPush != 0;
         int unequipTarget = -1;
         if (rightClick) {
             MouseRButtonPush = 0;
-            if (DAT_07eaa134) return;                       // modo reparar
+            if (RepairEnableFlag) return;                       // modo reparar
             unequipTarget = RightClickMove_FindInventorySlot(type);
             if (unequipTarget < 0) return;
         }
-        if (!DAT_083a4124 && !rightClick) {                 // MouseLButtonPush
+        if (!MouseLButtonPush && !rightClick) {                 // MouseLButtonPush
             slot[64] = 2;                                   // Color: hover
-            DAT_07ea9844 = 0;                               // byte_7EA9844
-            DAT_07eaa160 = (uintptr_t)slot;          // CheckInventory
-            DAT_07ea8408 = (DWORD)y0;                       // sy
-            DAT_07ea840c = (DWORD)(x0 + (int)w / 2);        // sx
+            ItemRenderMode = 0;                               // 0x07EA9844
+            CheckInventoryPtr = (uintptr_t)slot;          // CheckInventory
+            TooltipPosY = (DWORD)y0;                       // sy
+            TooltipPosX = (DWORD)(x0 + (int)w / 2);        // sx
             return;
         }
         if (Teleport) return;                           // Teleport
-        if (DAT_07eaa134) {                                 // RepairEnable_0
+        if (RepairEnableFlag) {                                 // RepairEnable_0
             const int kind = ItemBehaviorType(type);        // 0.97.20
             if ((kind >= 416 && kind <= 419) || kind == 426 || kind == 135 ||
                 kind == 143 || kind >= 448 || (kind >= 391 && kind <= 403) ||
                 (kind >= 430 && kind <= 435))
                 return;
-            DAT_083a4124 = 0;
-            BYTE pkt[5] = { 0xC1, 0x05, 0x34, (BYTE)a5, (BYTE)DAT_07eaa138 };
+            MouseLButtonPush = 0;
+            BYTE pkt[5] = { 0xC1, 0x05, 0x34, (BYTE)a5, (BYTE)RepairEnable };
             gNetwork.Send(pkt, sizeof(pkt));
             return;
         }
-        DAT_083a4124 = 0;
+        MouseLButtonPush = 0;
         if ((int)gMapManager.GetCurrentMap() == 10) {
             // Icarus: no se puede sacar el unico item que permite volar
             // (alas 384..390 o Dinorant 419).
@@ -216,24 +216,24 @@ extern "C" void __cdecl FUN_004cdc70(float sx, float sy, float w, float h, int s
             if (flying <= 1 && ((kind >= 384 && kind <= 390) || kind == 419))
                 return;
         }
-        DAT_07ea9800 = &OffsetInventoryItems[0];
-        memcpy(DAT_07e91350, slot, 0x44);                   // pPickedItem = *slot
-        DAT_07e91388 = 1;                                   // pPickedItem.Key (copia del port)
+        InventoryBasePtr = &OffsetInventoryItems[0];
+        memcpy(PickedItemData, slot, 0x44);                   // pPickedItem = *slot
+        ItemPickedFlag = 1;                                   // pPickedItem.Key (copia del port)
         SyncPickedItemVisualState();
         g_ItemMoveSourcePool = &OffsetInventoryItems[0];
         g_ItemMoveTargetPool = 0;
         *(short*)slot = -1;
         *(int*)(slot + 4) = 0;
         slot[27] = 0;
-        DAT_07ea5b18 = (DWORD)a5;                           // Inventory[32].Type
-        SetCharacterClass(AsCharacter(DAT_07abf5d8));         // SetCharacterClass(Hero)
-        DAT_07eaa160 = 0;                                   // CheckInventory
+        SourceInvSlot = (DWORD)a5;                           // Inventory[32].Type
+        SetCharacterClass(AsCharacter(Hero));         // SetCharacterClass(Hero)
+        CheckInventoryPtr = 0;                                   // CheckInventory
         PlayBuffer(29, 0, 0);
         if (a5 == 8)
-            DeleteBug((intptr_t)DAT_07abf5d8);
+            DeleteBug((intptr_t)Hero);
         if (rightClick) {
-            DAT_07e11e78 = (DWORD)(unequipTarget + 12);
-            DAT_07eaa165 = 1;                               // EquipmentItem
+            TargetInvSlot = (DWORD)(unequipTarget + 12);
+            ItemMoveInFlightFlag = 1;                               // EquipmentItem
             g_ItemMoveTargetPool = &OffsetInventoryItems[0];
             SendRequestEquipmentItem(0, a5, picked, 0, unequipTarget + 12);
         }
@@ -247,35 +247,35 @@ extern "C" void __cdecl FUN_004cdc70(float sx, float sy, float w, float h, int s
     const bool  invalid = !Equip_CanPlace(picked, a5);
     if (invalid) {                                          // LABEL_220
         slot[64] = 3;
-        if (DAT_083a4124) {
-            DAT_083a4124 = 0;
-            if (!DAT_07eaa165) Item_ReturnPickedItem();     // sub_4CD3B0
+        if (MouseLButtonPush) {
+            MouseLButtonPush = 0;
+            if (!ItemMoveInFlightFlag) Item_ReturnPickedItem();     // sub_4CD3B0
         }
         return;
     }
 
     slot[64] = 2;
-    if (!DAT_083a4124) return;
-    DAT_07eaa164 = 1;
-    DAT_083a4124 = 0;
-    DAT_07e11e78 = (DWORD)a5;
+    if (!MouseLButtonPush) return;
+    InventorySpecialModeFlag = 1;
+    MouseLButtonPush = 0;
+    TargetInvSlot = (DWORD)a5;
     if (a5 == 1 && pt >= 0 && pt < 96 && left == -1)
-        DAT_07e11e78 = 0;
+        TargetInvSlot = 0;
 
-    const BYTE* src = DAT_07ea9800;
+    const BYTE* src = InventoryBasePtr;
     BYTE srcFlag;
     if (src == &OffsetInventoryItems[0])      srcFlag = 0;
     else if (src == &OffsetWarehouseItems[0]) srcFlag = 2;
     else if (src == &OffsetMixItems[0])       srcFlag = 3;
     else                                      srcFlag = 1;  // trade
 
-    if (srcFlag == 2 && DAT_00559f5f && !DAT_07eaa148) {
+    if (srcFlag == 2 && StoragePinOkFlag && !ShopItemSelectionC) {
         // Baul con candado: pedir el PIN antes de sacar el item.
-        DAT_07ea9810 = (DWORD)a5;
-        DAT_07ea9808 = DAT_07ea5b18;
-        DAT_07ea9804 = 2;
-        DAT_07ea980c = 0;
-        short* digits = (short*)&DAT_07e91394;
+        EquipTargetSlot = (DWORD)a5;
+        ShopContextB = SourceInvSlot;
+        ShopContextA = 2;
+        ShopContextC = 0;
+        short* digits = (short*)&PinShuffleDigits;
         for (short i = 0; i < 10; ++i) digits[i] = i;
         for (int n = 0; n < 20; ++n) {
             const int a = rand() % 10, b = rand() % 10;
@@ -285,40 +285,40 @@ extern "C" void __cdecl FUN_004cdc70(float sx, float sy, float w, float h, int s
                 digits[a] ^= digits[b];
             }
         }
-        DAT_07eaa14c = 1;
-        memset(DAT_07ea9814, 0, sizeof(DAT_07ea9814));
+        PinInputModeState = 1;
+        memset(PinBytesPart0Bits, 0, sizeof(PinBytesPart0Bits));
         return;
     }
 
-    if (DAT_07eaa165) return;                               // EquipmentItem
-    DAT_07eaa165 = 1;
-    g_ItemMoveSourcePool = DAT_07ea9800 ? DAT_07ea9800
+    if (ItemMoveInFlightFlag) return;                               // EquipmentItem
+    ItemMoveInFlightFlag = 1;
+    g_ItemMoveSourcePool = InventoryBasePtr ? InventoryBasePtr
                                         : &OffsetInventoryItems[0];
     g_ItemMoveTargetPool = &OffsetInventoryItems[0];
-    SendRequestEquipmentItem(srcFlag, (int)DAT_07ea5b18, picked, 0, (int)DAT_07e11e78);
+    SendRequestEquipmentItem(srcFlag, (int)SourceInvSlot, picked, 0, (int)TargetInvSlot);
 }
 
-void __cdecl FUN_004d1fc0(void) {
+void __cdecl Item_RenderEquipSlots(void) {
     if (!CharacterAttribute) return;
-    FUN_004cdc70(15.0f,  46.0f,  40.0f, 40.0f, 8);
-    FUN_004cdc70(115.0f, 46.0f,  60.0f, 40.0f, 7);
+    Item_EquipSlotLogic(15.0f,  46.0f,  40.0f, 40.0f, 8);
+    Item_EquipSlotLogic(115.0f, 46.0f,  60.0f, 40.0f, 7);
 
     BYTE classByte = *(BYTE*)((BYTE*)CharacterAttribute + 11);
     if ((classByte & 7) != 3) {  // not SM (Soul Master)
-        FUN_004cdc70(75.0f,  46.0f,  40.0f, 40.0f, 2);
+        Item_EquipSlotLogic(75.0f,  46.0f,  40.0f, 40.0f, 2);
     }
-    FUN_004cdc70(75.0f,  89.0f,  40.0f, 60.0f, 3);
-    FUN_004cdc70(75.0f,  152.0f, 40.0f, 40.0f, 4);
-    FUN_004cdc70(15.0f,  89.0f,  40.0f, 60.0f, 0);
-    FUN_004cdc70(134.0f, 89.0f,  40.0f, 60.0f, 1);
-    FUN_004cdc70(15.0f,  152.0f, 40.0f, 40.0f, 5);
-    FUN_004cdc70(134.0f, 152.0f, 40.0f, 40.0f, 6);
-    FUN_004cdc70(55.0f,  89.0f,  20.0f, 20.0f, 9);
-    FUN_004cdc70(55.0f,  152.0f, 20.0f, 20.0f, 10);
-    FUN_004cdc70(115.0f, 152.0f, 20.0f, 20.0f, 11);
+    Item_EquipSlotLogic(75.0f,  89.0f,  40.0f, 60.0f, 3);
+    Item_EquipSlotLogic(75.0f,  152.0f, 40.0f, 40.0f, 4);
+    Item_EquipSlotLogic(15.0f,  89.0f,  40.0f, 60.0f, 0);
+    Item_EquipSlotLogic(134.0f, 89.0f,  40.0f, 60.0f, 1);
+    Item_EquipSlotLogic(15.0f,  152.0f, 40.0f, 40.0f, 5);
+    Item_EquipSlotLogic(134.0f, 152.0f, 40.0f, 40.0f, 6);
+    Item_EquipSlotLogic(55.0f,  89.0f,  20.0f, 20.0f, 9);
+    Item_EquipSlotLogic(55.0f,  152.0f, 20.0f, 20.0f, 10);
+    Item_EquipSlotLogic(115.0f, 152.0f, 20.0f, 20.0f, 11);
 }
 
-// FUN_004d23b0 @ 0x004D23B0 — Inventory grid render + click dispatcher.
+// Inventory_ClickHandler @ 0x004D23B0 — Inventory grid render + click dispatcher.
 // Vive en `Item/Item_ClickHandler.cpp`. Signatura real (per IDA):
-//   void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
+//   void __cdecl Inventory_ClickHandler(char* origin_x, int origin_y, short* inv_base,
 //                             int grid_w, int grid_h, char mode_flag);

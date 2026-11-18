@@ -6,7 +6,7 @@
 //
 // ── POOL DE EFECTOS ───────────────────────────────────────────────────────────
 //
-//   Base:   DAT_07c5ab3c  (inicio de iteración, pfVar1[-3] = flag activo)
+//   Base:   SkillEffectPool  (inicio de iteración, pfVar1[-3] = flag activo)
 //   Stride: 0x1c * 4 = 0x70 bytes por efecto (pfVar1 += 0x1c por iteración)
 //   Límite: pfVar1 < 0x7c602bc
 //   Entradas: (0x7c602bc - 0x07c5ab3c) / 0x70 = 0x5780/112 = 200 efectos
@@ -33,7 +33,7 @@
 //
 //     glColor3f(1.0, 1.0, 1.0);  // color blanco (textura sin tinte)
 //
-//     pfVar1 = &DAT_07c5ab3c;
+//     pfVar1 = &SkillEffectPool;
 //     do {
 //       if (pfVar1[-3] != '\0') {             // efecto activo
 //         BindTexture(*((_DWORD *)v0 - 2));    ← DWORD, no float
@@ -66,7 +66,7 @@
 //
 //   Esta función se llama dos veces en Game_RenderTick:
 //   1. Siempre (línea 106) — para todas las escenas
-//   2. Solo si World == 2 && DAT_07e118e8 not in {3, >=10} (línea 121)
+//   2. Solo si World == 2 && WorldMapType not in {3, >=10} (línea 121)
 //      → segunda pasada solo en modo in-world normal
 //
 // ── FUNCIÓN CROSS-REFERENCE ───────────────────────────────────────────────────
@@ -87,7 +87,7 @@
 // SkillEffect_Render @ 0x0046CB70 (44 lines)
 // Renders all active skill effects. In sub-states 2/7/10 uses timer-driven mode;
 // otherwise sets GL blend mode. Each effect: bind texture, then draw 2D or billboard.
-// Pool DAT_07c5ab3c: array
+// Pool SkillEffectPool: array
 // de 200 × 0x70 bytes en globals.cpp. Loop bound count-based.
 //
 // Pool layout per slot (start at +0x0c offset from pfVar1, so pfVar1[-3] = +0):
@@ -117,7 +117,7 @@ void SkillEffect_Render(void)
 
     // Iterate 200 slots × 0x70 bytes; pfVar1 lands at +0x0c per slot.
     for (int slot = 0; slot < 200; ++slot) {
-        float *pfVar1 = (float*)(DAT_07c5ab3c + slot * 0x70 + 0x0c);
+        float *pfVar1 = (float*)(SkillEffectPool + slot * 0x70 + 0x0c);
         if (*(char *)(pfVar1 + -3) == '\0') continue;   // not active
 
         // IDA lee este campo como **DWORD**: `BindTexture(*((_DWORD *)v0 - 2))`.

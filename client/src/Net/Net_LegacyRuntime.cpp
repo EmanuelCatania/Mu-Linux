@@ -13,11 +13,11 @@ extern void __cdecl Xor_ConvertBlock(BYTE *lpBuffer, int iSize, int iKey);
 extern void __cdecl operator_delete(void* ptr);
 extern void ClearActionObject(void);
 extern void __cdecl Effect_PhysicsTick(std::uintptr_t Object);
-extern "C" void __cdecl FUN_004cdc70(float sx, float sy, float w, float h, int slotIdx);
+extern "C" void __cdecl Item_EquipSlotLogic(float sx, float sy, float w, float h, int slotIdx);
 
-// En el binario original `OffsetInventoryItems` y `DAT_07ea8410` son el mismo
+// En el binario original `OffsetInventoryItems` y `LegacyInventoryItems` son el mismo
 // símbolo (idem para Mix/Warehouse). En nuestra build son globals separados,
-// así que comparaciones tipo `DAT_07ea9800 == &DAT_07ea8410` tienen que usar
+// así que comparaciones tipo `InventoryBasePtr == &LegacyInventoryItems` tienen que usar
 // las direcciones reales del pool.
 // Forward-decls a nivel TU para usar las direcciones reales del pool.
 extern "C" BYTE OffsetInventoryItems[];   // HUD_Pass3.cpp — main inv (8x8 + 12 wear)
@@ -75,17 +75,17 @@ void __stdcall InitGame(void)
 {
     // --- Phase 1: Reset game state globals ---
     EnableUse = 0;
-    DAT_07e11998 = -1;    // SendGetItem
+    SendGetItem = -1;    // SendGetItem
     // IDA InitGame L31 es `SummonLife = 0`, y SummonLife vive en 0x05826D24
     // (lo escriben InitGame, ReceiveRevival x3 y ProtocolCore, y lo lee
-    // RenderEquipedHelperLife).  No confundir con DAT_07E11D28, que es
+    // RenderEquipedHelperLife).  No confundir con MoveDebounceCounter, que es
     // MouseUpdateTime -- el contador del debounce de movimiento de Player_InputTick.
-    DAT_05826d24 = 0;     // SummonLife
-    DAT_05826c08 = 0;     // SoccerTime    (IDA InitGame @0x4244B4)
-    DAT_05826d33 = 0;     // SoccerObserver (IDA InitGame @0x4244BA)
+    SummonLife = 0;     // SummonLife
+    SoccerTime = 0;     // SoccerTime    (IDA InitGame @0x4244B4)
+    SoccerObserver = 0;     // SoccerObserver (IDA InitGame @0x4244BA)
     // IDA InitGame L36-39 resetea los globals NOMBRADOS
     //   SelectedNpc / SelectedOperate / SelectedCharacter / SelectedItem,
-    // que viven en 0x00559C4C / 54 / 50 / 48.  El port escribia DAT_07E11988..94,
+    // que viven en 0x00559C4C / 54 / 50 / 48.  El port escribia LegacySelectedItem..94,
     // que es memoria distinta: el mismo error de alias que esta funcion ya tenia
     // en SummonLife, Attacking, CheckInventory y World.
     //
@@ -98,41 +98,41 @@ void __stdcall InitGame(void)
     SelectedCharacter = -1;
     SelectedItem      = -1;
     Attacking = -1;    // Attacking (IDA InitGame L38, global 0x00559C58).
-                          // Antes escribia DAT_07e11984, que es el debounce de
+                          // Antes escribia UpArrowDebounce, que es el debounce de
                           // la flecha arriba del chat.
     m_bAutoAttack = 1;     // m_bAutoAttack (IDA InitGame L39, 0x00559C5C)
     // IDA InitGame L40 es `CheckInventory = 0`, y CheckInventory vive en
     // 0x07EAA160 -- es el puntero al ITEM bajo el mouse que Scene_MapTick le
     // pasa a RenderItemInfo para dibujar el tooltip.  No confundir con
-    // DAT_07E11D24 (el tipo de item de la ventana F1, el que indexa sub_4C2E20).
+    // MenuF1ItemType (el tipo de item de la ventana F1, el que indexa sub_4C2E20).
     // Si no se limpia, el tooltip queda dibujado encima del char-select y del
     // select-server.
-    DAT_07eaa160 = 0;     // CheckInventory
+    CheckInventoryPtr = 0;     // CheckInventory
 
     // IDA InitGame tiene ADEMAS esta linea, sobre otro global (ojo: D20, no
     // D24).  Es el modo de la ventana de ayuda F1.
-    DAT_07e11d20 = 0;
+    HelpWindowMode = 0;
     // IDA InitGame L41 es `World = -1`, y World es 0x0055A7AC (World), no
     // DAT_005615c4 (el puntero al mp3 de la taberna).
     gMapManager.SetCurrentMap(-1);   // World
     // CSQuest__ClearQuest(g_csQuest);
     // IDA InitGame L43 es `LockInputStatus = 0`, y LockInputStatus vive en
     // 0x07E11D6F (xrefs: WndProc x4, InitGame, ReceiveJoinMapServer,
-    // RenderIME_Status).  No confundir con DAT_07E11D1C, que es **LoadingWorld**
+    // RenderIME_Status).  No confundir con InputCooldownTicks, que es **LoadingWorld**
     // -- el contador que gatea el frame de render (`if (LoadingWorld > 30) return`).
-    DAT_07e11d6f = 0;     // LockInputStatus
-    DAT_07eaa134 = 0;     // RepairEnable_0 (IDA InitGame 0x4244FC)
-    DAT_07eaa138 = 0;     // RepairEnable   (IDA InitGame 0x424502)
-    DAT_00559c6d = 0xff;
-    DAT_0055a3e4 = 0xffffffff;
-    ClearNotice();        // IDA: ClearNotice (0x0047FAC0).  Antes llamaba a FUN_0051d740,
+    LockInputStatus = 0;     // LockInputStatus
+    RepairEnableFlag = 0;     // RepairEnable_0 (IDA InitGame 0x4244FC)
+    RepairEnable = 0;     // RepairEnable   (IDA InitGame 0x424502)
+    UiAlphaByte = 0xff;
+    HoveredSkillIndex = 0xffffffff;
+    ClearNotice();        // IDA: ClearNotice (0x0047FAC0).  Antes llamaba a ClearNoticeStub,
                           // que no es una funcion (cuerpo vacio): los notices del juego
                           // seguian en pantalla al volver al login o al char-select.
 
     // --- Phase 2: Hash table lookup for CharacterMachine ---
     // Looks up CharacterMachine key in MAIN_HASH_CLASS (anti-tamper obfuscation).
     // If found, clones the 0x584-byte block, XOR-encrypts it with key table
-    // at DAT_00559050 (reverse iterate, XOR ^ subtract 0x23, add 0xB9),
+    // at LegacyPacketXorKey16 (reverse iterate, XOR ^ subtract 0x23, add 0xB9),
     // then copies back. Reference count incremented.
     // This is anti-tamper hash table manipulation — not game logic.
 
@@ -146,16 +146,16 @@ void __stdcall InitGame(void)
     // If refcount hits 0, calls Packet_EncryptBuffer to free the entry.
 
     // --- Phase 5: Final cleanup ---
-    DAT_07e11e1c = 0;     // _g_shEventChipCount
-    DAT_07e11e20 = -1;    // g_shMutoNumber[0]
-    DAT_07e11e22 = -1;    // g_shMutoNumber[1]
-    DAT_07e11e24 = -1;    // g_shMutoNumber[2]
+    EventChipCount = 0;     // _g_shEventChipCount
+    MutoNumber0 = -1;    // g_shMutoNumber[0]
+    MutoNumber1 = -1;    // g_shMutoNumber[1]
+    MutoNumber2 = -1;    // g_shMutoNumber[2]
     m_bWhisperSound = 0;     // m_bWhisperSound (IDA InitGame L167, 0x07E11D80)
     ClearWhisperID();     // IDA: ClearWhisperID (0x004804D0).  Antes llamaba a
-                          // FUN_00482350, que no es una funcion (cae dentro de sub_4824C0).
+                          // ClearWhisperIDStub, que no es una funcion (cae dentro de sub_4824C0).
     clearMatchInfo();       // clearMatchInfo (0x0047EB80; antes se llamaba a
-                          // FUN_004827a0, un stub vacio con la direccion mal)
-    FUN_00433830();       // InitPartyList
+                          // Fn_004827a0, un stub vacio con la direccion mal)
+    InitPartyListStub();       // InitPartyList
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -223,7 +223,7 @@ void __cdecl ReceiveChat(BYTE *ReceiveBuffer)
     }
     else {
         // Chat normal: burbuja + log en canal 3 (color casi-blanco 0xFFEFDCCD;
-        // renderLine lo saltea si byte_559BF1==0, que es el toggle de F2).
+        // renderLine lo saltea si ChatDisplayToggle==0, que es el toggle de F2).
         NetText::FromServer(msg, sizeof(msg), ReceiveBuffer + MSG, NetText::ChatMessageSize);
         AssignChat(sender, msg, 0);
         UIChatLogWindow_AddText(sender, msg, 3);
@@ -231,18 +231,18 @@ void __cdecl ReceiveChat(BYTE *ReceiveBuffer)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FUN_00422c50 @ 0x00422C50 (395 bytes, ~99 lines)
+// Net_SessionNodeCleanup @ 0x00422C50 (395 bytes, ~99 lines)
 // __fastcall(ecx=contextObj). Binary tree node cleanup for a connection/session
 // object. Frees 4 heap allocations at offsets +0x3FC, +0x408, +0x40C, +0x410.
 // Resets +0x400 to 1950000000 (likely a timeout sentinel), +0x404 to -1.
 // Then rebuilds the BST rooted at +0x41C:
 //   - Sets vtable at +0x414 to PTR_LAB_00552840
 //   - Recursively inserts left/right children via CBTree_RemoveFrom
-//   - Removes root node via FUN_004236c0 or CBTree_RemoveNode
+//   - Removes root node via BST_RemoveNode or CBTree_RemoveNode
 //   - Handles the "find rightmost in left subtree" replacement for BST delete
 // Finally zeroes +0x41C (root) and +0x418 (count).
 // ─────────────────────────────────────────────────────────────────────────────
-void __fastcall FUN_00422c50(intptr_t param_1)
+void __fastcall Net_SessionNodeCleanup(intptr_t param_1)
 {
     // Free heap allocations
     if (*(void **)(param_1 + 0x3FC) != NULL) {

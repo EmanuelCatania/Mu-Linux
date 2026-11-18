@@ -15,9 +15,9 @@
 //   World — float, coordenada 3D para OpenGL
 //
 // Conversión grid → world:
-//   worldX = (float(gridX) + DAT_00552504) * DAT_005524f0
-//   DAT_00552504 = 0.5f  (centrado en casilla)
-//   DAT_005524f0 = escala global (≈ tamaño de casilla en unidades de render)
+//   worldX = (float(gridX) + HalfScaleBits) * GridToWorldScaleBits
+//   HalfScaleBits = 0.5f  (centrado en casilla)
+//   GridToWorldScaleBits = escala global (≈ tamaño de casilla en unidades de render)
 //
 // Elevación (Z) se obtiene por RequestTerrainHeight() — lectura del heightmap del mapa.
 //
@@ -26,8 +26,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //
 //   Stride del array: 0x394 bytes por entidad
-//   Base del array:   DAT_07abf5d0 (aleatorizada con rand()%0x80*0x394 al inicio)
-//   Entidad del jugador: DAT_07abf5d8 (= base + 0x394)
+//   Base del array:   CharactersClient (aleatorizada con rand()%0x80*0x394 al inicio)
+//   Entidad del jugador: Hero (= base + 0x394)
 //
 //   Campos: Entity/EntityTypes.h (CHARACTER / OBJECT).
 //
@@ -77,8 +77,8 @@ float Entity_GetDirCode(float x1, float y1, float x2, float y2);
 // 0x0043e1b0  Angle_ShortestLerp(float current, float target, float step) → float
 //   Interpolación suavizada del ángulo más corto entre current y target.
 //   Maneja el wrap-around de 360° correctamente.
-//   DAT_005524ec = 180.0f (punto de inflexión del wrap)
-//   DAT_0055286c = 360.0f
+//   AngleDeg180Bits = 180.0f (punto de inflexión del wrap)
+//   AngleDeg360Bits = 360.0f
 //   Si current >= 180: intenta reducir wrap-around por ambos lados.
 //   Retorna el ángulo interpolado (float10 → float).
 float Angle_ShortestLerp(float current, float target, float step);
@@ -103,15 +103,15 @@ void Entity_ApplyRotation(float* out, float* quat, float* vec);
 
 // 0x0043e5c0  Entity_SmoothAngle(intptr_t entity)
 //   Lee entity+0x161 (flag):
-//     0 → lerp suave: entity+0x168 += (entity+0x164 - entity+0x168) * DAT_005524f4
-//   Flag ≠ 0 → avanza/retrocede DAT_00552874 directamente (snap incremental).
-//   Clamp a [0,1] (DAT_0055256c = 1.0f).
+//     0 → lerp suave: entity+0x168 += (entity+0x164 - entity+0x168) * 0.1f
+//   Flag ≠ 0 → avanza/retrocede AlphaFadeStepBits directamente (snap incremental).
+//   Clamp a [0,1] (1.0f).
 //   Actualiza entity+0x68 si entity+0x168 < entity+0x68.
 void Entity_SmoothAngle(intptr_t entity);
 
 // 0x0043e680  Entity_SteerAvoid(intptr_t entity, int self_idx, intptr_t entity_array, int count)
 //   Steering de evasión: itera el array de entidades (stride 0x1BC).
-//   Para cada entidad dentro de DAT_00552850 unidades:
+//   Para cada entidad dentro de WeatherMaxAltitudeBits unidades:
 //     Calcula vector de repulsión ponderado.
 //   Promedia todos los vectores de repulsión.
 //   Llama Entity_GetDirCode y Angle_ShortestLerp para actualizar entity+0x24.
@@ -136,7 +136,7 @@ void Entity_SetAnimation(intptr_t entity, uint animId);
 //   Si target != 0:
 //     Entity_GetDirCode(entity.pos, target.pos) → dirCode
 //     Angle_Delta(entity.angle, dirCode, 1) → delta
-//     Si delta < DAT_00552848 (umbral):
+//     Si delta < 90.0f (umbral):
 //       entity+0x34 = entity.angle - dirCode  (jitter X)
 //       entity+0x38 = (target.z - entity.z - 0.5) * sin_factor  (jitter Y / elevación)
 //       Normaliza ambos a [0, 360)
@@ -171,7 +171,7 @@ void Entity_AnimTick(intptr_t entity);
 //   INTERPOLACIÓN (4 sub-pasos por waypoint):
 //     Para cada sub-paso 0..3 se calcula la posición objetivo como combinación
 //     lineal de los 4 waypoints circundantes con diferentes coeficientes
-//     (constantes DAT_00552880..0x52888C — spline cúbica de Catmull-Rom o similar).
+//     (constantes 0.0703125f..0x52888C — spline cúbica de Catmull-Rom o similar).
 //     Casos por entity+0x355:
 //       0: coef (0x52880, 0x5288c, 0x52888, 0x52884)
 //       1: coef (0x5287c, 0x5287c, 0x526dc, 0x526dc)
@@ -179,7 +179,7 @@ void Entity_AnimTick(intptr_t entity);
 //       3: posición directa del waypoint (sin interpolación)
 //
 //   AVANCE:
-//     - Si distancia al sub-objetivo < DAT_005524fc (epsilon):
+//     - Si distancia al sub-objetivo < 20.0f (epsilon):
 //         path_substep += 1
 //         Si path_substep >= 4:
 //             path_substep = 0
@@ -189,7 +189,7 @@ void Entity_AnimTick(intptr_t entity);
 //   ACTUALIZACIÓN DE ÁNGULO (si update_angle != 0):
 //     Entity_GetDirCode(entity.pos, target_pos) → dirCode
 //     Angle_Delta(entity+0x24, dirCode, 1) → delta
-//     Si delta >= DAT_00552844: Angle_ShortestLerp(entity+0x24, dirCode, delta*0.5)
+//     Si delta >= 45.0f: Angle_ShortestLerp(entity+0x24, dirCode, delta*0.5)
 //     Si delta < threshold:     entity+0x24 = dirCode  (snap)
 //
 //   HASH TABLE ANTI-TAMPER:
@@ -205,7 +205,7 @@ int Entity_MoveAlongPath(intptr_t entity, char update_angle);
 // 0x004430c0  Entity_SetWalkAnimation(intptr_t entity)
 //   Determina y aplica el ID de animación de caminata correcta según contexto.
 //   Llama Terrain_GetTileIndex(x, y) = GetTileType para detectar agua/terreno especial.
-//   DAT_07d78068 = tabla de propiedades de tiles (flags de terreno, stride 0x40).
+//   ItemAttributeBase = tabla de propiedades de tiles (flags de terreno, stride 0x40).
 //   Lógica de selección:
 //     entity_type == 0x186 → animaciones especiales (skip; ver Entity_UpdateWalkAnim)
 //     entity+0x34e (dead)  → skip
@@ -227,10 +227,10 @@ void Entity_SetWalkAnimation(intptr_t entity);
 //   Versión extendida de Entity_SetWalkAnimation para entidad type==0x186 (y otras).
 //   Gestiona adicionalmente:
 //     c->Run (+0x300): contador de cansancio; se incrementa al correr.
-//     Si entity_type == 0x186: inicializa tabla de bone weights en DAT_05828d58+0x11E98:
+//     Si entity_type == 0x186: inicializa tabla de bone weights en ModelsBase+0x11E98:
 //       Offsets 0xD0..0x140 (step 0x10): peso = 0x3EA8F5C3 (≈ 0.083f)
 //       Offsets 0x160..0x210 (step 0x10): peso = 0x3EAE147B (≈ 0.085f)
-//       Si entity+0x78 bit1==1: multiplica por DAT_00552504 (0.5f)
+//       Si entity+0x78 bit1==1: multiplica por HalfScaleBits (0.5f)
 //     Luego, lógica completa de selección de animación (similar a Entity_SetWalkAnimation)
 //     con más casos para estados de juego (World==7, 8, 10).
 //     Finaliza con Entity_SetAnimation + PlayBuffer para sonidos.
@@ -270,8 +270,8 @@ void PacketHandler_0x10(int packet);
 //
 //   Caso especial type==0xEC (flecha/proyectil):
 //     entity+0xD8 = 20.0f (velocidad inicial)
-//     entity+0xC4 = (byte[5] - entity.x) * DAT_00552850  (velocidad X)
-//     entity+0xC0 = (entity.y - byte[6]) * DAT_00552850  (velocidad Y)
+//     entity+0xC4 = (byte[5] - entity.x) * WeatherMaxAltitudeBits  (velocidad X)
+//     entity+0xC0 = (entity.y - byte[6]) * WeatherMaxAltitudeBits  (velocidad Y)
 //     PlayBuffer(0x1B, ...) — notificación UI
 //     Effect_SpawnSmokeBurst(entity+0x10, 0) — aplicar fuerza/posición
 //   Caso general:
@@ -287,7 +287,7 @@ void PacketHandler_0x11(int packet);
 //   byte[3] sub-tipo:
 //     0: UI_AddNotice(packet+4, 0)      — broadcast/aviso de sistema
 //     1: UIChatLogWindow_AddText(..., packet+4, 1) — mensaje de GM
-//     2: Copia string de packet+4 a DAT_07e913a8 (max 14 chars)
+//     2: Copia string de packet+4 a ScreenBannerText (max 14 chars)
 //                                        para banner de texto en pantalla
 void PacketHandler_0x0D(int packet);
 
@@ -296,7 +296,7 @@ void PacketHandler_0x0D(int packet);
 // ─────────────────────────────────────────────────────────────────────────────
 //
 //   0x0043f3e0  PacketQueue_Enqueue(uint id, float current, uint x, uint y, void* pathState, float t)
-//     Wrapper → PATH_FindPath(DAT_05826df4, id, t, x, y, 1, 2, t)
+//     Wrapper → PATH_FindPath(PathFindContext, id, t, x, y, 1, 2, t)
 //     Inserta movimiento en la cola de acciones de red (predicción de cliente).
 //
 //   0x0043f500  ActionQueue_Insert(this, int id, float t, int x, int y, int p5, int p6, float p7)
@@ -309,26 +309,26 @@ void PacketHandler_0x0D(int packet);
 //
 //   0x0043fd70  AnimTimer_Update(void)
 //     Inicia/actualiza timer global de animación con timeGetTime().
-//     FpsWindowStartTimeMs = timestamp base; DAT_05826e10 = delta por frame.
+//     FpsWindowStartTimeMs = timestamp base; FpsWindowFrameCount = delta por frame.
 //     Usado por Entity_AnimTick para avanzar frames.
 //
 //   0x004f6c40  GetTileType(uint x, uint y) → int
 //     Devuelve tipo de tile del mapa en posición grid (x, y).
-//     DAT_0838bc70 = tabla de atributos de tile del mapa cargado.
+//     TerrainWallFlags = tabla de atributos de tile del mapa cargado.
 //     Bit 0 = walkable, bit otros = agua, obstáculo, etc.
 //
 //   0x0045ac80  Entity_FindByNetId(uint netId) → int
 //     Busca el índice en el array de entidades por ID de red (0..0x7FFF).
-//     Retorna índice (0-based); entidad = DAT_07abf5d0 + ret * 0x394.
+//     Retorna índice (0-based); entidad = CharactersClient + ret * 0x394.
 //
 // ─────────────────────────────────────────────────────────────────────────────
 // POOLS DE ENTIDADES (identificados en este análisis)
 // ─────────────────────────────────────────────────────────────────────────────
 //
-//   DAT_07abf5d0  Main entity array        stride 0x394, ≥8 entidades (login scene)
-//   DAT_0839be18  Render entity pool A     stride 0x1BC, 12 entidades (visible list)
-//   DAT_083a2e92  Render entity pool B     stride 0x1BC, 10 entidades (NPC/effect)
-//   DAT_07abf5d8  Player entity            = base + 0x394 (primer slot)
+//   CharactersClient  Main entity array        stride 0x394, ≥8 entidades (login scene)
+//   RenderPoolA  Render entity pool A     stride 0x1BC, 12 entidades (visible list)
+//   RenderPoolB  Render entity pool B     stride 0x1BC, 10 entidades (NPC/effect)
+//   Hero  Player entity            = base + 0x394 (primer slot)
 //
 // ─────────────────────────────────────────────────────────────────────────────
 // FLUJO COMPLETO DE UN PASO DE MOVIMIENTO

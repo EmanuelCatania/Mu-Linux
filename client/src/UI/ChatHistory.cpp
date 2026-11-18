@@ -11,14 +11,14 @@ int s_browse = -1;                    // -1 = editando el texto propio
 std::string s_draft;
 
 // Campo 0 del input del chat (InputText[0] / InputLength[0]).
-char* MessageField() { return DAT_07db8710[0]; }
+char* MessageField() { return InputTextBuffers[0]; }
 void SetMessageField(const std::string& text)
 {
     char* field = MessageField();
-    memset(field, 0, sizeof(DAT_07db8710[0]));
-    const size_t length = text.size() < sizeof(DAT_07db8710[0]) - 1 ? text.size() : sizeof(DAT_07db8710[0]) - 1;
+    memset(field, 0, sizeof(InputTextBuffers[0]));
+    const size_t length = text.size() < sizeof(InputTextBuffers[0]) - 1 ? text.size() : sizeof(InputTextBuffers[0]) - 1;
     memcpy(field, text.data(), length);
-    reinterpret_cast<DWORD*>(DAT_07d780a8)[0] = (DWORD)length;
+    reinterpret_cast<DWORD*>(InputTextLengths)[0] = (DWORD)length;
 }
 }
 

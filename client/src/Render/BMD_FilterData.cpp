@@ -11,26 +11,26 @@
 // Checksum is computed by walking the encrypted blob 4 bytes at a time, XOR/ADD
 // alternating on a seed pointer, with a rotate-mix every 16th iteration.
 // Filter_SaveBMD @ 0x00479A50 — Filter_SaveBMD
-// Copies 1000 word-filter entries (stride 0x14) from DAT_07d73104 into a
+// Copies 1000 word-filter entries (stride 0x14) from WordFilterTable into a
 // 20000-byte heap buffer, BuxConvert_0-encrypts each entry, computes the
-// checksum starting from &DAT_007cfa00, then writes buffer + checksum to file.
+// checksum starting from &WordFilterChecksumSeed, then writes buffer + checksum to file.
 void __cdecl Filter_SaveBMD(const char* path)
 {
     // Port of IDA sub_479A50 (Filter_SaveBMD).  Not called in the .bmd branch
-    // (DAT_0055a7c4==1), only in the txt-source branch.  Kept for parity.
+    // (g_tex_ext_mode==1), only in the txt-source branch.  Kept for parity.
     FILE* pFVar1 = Platform::GetFileSystem().Open(path, "wb");
     if (!pFVar1) return;
     BYTE* lpMem  = (BYTE*)operator_new(20000);
-    char* src = DAT_07d73104;
+    char* src = WordFilterTable;
     BYTE* dst = lpMem;
-    char* srcEnd = DAT_07d73104 + sizeof(DAT_07d73104);
+    char* srcEnd = WordFilterTable + sizeof(WordFilterTable);
     while (src < srcEnd) {
         memcpy(dst, src, 0x14);
         BuxConvert_0(dst, 0x14);
         src += 0x14;
         dst += 0x14;
     }
-    DWORD acc = (DWORD)DAT_007cfa00;
+    DWORD acc = (DWORD)WordFilterChecksumSeed;
     for (unsigned int i = 0; i <= 0x4e1c; i += 4) {
         unsigned int v = *(unsigned int*)(lpMem + i);
         unsigned int k = ((unsigned char)((i >> 2) - 1)) & 1;
@@ -49,8 +49,8 @@ void __cdecl Filter_SaveBMD(const char* path)
 // Port of IDA sub_479B30 (raw/00479B30_OpenFilterFile.c).
 // Reads 20000-byte blob + 4-byte checksum, validates ring checksum
 // (seed 0x7cfa00, magic 15997), then BuxConvert_0-decrypts each 20-byte
-// entry into DAT_07d73104[]; stops on empty-first-byte sentinel or when
-// the 20000-byte target buffer is full; writes count into DAT_07d78070.
+// entry into WordFilterTable[]; stops on empty-first-byte sentinel or when
+// the 20000-byte target buffer is full; writes count into WordFilterCount.
 void __cdecl OpenFilterFile(const char* path)
 {
     char local_100[256];
@@ -67,7 +67,7 @@ void __cdecl OpenFilterFile(const char* path)
     fread(&Checksum,      4, 1, Stream);
     fclose(Stream);
     // Validate ring checksum — IDA-exact.
-    DWORD acc = (DWORD)DAT_007cfa00;  // 0x007cfa00 (literal seed)
+    DWORD acc = (DWORD)WordFilterChecksumSeed;  // 0x007cfa00 (literal seed)
     for (unsigned int i = 0; i <= 0x4e1c; i += 4) {
         unsigned int v = *(unsigned int*)(Buffer + i);
         unsigned int k = ((unsigned char)((i >> 2) - 1)) & 1;
@@ -86,8 +86,8 @@ void __cdecl OpenFilterFile(const char* path)
     // Decrypt and copy entries until sentinel (empty first byte) or buffer full.
     int count = 0;
     BYTE* src = Buffer;
-    char* dst = DAT_07d73104;
-    char* end = DAT_07d73104 + sizeof(DAT_07d73104);
+    char* dst = WordFilterTable;
+    char* end = WordFilterTable + sizeof(WordFilterTable);
     while (dst < end) {
         BuxConvert_0(src, 0x14);
         memcpy(dst, src, 0x14);
@@ -96,47 +96,47 @@ void __cdecl OpenFilterFile(const char* path)
         dst   += 0x14;
         count += 1;
     }
-    if (dst < end) DAT_07d78070 = count;
+    if (dst < end) WordFilterCount = count;
     operator_delete(Buffer);
 }
 
 // FilterName_LoadData @ 0x00479CF0 — FilterName_LoadData
 // Reads word tokens from a text file via GetToken(); stores each into
-// DAT_07d27610 (stride 0x14), incrementing DAT_07d78074 per token.
+// NameFilterTable (stride 0x14), incrementing NameFilterCount per token.
 void __cdecl FilterName_LoadData(const char* path)
 {
-    DAT_07d7806c = (FILE*)Platform::GetFileSystem().Open(path, DAT_005580ac);
-    if (!DAT_07d7806c) return;
+    BmdFileHandle = (FILE*)Platform::GetFileSystem().Open(path, FopenModeRb);
+    if (!BmdFileHandle) return;
     int iVar2;
     while ((iVar2 = ParseNextToken()) != 2) {
-        char* dst = DAT_07d27610 + DAT_07d78074 * 0x14;
+        char* dst = NameFilterTable + NameFilterCount * 0x14;
         int   len = (int)strlen(ParserTokenString) + 1;  // TokenString
         memcpy(dst, ParserTokenString, len);
-        DAT_07d78074++;
+        NameFilterCount++;
     }
-    fclose(DAT_07d7806c);
+    fclose(BmdFileHandle);
 }
 
 // FilterName_SaveBMD @ 0x00479D70 — FilterName_SaveBMD
-// Mirror of Filter_SaveBMD for the name filter (DAT_07d27610, seed DAT_00578200,
+// Mirror of Filter_SaveBMD for the name filter (NameFilterTable, seed NameFilterChecksumSeed,
 // magic 0x2bc1).
 void __cdecl FilterName_SaveBMD(const char* path)
 {
     // Port of IDA sub_479D70 (FilterName_SaveBMD).  Not called in the .bmd
-    // branch (DAT_0055a7c4==1), only in the txt-source branch.  Kept for parity.
+    // branch (g_tex_ext_mode==1), only in the txt-source branch.  Kept for parity.
     FILE* pFVar1 = Platform::GetFileSystem().Open(path, "wb");
     if (!pFVar1) return;
     BYTE* lpMem  = (BYTE*)operator_new(20000);
-    char* src = DAT_07d27610;
+    char* src = NameFilterTable;
     BYTE* dst = lpMem;
-    char* srcEnd = DAT_07d27610 + sizeof(DAT_07d27610);
+    char* srcEnd = NameFilterTable + sizeof(NameFilterTable);
     while (src < srcEnd) {
         memcpy(dst, src, 0x14);
         BuxConvert_0(dst, 0x14);
         src += 0x14;
         dst += 0x14;
     }
-    DWORD acc = (DWORD)DAT_00578200;
+    DWORD acc = (DWORD)NameFilterChecksumSeed;
     for (unsigned int i = 0; i <= 0x4e1c; i += 4) {
         unsigned int v = *(unsigned int*)(lpMem + i);
         unsigned int k = ((unsigned char)((i >> 2) - 1)) & 1;
@@ -154,7 +154,7 @@ void __cdecl FilterName_SaveBMD(const char* path)
 // OpenNameFilterFile @ 0x00479E50 — FilterName_LoadBMD (OpenNameFilterFile)
 // Port of IDA sub_479E50 (raw/00479E50_OpenNameFilterFile.c).
 // Mirror of OpenFilterFile for the name filter (seed 0x578200, magic 11201,
-// target DAT_07d27610[], count in DAT_07d78074).
+// target NameFilterTable[], count in NameFilterCount).
 void __cdecl OpenNameFilterFile(const char* path)
 {
     char local_100[256];
@@ -170,7 +170,7 @@ void __cdecl OpenNameFilterFile(const char* path)
     fread(Buffer,     20000, 1, Stream);
     fread(&Checksum,      4, 1, Stream);
     fclose(Stream);
-    DWORD acc = (DWORD)DAT_00578200;  // 0x00578200 (literal seed)
+    DWORD acc = (DWORD)NameFilterChecksumSeed;  // 0x00578200 (literal seed)
     for (unsigned int i = 0; i <= 0x4e1c; i += 4) {
         unsigned int v = *(unsigned int*)(Buffer + i);
         unsigned int k = ((unsigned char)((i >> 2) - 1)) & 1;
@@ -188,8 +188,8 @@ void __cdecl OpenNameFilterFile(const char* path)
     }
     int count = 0;
     BYTE* src = Buffer;
-    char* dst = DAT_07d27610;
-    char* end = DAT_07d27610 + sizeof(DAT_07d27610);
+    char* dst = NameFilterTable;
+    char* end = NameFilterTable + sizeof(NameFilterTable);
     while (dst < end) {
         BuxConvert_0(src, 0x14);
         memcpy(dst, src, 0x14);
@@ -198,7 +198,7 @@ void __cdecl OpenNameFilterFile(const char* path)
         dst   += 0x14;
         count += 1;
     }
-    if (dst < end) DAT_07d78074 = count;
+    if (dst < end) NameFilterCount = count;
     operator_delete(Buffer);
 }
 // OpenDialogFile — implemented in src/Item/Dialog_Data.cpp  (Dialog_LoadBMD)

@@ -1,7 +1,7 @@
 // IDA: OpenPlayers @ 0x00506170 — Model_LoadPlayerAndItemMeshes
 // Allocates the model data pool, zeroes it, then loads the player body mesh
 // (model slot 0x186) with all its animations (Korean-locale paths when
-// DAT_0055a7c4 == 0), plus all equipment piece slots (Helm/Armor/Pant/Glove/Boot
+// g_tex_ext_mode == 0), plus all equipment piece slots (Helm/Armor/Pant/Glove/Boot
 // for every class/tier), item slots, and shadow model.  Ends by calling
 // SetAttackSpeed (Entity_LockAnim) and setting scale tables in the model block.
 #include "stdafx.h"
@@ -24,11 +24,11 @@ void __cdecl Model_LoadPlayerAndItemMeshes(void)
     // La base ya no cambia: invalidar explícitamente snapshots de la carga anterior.
     RenderDerivedState_Cancel();Skinning::Invalidate();
     ResourceTables::ResetModels();
-    DAT_06f42a58=ResourceTables::ModelBase();
-    DAT_05828d58 = reinterpret_cast<std::uintptr_t>(DAT_06f42a58);
+    ModelMemoryPool=ResourceTables::ModelBase();
+    ModelsBase = reinterpret_cast<std::uintptr_t>(ModelMemoryPool);
 
     // ── Korean-locale SMD animations (skipped in compressed-asset mode) ──────
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         // Player body (female base mesh, slot 0x186, 0x8d = 141 animation slots)
         OpenSMDModel((int)0x186, "Data2\\Player\\BodyFemale.smd", 0x8d, '\0');
 
@@ -197,16 +197,16 @@ void __cdecl Model_LoadPlayerAndItemMeshes(void)
 
         // Shadow model
         OpenModels((int)0x187, "Data2\\Player\\Shadow\\Shadow", 1);
-    } // end if DAT_0055a7c4 == '\0' (Korean SMD branch)
+    } // end if g_tex_ext_mode == '\0' (Korean SMD branch)
 
     // ── Compressed-asset branch (always runs: BMD-based loads) ───────────────
     AccessModel(0x186, "Data\\Player\\", "Player", -1);
-    DAT_0055a7c4 = '\x01';
+    g_tex_ext_mode = '\x01';
 
     // Check that BMD loaded successfully — DESHABILITADO
     // 0x47a3*4 = 0x11E8C → dirección absoluta 0x05828d58+0x11E8C = 0x0583ABE4
     // (otro DAT_ en el binario original). Ghidra malrenderizó como base+index.
-    // if (*(short*)((BYTE*)DAT_05828d58 + 0x47a3*4) > 0) {
+    // if (*(short*)((BYTE*)ModelsBase + 0x47a3*4) > 0) {
     //     CErrorReport_Write(nullptr, "Player.bmd file error.\r\n");
     //     MessageBoxA((HWND)(DWORD)DAT_055c9ffc, "Player.bmd file error!!!", nullptr, 0);
     //     SendMessageA((HWND)(DWORD)DAT_055c9ffc, WM_CLOSE, 0, 0);
@@ -223,7 +223,7 @@ void __cdecl Model_LoadPlayerAndItemMeshes(void)
 
     // Class2 SMD (only in Korean locale)
     // IDA 0x00506170 L57: `while (v6 + 3 < 7)` = 3 iteraciones (v6=1,2,3).
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         for (int i = 1; i+3 < 7; i++) {
             OpenModels((int)(i + 0x393), "Data2\\Player\\Helm\\class2_",  i);
             OpenModels((int)(i + 0x39a), "Data2\\Player\\Armor\\class2_", i);
@@ -242,7 +242,7 @@ void __cdecl Model_LoadPlayerAndItemMeshes(void)
         AccessModel(i + 0x3af, "Data\\Player\\", "BootClass2",  i);
     }
 
-    DAT_0055a7c4 = '\x01';
+    g_tex_ext_mode = '\x01';
 
     // Male armour BMD tiers (1-10)
     for (int i = 1; i <= 10; i++) {
@@ -274,7 +274,7 @@ void __cdecl Model_LoadPlayerAndItemMeshes(void)
     AccessModel(0x300, "Data\\Player\\", "BootMale",  0x11);
 
     // Dark/Soul/Muz/Ma unique armour (Korean SMD only)
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         OpenModel((int)0x281, "Data2\\Player\\Helm\\",  "DarkP_Head.smd");
         OpenModel((int)0x2a1, "Data2\\Player\\Armor\\", "DarkP_Armor.smd");
         OpenModel((int)0x2c1, "Data2\\Player\\Pant\\",  "DarkP_Pant.smd");
@@ -307,7 +307,7 @@ void __cdecl Model_LoadPlayerAndItemMeshes(void)
         AccessModel(i + 0x2ef, "Data\\Player\\", "BootMale",  i);
     }
 
-    DAT_0055a7c4 = 1;
+    g_tex_ext_mode = 1;
 
     // Shadow BMD
     AccessModel(0x187, "Data\\Player\\", "Shadow", 1);
@@ -319,7 +319,7 @@ void __cdecl Model_LoadPlayerAndItemMeshes(void)
     // de la elfa (140).
     // Modelo del jugador = Models + 188 * 390; Actions en +48, stride 16, speed en +4.
     {
-        BYTE* playerModelBase = (BYTE*)(uintptr_t)DAT_05828d58;
+        BYTE* playerModelBase = (BYTE*)(uintptr_t)ModelsBase;
         // Aux fields del struct player (no son acciones; offsets internos del modelo)
         *(DWORD*)(playerModelBase + BMD_STRIDE * 390 + 0x54 + BMD_FIELD_SHIFT) = 20;
         *(DWORD*)(playerModelBase + BMD_STRIDE * 390 + 0x58 + BMD_FIELD_SHIFT) = 6;

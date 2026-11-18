@@ -90,8 +90,8 @@ void __cdecl BMD__RenderMeshTranslate(void *model, char a, int b, float frame, i
         lightEnable = 0;
     } else if (lightEnable) {
         const int nNormals = mesh->NormalCount;
-        const float *src = (const float *)(&DAT_077e298c + meshIdx * 15000);
-        float *dst = (float *)(&DAT_060db65c + meshIdx * 180000);
+        const float *src = (const float *)(&IntensityTransformBuf + meshIdx * 15000);
+        float *dst = (float *)(&BoneLightData + meshIdx * 180000);
         for (int i = 0; i < nNormals; ++i) {
             dst[i * 3 + 0] = src[i] * bodyLight[0];
             dst[i * 3 + 1] = src[i] * bodyLight[1];
@@ -114,9 +114,9 @@ void __cdecl BMD__RenderMeshTranslate(void *model, char a, int b, float frame, i
         lightEnable = 0;
     } else if ((fl & 2) == 2) {
         mode = 2;
-        BMDDevice::Select({BMDDevice::Pass::Surface,static_cast<unsigned>(fl),tex,f3 < _DAT_00552544});
+        BMDDevice::Select({BMDDevice::Pass::Surface,static_cast<unsigned>(fl),tex,f3 < AlphaChannelThreshold});
     } else if ((fl & 0x40) == 0x40) {
-        if ((&DAT_083a7cc8)[tex * TEXTURE_STRIDE] == '\x04') return;    // Bitmaps[tex].Components == 4
+        if ((&BitmapsBpp)[tex * TEXTURE_STRIDE] == '\x04') return;    // Bitmaps[tex].Components == 4
         mode = 64;
         BMDDevice::Select({BMDDevice::Pass::Metal});
     } else {
@@ -143,22 +143,22 @@ void __cdecl BMD__RenderMeshTranslate(void *model, char a, int b, float frame, i
                 if (uvAnim) BufferedDraw::TexCoord2f(f5 + uv[0], f6 + uv[1]);
                 else        BufferedDraw::TexCoord2f(uv[0], uv[1]);
                 if (lightEnable) {
-                    const float *c = (const float *)(&DAT_060db65c + ((int)idx[0] + meshIdx * 15000) * 12);
-                    if (f3 < _DAT_00552544) BufferedDraw::Color4f(c[0], c[1], c[2], f3);
+                    const float *c = (const float *)(&BoneLightData + ((int)idx[0] + meshIdx * 15000) * 12);
+                    if (f3 < AlphaChannelThreshold) BufferedDraw::Color4f(c[0], c[1], c[2], f3);
                     else                    BufferedDraw::Color3fv(c);
                 }
             }
 
-            const float *pos = (const float *)((char *)&DAT_0584621c + (vtx + meshIdx * 15000) * 12);
+            const float *pos = (const float *)((char *)&BoneVertBufBase + (vtx + meshIdx * 15000) * 12);
             float moved[3];
             if (deform) {
                 // IDA: v56 = (std::int64_t)WorldTime + 931 * vtx;
                 //      pos + sin(v56 * 0.007) * normal * 28
                 const int phase = (int)(long long)WorldTime + 0x3a3 * vtx;
-                const float sn = (float)sin((double)phase * (double)_DAT_005528c4);
-                const float *nrm = (const float *)(&DAT_06f433bc + ((int)idx[0] + meshIdx * 15000) * 12);
+                const float sn = (float)sin((double)phase * (double)VertexWaveFreq);
+                const float *nrm = (const float *)(&TransformedNormalBuf + ((int)idx[0] + meshIdx * 15000) * 12);
                 for (int k = 0; k < 3; ++k)
-                    moved[k] = sn * nrm[k] * _DAT_00552644 + pos[k];
+                    moved[k] = sn * nrm[k] * VertexWaveAmplitude + pos[k];
                 pos = moved;
             }
             BufferedDraw::Vertex3fv(pos);
@@ -175,225 +175,225 @@ static bool ApplyInventoryExactPoseLate(int param_1, int level, float* outPos)
     switch (param_1) {
     case MODEL_SWORD + 0:
         outPos[0] -= 0.02f; outPos[1] += 0.03f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 270.0f; _DAT_07ea9534 = 15.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 270.0f; ItemRenderRotZ = 15.0f; return true;
     case MODEL_SPEAR + 0:
         outPos[1] += 0.05f;
-        ObjectSelect_Angle = 0.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 20.0f; return true;
+        ObjectSelect_Angle = 0.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 20.0f; return true;
     case MODEL_BOW + 7:
     case MODEL_BOW + 15:
-        ObjectSelect_Angle = 0.0f; _DAT_07ea9530 = 270.0f; _DAT_07ea9534 = 15.0f; return true;
+        ObjectSelect_Angle = 0.0f; ItemRenderRotY = 270.0f; ItemRenderRotZ = 15.0f; return true;
     case MODEL_BOW + 17:
-        ObjectSelect_Angle = 0.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 15.0f; return true;
+        ObjectSelect_Angle = 0.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 15.0f; return true;
     case MODEL_BOW + 20:
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = -90.0f; _DAT_07ea9534 = 15.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = -90.0f; ItemRenderRotZ = 15.0f; return true;
     case MODEL_BOW + 21:
         outPos[1] += 0.12f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = -90.0f; _DAT_07ea9534 = 15.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = -90.0f; ItemRenderRotZ = 15.0f; return true;
     case MODEL_BOW + 22:
     case MODEL_BOW + 23:
         outPos[0] -= 0.10f; outPos[1] += 0.08f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = -90.0f; _DAT_07ea9534 = 15.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = -90.0f; ItemRenderRotZ = 15.0f; return true;
     case MODEL_SPEAR + 10:
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 270.0f; _DAT_07ea9534 = 20.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 270.0f; ItemRenderRotZ = 20.0f; return true;
     case MODEL_HELM + 30:
         outPos[0] -= 0.03f; outPos[1] += 0.07f;
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_HELM + 31:
         outPos[0] += 0.03f; outPos[1] -= 0.06f;
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_HELM + 35:
         outPos[0] -= 0.02f; outPos[1] += 0.05f;
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_EVENT + 5:
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 180.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 180.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_EVENT + 6:
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_EVENT + 7:
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_EVENT + 10:
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = -90.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = -90.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_EVENT + 11:
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = -20.0f; _DAT_07ea9534 = -20.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = -20.0f; ItemRenderRotZ = -20.0f; return true;
     case MODEL_EVENT + 12:
-        ObjectSelect_Angle = 250.0f; _DAT_07ea9530 = 140.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 250.0f; ItemRenderRotY = 140.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_EVENT + 14:
-        ObjectSelect_Angle = 255.0f; _DAT_07ea9530 = 160.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 255.0f; ItemRenderRotY = 160.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_EVENT + 15:
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_EVENT + 16:
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_EVENT + 18:
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_HELPER + 3:
     case MODEL_HELPER + 4:
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = -90.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = -90.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_HELPER + 5:
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = -35.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = -35.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_HELPER + 16:
     case MODEL_HELPER + 17:
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -10.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -10.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_HELPER + 18:
-        ObjectSelect_Angle = 290.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 290.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_HELPER + 21:
     case MODEL_HELPER + 22:
     case MODEL_HELPER + 23:
     case MODEL_HELPER + 24:
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 160.0f; _DAT_07ea9534 = 20.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 160.0f; ItemRenderRotZ = 20.0f; return true;
     case MODEL_HELPER + 29:
-        ObjectSelect_Angle = 290.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 290.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_HELPER + 30:
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_POTION + 12:
-        if (level == 0) { ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; }
-        else if (level == 1) { ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 0.0f; }
-        else if (level == 2) { ObjectSelect_Angle = 90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; }
+        if (level == 0) { ObjectSelect_Angle = 180.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; }
+        else if (level == 1) { ObjectSelect_Angle = 270.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 0.0f; }
+        else if (level == 2) { ObjectSelect_Angle = 90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; }
         return true;
     case MODEL_STAFF + 7:
-        ObjectSelect_Angle = 0.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 205.0f; return true;
+        ObjectSelect_Angle = 0.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 205.0f; return true;
     case MODEL_STAFF + 12:
         outPos[0] += 0.025f; outPos[1] -= 0.10f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 8.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 8.0f; return true;
     case MODEL_STAFF + 13:
         outPos[0] += 0.02f; outPos[1] += 0.02f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 8.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 8.0f; return true;
     case MODEL_POTION + 20:
     case MODEL_POTION + 27:
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_POTION + 13:
     case MODEL_POTION + 14:
     case MODEL_POTION + 22:
         outPos[0] += 0.005f; outPos[1] += 0.015f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -10.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -10.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_POTION + 21:
         outPos[0] += 0.005f; outPos[1] -= 0.005f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -10.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -10.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_POTION + 41:
         outPos[1] += 0.02f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_POTION + 42:
         outPos[1] += 0.02f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -10.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -10.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_POTION + 43:
     case MODEL_POTION + 44:
         outPos[0] -= 0.04f; outPos[1] += 0.02f; outPos[2] += 0.02f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -10.0f; _DAT_07ea9534 = -45.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -10.0f; ItemRenderRotZ = -45.0f; return true;
     case MODEL_POTION + 63:
         outPos[1] += 0.08f;
-        ObjectSelect_Angle = -50.0f; _DAT_07ea9530 = -60.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -50.0f; ItemRenderRotY = -60.0f; ItemRenderRotZ = 0.0f; return true;
     case MODEL_SWORD + 26:
         outPos[0] -= 0.02f; outPos[1] += 0.04f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 270.0f; _DAT_07ea9534 = 10.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 270.0f; ItemRenderRotZ = 10.0f; return true;
     case MODEL_SWORD + 27:
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 270.0f; _DAT_07ea9534 = 15.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 270.0f; ItemRenderRotZ = 15.0f; return true;
     case MODEL_SWORD + 28:
         outPos[1] += 0.02f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 270.0f; _DAT_07ea9534 = 10.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 270.0f; ItemRenderRotZ = 10.0f; return true;
     case MODEL_MACE + 16:
         outPos[0] -= 0.02f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 270.0f; _DAT_07ea9534 = 15.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 270.0f; ItemRenderRotZ = 15.0f; return true;
     case MODEL_MACE + 17:
         outPos[0] -= 0.02f; outPos[1] += 0.04f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 270.0f; _DAT_07ea9534 = 15.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 270.0f; ItemRenderRotZ = 15.0f; return true;
     case MODEL_MACE + 18:
         outPos[0] -= 0.03f; outPos[1] += 0.06f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 2.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 2.0f; return true;
     case MODEL_MACE + 14:
         outPos[0] -= 0.01f; outPos[1] += 0.10f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 13.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 13.0f; return true;
     case MODEL_MACE + 15:
         outPos[1] += 0.05f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 13.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 13.0f; return true;
     case MODEL_SPEAR + 11:
         outPos[1] += 0.02f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 15.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 15.0f; return true;
     case MODEL_STAFF + 30:
     case MODEL_STAFF + 31:
     case MODEL_STAFF + 32:
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 10.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 10.0f; return true;
     case MODEL_STAFF + 33:
         outPos[0] += 0.02f; outPos[1] -= 0.06f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 10.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 10.0f; return true;
     case MODEL_STAFF + 34:
         outPos[1] -= 0.05f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 10.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 10.0f; return true;
     case MODEL_BOW + 24:
         outPos[0] -= 0.07f; outPos[1] += 0.07f;
-        ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = -90.0f; _DAT_07ea9534 = 15.0f; return true;
+        ObjectSelect_Angle = 180.0f; ItemRenderRotY = -90.0f; ItemRenderRotZ = 15.0f; return true;
     case MODEL_HELPER + 39:
     case MODEL_HELPER + 40:
     case MODEL_HELPER + 41:
     case MODEL_HELPER + 42:
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     default:
         if (param_1 >= MODEL_HELPER + 12 && param_1 < MODEL_HELPER + 512 &&
             param_1 != MODEL_HELPER + 12 && param_1 != MODEL_HELPER + 13 &&
             param_1 != MODEL_HELPER + 14 && param_1 != MODEL_HELPER + 15) {
             ObjectSelect_Angle = 360.0f;
-            _DAT_07ea9530 = 0.0f;
-            _DAT_07ea9534 = 0.0f;
+            ItemRenderRotY = 0.0f;
+            ItemRenderRotZ = 0.0f;
             return true;
         }
         if (param_1 == MODEL_ARMOR + 29) {
             outPos[1] += 0.07f;
-            ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 == MODEL_ARMOR + 30) {
             outPos[1] += 0.10f;
-            ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 == MODEL_ARMOR + 34) {
             outPos[1] += 0.03f;
-            ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 == MODEL_ARMOR + 35) {
             outPos[1] += 0.05f;
-            ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 == MODEL_ARMOR + 36 || param_1 == MODEL_ARMOR + 37) {
             outPos[1] -= 0.05f;
-            ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 >= MODEL_HELM + 39 && param_1 <= MODEL_HELM + 44) {
             outPos[1] -= 0.05f;
-            ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 25.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = -90.0f; ItemRenderRotY = 25.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 >= MODEL_ARMOR + 38 && param_1 <= MODEL_ARMOR + 44) {
             outPos[1] -= 0.08f;
-            ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 >= MODEL_STAFF + 21 && param_1 <= MODEL_STAFF + 29) {
-            ObjectSelect_Angle = 0.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = 0.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 >= MODEL_POTION + 130 && param_1 <= MODEL_POTION + 132) {
             outPos[1] += 0.06f;
-            ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 == MODEL_POTION + 133) {
             outPos[0] += 0.01f;
-            ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 >= MODEL_POTION + 134 && param_1 <= MODEL_POTION + 139) {
             outPos[1] += 0.05f;
-            ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 == MODEL_POTION + 140) {
             outPos[1] += 0.09f;
-            ObjectSelect_Angle = 0.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = 0.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 == MODEL_POTION + 52) {
-            ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -25.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = 270.0f; ItemRenderRotY = -25.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 == MODEL_POTION + 63) {
             outPos[1] += 0.08f;
-            ObjectSelect_Angle = -50.0f; _DAT_07ea9530 = -60.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = -50.0f; ItemRenderRotY = -60.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 == MODEL_POTION + 160 || param_1 == MODEL_POTION + 161) {
             outPos[1] += 0.05f;
-            ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
         if (param_1 >= MODEL_POTION + 145 && param_1 <= MODEL_POTION + 150) {
             outPos[0] += 0.01f; outPos[1] += 0.04f;
-            ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+            ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
         }
     return false;
 }
@@ -406,14 +406,14 @@ void __cdecl RenderObjectScreen(int param_1, unsigned int param_2, unsigned char
 {
     // 2026-05-08: per-call recovery. Esta función se llama MUCHAS veces por
     // frame (una por cada item 3D del inventario). El watchdog en Render_GameFrame
-    // sólo recupera 1 vez por frame; si la corrupción de DAT_07d78068 ocurre
+    // sólo recupera 1 vez por frame; si la corrupción de ItemAttributeBase ocurre
     // entre dos calls del mismo frame, las posteriores crashean. Recuperar
     // inline antes del read.
     {
-        unsigned int p = (unsigned int)DAT_07d78068;
+        unsigned int p = (unsigned int)ItemAttributeBase;
         if (p < 0x100000u || p >= 0x80000000u) {
             if (g_ItemAttribute_Backup >= 0x100000u && g_ItemAttribute_Backup < 0x80000000u) {
-                DAT_07d78068 = (int)g_ItemAttribute_Backup;
+                ItemAttributeBase = (int)g_ItemAttribute_Backup;
             } else {
                 return;   // can't recover — bail
         }
@@ -424,115 +424,115 @@ static bool ApplyInventoryExactPoseTail(int param_1, float* outPos)
 {
     if (param_1 == MODEL_POTION + 96) {
         outPos[0] += 0.003f; outPos[1] -= 0.013f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_POTION + 99) {
         outPos[0] += 0.02f; outPos[1] -= 0.03f;
-        ObjectSelect_Angle = 290.0f; _DAT_07ea9530 = -40.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 290.0f; ItemRenderRotY = -40.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_POTION + 100) {
         outPos[0] += 0.01f; outPos[1] -= 0.05f;
-        ObjectSelect_Angle = 0.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 0.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 76) {
         outPos[1] -= 0.02f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 80 || param_1 == MODEL_HELPER + 123) {
         outPos[1] -= 0.05f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 40.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 40.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 81 || param_1 == MODEL_HELPER + 82) {
         outPos[0] += 0.005f; outPos[1] += 0.035f;
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 93 || param_1 == MODEL_HELPER + 94) {
         outPos[0] += 0.005f;
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 97 || param_1 == MODEL_HELPER + 98) {
         outPos[0] += 0.002f; outPos[1] -= 0.04f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 99) {
         outPos[0] += 0.002f; outPos[1] += 0.025f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 180.0f; _DAT_07ea9534 = 45.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 180.0f; ItemRenderRotZ = 45.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 103) {
         outPos[0] += 0.01f; outPos[1] += 0.01f;
-        ObjectSelect_Angle = 0.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 0.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 104 || param_1 == MODEL_HELPER + 105) {
         outPos[0] += 0.01f; outPos[1] -= 0.03f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 106) {
         outPos[0] += 0.01f; outPos[1] -= 0.05f;
-        ObjectSelect_Angle = 255.0f; _DAT_07ea9530 = 45.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 255.0f; ItemRenderRotY = 45.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 107) {
-        ObjectSelect_Angle = 90.0f; _DAT_07ea9530 = 225.0f; _DAT_07ea9534 = 45.0f; return true;
+        ObjectSelect_Angle = 90.0f; ItemRenderRotY = 225.0f; ItemRenderRotZ = 45.0f; return true;
     }
     if (param_1 >= MODEL_HELPER + 109 && param_1 <= MODEL_HELPER + 112) {
         outPos[0] += 0.025f; outPos[1] -= 0.035f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 25.0f; _DAT_07ea9534 = 25.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 25.0f; ItemRenderRotZ = 25.0f; return true;
     }
     if (param_1 >= MODEL_HELPER + 113 && param_1 <= MODEL_HELPER + 115) {
         outPos[0] += 0.005f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 116) {
         outPos[0] += 0.005f; outPos[1] -= 0.03f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 121) {
         outPos[1] -= 0.04f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 122) {
         outPos[0] += 0.01f; outPos[1] -= 0.035f;
-        ObjectSelect_Angle = 290.0f; _DAT_07ea9530 = -20.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 290.0f; ItemRenderRotY = -20.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 124) {
         outPos[1] -= 0.04f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 >= MODEL_HELPER + 125 && param_1 <= MODEL_HELPER + 127) {
         outPos[0] += 0.007f; outPos[1] -= 0.035f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 128 || param_1 == MODEL_HELPER + 131 || param_1 == MODEL_HELPER + 133) {
         outPos[0] += 0.017f; outPos[1] -= 0.053f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -20.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -20.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 129) {
         outPos[0] += 0.012f; outPos[1] -= 0.045f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -20.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -20.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 130) {
         outPos[0] += 0.007f; outPos[1] += 0.005f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -20.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -20.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 132) {
         outPos[0] += 0.007f; outPos[1] += 0.045f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -20.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -20.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 134) {
         outPos[0] += 0.005f; outPos[1] -= 0.033f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -20.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -20.0f; ItemRenderRotZ = 0.0f; return true;
     }
     // 2026-08-26: acotado para no pisar el 958, que IDA define aparte
     // (`case 958: Angle[0] = -90`). Este rango son los modelos 951..961.
     if (param_1 >= MODEL_HELPER + 135 && param_1 <= MODEL_HELPER + 145 && param_1 != 958) {
         outPos[1] += 0.02f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_WING + 30 || param_1 == MODEL_WING + 31 ||
         (param_1 >= MODEL_WING + 136 && param_1 <= MODEL_WING + 143)) {
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -10.0f; _DAT_07ea9534 = 0.0f;
-        if (param_1 == MODEL_WING + 142 || param_1 == MODEL_WING + 143) _DAT_07ea9534 = -45.0f;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -10.0f; ItemRenderRotZ = 0.0f;
+        if (param_1 == MODEL_WING + 142 || param_1 == MODEL_WING + 143) ItemRenderRotZ = -45.0f;
         else if (param_1 == MODEL_WING + 136 || param_1 == MODEL_WING + 137) outPos[1] -= 0.05f;
-        else if (param_1 == MODEL_WING + 139) { outPos[1] -= 0.05f; _DAT_07ea9530 = 90.0f; }
+        else if (param_1 == MODEL_WING + 139) { outPos[1] -= 0.05f; ItemRenderRotY = 90.0f; }
         return true;
     }
     // 2026-08-26: acotado. `MODEL_WING + 60..65` son los modelos 844..849, que
@@ -540,13 +540,13 @@ static bool ApplyInventoryExactPoseTail(int param_1, float* outPos)
     // y este interceptor les ponia 10. Se dejan pasar los que IDA define y solo
     // sobreviven 848/849, que caen fuera de ese rango.
     if (param_1 >= 848 && param_1 <= MODEL_WING + 65) {
-        ObjectSelect_Angle = 10.0f; _DAT_07ea9530 = -10.0f; _DAT_07ea9534 = 10.0f; return true;
+        ObjectSelect_Angle = 10.0f; ItemRenderRotY = -10.0f; ItemRenderRotZ = 10.0f; return true;
     }
     if (param_1 >= MODEL_WING + 70 && param_1 <= MODEL_WING + 74) {
-        ObjectSelect_Angle = 0.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 0.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 >= MODEL_WING + 100 && param_1 <= MODEL_WING + 129) {
-        ObjectSelect_Angle = 0.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 0.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     // 2026-08-26: excluido el modelo 833. `MODEL_WING + 49` es 833, que no es
     // un ala (MODEL_WING son 32 slots, 784..815): es el "Blood Bone" (item 433).
@@ -555,7 +555,7 @@ static bool ApplyInventoryExactPoseTail(int param_1, float* outPos)
     // tiene. Mismo error de aritmetica que tenia el +50 (Cloak of Invisibility).
     if (false && param_1 == MODEL_WING + 49) {
         outPos[0] += 0.015f; outPos[1] += 0.01f;
-        ObjectSelect_Angle = -90.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -90.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     // REMOVIDO 2026-08-26 — `MODEL_WING + 50` es 834, que NO es un ala.
     //
@@ -586,53 +586,53 @@ static bool ApplyInventoryExactPoseTail(int param_1, float* outPos)
         outPos[0] += 0.005f; outPos[1] += 0.05f; return true;
     }
     if (param_1 == MODEL_POTION + 52) {
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -25.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -25.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 >= MODEL_ETC + 19 && param_1 <= MODEL_ETC + 27) {
         outPos[0] += 0.03f; outPos[1] += 0.03f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_HELPER + 38) {
         outPos[1] += 0.02f;
-        ObjectSelect_Angle = -198.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -198.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_POTION + 63) {
         outPos[1] += 0.08f;
-        ObjectSelect_Angle = -50.0f; _DAT_07ea9530 = -60.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = -50.0f; ItemRenderRotY = -60.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_WING + 7) {
         outPos[0] += 0.005f; outPos[1] -= 0.015f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 >= MODEL_ETC + 30 && param_1 <= MODEL_ETC + 36) {
         outPos[0] += 0.03f; outPos[1] += 0.03f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     // 2026-08-26: excluido el modelo 958 — IDA tiene `case 958: Angle[0] = -90`
     // (con dword_7EA9530/34 = -0.5) y este interceptor le ponia 270.
     if (false && param_1 == MODEL_POTION + 110) {
         outPos[0] += 0.005f; outPos[1] -= 0.02f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -10.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -10.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_POTION + 111) {
         outPos[0] += 0.01f; outPos[1] -= 0.02f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -10.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -10.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 >= MODEL_POTION + 112 && param_1 <= MODEL_POTION + 113) {
         outPos[0] += 0.05f; outPos[1] += 0.009f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 180.0f; _DAT_07ea9534 = 45.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 180.0f; ItemRenderRotZ = 45.0f; return true;
     }
     if (param_1 >= MODEL_POTION + 114 && param_1 <= MODEL_POTION + 119) {
         outPos[1] += 0.06f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 == MODEL_POTION + 120) {
         outPos[0] += 0.01f; outPos[1] += 0.05f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     if (param_1 >= MODEL_POTION + 126 && param_1 <= MODEL_POTION + 129) {
         outPos[1] += 0.06f;
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f; return true;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f; return true;
     }
     return false;
 }
@@ -640,10 +640,10 @@ void __cdecl RenderObjectScreen(int param_1, unsigned int param_2, unsigned char
 {
     // 2026-05-08: per-call recovery. Esta función se llama muchas veces por frame.
     {
-        unsigned int p = (unsigned int)DAT_07d78068;
+        unsigned int p = (unsigned int)ItemAttributeBase;
         if (p < 0x100000u || p >= 0x80000000u) {
             if (g_ItemAttribute_Backup >= 0x100000u && g_ItemAttribute_Backup < 0x80000000u) {
-                DAT_07d78068 = (int)g_ItemAttribute_Backup;
+                ItemAttributeBase = (int)g_ItemAttribute_Backup;
             } else {
                 return;
             }
@@ -710,8 +710,8 @@ void __cdecl RenderObjectScreen(int param_1, unsigned int param_2, unsigned char
 
     // Default rotation values (overridden below)
     ObjectSelect_Angle = 0.0f;
-    _DAT_07ea9530 = 0.0f;
-    _DAT_07ea9534 = 0.0f;
+    ItemRenderRotY = 0.0f;
+    ItemRenderRotZ = 0.0f;
 
     DWORD local_3bc = 0;  // model scale (raw IEEE 754 float bits)
     bool exactPose = false;
@@ -720,183 +720,183 @@ void __cdecl RenderObjectScreen(int param_1, unsigned int param_2, unsigned char
         outPos[0] -= 0.02f;
         outPos[1] += 0.03f;
         ObjectSelect_Angle = 180.0f;
-        _DAT_07ea9530 = 270.0f;
-        _DAT_07ea9534 = 15.0f;
+        ItemRenderRotY = 270.0f;
+        ItemRenderRotZ = 15.0f;
         exactPose = true;
     } else if (param_1 == 0x1f0) { // MODEL_SPEAR+0
         outPos[1] += 0.05f;
         ObjectSelect_Angle = 0.0f;
-        _DAT_07ea9530 = 90.0f;
-        _DAT_07ea9534 = 20.0f;
+        ItemRenderRotY = 90.0f;
+        ItemRenderRotZ = 20.0f;
         exactPose = true;
     } else if (param_1 == 0x224) { // MODEL_BOW+20
         ObjectSelect_Angle = 180.0f;
-        _DAT_07ea9530 = -90.0f;
-        _DAT_07ea9534 = 15.0f;
+        ItemRenderRotY = -90.0f;
+        ItemRenderRotZ = 15.0f;
         exactPose = true;
     } else if (param_1 == 0x225) { // MODEL_BOW+21
         outPos[1] += 0.12f;
         ObjectSelect_Angle = 180.0f;
-        _DAT_07ea9530 = -90.0f;
-        _DAT_07ea9534 = 15.0f;
+        ItemRenderRotY = -90.0f;
+        ItemRenderRotZ = 15.0f;
         exactPose = true;
     } else if (param_1 == 0x226 || param_1 == 0x227) { // MODEL_BOW+22/+23
         outPos[0] -= 0.10f;
         outPos[1] += 0.08f;
         ObjectSelect_Angle = 180.0f;
-        _DAT_07ea9530 = -90.0f;
-        _DAT_07ea9534 = 15.0f;
+        ItemRenderRotY = -90.0f;
+        ItemRenderRotZ = 15.0f;
         exactPose = true;
     } else if (param_1 == 0x23c) { // MODEL_STAFF+12
         outPos[1] -= 0.10f;
         outPos[0] += 0.025f;
         ObjectSelect_Angle = 180.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 8.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 8.0f;
         exactPose = true;
     } else if (param_1 == 0x23d) { // MODEL_STAFF+13
         outPos[0] += 0.02f;
         outPos[1] += 0.02f;
         ObjectSelect_Angle = 180.0f;
-        _DAT_07ea9530 = 90.0f;
-        _DAT_07ea9534 = 8.0f;
+        ItemRenderRotY = 90.0f;
+        ItemRenderRotZ = 8.0f;
         exactPose = true;
     } else if (param_1 >= 0x245 && param_1 <= 0x24d) { // MODEL_STAFF+21..29
         ObjectSelect_Angle = 0.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x1de) { // MODEL_MACE+14
         outPos[1] += 0.10f;
         outPos[0] -= 0.01f;
         ObjectSelect_Angle = 180.0f;
-        _DAT_07ea9530 = 90.0f;
-        _DAT_07ea9534 = 13.0f;
+        ItemRenderRotY = 90.0f;
+        ItemRenderRotZ = 13.0f;
         exactPose = true;
     } else if (param_1 == 0x1df) { // MODEL_MACE+15
         outPos[1] += 0.05f;
         ObjectSelect_Angle = 180.0f;
-        _DAT_07ea9530 = 90.0f;
-        _DAT_07ea9534 = 13.0f;
+        ItemRenderRotY = 90.0f;
+        ItemRenderRotZ = 13.0f;
         exactPose = true;
     } else if (param_1 == 0x28e) { // MODEL_HELM+30
         outPos[1] += 0.07f;
         outPos[0] -= 0.03f;
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x28f) { // MODEL_HELM+31
         outPos[1] -= 0.06f;
         outPos[0] += 0.03f;
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x2ad) { // MODEL_ARMOR+29
         outPos[1] += 0.07f;
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x2ae) { // MODEL_ARMOR+30
         outPos[1] += 0.10f;
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x293) { // MODEL_HELM+35
         outPos[0] -= 0.02f;
         outPos[1] += 0.05f;
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 >= 0x297 && param_1 <= 0x29c) { // MODEL_HELM+39..44
         outPos[1] -= 0.05f;
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = 25.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 25.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x2b2) { // MODEL_ARMOR+34
         outPos[1] += 0.03f;
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x2b3) { // MODEL_ARMOR+35
         outPos[1] += 0.05f;
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x2b4 || param_1 == 0x2b5) { // MODEL_ARMOR+36/+37
         outPos[1] -= 0.05f;
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 >= 0x2b6 && param_1 <= 0x2bc) { // MODEL_ARMOR+38..44
         outPos[1] -= 0.08f;
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x1a8) { // MODEL_SWORD+24
         outPos[0] -= 0.02f;
         outPos[1] += 0.03f;
         ObjectSelect_Angle = 180.0f;
-        _DAT_07ea9530 = 90.0f;
-        _DAT_07ea9534 = 15.0f;
+        ItemRenderRotY = 90.0f;
+        ItemRenderRotZ = 15.0f;
         exactPose = true;
     } else if (param_1 == 0x24b) { // MODEL_EVENT+10
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = -90.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = -90.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x24c) { // MODEL_EVENT+11
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = -20.0f;
-        _DAT_07ea9534 = -20.0f;
+        ItemRenderRotY = -20.0f;
+        ItemRenderRotZ = -20.0f;
         exactPose = true;
     } else if (param_1 == 0x24d) { // MODEL_EVENT+12
         ObjectSelect_Angle = 250.0f;
-        _DAT_07ea9530 = 140.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 140.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x24f) { // MODEL_EVENT+14
         ObjectSelect_Angle = 255.0f;
-        _DAT_07ea9530 = 160.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 160.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x250) { // MODEL_EVENT+15
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x251) { // MODEL_EVENT+16
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_STAFF + 7) {
         ObjectSelect_Angle = 0.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 205.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 205.0f;
         exactPose = true;
     } else if (param_1 == MODEL_HELPER + 0) {
         outPos[0] += 0.002f;
         outPos[1] += 0.010f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_HELPER + 1 || param_1 == MODEL_HELPER + 2) {
         outPos[0] += 0.002f;
         outPos[1] += 0.008f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     // 2026-08-26 — DESACTIVADO. `MODEL_HELPER + 12/13` son los modelos 828/829
     // (Pendant of Lightning / of Fire). IDA los cubre con
@@ -909,304 +909,304 @@ void __cdecl RenderObjectScreen(int param_1, unsigned int param_2, unsigned char
         outPos[0] += 0.002f;
         outPos[1] += 0.010f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if ((param_1 >= MODEL_POTION + 1 && param_1 <= MODEL_POTION + 10) ||
                param_1 == MODEL_POTION + 13 || param_1 == MODEL_POTION + 14 || param_1 == MODEL_POTION + 22) {
         outPos[0] += 0.005f;
         outPos[1] += 0.015f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_POTION + 21) {
         outPos[0] += 0.005f;
         outPos[1] -= 0.005f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = -10.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = -10.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x34e) { // MODEL_HELPER+30
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x34f) { // MODEL_HELPER+31
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = -90.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = -90.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x350) { // MODEL_HELPER+32
         outPos[0] += 0.01f;
         outPos[1] -= 0.03f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x351) { // MODEL_HELPER+33
         outPos[1] += 0.02f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x352 || param_1 == 0x353) { // MODEL_HELPER+34/+35
         outPos[0] += 0.01f;
         outPos[1] += 0.02f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x354) { // MODEL_HELPER+36
         outPos[0] += 0.01f;
         outPos[1] += 0.05f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x355) { // MODEL_HELPER+37
         outPos[0] += 0.01f;
         outPos[1] += 0.04f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x35b || param_1 == 0x35d) { // raw ids verified from asset table
         outPos[1] += (param_1 == 0x35b) ? -0.027f : -0.02f;
         outPos[0] += 0.005f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x35e || param_1 == 0x35f || param_1 == 0x360 || param_1 == 0x361 || param_1 == 0x362 || param_1 == 0x363) { // MODEL_HELPER+46..51
         outPos[1] += (param_1 == 0x361) ? -0.04f : (param_1 == 0x362 ? -0.03f : (param_1 == 0x363 ? -0.02f : -0.04f));
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x364) { // MODEL_HELPER+52
         outPos[1] += 0.045f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x365) { // MODEL_HELPER+53
         outPos[1] += 0.04f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 120.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 120.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 >= 0x366 && param_1 <= 0x36a) { // MODEL_HELPER+54..58
         outPos[1] -= 0.02f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x36b) { // MODEL_HELPER+59
         outPos[0] += 0.01f;
         outPos[1] += 0.02f;
         ObjectSelect_Angle = 90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x36c) { // MODEL_HELPER+60
         outPos[1] -= 0.06f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x36d) { // MODEL_HELPER+61
         outPos[1] -= 0.04f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x36e) { // MODEL_HELPER+62
         outPos[0] += 0.01f;
         outPos[1] -= 0.03f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x36f) { // MODEL_HELPER+63
         outPos[0] += 0.01f;
         outPos[1] += 0.082f;
         ObjectSelect_Angle = 90.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x385) { // MODEL_POTION+53
         outPos[1] += 0.042f;
         ObjectSelect_Angle = 180.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x386) { // MODEL_POTION+54
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x38a) { // MODEL_POTION+58
         outPos[1] += 0.07f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 >= 0x38b && param_1 <= 0x38e) { // MODEL_POTION+59..62
         outPos[1] += 0.06f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x390) { // MODEL_POTION+64
         outPos[1] += 0.02f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 >= 0x396 && param_1 <= 0x397) { // MODEL_POTION+70..71
         outPos[0] += 0.01f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 >= 0x398 && param_1 <= 0x39d) { // MODEL_POTION+72..77
         outPos[1] += 0.08f;
         ObjectSelect_Angle = 0.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 >= 0x39e && param_1 <= 0x3a2) { // MODEL_POTION+78..82
         outPos[1] += 0.01f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x3a3) { // MODEL_POTION+83
         outPos[1] += 0.06f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 >= 0x3a4 && param_1 <= 0x3aa) { // MODEL_POTION+84..90
         if (param_1 == 0x3a4 || param_1 == 0x3a6 || param_1 == 0x3a7) outPos[1] += 0.01f;
         else if (param_1 == 0x3a5) outPos[1] -= 0.01f;
         else outPos[1] += 0.015f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 >= 0x3ab && param_1 <= 0x3af) { // MODEL_POTION+91..95
         if (param_1 == 0x3ae) outPos[0] += 0.01f; // +94
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == 0x3b1 || param_1 == 0x3b2) { // MODEL_POTION+97..98
         outPos[1] += 0.09f;
         ObjectSelect_Angle = 0.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_WING + 37 || param_1 == MODEL_WING + 38 || param_1 == MODEL_WING + 40) {
         outPos[1] += 0.05f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = -10.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = -10.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_WING + 39) {
         outPos[1] += 0.08f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = -10.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = -10.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_WING + 42) {
         outPos[1] += 0.05f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 2.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 2.0f;
         exactPose = true;
     } else if (param_1 == MODEL_WING + 44 || param_1 == MODEL_WING + 45 || param_1 == MODEL_WING + 46 || param_1 == MODEL_WING + 47) {
         outPos[0] += 0.005f;
         outPos[1] -= 0.015f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_HELPER + 64) {
         outPos[1] -= 0.05f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = -10.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = -10.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_HELPER + 65) {
         outPos[1] -= 0.02f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = -10.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = -10.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_HELPER + 66) {
         outPos[0] += 0.01f;
         outPos[1] -= 0.05f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_HELPER + 67) {
         outPos[1] -= 0.05f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 40.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 40.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_HELPER + 68) {
         outPos[0] += 0.02f;
         outPos[1] -= 0.02f;
         ObjectSelect_Angle = 300.0f;
-        _DAT_07ea9530 = 10.0f;
-        _DAT_07ea9534 = 20.0f;
+        ItemRenderRotY = 10.0f;
+        ItemRenderRotZ = 20.0f;
         exactPose = true;
     } else if (param_1 == MODEL_HELPER + 69) {
         outPos[0] += 0.005f;
         outPos[1] -= 0.05f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = -30.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = -30.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_HELPER + 70) {
         outPos[0] += 0.04f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 70.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 70.0f;
         exactPose = true;
     } else if (param_1 >= MODEL_HELPER + 71 && param_1 <= MODEL_HELPER + 75) {
         outPos[1] += 0.07f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = (param_6 == 1) ? 180.0f : (WorldTime * 0.2f);
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = (param_6 == 1) ? 180.0f : (WorldTime * 0.2f);
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_ARMOR + 10 || param_1 == MODEL_ARMOR + 11) {
         outPos[1] -= 0.10f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_PANTS + 10 || param_1 == MODEL_PANTS + 11) {
         outPos[1] -= 0.08f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_POTION + 65) {
         outPos[1] += 0.05f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (param_1 == MODEL_POTION + 66 || param_1 == MODEL_POTION + 67) {
         outPos[1] += 0.11f;
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     }
 
@@ -1215,30 +1215,30 @@ void __cdecl RenderObjectScreen(int param_1, unsigned int param_2, unsigned char
 
     if (!exactPose && param_1 == MODEL_EVENT + 5) {
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 180.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 180.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (!exactPose && param_1 == MODEL_EVENT + 6) {
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 90.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 90.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (!exactPose && param_1 == MODEL_EVENT + 7) {
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     }
 
     if (!exactPose && (param_1 >= MODEL_POTION + 32 && param_1 <= MODEL_POTION + 34)) {
         ObjectSelect_Angle = 0.0f;
-        _DAT_07ea9530 = (float)WorldTime * _DAT_00552c00;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = (float)WorldTime * ItemSpinSpeed;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     } else if (!exactPose && (param_1 >= MODEL_EVENT + 21 && param_1 <= MODEL_EVENT + 23)) {
         ObjectSelect_Angle = 0.0f;
-        _DAT_07ea9530 = (float)WorldTime * _DAT_00552c00;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = (float)WorldTime * ItemSpinSpeed;
+        ItemRenderRotZ = 0.0f;
         exactPose = true;
     }
 
@@ -1249,28 +1249,28 @@ void __cdecl RenderObjectScreen(int param_1, unsigned int param_2, unsigned char
     // Las líneas siguientes antes asignaban `ObjectSelect_Angle = 0x42b40000` etc.
     // Como esos globals están tipados `float` en globals.h/cpp, C hace conversión
     // int→float: 0x42b40000 == 1'119'748'096, no 90.0f. El patrón es idéntico al
-    // bug que tuvimos en _DAT_005597c8 — producía rotaciones locas (~1e9°).
+    // bug que tuvimos en EntityLodScale — producía rotaciones locas (~1e9°).
     if (exactPose) {
     } else if (param_1 == 0x217 || param_1 == 0x21f) {
         ObjectSelect_Angle = 0.0f;
-        _DAT_07ea9530 = 270.0f;
-        _DAT_07ea9534 = 15.0f;
+        ItemRenderRotY = 270.0f;
+        ItemRenderRotZ = 15.0f;
     } else if (param_1 == 0x221) {
         ObjectSelect_Angle = 0.0f;
-        _DAT_07ea9530 = 90.0f;
-        _DAT_07ea9534 = 15.0f;
+        ItemRenderRotY = 90.0f;
+        ItemRenderRotZ = 15.0f;
     } else if (param_1 >= 0x218 && param_1 <= 0x22f) {
         ObjectSelect_Angle = 90.0f;
-        _DAT_07ea9530 = 180.0f;
-        _DAT_07ea9534 = 20.0f;
+        ItemRenderRotY = 180.0f;
+        ItemRenderRotZ = 20.0f;
     } else if (param_1 == 0x1fa) {
         ObjectSelect_Angle = 180.0f;
-        _DAT_07ea9530 = 270.0f;
-        _DAT_07ea9534 = 20.0f;
+        ItemRenderRotY = 270.0f;
+        ItemRenderRotZ = 20.0f;
     } else if (param_1 >= 0x250 && param_1 <= 0x26f) {
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = 270.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 270.0f;
+        ItemRenderRotZ = 0.0f;
     } else if (param_1 >= 0x190 && param_1 < 0x250) {
         switch (param_1) {
         case 0x23e: outPos[1] += 0.04f; break;                 // MODEL_STAFF+14
@@ -1281,42 +1281,42 @@ void __cdecl RenderObjectScreen(int param_1, unsigned int param_2, unsigned char
         default: break;
         }
         ObjectSelect_Angle = 180.0f;
-        _DAT_07ea9530 = 270.0f;
-        if (*(char *)(param_1 * 0x40 + -0x63e2 + DAT_07d78068) != '\0')
-            _DAT_07ea9534 = 25.0f;
+        ItemRenderRotY = 270.0f;
+        if (*(char *)(param_1 * 0x40 + -0x63e2 + ItemAttributeBase) != '\0')
+            ItemRenderRotZ = 25.0f;
         else
-            _DAT_07ea9534 = 15.0f;
+            ItemRenderRotZ = 15.0f;
     } else if (param_1 == 0x333) {
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = -90.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = -90.0f;
+        ItemRenderRotZ = 0.0f;
     } else if (param_1 == 0x342) {
         ObjectSelect_Angle = 290.0f;
-        _DAT_07ea9530 = 0.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = 0.0f;
+        ItemRenderRotZ = 0.0f;
     } else if (param_1 == 0x3be) {
         ObjectSelect_Angle = -90.0f;
-        _DAT_07ea9530 = -20.0f;
-        _DAT_07ea9534 = -20.0f;    // 0xc1a00000
+        ItemRenderRotY = -20.0f;
+        ItemRenderRotZ = -20.0f;    // 0xc1a00000
     } else if (param_1 == 0x35c) {
-        if (level == 0) { ObjectSelect_Angle = 180.0f; _DAT_07ea9530 = 0.0f;   _DAT_07ea9534 = 0.0f; }
-        else if (level == 1) { ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 0.0f; }
-        else if (level == 2) { ObjectSelect_Angle =  90.0f; _DAT_07ea9530 = 0.0f;  _DAT_07ea9534 = 0.0f; }
+        if (level == 0) { ObjectSelect_Angle = 180.0f; ItemRenderRotY = 0.0f;   ItemRenderRotZ = 0.0f; }
+        else if (level == 1) { ObjectSelect_Angle = 270.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 0.0f; }
+        else if (level == 2) { ObjectSelect_Angle =  90.0f; ItemRenderRotY = 0.0f;  ItemRenderRotZ = 0.0f; }
     } else if (param_1 == 0x3b8 || param_1 == 0x3ba || param_1 == 0x364) {
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f;
     } else if (param_1 == 0x3b9) {
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = 90.0f; _DAT_07ea9534 = 0.0f;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = 90.0f; ItemRenderRotZ = 0.0f;
     } else if ((param_1 >= 0x33c && param_1 <= 0x34f) &&
                param_1 != 0x33e && param_1 != 0x33f) {
-        ObjectSelect_Angle = 360.0f; _DAT_07ea9530 = 0.0f; _DAT_07ea9534 = 0.0f;
+        ObjectSelect_Angle = 360.0f; ItemRenderRotY = 0.0f; ItemRenderRotZ = 0.0f;
     } else {
         // FIX 2026-05-01: IDA fall-through (verified disasm @0x4E16FC/1728):
         // Angle=270, Y=-10, Z=0. Antes Y=0 → items rendered upside-down.
-        ObjectSelect_Angle = 270.0f; _DAT_07ea9530 = -10.0f; _DAT_07ea9534 = 0.0f;
+        ObjectSelect_Angle = 270.0f; ItemRenderRotY = -10.0f; ItemRenderRotZ = 0.0f;
     }
 
     if (param_6 == 1)
-        _DAT_07ea9530 = (float)WorldTime * _DAT_00552c00;
+        ItemRenderRotY = (float)WorldTime * ItemSpinSpeed;
 
     ObjectSelect_Type = modelType;
     if (modelType >= 0x270 && modelType < 0x310) {
@@ -1335,7 +1335,7 @@ void __cdecl RenderObjectScreen(int param_1, unsigned int param_2, unsigned char
     }
 
     // Set model height offset based on type range
-    void *modelThis = (void *)(DAT_05828d58 + (int)modelType * BMD_STRIDE);
+    void *modelThis = (void *)(ModelsBase + (int)modelType * BMD_STRIDE);
 
     // FIX 2026-05-02: faltaba `*(BYTE*)&((BMD*)(uintptr_t)(modelThis))->CurrentAction = 0`. IDA hace esto
     // al inicio para resetear el action index. Sin esto, el player pose usa el
@@ -1649,8 +1649,8 @@ void __cdecl RenderObjectScreen(int param_1, unsigned int param_2, unsigned char
         outPos[1] = nativeBookPos[1];
         outPos[2] = nativeBookPos[2];
         ObjectSelect_Angle = 270.0f;
-        _DAT_07ea9530 = param_6 == 1 ? (float)WorldTime * 0.45f : -10.0f;
-        _DAT_07ea9534 = 0.0f;
+        ItemRenderRotY = param_6 == 1 ? (float)WorldTime * 0.45f : -10.0f;
+        ItemRenderRotZ = 0.0f;
         local_3bc = 0x3b23d70a; // 0.0025f
     }
 
@@ -1660,9 +1660,9 @@ void __cdecl RenderObjectScreen(int param_1, unsigned int param_2, unsigned char
     ObjectSelect_PriorAction = 0;
 
     // Pose model with BMD_Animation
-    float angleArr[3] = { ObjectSelect_Angle, _DAT_07ea9530, _DAT_07ea9534 };
+    float angleArr[3] = { ObjectSelect_Angle, ItemRenderRotY, ItemRenderRotZ };
     float headAngle[3] = { ObjectSelect_HeadAngle, 0.0f, 0.0f };
-    BMD_Animation(modelThis, reinterpret_cast<float*>(&DAT_06970a9c), 0.0f, 0, 0, (unsigned int *)angleArr, headAngle, '\0', '\0');
+    BMD_Animation(modelThis, reinterpret_cast<float*>(&BoneScratchRoot), 0.0f, 0, 0, (unsigned int *)angleArr, headAngle, '\0', '\0');
 
     // Build stack entity and draw
     // entity_type at [+2], scale at [+0x0c], world_pos at [+0x10..+0x18]
@@ -1716,7 +1716,7 @@ void __cdecl RenderObjectScreen(int param_1, unsigned int param_2, unsigned char
 
     float light[3] = { 1.0f, 1.0f, 1.0f };
     // FIX 2026-05-01: param_5 era 0.0f → fallaba el gate
-    // `if (_DAT_005524f8 < param_5)` (threshold = 0.01) y RenderPartObject
+    // `if (0.01f < param_5)` (threshold = 0.01) y RenderPartObject
     // entero se saltaba → items del inventario no se veían. Pasamos 1.0f
     // (distancia "siempre visible") como hace el path de mundo (que pasa
     // entity scale/distance).
@@ -1848,7 +1848,7 @@ void __cdecl RenderObjectScreen(int Type, unsigned int ItemLevel, unsigned char 
         ? InventoryPoses[Type] : DefaultInventoryPose;
     float angle[3] = { inventoryPose.Angle[0], inventoryPose.Angle[1], inventoryPose.Angle[2] };
     if (inventoryPose.AngleMode == InventoryAngleMode::ItemAttribute) {
-        angle[2] = *(BYTE*)((BYTE*)(uintptr_t)DAT_07d78068 + (Type - 399) * 0x40 - 34) ? 25.0f : 15.0f;
+        angle[2] = *(BYTE*)((BYTE*)(uintptr_t)ItemAttributeBase + (Type - 399) * 0x40 - 34) ? 25.0f : 15.0f;
     } else if (inventoryPose.AngleMode == InventoryAngleMode::Level) {
         if (level == 0) angle[0] = 180.0f;
         else if (level == 1) { angle[0] = 270.0f; angle[1] = 90.0f; }
@@ -1872,8 +1872,8 @@ void __cdecl RenderObjectScreen(int Type, unsigned int ItemLevel, unsigned char 
     // IDA stores the pose in these shared angle slots before BMD_Animation;
     // later item passes also observe that state.
     ObjectSelect_Angle = angle[0];
-    _DAT_07ea9530 = angle[1];
-    _DAT_07ea9534 = angle[2];
+    ItemRenderRotY = angle[1];
+    ItemRenderRotZ = angle[2];
 
     short modelType = (short)drawType;
     if (drawType == Type && modelType >= MODEL_HELM && modelType < MODEL_WING_ELF) {
@@ -1884,7 +1884,7 @@ void __cdecl RenderObjectScreen(int Type, unsigned int ItemLevel, unsigned char 
     }
     ObjectSelect_Type = modelType;
 
-    void* model = (void*)(DAT_05828d58 + (int)modelType * BMD_STRIDE);
+    void* model = (void*)(ModelsBase + (int)modelType * BMD_STRIDE);
     *(BYTE*)&((BMD*)(uintptr_t)(model))->CurrentAction = 0;
     *(float*)&((BMD*)(uintptr_t)(model))->BodyHeight = inventoryPose.BodyHeight;
     float scale = (int)ItemLevel < 0 ? inventoryPose.NegativeLevelScale : inventoryPose.Scale;
@@ -1893,9 +1893,9 @@ void __cdecl RenderObjectScreen(int Type, unsigned int ItemLevel, unsigned char 
     ObjectSelect_AnimationFrame = 0;
     ObjectSelect_PriorAnimationFrame = 0;
     ObjectSelect_PriorAction = 0;
-    float renderAngle[3] = { ObjectSelect_Angle, _DAT_07ea9530, _DAT_07ea9534 };
+    float renderAngle[3] = { ObjectSelect_Angle, ItemRenderRotY, ItemRenderRotZ };
     float headAngle[3] = { ObjectSelect_HeadAngle, 0.0f, 0.0f };
-    BMD_Animation(model, reinterpret_cast<float*>(&DAT_06970a9c), 0.0f, 0, 0,
+    BMD_Animation(model, reinterpret_cast<float*>(&BoneScratchRoot), 0.0f, 0, 0,
                  (unsigned int*)renderAngle, headAngle, '\0', '\0');
 
     char object[0x200] = {};

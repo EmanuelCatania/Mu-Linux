@@ -12,10 +12,10 @@ int QuestX(int offset) { return gWindow.PanelOrigin(Ui::Quest) + offset; }
 }
 
 
-// FUN_00402ff0 @ 0x00402FF0 (~59 lines) — Quest dialog: render message box text + answer choices
+// Quest_RenderDialogAnswers @ 0x00402FF0 (~59 lines) — Quest dialog: render message box text + answer choices
 // __fastcall(ecx=questObj). Renders g_lpszMessageBoxCustom lines centered, then answer list
 // with mouse hover highlight (red if hovered). Uses g_iNumAnswer, g_iNumLineMessageBoxCustom.
-void __fastcall FUN_00402ff0(const BYTE* param_1) {
+void __fastcall Quest_RenderDialogAnswers(const BYTE* param_1) {
     m_dwTextColor = 0xffd2e6ff;
     m_dwBackColor = 0;
     EnableAlphaTest(true);
@@ -49,7 +49,7 @@ void __fastcall FUN_00402ff0(const BYTE* param_1) {
 }
 
 extern "C" void __cdecl RenderTipText(int sx, int sy, const char* Text);
-int __cdecl FUN_004c3dd0(int param_1);
+int __cdecl UI_ColorFromZen(int param_1);
 
 // sub_403150 @ 0x00403150 (438 bytes) — lista de items que pide la quest.
 //
@@ -72,7 +72,7 @@ int __cdecl FUN_004c3dd0(int param_1);
 //   +2  cantidad pedida
 //   +4  flags de disponibilidad por clase (se indexa con This[4])
 //   -1  (= pQuest + 39 + 18*i) 1 = la entrada pide un item
-char __fastcall FUN_00403150(void *pThis, int /*edx*/, char a2, char a3)
+char __fastcall Quest_RenderItemList(void *pThis, int /*edx*/, char a2, char a3)
 {
     const BYTE* This = static_cast<const BYTE*>(pThis);
 
@@ -134,16 +134,16 @@ char __fastcall FUN_00403150(void *pThis, int /*edx*/, char a2, char a3)
             RenderItem3D((float)QuestX(30), sy, 20.0f, 20.0f, nType,
                          QUEST_ITEM_PREVIEW_DLL_FIX ? 0 : -1, 0, 0, false);
         }
-        sy += _DAT_00552464;
+        sy += 25.0f;
     }
     return ret;
 }
 
-// FUN_00403320 @ 0x00403320 (955 bytes) — ventana de quest del NPC
+// Quest_RenderNpcDialog @ 0x00403320 (955 bytes) — ventana de quest del NPC
 // Port fiel del decompile.  Dibuja el texto del dialogo y las respuestas con
-// FUN_00402ff0, y la lista de items pedidos con FUN_00403150 (que tambien
+// Quest_RenderDialogAnswers, y la lista de items pedidos con Quest_RenderItemList (que tambien
 // decide el color del boton).
-void __fastcall FUN_00403320(void* param_1) {
+void __fastcall Quest_RenderNpcDialog(void* param_1) {
     char Buffer[100];
     const BYTE* This = static_cast<const BYTE*>(param_1);
 
@@ -157,7 +157,7 @@ void __fastcall FUN_00403320(void* param_1) {
     if (state == 1) {
         GL_DrawTexture(279, (float)gWindow.PanelOrigin(Ui::Quest), 325.0f, 190.0f, 10.0f,
                      0.0f, 0.0f, 0.7421875f, 0.625f, 1, 1);
-        if (FUN_00403150(param_1, 0, state, 1)) {
+        if (Quest_RenderItemList(param_1, 0, state, 1)) {
             m_dwTextColor = 0xFFD2E6FFu;
         } else {
             Gfx::Color3f(0.3f, 0.3f, 0.3f);
@@ -184,7 +184,7 @@ void __fastcall FUN_00403320(void* param_1) {
         m_dwTextColor = 0xFF96DCFFu;
         RenderText(QuestX(20), 370, GlobalText[198], 0, 0, nullptr);
         int zen = *(int*)(This + 116868);       // +0x1C884
-        m_dwTextColor = (DWORD)FUN_004c3dd0(zen);
+        m_dwTextColor = (DWORD)UI_ColorFromZen(zen);
         ConvertGold64(zen, Buffer);
         RenderText(QuestX(60), 370, Buffer, 0, 0, nullptr);
     }
@@ -216,29 +216,29 @@ void __fastcall FUN_00403320(void* param_1) {
     RenderText(QuestX(22), 22, (char*)(questBase + 13),
                150 * (int)gWindow.GetWidth() / 0x280, 1, nullptr);
 
-    FUN_00402ff0(This);      // texto del diálogo + respuestas
+    Quest_RenderDialogAnswers(This);      // texto del diálogo + respuestas
     Gfx::Color3f(1.0f, 1.0f, 1.0f);
 }
 
-// FUN_00403f30 @ 0x00403F30 (30 bytes) — dispatcher del render de quest.
+// Quest_RenderDispatch @ 0x00403F30 (30 bytes) — dispatcher del render de quest.
 // sub_4F5820 (Render_QuickButtons_) lo invoca entre RenderGoldenArcherWindow
 // y RenderServerDivision (aca lo llama HUD_Pass4).
-void __fastcall FUN_00403a40(void* param_1);
-char __fastcall FUN_00403f30(void* param_1) {
+void __fastcall Quest_RenderMainPanel(void* param_1);
+char __fastcall Quest_RenderDispatch(void* param_1) {
     if (param_1 == nullptr) return 1;
     unsigned char mode = *(static_cast<const BYTE*>(param_1) + 116863);  // +0x1C87F
-    if (mode == 1)      FUN_00403320(param_1);
-    else if (mode == 2) FUN_00403a40(param_1);
+    if (mode == 1)      Quest_RenderNpcDialog(param_1);
+    else if (mode == 2) Quest_RenderMainPanel(param_1);
     return 1;
 }
 
-// FUN_00403700 @ 0x00403700 (~116 lines) — Quest list: render quest entries filtered by state
+// Quest_RenderListByState @ 0x00403700 (~116 lines) — Quest list: render quest entries filtered by state
 // __thiscall(this=questObj, param_1=filterState). Iterates up to 200 quests via CSQuest__getQuestState,
 // shows matching quests in a scrollable list. Mouse click selects quest + calls CSQuest__CheckQuestState
 // and CSQuest__ShowDialogText. Tab buttons "Progress"/"Complete" at top. Selected quest shows arrow icon.
-UINT __fastcall FUN_00403700(void* ecx, void* /*edx*/, UINT param_1) {
+UINT __fastcall Quest_RenderListByState(void* ecx, void* /*edx*/, UINT param_1) {
     (void)ecx; (void)param_1;
-    // Tab buttons rendered at offset _DAT_005524a4, hover highlight
+    // Tab buttons rendered at offset QuestTabButtonOffset, hover highlight
     // Quest loop: for questIndex 0..199:
     //   if getQuestState(questIndex) == param_1 and name != empty:
     //     render quest name, highlight on hover, click selects
@@ -247,11 +247,11 @@ UINT __fastcall FUN_00403700(void* ecx, void* /*edx*/, UINT param_1) {
     return 0;
 }
 
-// FUN_00403a40 @ 0x00403A40 (~88 lines) — Quest UI main panel: tabs + quest list + close button
+// Quest_RenderMainPanel @ 0x00403A40 (~88 lines) — Quest UI main panel: tabs + quest list + close button
 // __fastcall(ecx=questObj). Renders 3-tab quest panel (tab 0=progress, 1=complete, 2=special).
-// Calls FUN_00403700 for tab 0/1 content, CWsctlc__LogPrintOn for tab 2.
-// Renders NPC name, close button with tooltip, dialog answers via FUN_00402ff0.
-void __fastcall FUN_00403a40(void* param_1) {
+// Calls Quest_RenderListByState for tab 0/1 content, CWsctlc__LogPrintOn for tab 2.
+// Renders NPC name, close button with tooltip, dialog answers via Quest_RenderDialogAnswers.
+void __fastcall Quest_RenderMainPanel(void* param_1) {
     Gfx::Color3f(1.0f, 1.0f, 1.0f);
     EnableAlphaTest(true);
     RenderInventoryInterface(gWindow.PanelOrigin(Ui::Quest), 0, 1);
@@ -261,19 +261,19 @@ void __fastcall FUN_00403a40(void* param_1) {
     // Render 3 tab buttons (stride 0x37, bitmaps 0x115/0x116 for normal/selected)
     // Tab click sets *(param_1+0x1c87d)
     // Render separator lines (bitmap 0x117) and border lines (bitmap 0x104)
-    // Dispatch to FUN_00403700(1 or 2) or CWsctlc__LogPrintOn() based on selected tab
+    // Dispatch to Quest_RenderListByState(1 or 2) or CWsctlc__LogPrintOn() based on selected tab
     // Close button, NPC name, dialog answers
     const BYTE* quest = static_cast<const BYTE*>(param_1);
     char cVar1 = *(const char*)(quest + 0x1c87d);
     if (cVar1 == '\0') {
-        FUN_00403700(param_1, NULL, 1);
+        Quest_RenderListByState(param_1, NULL, 1);
     } else if (cVar1 == '\x01') {
-        FUN_00403700(param_1, NULL, 2);
+        Quest_RenderListByState(param_1, NULL, 2);
     } else if (cVar1 == '\x02') {
         CWsctlc__LogPrintOn();
     }
     // Texto del dialogo + respuestas.
-    FUN_00402ff0(quest);
+    Quest_RenderDialogAnswers(quest);
     Gfx::Color3f(1.0f, 1.0f, 1.0f);
 }
 

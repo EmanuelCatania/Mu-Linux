@@ -8,9 +8,9 @@
 #include "Render/Camera.h"
 
 // CollisionDetectLineToFace @ 0x00512D40 — CollisionDetectLineToFace (a.k.a. Ray_TriIntersect)
-//   xf → DAT_083a4130  (cursor billboard screen X / picked world X)
-//   yf → DAT_083a4134  (cursor billboard screen Y / picked world Y)
-//   DAT_083a4120 is the running closest-hit ray parameter (float, not DWORD).
+//   xf → TerrainPickPosX  (cursor billboard screen X / picked world X)
+//   yf → TerrainPickPosY  (cursor billboard screen Y / picked world Y)
+//   RayCastClosestT is the running closest-hit ray parameter (float, not DWORD).
 unsigned int __cdecl CollisionDetectLineToFace(float *Position, float *Target, int Polygon,
     float *v1, float *v2, float *v3, float *v4, float *Normal, char Collision)
 {
@@ -27,7 +27,7 @@ unsigned int __cdecl CollisionDetectLineToFace(float *Position, float *Target, i
                            + v1[1] * Normal[1]
                            + v1[0] * Normal[0]))
                          / v12));
-    if ( v20 < 0.0f || (double)v20 > (double)DAT_083a4120 )
+    if ( v20 < 0.0f || (double)v20 > (double)RayCastClosestT )
         return 0;
     float Targeta   = v20 * v24 + Position[0];
     float Positiona = v20 * v25 + Position[1];
@@ -76,10 +76,10 @@ unsigned int __cdecl CollisionDetectLineToFace(float *Position, float *Target, i
         return 0;
 
     if ( Collision ) {
-        DAT_083a4120 = v20;
-        DAT_083a4130 = Targeta;     // xf
-        DAT_083a4134 = Positiona;   // yf
-        DAT_083a4138 = Normala;
+        RayCastClosestT = v20;
+        TerrainPickPosX = Targeta;     // xf
+        TerrainPickPosY = Positiona;   // yf
+        TerrainPickPosZ = Normala;
     }
     return 1;
 }

@@ -13,7 +13,7 @@
 // IDA: CWsctlc::GetSocket (0x0043DCC0)
 //
 // Key global:
-//   DAT_00559050 — 16-byte XOR key table (indices 0..15)
+//   LegacyPacketXorKey16 — 16-byte XOR key table (indices 0..15)
 
 #include "stdafx.h"
 #include "Physics/ClothTypes.h"
@@ -24,7 +24,7 @@
 #include "Platform/ISocket.h"
 #include "Net/Ping.h"
 
-void __fastcall FUN_00401af0(void*);
+void __fastcall CSQuest_ClickDialogAnswers(void*);
 void  __fastcall SpringNode_Ctor(void *node);
 int   __cdecl    Cloth_SpringRange(uintptr_t a1, uintptr_t a3, const float *range);
 void  __cdecl    Cloth_SpringEqual(uintptr_t a1, uintptr_t a3, float rest);
@@ -41,7 +41,7 @@ void __fastcall SpringNode_SetPos(void *node, float x, float y, float z, int pin
 void __fastcall SpringNode_GetPos(void *node, float *out);
 float __fastcall SpringNode_Delta(void *a, uintptr_t b, float *c);
 void __fastcall ClothAnchor_SetParams(void *node, float p1, float p2, float p3, float radius, int boneIdx);
-void __fastcall FUN_0053cbf0(int *param_1);
+void __fastcall GameGuard_SetVtable(int *param_1);
 static void __cdecl FUN_0053cc00_impl(void* param_1);
 
 
@@ -330,7 +330,7 @@ void __cdecl HashTable_Insert(void *this_,void *param_1_v,void *param_2_v)
       uVar9 = uVar9 + 1;
     } while (uVar9 < *(uint *)((intptr_t)this_ + 0xc));
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______Insert_005580e8);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullInsert);
   return;
 }
 
@@ -408,7 +408,7 @@ void* __cdecl HashTable_GetNode(void *this_,void *param_1_v)
       uVar9 = uVar9 + 1;
     } while (uVar9 < *(uint *)((intptr_t)this_ + 0xc));
   }
-  CErrorReport_Write(&DAT_055c9bf0,s_Hash_table_full______GetIndex_00558108);
+  CErrorReport_Write(&ErrorReportCtx,Err_HashTableFullGetIndex);
   return (void*)0;
 }
 
@@ -549,7 +549,7 @@ static void CSimpleModulus_EncryptBlock(DWORD *ctx, BYTE *dst, WORD *src, BYTE x
 // IDA: FUN_0053CCA0 (0x0053CCA0)
 // Inversa de CC30 (codificar). Los paquetes server→cliente se decodifican con ésta.
 // 11 bytes de entrada → 8 de salida por bloque. Devuelve el total de bytes decodificados
-// (o sólo el tamaño cuando dst==0). El bloque lo decodifica FUN_0053ce30.
+// (o sólo el tamaño cuando dst==0). El bloque lo decodifica PacketCipher_DecryptBlock.
 //
 // Context = g_SimpleModulusSC loaded from Data\Dec2.dat.
 // Layout: ctx[1+i]=ModKey, ctx[9+i]=DecKey, ctx[13+i]=XorKey (DWORD indices).
@@ -578,7 +578,7 @@ int __cdecl CSimpleModulus_Decode(BYTE* a1, BYTE* a2, int a3, int a4)
     return outBytes;
 }
 
-// FUN_0053ce30 @ 0x0053CE30 — Decrypt one 11-byte block to 8 bytes.
+// PacketCipher_DecryptBlock @ 0x0053CE30 — Decrypt one 11-byte block to 8 bytes.
 // ctx : CSimpleModulus context (decode flavor).
 // dst : 8-byte output (caller must guarantee 8 bytes available).
 // src : 11-byte input.
@@ -705,7 +705,7 @@ static int CSimpleModulus_DecryptBlock(DWORD *ctx, BYTE *dst, BYTE *src)
 void __fastcall Quest_FullInit(void *param_1_raw) {
     BYTE* param_1 = static_cast<BYTE*>(param_1_raw);
     // El slot de vtable conserva cuatro bytes hasta migrar el layout en B2.
-    *reinterpret_cast<std::uint32_t*>(param_1) = static_cast<std::uint32_t>(reinterpret_cast<uintptr_t>(&PTR_LAB_005524b8));
+    *reinterpret_cast<std::uint32_t*>(param_1) = static_cast<std::uint32_t>(reinterpret_cast<uintptr_t>(&Vtbl_Quest));
     if (g_csQuest == 0) g_csQuest = reinterpret_cast<uintptr_t>(param_1);
     *(param_1 + 4) = 0xff;
     *(param_1 + 0x1c87a) = 0;
@@ -724,22 +724,22 @@ void __fastcall Quest_FullInit(void *param_1_raw) {
     // por vtable, esto hay que restaurarlo.
 }
 
-// FUN_00403ef0 @ 0x00403EF0 (17 bytes) — quest vtable init
-void __fastcall FUN_00403ef0(void* param_1) {
+// Quest_SetVtable @ 0x00403EF0 (17 bytes) — quest vtable init
+void __fastcall Quest_SetVtable(void* param_1) {
     // El slot de vtable conserva cuatro bytes hasta migrar el layout en B2.
-    *reinterpret_cast<std::uint32_t*>(param_1) = static_cast<std::uint32_t>(reinterpret_cast<uintptr_t>(&PTR_LAB_005524b8));
+    *reinterpret_cast<std::uint32_t*>(param_1) = static_cast<std::uint32_t>(reinterpret_cast<uintptr_t>(&Vtbl_Quest));
     g_csQuest = 0;
 }
 
-// FUN_00403f10 @ 0x00403F10 — Quest ~dtor
-void __fastcall FUN_00403f10(void* ecx, int /*edx*/, BYTE param_1) {
-    FUN_00403ef0(ecx);
+// Quest_Dtor @ 0x00403F10 — Quest ~dtor
+void __fastcall Quest_Dtor(void* ecx, int /*edx*/, BYTE param_1) {
+    Quest_SetVtable(ecx);
     if (param_1 & 1) operator_delete(ecx);
 }
 
 // Packet_DecryptBuffer @ 0x00404370 — HashTable_CopyEncrypt(param_1, param_2)
 // Copia 0x584 bytes de param_2 a un buffer nuevo, lo codifica con XOR (resta 0x23,
-// XOR con la tabla DAT_00559050, suma 0xb9) y copia el resultado de vuelta a param_1.
+// XOR con la tabla LegacyPacketXorKey16, suma 0xb9) y copia el resultado de vuelta a param_1.
 // IDA: Packet_DecryptBuffer (0x00404370)
 void __cdecl Packet_DecryptBuffer(void *vparam_1, void *vparam_2) {
     unsigned int *param_1 = (unsigned int*)vparam_1;
@@ -786,19 +786,19 @@ int  __cdecl    Cloth_Solve(DWORD *a1);
 int __cdecl CSQuest_ProceedButton(void *param_1) {
     BYTE* quest = static_cast<BYTE*>(param_1);
     if (Ui::QuestBounds(gWindow.GetRightShift()).Contains((int)MouseX, (int)MouseY))
-        DAT_07d78094 = 1;                       // MouseOnWindow
+        MouseOnWindowFlag = 1;                       // MouseOnWindow
 
-    FUN_00401af0(param_1);
+    CSQuest_ClickDialogAnswers(param_1);
 
     // Botón de aceptar / continuar la quest.
     if (Ui::QuestProceed(gWindow.GetRightShift()).Contains((int)MouseX, (int)MouseY) &&
-        (DAT_083a4124 != 0)) {
+        (MouseLButtonPush != 0)) {
         // IDA: sub_402850 (0x00402850).
         // DESVIACION (fix del DLL, Patchs.cpp 0x004028EA): consumir el clic en QUEST_CANCEL sin enviar A2.
         if (*(quest + 0x1c882) == 3) {
-            DAT_083a4124 = 0;
-            DAT_07e11d28 = 0;
-            DAT_00559bec = 6;
+            MouseLButtonPush = 0;
+            MoveDebounceCounter = 0;
+            MouseUpdateTimeMax = 6;
             goto closeButton;
         }
         // Mismo paquete que las respuestas del diálogo (ver Quest_SendState en
@@ -812,8 +812,8 @@ int __cdecl CSQuest_ProceedButton(void *param_1) {
         pkt[4] = 0x01;
         gNetwork.Send(pkt, 5);
 
-        DAT_083a4124 = 0;                       // MouseLButtonPush
-        DAT_083a42c4 = 0;                       // MouseLButton
+        MouseLButtonPush = 0;                       // MouseLButtonPush
+        MouseLButton = 0;                       // MouseLButton
         PlayBuffer(28, 0, 0);
     }
 
@@ -821,12 +821,12 @@ closeButton:
     // Botón de cerrar.
     if (Ui::QuestClose(gWindow.GetRightShift()).Contains((int)MouseX, (int)MouseY) &&
         (IsClickPushed())) {
-        DAT_083a4124 = 0;
-        DAT_07e11d28 = 0;
-        DAT_00559bec = 6;
+        MouseLButtonPush = 0;
+        MoveDebounceCounter = 0;
+        MouseUpdateTimeMax = 6;
         CSQuest_clearQuest(param_1);
     }
-    if (DAT_083a413c != 0) DAT_083a413c = 0;
+    if (MouseLButtonPop != 0) MouseLButtonPop = 0;
     return 1;
 }
 
@@ -834,11 +834,11 @@ closeButton:
 // BATCH 11 — BMD/SMD model loading + mesh rendering + linked list + quest init
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// FUN_00408ff0 @ 0x00408FF0 (~43 lines) — BMD mesh render: prepare vertices + draw front/back faces
+// BMD_RenderMesh @ 0x00408FF0 (~43 lines) — BMD mesh render: prepare vertices + draw front/back faces
 // __fastcall(ecx=meshObj). Aloca un buffer temporal de vértices (count*0xC), llama a SpringNode_GetPos para transformar
 // cada vértice, setea el modo de alpha según los flags de obj+0x14 (0=deshabilitar, 0x1000=alphaTest),
-// y después llama dos veces a FUN_004090b0, para la cara frontal (textura obj+0xC) y la trasera (textura obj+0x10).
-void __fastcall FUN_00408ff0(void* param_1) {
+// y después llama dos veces a BMD_EmitFaceQuads, para la cara frontal (textura obj+0xC) y la trasera (textura obj+0x10).
+void __fastcall BMD_RenderMesh(void* param_1) {
     // Port FIEL de IDA `sub_408FF0` — arma el buffer de vértices transformando
     // cada nodo y dibuja las dos caras.
     int *thiz = (int *)param_1;
@@ -867,17 +867,17 @@ void __fastcall FUN_00408ff0(void* param_1) {
     float texFront, texBack;
     memcpy(&texFront, &ClothSystem(thiz).FrontTexture, 4);   // +0x0C
     memcpy(&texBack,  &ClothSystem(thiz).BackTexture, 4);   // +0x10
-    FUN_004090b0(param_1, 0, 1, texFront, verts);
-    FUN_004090b0(param_1, 0, 0, texBack,  verts);
+    BMD_EmitFaceQuads(param_1, 0, 1, texFront, verts);
+    BMD_EmitFaceQuads(param_1, 0, 0, texBack,  verts);
 
     operator_delete((unsigned char *)verts);
 }
 
-// FUN_004090b0 @ 0x004090B0 (~54 lines) — BMD mesh: emit quads for one face side
+// BMD_EmitFaceQuads @ 0x004090B0 (~54 lines) — BMD mesh: emit quads for one face side
 // __thiscall(this=meshObj, param_1=windingOrder, param_2=textureId, param_3=vertexBuf).
 // Binds texture, glBegin(GL_QUADS=7), nested loop over rows/cols emitting 4 vertices per quad
-// vía FUN_004091d0. El orden de winding se invierte según param_1 (0=atrás, 1=adelante).
-void __fastcall FUN_004090b0(void* ecx, void* /*edx*/, int param_1, float param_2, const float* param_3) {
+// vía BMD_EmitVertex. El orden de winding se invierte según param_1 (0=atrás, 1=adelante).
+void __fastcall BMD_EmitFaceQuads(void* ecx, void* /*edx*/, int param_1, float param_2, const float* param_3) {
     // Port FIEL de IDA `sub_4090B0`. `param_2` es un GLfloat que en realidad
     // lleva el ID de textura en sus BITS (IDA: `BindTexture(SLODWORD(t))`),
     // igual que el `t` de sub_4091D0 lleva el índice de fila.
@@ -893,28 +893,28 @@ void __fastcall FUN_004090b0(void* ecx, void* /*edx*/, int param_1, float param_
         // cara delantera: (c,r) (c+1,r) (c+1,r+1) (c,r+1)
         for (int r = 0; r < rows - 1; ++r)
             for (int c = 0; c < cols - 1; ++c) {
-                FUN_004091d0(ecx, 0, param_3, c,     (float)r);
-                FUN_004091d0(ecx, 0, param_3, c + 1, (float)r);
-                FUN_004091d0(ecx, 0, param_3, c + 1, (float)(r + 1));
-                FUN_004091d0(ecx, 0, param_3, c,     (float)(r + 1));
+                BMD_EmitVertex(ecx, 0, param_3, c,     (float)r);
+                BMD_EmitVertex(ecx, 0, param_3, c + 1, (float)r);
+                BMD_EmitVertex(ecx, 0, param_3, c + 1, (float)(r + 1));
+                BMD_EmitVertex(ecx, 0, param_3, c,     (float)(r + 1));
             }
     } else {
         // cara trasera: winding invertido — (c,r) (c,r+1) (c+1,r+1) (c+1,r)
         for (int r = 0; r < rows - 1; ++r)
             for (int c = 0; c < cols - 1; ++c) {
-                FUN_004091d0(ecx, 0, param_3, c,     (float)r);
-                FUN_004091d0(ecx, 0, param_3, c,     (float)(r + 1));
-                FUN_004091d0(ecx, 0, param_3, c + 1, (float)(r + 1));
-                FUN_004091d0(ecx, 0, param_3, c + 1, (float)r);
+                BMD_EmitVertex(ecx, 0, param_3, c,     (float)r);
+                BMD_EmitVertex(ecx, 0, param_3, c,     (float)(r + 1));
+                BMD_EmitVertex(ecx, 0, param_3, c + 1, (float)(r + 1));
+                BMD_EmitVertex(ecx, 0, param_3, c + 1, (float)r);
             }
     }
     BufferedDraw::End();
 }
 
-// FUN_004091d0 @ 0x004091D0 (~21 lines) — BMD mesh: emit single vertex with texcoord
+// BMD_EmitVertex @ 0x004091D0 (~21 lines) — BMD mesh: emit single vertex with texcoord
 // __thiscall. Calcula la UV desde la posición en la grilla: u = col/(cols-1), v = row/(rows-1), clampeado a 0.99.
 // Emite glTexCoord2f + glVertex3f desde el buffer de vértices en param_1 + (row*cols+col)*0xC.
-void __fastcall FUN_004091d0(void* ecx, void* /*edx*/, const float* param_1, int param_2, float param_3) {
+void __fastcall BMD_EmitVertex(void* ecx, void* /*edx*/, const float* param_1, int param_2, float param_3) {
     // Port FIEL de IDA `sub_4091D0`. param_1 = buffer de vértices (stride 12),
     // param_2 = columna, param_3 = fila (llega como float con valor entero).
     int *thiz = (int *)ecx;
@@ -987,7 +987,7 @@ int __cdecl Cloth_Solve(DWORD *a1)
     VerletNode_GetPos(anchor,Position);
     float v6=Position[0];Position[1]=-Position[1];Position[0]=Position[2];Position[2]=v6;
     OBJECT* owner=ClothSystem(a1).Owner;
-    BMD_TransformPosition(static_cast<void*>(AsModel(DAT_05828d58)+owner->Type),
+    BMD_TransformPosition(static_cast<void*>(AsModel(ModelsBase)+owner->Type),
       reinterpret_cast<float*>(owner->BoneMatrices+anchor->Bone),Position,WorldPosition,1);
     VerletNode_SetTarget(anchor,WorldPosition[0],*(int*)&WorldPosition[1],*(int*)&WorldPosition[2]);
   }
@@ -1039,14 +1039,14 @@ void* __fastcall Widget_Ctor(void *param_1)
     return param_1;
 }
 
-// FUN_004093c0 @ 0x004093C0 (11 bytes)
-void __fastcall FUN_004093c0(void *This) {
-    ClothSystem(This).VTable = reinterpret_cast<void**>(&PTR_LAB_005524e8);
-    FUN_00408070(This);
+// SoundWidget_SetVtable @ 0x004093C0 (11 bytes)
+void __fastcall SoundWidget_SetVtable(void *This) {
+    ClothSystem(This).VTable = reinterpret_cast<void**>(&ClothNodeVtable);
+    SoundWidget_Deinit(This);
 }
 
 // SpringMesh_Create @ 0x004093E0 — SpringMesh_Create: builds triangle-mesh spring system from BMD face data.
-// Por cada vértice de cara: inicializa la posición del nodo desde el buffer de vértices de huesos (DAT_0584621c), lo marca como fijo si el tipo coincide.
+// Por cada vértice de cara: inicializa la posición del nodo desde el buffer de vértices de huesos (BoneVertBufBase), lo marca como fijo si el tipo coincide.
 // Por cada arista de cara (3 por triángulo): calcula el largo de reposo vía SpringNode_Delta, marca si es horizontal/vertical,
 // y agrega el resorte vía Spring_StoreEdge a this->springs (stride 0x10; na,nb,rest_scaled,rest,flags).
 // Layout: this+4=entity, +8=type, +0x14=flags, +0x30=node_count, +0x34=node_array*, +0x38=spring_count,
@@ -1063,8 +1063,8 @@ void __cdecl SpringMesh_Create(void *widget, OBJECT* entity, int slot, int type,
     int model_type = (flags == -1) ? (int)entity->Type : flags;
     static_cast<ClothMeshWidget*>(widget)->ModelType = model_type;
 
-    // model data: DAT_05828d58 + model_type * 0xbc; face list at +0x28
-    const BMD* model_base = AsModel(DAT_05828d58) + model_type;
+    // model data: ModelsBase + model_type * 0xbc; face list at +0x28
+    const BMD* model_base = AsModel(ModelsBase) + model_type;
     auto* face_list = reinterpret_cast<ClothModelMesh*>(model_base->Meshs);
     ClothModelMesh* face_entry = face_list + slot;
 
@@ -1093,8 +1093,8 @@ void __cdecl SpringMesh_Create(void *widget, OBJECT* entity, int slot, int type,
     ClothSystem(thiz).Springs = static_cast<ClothSpring*>(springs);
 
     // init node positions from bone vertex buffer
-    // buffer de vértices: (float*)&DAT_0584621c, stride de 3 floats por entrada * 15000 por slot
-    float *verts = (float*)&DAT_0584621c;
+    // buffer de vértices: (float*)&BoneVertBufBase, stride de 3 floats por entrada * 15000 por slot
+    float *verts = (float*)&BoneVertBufBase;
     int vert_base = (int)slot * 15000;
     int *vert_indices = reinterpret_cast<int*>(face_entry->Vertices);  // vertex index list
 
@@ -1122,8 +1122,8 @@ void __cdecl SpringMesh_Create(void *widget, OBJECT* entity, int slot, int type,
             float posA[3], posB[3];
             SpringNode_GetPos((void*)pA, posA);
             SpringNode_GetPos((void*)pB, posB);
-            BYTE edge_flags = (BYTE)(2 | (fabsf(posA[0] - posB[0]) <= _DAT_00552560 ? 4 : 1));
-            Spring_StoreEdge(widget, (int)sp, na, nb, dist * _DAT_00552504, dist, edge_flags);
+            BYTE edge_flags = (BYTE)(2 | (fabsf(posA[0] - posB[0]) <= SpringEdgeThreshold ? 4 : 1));
+            Spring_StoreEdge(widget, (int)sp, na, nb, dist * HalfScale, dist, edge_flags);
             sp++;
         }
     }
@@ -1136,7 +1136,7 @@ void __cdecl SpringMesh_Create(void *widget, OBJECT* entity, int slot, int type,
 // +8 next): This[2] = cabeza, This[3] = cola, cabeza->next = cola,
 // cola->prev = cabeza, This[1] = 0 (cantidad).  La vtable (off_552568) no se
 // instala: nadie despacha por ella.  CWsctlc::LogPrintOn es un nullsub.
-void* __fastcall FUN_00409ad0(void* param_1) {
+void* __fastcall CPhysicsManager_Ctor(void* param_1) {
     DWORD* This = (DWORD*)param_1;
     DWORD* head = (DWORD*)operator new(0xC);
     head[0] = 0; head[1] = 0; head[2] = 0;
@@ -1157,23 +1157,23 @@ void __fastcall scalar_deleting_destructor_locale(intptr_t ecx, int /*edx*/, BYT
 }
 
 // Locimp_dtor @ 0x00409B80 (~39 lines) — destructor de CPhysicsManager (misma vtable
-// 0x552568 que FUN_00409ad0): vacía la lista y libera los centinelas.
-// __fastcall(ecx=this). Setea la vtable, llama a FUN_00409d20 (limpia todos los nodos),
+// 0x552568 que CPhysicsManager_Ctor): vacía la lista y libera los centinelas.
+// __fastcall(ecx=this). Setea la vtable, llama a CPhysicsManager_ClearNodes (limpia todos los nodos),
 // y después libera la cadena de nodos entre la cabeza y la cola, y los propios centinelas.
 // Sin portar: el cuerpo de abajo está vacío.
 void __fastcall Locimp_dtor(void* param_1) {
     // *param_1 = &PTR_FUN_00552568 (vtable)
-    // FUN_00409d20(param_1) — clear all nodes
+    // CPhysicsManager_ClearNodes(param_1) — clear all nodes
     // Recorre la cadena head->next y borra cada nodo
     // Re-link head<->tail, count=0
     // delete tail, delete head
 }
 
-// FUN_00409d20 @ 0x00409D20 (~34 lines) — CPhysicsManager: vacía la lista de nodos
+// CPhysicsManager_ClearNodes @ 0x00409D20 (~34 lines) — CPhysicsManager: vacía la lista de nodos
 // __fastcall(ecx=this). Itera desde head->next hasta tail, llama a Widget_Release sobre los datos
 // de cada nodo y después invoca el destructor vía la vtable. Libera todos los nodos intermedios.
 // Sin portar: el cuerpo de abajo está vacío.
-void __fastcall FUN_00409d20(intptr_t param_1) {
+void __fastcall CPhysicsManager_ClearNodes(intptr_t param_1) {
     // Recorre desde (param_1+8)->next hasta llegar al centinela (param_1+0xC):
     //   Widget_Release(*node) — cleanup node data
     //   (*node->vtable[0])(1) — destructor with free
@@ -1197,11 +1197,12 @@ void __fastcall LinkedList_DestroyAll(int *param_1) {
     if ((void *)param_1[1] != NULL) operator_delete((void *)param_1[1]);
 }
 
-// FUN_00409ea0 @ 0x00409EA0 (10 bytes) — calls sound device init
-void FUN_00409ea0(void) { LinkedList_InitSentinels((void *)&DAT_00590b00); }
+// SoundDevice_InitSentinels @ 0x00409EA0 (10 bytes) — calls sound device init
+void SoundDevice_InitSentinels(void) { LinkedList_InitSentinels((void *)&SoundDeviceCtx); }
 
-// FUN_00409eb0 @ 0x00409EB0 (12 bytes)
-void FUN_00409eb0(void) {}
+// SoundDevice_RegisterStaticDtor @ 0x00409EB0 (12 bytes) - IDA: Fn_00409eb0
+// `crt_atexit(&dtor de SoundDeviceCtx @0x590B00)`; neutralizado en este build.
+void SoundDevice_RegisterStaticDtor(void) {}
 
 // WidgetB_Ctor @ 0x00409ED0 — WidgetB_Ctor: set vtable + zero fields.
 void* __fastcall WidgetB_Ctor(void *param_1)
@@ -1211,8 +1212,8 @@ void* __fastcall WidgetB_Ctor(void *param_1)
     return param_1;
 }
 
-// FUN_00409ef0 @ 0x00409EF0 — WidgetC ~dtor
-void __fastcall FUN_00409ef0(void* widget, int /*edx*/, BYTE param_1) {
+// WidgetC_Dtor @ 0x00409EF0 — WidgetC ~dtor
+void __fastcall WidgetC_Dtor(void* widget, int /*edx*/, BYTE param_1) {
     WidgetB_SetVtable(widget);
     if (param_1 & 1) operator_delete(widget);
 }
@@ -1236,42 +1237,42 @@ void __fastcall WidgetB_ZeroFields(void* widget)
     *(int *)(param_1 + 0x1c) = 0;
 }
 
-// FUN_00409f30 @ 0x00409F30 (~64 lines) — BMD: build visible triangle list for mesh part
+// BMD_BuildVisibleTris @ 0x00409F30 (~64 lines) — BMD: build visible triangle list for mesh part
 // __thiscall(this=renderCtx, param_1=vertBuf, param_2=meshData, param_3=entityPtr, param_4=skipAlpha).
 // Checks entity visibility distance (param_3+0x168 >= threshold). Skips mesh parts at indices
 // guardados en param_3+0x58/0x64. Cuenta los triángulos visibles por sub-mesh, aloca el buffer de resultado
-// (count * 0x1E), y después llama a FUN_0040a1c0 por cada sub-mesh para poblar los datos de triángulos.
+// (count * 0x1E), y después llama a BMD_ShadowCullEdges por cada sub-mesh para poblar los datos de triángulos.
 // Devuelve 1 si lo armó, 0 si la entidad está demasiado lejos o los índices de mesh son inválidos.
-int __fastcall FUN_00409f30(void* ecx, void* /*edx*/, int param_1, int param_2, int param_3, char param_4) {
+int __fastcall BMD_BuildVisibleTris(void* ecx, void* /*edx*/, int param_1, int param_2, int param_3, char param_4) {
     (void)ecx; (void)param_1; (void)param_2; (void)param_3; (void)param_4;
     // if (*(float*)(param_3+0x168) < umbral) return 0
     // Saltea las sub-meshes en los índices sVar1, sVar2 (de param_3+0x58, +0x64)
     // Count total triangles across valid sub-meshes
     // this+0x18 = 0; this+0x1C = new byte[totalTris * 0x1E]
-    // Por cada sub-mesh válida: FUN_0040a1c0(this, meshIdx, param_1, triCount, triData)
+    // Por cada sub-mesh válida: BMD_ShadowCullEdges(this, meshIdx, param_1, triCount, triData)
     // return 1
     return 0;
 }
 
-// FUN_0040a0a0 @ 0x0040A0A0 — prepara la dirección del volumen de sombra.
-void __fastcall FUN_0040a0a0(void *This, int /*edx*/, int param_1, int param_2, int param_3, char param_4) {
+// BMD_SetShadowDirection @ 0x0040A0A0 — prepara la dirección del volumen de sombra.
+void __fastcall BMD_SetShadowDirection(void *This, int /*edx*/, int param_1, int param_2, int param_3, char param_4) {
     BYTE* context = static_cast<BYTE*>(This);
     *(DWORD *)(context + 0x10) = 0x3cf5c28f;
     *(DWORD *)(context + 0x14) = 0xbf800000;
     *(float *)(context + 0xc) = -1.0f;
     Vec3_Normalize((float *)(context + 0xc));
-    int iVar1 = FUN_00409f30(This, NULL, param_1, param_2, param_3, param_4);
+    int iVar1 = BMD_BuildVisibleTris(This, NULL, param_1, param_2, param_3, param_4);
     if (iVar1 != 0) {
-        FUN_0040a300(This, NULL, param_1);
+        BMD_BuildShadowVolume(This, NULL, param_1);
         operator_delete(*(void **)(context + 0x1c));
     }
 }
 
-// FUN_0040a110 @ 0x0040A110 (~25 lines) — BMD: add triangle edge to shadow volume
+// BMD_AddShadowEdge @ 0x0040A110 (~25 lines) — BMD: add triangle edge to shadow volume
 // __thiscall(this=shadowCtx). Chequea la adyacencia en param_6 + param_4*0x24 + param_5*2 + 0x1A.
 // Si la arista es de borde (adj == -1 o la cara adyacente mira hacia atrás), appendea un registro de arista (10 bytes)
 // con 3 índices de vértice + 2 índices de vértice de arista al buffer de sombra en this+0x1C.
-void __fastcall FUN_0040a110(void* ecx, void* /*edx*/, short param_1, short param_2, short param_3,
+void __fastcall BMD_AddShadowEdge(void* ecx, void* /*edx*/, short param_1, short param_2, short param_3,
                              int param_4, int param_5, int param_6) {
     (void)ecx; (void)param_1; (void)param_2; (void)param_3;
     (void)param_4; (void)param_5; (void)param_6;
@@ -1284,12 +1285,12 @@ void __fastcall FUN_0040a110(void* ecx, void* /*edx*/, short param_1, short para
     //   this->shadowCount++
 }
 
-// FUN_0040a1c0 @ 0x0040A1C0 (~70 lines) — BMD: backface cull + edge extraction for shadow volume
+// BMD_ShadowCullEdges @ 0x0040A1C0 (~70 lines) — BMD: backface cull + edge extraction for shadow volume
 // __thiscall(this=shadowCtx, param_1=meshPartIdx, param_2=vertBuf, param_3=triCount, param_4=triData).
 // Por cada triángulo: calcula la normal de la cara vía FaceNormalize y el producto punto con la dirección de la luz (this+0xC..0x14).
 // Marca la cara como frontal (0) o trasera (1). Después, por cada triángulo frontal, llama a
-// FUN_0040a110 tres veces (una por arista) para extraer las aristas de silueta del volumen de sombra.
-void __fastcall FUN_0040a1c0(void* ecx, void* /*edx*/, short param_1, int param_2, short param_3, int param_4) {
+// BMD_AddShadowEdge tres veces (una por arista) para extraer las aristas de silueta del volumen de sombra.
+void __fastcall BMD_ShadowCullEdges(void* ecx, void* /*edx*/, short param_1, int param_2, short param_3, int param_4) {
     (void)ecx; (void)param_1; (void)param_2; (void)param_3; (void)param_4;
     // Por cada triángulo (param_3 iteraciones):
     //   Carga 3 vértices del vertBuf en (vtxIdx + param_1*15000) * 0xC
@@ -1297,28 +1298,28 @@ void __fastcall FUN_0040a1c0(void* ecx, void* /*edx*/, short param_1, int param_
     //   dot = normal . lightDir (this+0xC,+0x10,+0x14)
     //   face_flag[tri] = (dot < threshold) ? 0 : 1
     // Por cada triángulo frontal:
-    //   FUN_0040a110(edge0), FUN_0040a110(edge1), FUN_0040a110(edge2)
+    //   BMD_AddShadowEdge(edge0), BMD_AddShadowEdge(edge1), BMD_AddShadowEdge(edge2)
 }
 
-// FUN_0040a300 @ 0x0040A300 (~110 lines) — BMD: build shadow volume geometry from silhouette edges
+// BMD_BuildShadowVolume @ 0x0040A300 (~110 lines) — BMD: build shadow volume geometry from silhouette edges
 // __thiscall(this=shadowCtx, param_1=vertBuf). Allocates output vertex buffer (count * 0x48).
 // Por cada arista de silueta: extruye los vértices de la arista en la dirección -luz (VectorMA),
 // y arma 6 vértices (2 triángulos) por arista = un quad extruido. La altura se clampea a un mínimo.
-void __fastcall FUN_0040a300(void* ecx, void* /*edx*/, intptr_t param_1) {
+void __fastcall BMD_BuildShadowVolume(void* ecx, void* /*edx*/, intptr_t param_1) {
     (void)ecx; (void)param_1;
     // this->quadCount = 0
     // this->quadBuf = new byte[this->edgeCount * 0x48]
     // Por cada arista de silueta:
     //   v0 = vertBuf[(edge.vtx0 + edge.meshPart*15000) * 0xC]
     //   v1 = vertBuf[(edge.vtx1 + edge.meshPart*15000) * 0xC]
-    //   Clamp v0.z, v1.z to minimum height (_DAT_00552584)
+    //   Clamp v0.z, v1.z to minimum height (ArrowAngleOffsetLarge)
     //   extrude0 = v0 + (-height/this->extrudeScale) * lightDir vía VectorMA
     //   extrude1 = v1 + (-height/this->extrudeScale) * lightDir vía VectorMA
     //   Emit 6 vertices: v0, extrude0, v1, v1, extrude0, extrude1
 }
 
-// FUN_004236c0 @ 0x004236C0 (90 bytes) — BST node remove (unlink + delete)
-void __fastcall FUN_004236c0(void *This, int /*edx*/, int *param_1) {
+// BST_RemoveNode @ 0x004236C0 (90 bytes) — BST node remove (unlink + delete)
+void __fastcall BST_RemoveNode(void *This, int /*edx*/, int *param_1) {
     BYTE* context = static_cast<BYTE*>(This);
     intptr_t iVar1 = *(int *)(*param_1 + 0x10);
     if (iVar1 == 0) {
@@ -1335,18 +1336,18 @@ void __fastcall FUN_004236c0(void *This, int /*edx*/, int *param_1) {
     *param_1 = 0;
 }
 
-// FUN_00423c30 @ 0x00423C30 (10 bytes) — disconnect socket context
-void FUN_00423c30(void) { CWsctlc_Close(reinterpret_cast<uintptr_t>(SocketClient)); }
+// Net_DisconnectSocket @ 0x00423C30 (10 bytes) — disconnect socket context
+void Net_DisconnectSocket(void) { CWsctlc_Close(reinterpret_cast<uintptr_t>(SocketClient)); }
 
 // InitGuildWar @ 0x00423DB0 — Net_ResetTrade: clears trade/shop globals, re-enables party markers.
 // IDA: FUN_00423DB0 (0x00423DB0)
 void __cdecl InitGuildWar(void) {
-    DAT_05826d30 = 0;
-    DAT_00559684 = 0xffffffff;
-    lpString_05826bfc[0] = '\0';
+    LegacyTradeActive = 0;
+    CachedShopSlotIndex = 0xffffffff;
+    GuildNameCacheA[0] = '\0';
     // Re-enable party target markers for all live entities
-    unsigned char *puVar3 = (unsigned char*)(DAT_07abf5d0 + EntityOffset(0x2e9));
-    char *pPlayer = DAT_07abf5d8;
+    unsigned char *puVar3 = (unsigned char*)(CharactersClient + EntityOffset(0x2e9));
+    char *pPlayer = Hero;
     int iVar4 = 400;
     do {
         if (*(puVar3 - EntityOffset(0x2e9)) != '\0') {
@@ -1370,26 +1371,26 @@ void __cdecl CWsctlc_Close(uintptr_t ctx) {
     *(int *)(ctx + 8) = -1; // INVALID_SOCKET
 }
 
-// FUN_0053cbb0 @ 0x0053CBB0 (18 bytes) — GameGuard class init
-void __fastcall FUN_0053cbb0(int *param_1) {
-    *param_1 = (intptr_t)&PTR_FUN_0055389c;
+// GameGuard_ClassInit @ 0x0053CBB0 (18 bytes) — GameGuard class init
+void __fastcall GameGuard_ClassInit(int *param_1) {
+    *param_1 = (intptr_t)&Vtbl_GameGuard;
     FUN_0053cc00_impl(param_1);
 }
 
-// FUN_0053cbd0 @ 0x0053CBD0 — GameGuard ~dtor
-void __fastcall FUN_0053cbd0(intptr_t ecx, int /*edx*/, BYTE param_1) {
-    FUN_0053cbf0((int *)ecx);
+// GameGuard_Dtor @ 0x0053CBD0 — GameGuard ~dtor
+void __fastcall GameGuard_Dtor(intptr_t ecx, int /*edx*/, BYTE param_1) {
+    GameGuard_SetVtable((int *)ecx);
     if (param_1 & 1) operator_delete((void *)ecx);
 }
 
-// FUN_0053cbf0 @ 0x0053CBF0 (7 bytes)
-void __fastcall FUN_0053cbf0(int *param_1) { *param_1 = (intptr_t)&PTR_FUN_0055389c; }
+// GameGuard_SetVtable @ 0x0053CBF0 (7 bytes)
+void __fastcall GameGuard_SetVtable(int *param_1) { *param_1 = (intptr_t)&Vtbl_GameGuard; }
 
-// FUN_0053ce30 @ 0x0053CE30 (350 bytes) — Packet crypto decrypt block
+// PacketCipher_DecryptBlock @ 0x0053CE30 (350 bytes) — Packet crypto decrypt block
 // 4-round Feistel cipher: extracts 16-bit + 2-bit fields via CSimpleModulus_AddBits,
 // applies reverse XOR chain using context keys (this+0x04..0x3c),
 // y después multiplica-módulo + XOR de salida. Devuelve el byte de checksum o 0xFFFFFFFF si falla.
-unsigned int __cdecl FUN_0053ce30(void *self, unsigned short *param_1, int param_2) {
+unsigned int __cdecl PacketCipher_DecryptBlock(void *self, unsigned short *param_1, int param_2) {
     (void)self; (void)param_2;
     if (param_1) { param_1[0] = 0; param_1[1] = 0; param_1[2] = 0; param_1[3] = 0; }
     return 0;
@@ -1487,7 +1488,7 @@ int __cdecl CSimpleModulus_GetByteOfBit(int a1)
 // CSimpleModulus_LoadKey @ 0x0053D1C0 (381 bytes) — Crypto key file loader.
 // Reads a CSimpleModulus key file:
 //   header = [int16 magic][int32 expected_size]
-// y después hasta 4 grupos de clave de 16 bytes, con XOR contra DAT_00562e48, en el
+// y después hasta 4 grupos de clave de 16 bytes, con XOR contra SimpleModulusXorKeys, en el
 // objeto destino en los offsets +4, +20, +36 y +52. Los flags a4..a7 eligen
 // cuál de los cuatro grupos trae el archivo (LoadEncryptionKey pasa
 // 1,1,0,1 → Mod,Enc,skip Dec,Xor; LoadDecryptionKey passes 1,0,1,1 →
@@ -1516,19 +1517,19 @@ int __cdecl CSimpleModulus_LoadKey(void *self, const char *filename, short magic
     DWORD buf[4];
     if (a4) {  // ModKey → this+4
         if (fread(buf, 1, 16, hFile) != 16) { fclose(hFile); return 0; }
-        for (int i = 0; i < 4; ++i) _this[1 + i] = buf[i] ^ DAT_00562e48[i];
+        for (int i = 0; i < 4; ++i) _this[1 + i] = buf[i] ^ SimpleModulusXorKeys[i];
     }
     if (a5) {  // EncKey → this+20
         if (fread(buf, 1, 16, hFile) != 16) { fclose(hFile); return 0; }
-        for (int i = 0; i < 4; ++i) _this[5 + i] = buf[i] ^ DAT_00562e48[i];
+        for (int i = 0; i < 4; ++i) _this[5 + i] = buf[i] ^ SimpleModulusXorKeys[i];
     }
     if (a6) {  // DecKey → this+36
         if (fread(buf, 1, 16, hFile) != 16) { fclose(hFile); return 0; }
-        for (int i = 0; i < 4; ++i) _this[9 + i] = buf[i] ^ DAT_00562e48[i];
+        for (int i = 0; i < 4; ++i) _this[9 + i] = buf[i] ^ SimpleModulusXorKeys[i];
     }
     if (a7) {  // XorKey → this+52
         if (fread(buf, 1, 16, hFile) != 16) { fclose(hFile); return 0; }
-        for (int i = 0; i < 4; ++i) _this[13 + i] = buf[i] ^ DAT_00562e48[i];
+        for (int i = 0; i < 4; ++i) _this[13 + i] = buf[i] ^ SimpleModulusXorKeys[i];
     }
     fclose(hFile);
     return 1;

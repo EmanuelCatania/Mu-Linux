@@ -15,16 +15,16 @@
 //   6. 4 action buttons (party/character/inventory/guild) at (348/379/410/582)
 //      with hover tooltips (GlobalText[361..364]) and pressed-state bitmaps
 //      (236/237/238/250) when the corresponding *Opened flag is set.
-//   7. Skill-bar render via sub_4BB940 (the 5×4 grid of skills + the main
+//   7. Skill-bar render via HUD_RenderSkillIcon (the 5×4 grid of skills + the main
 //      weapon icon at slot 913) when the skill list is unlocked
 //      (CharacterAttribute+86 != 0).
 //   8. Coin / kill counters from Hero+904 / Hero+908 at (24, 462) and
 //      (48, 462).
 //   9. Cur HP / Cur MP numbers at (100, 467) and (540, 467).
-//  10. Three item-count badges (potions slots) via sub_482E40 at x=226, 257, 288.
+//  10. Three item-count badges (potions slots) via HUD_CountQuickSlotItems at x=226, 257, 288.
 //  11. EndBitmap.
 //
-// All anti-tamper inner blocks gate on `CharacterMachine && dword_55C9BD4`
+// All anti-tamper inner blocks gate on `CharacterMachine && HashTableCapacity`
 // — both 0 by default in our build, so the hash-table noise is skipped.
 //
 // =============================================================================
@@ -46,12 +46,12 @@ extern "C" void   __cdecl RenderTipText(int, int, const char*);
 extern "C" void   __cdecl SeedQuickPotionTypesFromInventory(void);
 // PartyOpened/GuildOpened now #defined in globals.h to DAT_07eaa11x bytes.
 
-#define ItemAttribute  ((ITEM_ATTRIBUTE*)DAT_07d78068)
-#define byte_7DB870C   DAT_07db870c
-#define dword_559C60   (&DAT_00559c60)
-#define dword_559C64   DAT_00559c64
-#define dword_559C68   DAT_00559c68
-#define byte_559C6C    DAT_00559c6c
+#define ItemAttribute  ((ITEM_ATTRIBUTE*)ItemAttributeBase)
+#define byte_7DB870C   ItemSelectMenuFlag
+#define dword_559C60   (&QKeyItemType)
+#define dword_559C64   WKeyItemType
+#define dword_559C68   EKeyItemType
+#define byte_559C6C    LastHotkeyChar
 
 // Inventory grid pool — same one HUD_Pass3.cpp's sub_482850 walks.
 extern "C" BYTE  OffsetInventoryItems[];
@@ -82,12 +82,12 @@ static bool HUD_IsGuildFamilyActive(void)
 }
 
 // =============================================================================
-// sub_482E40 — count inventory items matching a quick-slot category.
+// HUD_CountQuickSlotItems (IDA: sub_482E40) - count inventory items matching a quick-slot category.
 // The original walks its inventory grid.  In this port the authoritative
 // inventory storage is OffsetInventoryItems, which is also what renders the
 // hotbar and receives every server inventory update.
 // =============================================================================
-extern "C" int __cdecl sub_482E40(int a1)
+extern "C" int __cdecl HUD_CountQuickSlotItems(int a1)
 {
     char countAsStacks = 0;
     int rangeHi = a1;
@@ -188,7 +188,7 @@ extern "C" int __cdecl sub_482E40(int a1)
 
 
 // =============================================================================
-// sub_4BB940 — render a single skill icon.
+// HUD_RenderSkillIcon (IDA: sub_4BB940) - render a single skill icon.
 //   Height — skill slot index (0..19) cast to float in IDA.
 //   x, y   — screen position (passed as float-cast-of-int).
 //   a4     — icon width  (32)
@@ -201,7 +201,7 @@ extern "C" int __cdecl sub_482E40(int a1)
 //   * Renders the keybind digit (0..9) at the bottom-right when
 //     CharacterAttribute[SelectedHero*64 + slot + 215] != 255.
 // =============================================================================
-extern "C" void __cdecl sub_4BB940(float HeightArg, float xArg, float yArg,
+extern "C" void __cdecl HUD_RenderSkillIcon(float HeightArg, float xArg, float yArg,
                                    int a4, int a5)
 {
     if (!CharacterAttribute || !Hero) return;
@@ -347,13 +347,13 @@ void __cdecl Render_HudPass_4BD650_(void)
         // Main weapon skill icon.
         BYTE mainSlot = *(unsigned char*)((BYTE*)(uintptr_t)Hero + EntityOffset(913));
         float mainSkill = (float)mainSlot;
-        sub_4BB940(mainSkill, 304.0f, 444.0f, 32, 36);
+        HUD_RenderSkillIcon(mainSkill, 304.0f, 444.0f, 32, 36);
         if ((double)MouseX >= 304.0 && (double)MouseX < 336.0 &&
             (double)MouseY >= 444.0 && (double)MouseY < 480.0) {
-            DAT_0055a3e4 = (DWORD)mainSlot;
-            DAT_07ea840c = 320;
-            DAT_07ea8408 = 444;
-            DAT_07d78094 = 1;
+            HoveredSkillIndex = (DWORD)mainSlot;
+            TooltipPosX = 320;
+            TooltipPosY = 444;
+            MouseOnWindowFlag = 1;
             hoveredSkill = true;
         }
 
@@ -369,13 +369,13 @@ void __cdecl Render_HudPass_4BD650_(void)
                     } else {
                         Gfx::Color3f(0.6f, 0.7f, 0.8f);
                     }
-                    sub_4BB940((float)slotIdx, (float)(int)xCenter, 370.0f, 32, 36);
+                    HUD_RenderSkillIcon((float)slotIdx, (float)(int)xCenter, 370.0f, 32, 36);
                     if ((double)MouseX >= xCenter && (double)MouseX < xCenter + 32.0 &&
                         (double)MouseY >= 370.0 && (double)MouseY < 406.0) {
-                        DAT_0055a3e4 = (DWORD)slotIdx;
-                        DAT_07ea840c = (DWORD)((int)xCenter + 16);
-                        DAT_07ea8408 = 370;
-                        DAT_07d78094 = 1;
+                        HoveredSkillIndex = (DWORD)slotIdx;
+                        TooltipPosX = (DWORD)((int)xCenter + 16);
+                        TooltipPosY = 370;
+                        MouseOnWindowFlag = 1;
                         hoveredSkill = true;
                     }
                     ++v92;
@@ -383,8 +383,8 @@ void __cdecl Render_HudPass_4BD650_(void)
                 ++slotIdx;
             } while (slotIdx < 20);
         }
-        if (!hoveredSkill && (int)DAT_0055a3e4 >= 0 && (int)DAT_0055a3e4 < 20) {
-            DAT_0055a3e4 = 0xFFFFFFFF;
+        if (!hoveredSkill && (int)HoveredSkillIndex >= 0 && (int)HoveredSkillIndex < 20) {
+            HoveredSkillIndex = 0xFFFFFFFF;
         }
     }
 
@@ -413,7 +413,7 @@ void __cdecl Render_HudPass_4BD650_(void)
 
     // ── Three item-count badges (potion / arrow / etc) at x=226, 257, 288 ───
     for (int i = 0; i < 3; ++i) {
-        int v81 = sub_482E40(i);
+        int v81 = HUD_CountQuickSlotItems(i);
         if (v81 > 0) {
             float x_pos = (float)(i) * 31.0f + 226.0f;
             RenderNumber2D(x_pos, 447.0f, v81, 9.0f, 10.0f);

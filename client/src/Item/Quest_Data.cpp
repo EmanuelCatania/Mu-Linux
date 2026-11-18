@@ -21,9 +21,9 @@
 uint __cdecl CSQuest_OpenQuestScript(BYTE* handle, const char *path)
 {
     CHAR msg[256];
-    FILE *fp = (FILE *)crt_fopen(path, DAT_005580ac);
+    FILE *fp = (FILE *)crt_fopen(path, FopenModeRb);
     if (!fp) {
-        crt_sprintf(msg, (const char *)s__s___File_not_exist__00558094);
+        crt_sprintf(msg, (const char *)Err_FileNotExist);
         // Note: original doesn't show a MessageBox here, just crt_sprintf
         return 0;
     }

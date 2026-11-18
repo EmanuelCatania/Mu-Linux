@@ -4,7 +4,7 @@
 #include "Platform/Text.h"
 #include "Platform/IFileSystem.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -53,7 +53,7 @@ extern void MapFileDecrypt(BYTE* buf, int size);
 // que el .att (OpenTerrainAttribute); se descifra antes de parsear.
 void __cdecl OpenTerrainMapping(const char *path) {
     Terrain_Clear(); // InitTerrainMappingLayer (IDA)
-    FILE *f = crt_fopen(path, DAT_005580ac);
+    FILE *f = crt_fopen(path, FopenModeRb);
     if (!f) {
         char d[256]; Platform::TextFormat(d, "TerrainMap LOAD FAIL: %s", path);
         DbgLogPublic(d);
@@ -83,7 +83,7 @@ void __cdecl OpenTerrainMapping(const char *path) {
     // alpha bytes → float (per IDA 0.85: alpha[i] = byte * (1/255.0f))
     float *fDst = TerrainMappingAlpha;
     unsigned char *hSrc = (unsigned char*)p;
-    for (int i = 0; i < 0x10000; i++) *fDst++ = (float)*hSrc++ * _DAT_00552b70;
+    for (int i = 0; i < 0x10000; i++) *fDst++ = (float)*hSrc++ * HeightNormScale;
     operator_delete(buf);
 }
 
@@ -91,11 +91,11 @@ void __cdecl OpenTerrainMapping(const char *path) {
 // Per IDA decompile (raw/004F6CE0_OpenTerrainAttribute.c, 442 bytes).
 //
 // Reads a 65539-byte .att file into a temp buffer, runs BuxConvert_1 (XOR
-// descrambler with 3-byte key at DAT_0055a770), then memcpy bytes [+3..+65539]
-// into the terrain wall array DAT_0838bc70 (256×256). First byte must be 0,
+// descrambler with 3-byte key at BuxConvertXorKeyB), then memcpy bytes [+3..+65539]
+// into the terrain wall array TerrainWallFlags (256×256). First byte must be 0,
 // next short must be 0xFFFF (file marker). Per-world magic-byte check at
 // known offsets validates the right map. Any byte >= 0x80 triggers Error.
-unsigned char* TerrainWall = (unsigned char*)&DAT_0838bc70;
+unsigned char* TerrainWall = (unsigned char*)&TerrainWallFlags;
 int __cdecl OpenTerrainAttribute(const char *FileName) {
     FILE *fp = Platform::GetFileSystem().Open(FileName, "rb");
     if (!fp) {
@@ -128,7 +128,7 @@ int __cdecl OpenTerrainAttribute(const char *FileName) {
     if (attBuf[0] != 0 || *(unsigned short*)(attBuf + 1) != 0xFFFF)
         Error = true;
 
-    if (DAT_083a410c == '\0') {
+    if (InGameModeFlag == '\0') {
         // Per-world magic byte check (sanity vs distributed .att files).
         switch (gMapManager.GetCurrentMap()) {
         case 0: if (TerrainWall[31623] != 5) Error = true; break;
@@ -159,7 +159,7 @@ int __cdecl OpenTerrainAttribute(const char *FileName) {
 // `EncTerrain%d.obj` está encriptado con BuxConvert_1 (igual que el .att); se
 // descifra antes de parsear.
 void __cdecl OpenObjectsEnc(const char *path) {
-    FILE *f = crt_fopen(path, DAT_005580ac);
+    FILE *f = crt_fopen(path, FopenModeRb);
     if (!f) {
         // Text es un buffer local, como en IDA. Ghidra lo había decompilado como el
         // global DAT_083a0218, que en nuestro build es la celda 0 de la grilla de
@@ -200,10 +200,10 @@ void __cdecl OpenObjectsEnc(const char *path) {
 }
 
 // OpenTerrainLight @ 0x004F7250 — Terrain_LoadLight(path)
-// Loads TerrainLight.jpg into DAT_07eeb238 (RGB float buffer, 256x256x3),
+// Loads TerrainLight.jpg into TerrainLightAmbientBuf (RGB float buffer, 256x256x3),
 // then processes via FUN_004f70b0 / FUN_004f71c0.
 void __cdecl OpenTerrainLight(const char *path) {
-    OpenJpegBuffer((char*)path, DAT_07eeb238);
+    OpenJpegBuffer((char*)path, TerrainLightAmbientBuf);
     CreateTerrainNormal(); // FUN_004f70b0 (IDA)
     CreateTerrainLight(); // IDA: CreateTerrainLight (0x004F71C0)
 }
@@ -211,18 +211,18 @@ void __cdecl OpenTerrainLight(const char *path) {
 // CreateTerrain @ 0x004F7270 — Terrain_LoadHeight(path)
 // Sets flag, loads height bitmap, flushes.
 void __cdecl CreateTerrain(const char *path) {
-    DAT_0839bc84 = 1;
+    LightMapEnableFlag = 1;
     OpenTerrainHeight((char*)path); // FUN_004f7290 (IDA)
     Terrain_SetupCulling();
 }
 
 // ClearItems @ 0x00502B80 — ClearItems / Map_InitEntities
-// Limpia el flag "vivo" de cada slot del pool de GroundItem (DAT_07e12840,
+// Limpia el flag "vivo" de cada slot del pool de GroundItem (GroundItemPool,
 // 1000 slots × 0x204 bytes). Como IDA, arranca en `&Items[0][72]`: el flag vive
 // en +72, que es el que leen Net_Process (0x20), Entity_Render y MoveItems.
 void __cdecl ClearItems(void) {
     for (int i = 0; i < 1000; ++i) {
-        DAT_07e12840[i * GROUND_ITEM_STRIDE + 72] = 0;
+        GroundItemPool[i * GROUND_ITEM_STRIDE + 72] = 0;
     }
 }
 
@@ -230,7 +230,7 @@ void __cdecl ClearItems(void) {
 // Frees tile model slots (0xf604..0x11710), then frees sound channels 0x78..0xa9.
 void __cdecl DeleteNpcs(void) {
     for (int slot = 0x14f; slot < 0x17c; ++slot)
-        BMD__Release(AsModel(DAT_05828d58) + slot);
+        BMD__Release(AsModel(ModelsBase) + slot);
     for (int i = 0x78; i < 0xaa; i++) Sound_ReleaseBuffer(i); // IDA: FUN_00404AD0
 }
 
@@ -238,7 +238,7 @@ void __cdecl DeleteNpcs(void) {
 // Frees water model slots (0xc648..0xf604), then frees sound channels 0xaa..0x1a3.
 void __cdecl DeleteMonsters(void) {
     for (int slot = 0x10e; slot < 0x14f; ++slot)
-        BMD__Release(AsModel(DAT_05828d58) + slot);
+        BMD__Release(AsModel(ModelsBase) + slot);
     for (int i = 0xaa; i < 0x1a4; i++) Sound_ReleaseBuffer(i); // IDA: FUN_00404AD0
 }
 
@@ -246,15 +246,15 @@ void __cdecl DeleteMonsters(void) {
 // Loads world-specific animated props + object models for current zone.
 // (Scene_Objects.cpp tiene un port alternativo con strings distintos.)
 void __cdecl OpenWorldModels(void) {
-    char cVar2 = DAT_0055a7c4;
-    if (DAT_083a410c != '\0') {
-        DAT_0055a7c4 = '\0';
+    char cVar2 = g_tex_ext_mode;
+    if (InGameModeFlag != '\0') {
+        g_tex_ext_mode = '\0';
         gMapManager.SetCurrentMap(7);
     }
 
     OpenJPG("Object8/drop01.jpg", 0x4d9, 0x2600, 0x2900, 0, '\x01');
 
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         switch (gMapManager.GetCurrentMap()) {
         case 0:
             OpenModel((int)0xae, "Data2/Object1/Animal/", "bird.smd");
@@ -280,7 +280,7 @@ void __cdecl OpenWorldModels(void) {
             break;
         case 6:
             OpenModel((int)0xb2, "Data2/Object7/", "SummonMonster.smd");
-            *(unsigned char *)((uintptr_t)AsModel(DAT_05828d58 + BMD_STRIDE * 178)->Actions + 0x1a) = 1;
+            *(unsigned char *)((uintptr_t)AsModel(ModelsBase + BMD_STRIDE * 178)->Actions + 0x1a) = 1;
             break;
         case 7:
             OpenModel((int)0xb6, "Data2/Object8/", "WaterMill.smd");
@@ -292,7 +292,7 @@ void __cdecl OpenWorldModels(void) {
             OpenModel((int)0xbc, "Data2/Object8/", "Trap03.smd");
             OpenModel((int)0xbd, "Data2/Object8/", "FireArrow.smd");
             for (int iVar7 = 0xbc; iVar7 < 0x69c; iVar7 += 0xbc)
-                *(unsigned char *)((intptr_t)AsModel(DAT_05828d58 + BMD_STRIDE * (181 + iVar7 / 0xbc))->Actions + 10) = 1;
+                *(unsigned char *)((intptr_t)AsModel(ModelsBase + BMD_STRIDE * (181 + iVar7 / 0xbc))->Actions + 10) = 1;
             break;
         case 8:
             OpenModel((int)0xb3, "Data2/Object9/", "SandPillar.smd");
@@ -313,7 +313,7 @@ void __cdecl OpenWorldModels(void) {
             OpenModel((int)0xb9, "Data2/Object12/", "shine.smd");
             OpenJPG("Effect/clouds.jpg", 0x4f4, 0x2601, 0x2900, 0, '\x01');
             LoadWaveFile(0x6e, "Data/Sound/iBloodCastle.wav", 1, '\0');
-            DAT_0055a7c4 = '\x01';
+            g_tex_ext_mode = '\x01';
             break;
         }
     }
@@ -392,7 +392,7 @@ void __cdecl OpenWorldModels(void) {
         //     OpenJPG("Effect\cloudLight.jpg", 0x4F5u, ...);
         //
         // Al port le faltaban las DOS texturas: solo las cargaba el PRIMER
-        // switch, gateado por `DAT_0055a7c4 == 0`, que ya no corre cuando se
+        // switch, gateado por `g_tex_ext_mode == 0`, que ya no corre cuando se
         // llega a Icarus. La textura 1268 quedaba sin handle GL y las ~6800
         // nubes por frame se dibujaban invisibles.
         OpenJPG("Effect/clouds.jpg",     0x4f4, 0x2601, 0x2900, 0, '\x01');
@@ -434,7 +434,7 @@ void __cdecl OpenWorldModels(void) {
     SetMaxTextures(0x2ee);
     if (gMapManager.GetCurrentMap() == 0) {
         // Lorencia (Object1) — load SMD models on first call
-        if (DAT_0055a7c4 == '\0') {
+        if (g_tex_ext_mode == '\0') {
             OpenModel((int)0x00, "Data2/Object1/", "treesmall.smd");
             OpenModel((int)0x01, "Data2/Object1/", "treebig.smd");
             OpenModel((int)0x02, "Data2/Object1/", "treea_01.smd");
@@ -468,7 +468,7 @@ void __cdecl OpenWorldModels(void) {
             OpenModel((int)0x2a, "Data2/Object1/", "Angel_Stone.smd");
             OpenModel((int)0x2b, "Data2/Object1/", "steel_barred_door_side.smd");
             OpenModel((int)0x2c, "Data2/Object1/", "Tomb_arc.smd");
-            DAT_083a4100 = 1;
+            LorenciaModelsLoadedFlag = 1;
             OpenModel((int)0x2d, "Data2/Object1/", "Tomb_cross.smd");
             OpenModel((int)0x2e, "Data2/Object1/", "TombStone.smd");
             OpenModel((int)0x32, "Data2/Object1/", "fire_light.smd");
@@ -638,7 +638,7 @@ void __cdecl OpenWorldModels(void) {
         };
         for (size_t i = 0; i < sizeof(lorenciaSlots)/sizeof(lorenciaSlots[0]); ++i) {
             int slotIdx = lorenciaSlots[i].slot;
-            char* slotPtr = (char*)((uintptr_t)DAT_05828d58 + (uintptr_t)BMD_STRIDE * slotIdx);
+            char* slotPtr = (char*)((uintptr_t)ModelsBase + (uintptr_t)BMD_STRIDE * slotIdx);
             if (AsModel(slotPtr)->NumBones > 0) continue;  // already loaded (e.g. SMD worked)
             AccessModel(slotIdx, "Data/Object1/", lorenciaSlots[i].bmd, -1);
         }
@@ -655,7 +655,7 @@ void __cdecl OpenWorldModels(void) {
             objFolder = 12;
 
         // Dynamic map: load from per-map object file
-        if (DAT_0055a7c4 == '\0') {
+        if (g_tex_ext_mode == '\0') {
             char local_384[32];
             crt_sprintf(local_384, "Data2/Object%d/", objFolder);
             ParserFileHandle = Platform::GetFileSystem().Open(local_384, "rt");
@@ -684,19 +684,19 @@ void __cdecl OpenWorldModels(void) {
             OpenTexture(i, local_384, 0x2600, '\x01');
         // Map-specific post-load fixups
         if (gMapManager.GetCurrentMap() == 1)
-            *(unsigned int *)((uintptr_t)AsModel(DAT_05828d58 + BMD_STRIDE * 40)->Actions + sizeof(ModelAnimationAction) + 4) = 0x3ecccccd; // 0.4f
+            *(unsigned int *)((uintptr_t)AsModel(ModelsBase + BMD_STRIDE * 40)->Actions + sizeof(ModelAnimationAction) + 4) = 0x3ecccccd; // 0.4f
         else if (gMapManager.GetCurrentMap() == 8) {
-            *(unsigned char *)(DAT_05828d58 + BMD_STRIDE * 11 + 0x88 + BMD_FIELD_SHIFT) = 0;
-            *(unsigned char *)(DAT_05828d58 + BMD_STRIDE * 12 + 0x88 + BMD_FIELD_SHIFT) = 0;
-            *(unsigned char *)(DAT_05828d58 + BMD_STRIDE * 13 + 0x88 + BMD_FIELD_SHIFT) = 0;
-            *(unsigned char *)(DAT_05828d58 + BMD_STRIDE * 73 + 0x88 + BMD_FIELD_SHIFT) = 0;
-            *(unsigned char *)(DAT_05828d58 + BMD_STRIDE * 75 + 0x88 + BMD_FIELD_SHIFT) = 0;
-            *(unsigned char *)(DAT_05828d58 + BMD_STRIDE * 79 + 0x88 + BMD_FIELD_SHIFT) = 0;
+            *(unsigned char *)(ModelsBase + BMD_STRIDE * 11 + 0x88 + BMD_FIELD_SHIFT) = 0;
+            *(unsigned char *)(ModelsBase + BMD_STRIDE * 12 + 0x88 + BMD_FIELD_SHIFT) = 0;
+            *(unsigned char *)(ModelsBase + BMD_STRIDE * 13 + 0x88 + BMD_FIELD_SHIFT) = 0;
+            *(unsigned char *)(ModelsBase + BMD_STRIDE * 73 + 0x88 + BMD_FIELD_SHIFT) = 0;
+            *(unsigned char *)(ModelsBase + BMD_STRIDE * 75 + 0x88 + BMD_FIELD_SHIFT) = 0;
+            *(unsigned char *)(ModelsBase + BMD_STRIDE * 79 + 0x88 + BMD_FIELD_SHIFT) = 0;
         }
     }
 
-    if (DAT_083a410c != '\0')
-        DAT_0055a7c4 = cVar2;
+    if (InGameModeFlag != '\0')
+        g_tex_ext_mode = cVar2;
 }
 
 // Font helpers (called from OpenFont)

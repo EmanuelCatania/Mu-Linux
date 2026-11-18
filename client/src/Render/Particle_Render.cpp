@@ -7,7 +7,7 @@
 //
 // ── PARTICLE POOL ─────────────────────────────────────────────────────────────
 //
-//   Base:   DAT_07b116d0
+//   Base:   ParticlePoolBase
 //   Stride: 0x6f * 4 = 0x1bc bytes per entry
 //   Count:  500 entries (pool ends at 0x7b271af = base + 500*0x1bc - 4)
 //
@@ -30,15 +30,15 @@
 // ── PARTICLE TYPE SWITCH ──────────────────────────────────────────────────────
 //
 //   case 0x4a7  (Linear / fire spark):
-//     piVar2[-0x15] += DAT_005526e4     (lifetime += delta_time)
-//     size = piVar2[0] * _DAT_005524f4  (base_size * tile_scale)
+//     piVar2[-0x15] += 0.2f     (lifetime += delta_time)
+//     size = piVar2[0] * 0.1f  (base_size * tile_scale)
 //     RGB = (constant R, G, B based on velocity)
 //     gravity = -(float)piVar2[-0xf]
 //     → RenderTerrainAlphaBitmap(0x4a7, x, y, size, size, &color_r, z_neg, 1.0)
 //
 //   case 0x4b0  (Random walk / snow):
 //     uVar1 = rand() & 0x80000003   (small random int)
-//     size  = (uVar1 + 8) * _DAT_005524f4
+//     size  = (uVar1 + 8) * 0.1f
 //     RGB   = constant
 //     → RenderTerrainAlphaBitmap(0x4b0, x, y, 2.0, 2.0, &color_r, z_neg, 1.0)
 //
@@ -58,7 +58,7 @@
 //
 //   case 0x4f1  (Circular orbit / portal ring):
 //     GL_SetBlendAdditive()   — get frame time
-//     fVar6 = (frame_counter % 0xe10) * _DAT_00552a00  (rotation angle, 0-3600°)
+//     fVar6 = (frame_counter % 0xe10) * JointLerpStep  (rotation angle, 0-3600°)
 //     if piVar2[-0x17] == 2:
 //       if piVar2[0] < 0xb: size = 1.0 - (10-count)*1.0
 //       else: local_18 = (0x14-count) * some_scale; size = 1.0
@@ -86,9 +86,9 @@
 //   GL_SetBlendAdditive  → Frame_GetTime() or Frame_UpdateCounter()
 //   Effect_DrawRing  → Particle_SpawnOrbit(type, pos, r_min, r_mid, r_max, angle, flag, param)
 //   _rand         → MSVC rand()
-//   DAT_005526e4  → g_DeltaTime (float, seconds per frame)
-//   DAT_005524f4  → g_TileScale (float, world units per tile)
-//   DAT_0055256c  → particle max intensity / base_size constant
+//   0.2f  → g_DeltaTime (float, seconds per frame)
+//   0.1f  → g_TileScale (float, world units per tile)
+//   1.0f  → particle max intensity / base_size constant
 
 #include "stdafx.h"
 #include "Render/Particle_Render.h"
@@ -99,7 +99,7 @@ struct ParticleSample { bool valid = false; short type = 0; int variant = 0; flo
 ParticleSample samples[kEffectPoolSize];
 }
 void Particle_InvalidateRender(const void *entity) {
-    const uintptr_t offset = (uintptr_t)entity - (uintptr_t)DAT_07b11670;
+    const uintptr_t offset = (uintptr_t)entity - (uintptr_t)EffectPoolBase;
     // El índice es por OBJECT_STRIDE: con 0x1bc, en x64 pasaba de 199 y pisaba
     // los globals siguientes (la burbuja de chat pendiente: crash en Blood Castle).
     if (offset < (uintptr_t)kEffectPoolSize * OBJECT_STRIDE && offset % OBJECT_STRIDE == 0) samples[offset / OBJECT_STRIDE].valid = false;
@@ -107,7 +107,7 @@ void Particle_InvalidateRender(const void *entity) {
 // DESVIACION: el pool se muestrea antes del pase de personajes, a 25 Hz.
 void Particle_PrepareRender() {
     for (int i = 0; i < kEffectPoolSize; ++i) {
-        char *slot = (char *)DAT_07b11670 + i * OBJECT_STRIDE;
+        char *slot = (char *)EffectPoolBase + i * OBJECT_STRIDE;
         ParticleSample &sample = samples[i];
         sample.valid = slot[0] && slot[EntityOffset(352)];
         if (!sample.valid) continue;
@@ -121,7 +121,7 @@ void Particle_PrepareRender() {
 
 // =============================================================================
 // IDA: FUN_0046be40 @ 0x0046BE40 — Particle_RenderAll
-// Itera el effect pool DAT_07b11670 (kEffectPoolSize slots; IDA: 200). Para cada slot
+// Itera el effect pool EffectPoolBase (kEffectPoolSize slots; IDA: 200). Para cada slot
 // activo y visible, despacha por type code (1191/1200/1264/1265) llamando a
 // RenderTerrainAlphaBitmap con escala/color/rotación per-tipo:
 //   1191 = scaling glow (incrementa scale 0.2/frame, color desde counter)
@@ -143,7 +143,7 @@ void Particle_PrepareRender() {
 // (RenderTerrainAlphaBitmap declared in functions.h; Effect_DrawRing too)
 void __cdecl Particle_RenderAll(void)
 {
-    char* base = (char*)&DAT_07b11670[0];
+    char* base = (char*)&EffectPoolBase[0];
     for (int i = 0; i < kEffectPoolSize; ++i) {
         char* slot = base + i * OBJECT_STRIDE;
         if (slot[0] == 0) continue;          // inactive

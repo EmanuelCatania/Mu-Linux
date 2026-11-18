@@ -70,7 +70,7 @@ extern "C" void EquipWipe_Tick(int op, int sub)
     static int s_prevOccupied = -1;
     static int s_prevOp = -1, s_prevSub = -1;
 
-    const BYTE* cm = static_cast<const BYTE*>(DAT_07cf1ffc);
+    const BYTE* cm = static_cast<const BYTE*>(CharacterMachinePtr);
     if (cm) {
         int occupied = 0;
         for (int i = 0; i < 12; ++i) {
@@ -130,7 +130,7 @@ static bool CheckFullSet_Tail(uintptr_t c, bool v26) {
         // 536 + 68*3 = 740. Sólo los armors 271 y 276 conservan el bonus.
         const uintptr_t cm = (uintptr_t)CharacterAttribute;
         // La ficha pertenece al bloque de 0x584 bytes creado para CharacterMachine.
-        if (cm && CharacterAttribute == DAT_07cf1ffc) {
+        if (cm && CharacterAttribute == CharacterMachinePtr) {
             unsigned short armor = *(unsigned short*)((char*)(uintptr_t)cm + 740);
             if (armor != 271 && armor != 276) {
                 g_bAddDefense = 0;
@@ -183,10 +183,10 @@ bool __cdecl CheckFullSet(uintptr_t c) {
 }
 
 // ── Helpers para Models[player].Actions[] ─────────────────────────────────────
-// Models + 188*390 + 48 = byte offset 73368 dentro de DAT_05828d58.
+// Models + 188*390 + 48 = byte offset 73368 dentro de ModelsBase.
 // IDA: *(_DWORD *)(Models + 73368) = player_model->Actions ptr.
 static inline float* GetPlayerActions() {
-    return reinterpret_cast<float*>(AsModel(DAT_05828d58 + BMD_STRIDE * 390)->Actions);
+    return reinterpret_cast<float*>(AsModel(ModelsBase + BMD_STRIDE * 390)->Actions);
 }
 static inline float GetPlayerActionPlaySpeed(int byteOffset) {
     float* actions = GetPlayerActions();
@@ -215,10 +215,10 @@ static inline float* BoneMat16(void* o, int bone) {
 // targetJ = (rand()%30+70) * 0.01f
 static void RenderWeaponFX(intptr_t c, intptr_t o, intptr_t v121, float Targetj, float* Light)
 {
-    // 'model' = global BMD entry at DAT_05828d58 + 188*entity_type. Pasado a
+    // 'model' = global BMD entry at ModelsBase + 188*entity_type. Pasado a
     // BMD_TransformPosition/TransformPos como ECX (this_) — usado para leer scale y
     // calcular bbox. NO confundir con `entity_o` que tiene el bone buffer.
-    void* model = (void*)(uintptr_t)((char*)(uintptr_t)DAT_05828d58
+    void* model = (void*)(uintptr_t)((char*)(uintptr_t)ModelsBase
                                      + BMD_STRIDE * (int)*(short*)(o + 2));
     void* entity_o = (void*)(uintptr_t)o;  // entity pointer with bone buffer at +0x114
     float WorldPosition[3];
@@ -488,10 +488,10 @@ extern "C" BYTE OffsetInventoryItems[];
 extern "C" void HeroEquipWatchdog(CHARACTER* c)
 {
     if (SceneFlag != 5) return;
-    if (!DAT_07abf5d8 || c != AsCharacter(DAT_07abf5d8)) return;
+    if (!Hero || c != AsCharacter(Hero)) return;
     unsigned char* be = (unsigned char*)c;
     static const int kBodyOff[6] = { 0x1e0, 0x1f8, 0x210, 0x228, 0x240, 0x258 };
-    BYTE* cm = (BYTE*)(uintptr_t)DAT_07cf1ffc;
+    BYTE* cm = (BYTE*)(uintptr_t)CharacterMachinePtr;
 
     if (cm) {
         // En el binario NADA re-siembra CharacterMachine por frame: el equipo lo
@@ -714,7 +714,7 @@ extern "C" void Render_PlayerHelper(intptr_t c, intptr_t o)
 
     // Sprite glow at transformed position (20, 0, 15) in bone[34]
     unsigned char v102 = AsCharacter(c)->Helper.LinkBone;   // = 34
-    void* model = (void*)(uintptr_t)((char*)(uintptr_t)DAT_05828d58
+    void* model = (void*)(uintptr_t)((char*)(uintptr_t)ModelsBase
                                      + BMD_STRIDE * (int)*(short*)(o + 2));
     void* entity_o = (void*)(uintptr_t)o;
     float* boneMat = BoneMat48(entity_o, v102);
@@ -809,7 +809,7 @@ extern "C" void Render_PlayerWeaponLoop(intptr_t c, intptr_t o)
 
         // ── DIAG: log weapon render attempt for char-select ─────────────────
         if (SceneFlag == 4) {
-            int csSlot = (int)(((uintptr_t)c - (uintptr_t)DAT_07abf5d0) / CHARACTER_STRIDE);
+            int csSlot = (int)(((uintptr_t)c - (uintptr_t)CharactersClient) / CHARACTER_STRIDE);
             if (csSlot >= 0 && csSlot < 5) {
                 static DWORD s_lastWP[5][2] = {{0,0},{0,0},{0,0},{0,0},{0,0}};
                 DWORD now = Platform::GetTimer().Ticks();

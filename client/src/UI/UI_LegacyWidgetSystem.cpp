@@ -4,7 +4,7 @@
 #include "Physics/ClothTypes.h"
 #include "Entity/ClothPresentation.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -104,7 +104,7 @@ void __cdecl Widget_Release(void* param_1, int, int) {
     w.Tail->Previous = w.Head;
     w.AnchorCount = 0;
     operator_delete(w.Springs);
-    if (w.Nodes) FUN_00408680(w.Nodes,3);
+    if (w.Nodes) ClothNode_ScalarDtor(w.Nodes,3);
     Widget_NodeInit(param_1);
 }
 
@@ -124,7 +124,7 @@ void __cdecl Cloth_Wind(void *_this);
 static void __cdecl Cloth_VSlot0(int a)  { (void)a; }  // dtor: se llama directo
 static void *g_ClothVTable[4] = {
     (void *)Cloth_VSlot0,  (void *)Cloth_PinTopRow,
-    (void *)Cloth_Wind,  (void *)FUN_00408ff0
+    (void *)Cloth_Wind,  (void *)BMD_RenderMesh
 };
 
 void* __fastcall Widget_CtorBase(void *param_1)
@@ -278,21 +278,21 @@ void __cdecl GridSpring_Create(void *widget, OBJECT* entity, int p3, float p4, f
 
         // flag-based UV scale (from Ghidra conditional at +0x14 bits 2-3)
         if ((ClothSystem(thiz).Flags & 0xc) == 4) {
-            float t = ((float)row * _DAT_00552538) / (float)(H - 1) + _DAT_00552534;
+            float t = ((float)row * ClothGridUvScale) / (float)(H - 1) + 0.6f;
             uOrig  = t * ClothSystem(thiz).Width;
             scaleU = uOrig / (float)(W - 1);
         }
 
         float vOffset = -((float)row * cellV);
-        float halfU   = uOrig * _DAT_00552504;
+        float halfU   = uOrig * HalfScale;
 
         for (int col = 0; col < W; col++) {
             float lx = (float)col * scaleU - halfU;
             float ly = 20.0f;
             if ((ClothSystem(thiz).Flags & 3) == 1) {
-                float frac = fabsf((float)col / (float)(W - 1) - _DAT_00552504);
+                float frac = fabsf((float)col / (float)(W - 1) - HalfScale);
                 frac += frac;
-                ly = _DAT_005524fc - frac * frac * _DAT_00552488;
+                ly = 20.0f - frac * frac * 10.0f;
             }
             float lz = vOffset;
 
@@ -302,7 +302,7 @@ void __cdecl GridSpring_Create(void *widget, OBJECT* entity, int p3, float p4, f
             } else {
                 float out_pos[3] = {lx, ly, lz};
                 float out_col[4] = {0};
-                BMD_TransformPosition(static_cast<void*>(AsModel(DAT_05828d58) + entity_ptr->Type),
+                BMD_TransformPosition(static_cast<void*>(AsModel(ModelsBase) + entity_ptr->Type),
                              local_3c, out_pos, out_col, '\x01');
                 // BMD__TransformPosition LEE del 3er arg (Pos) y ESCRIBE en el 4º
                 // (WorldPos): el resultado transformado es out_col, no `out_pos`.
@@ -335,7 +335,7 @@ void __cdecl GridSpring_Create(void *widget, OBJECT* entity, int p3, float p4, f
                 dist = SpringNode_Delta(nodes + ni,
                                    reinterpret_cast<uintptr_t>(nodes) + (W + ni) * sizeof(ClothNode), delta);
                 Spring_StoreEdge(widget, sp, sni, sni + (short)W,
-                             dist * _DAT_00552530, dist, (BYTE)(vert_flag | 2));
+                             dist * 0.8f, dist, (BYTE)(vert_flag | 2));
                 sp++;
             }
 
@@ -344,7 +344,7 @@ void __cdecl GridSpring_Create(void *widget, OBJECT* entity, int p3, float p4, f
                 dist = SpringNode_Delta(nodes + ni,
                                    reinterpret_cast<uintptr_t>(nodes) + (ni + 1) * sizeof(ClothNode), delta);
                 Spring_StoreEdge(widget, sp, sni, sni + 1,
-                             dist * _DAT_00552530, dist, 3);
+                             dist * 0.8f, dist, 3);
                 sp++;
 
                 // diagonal shear spring down-right (to row+1, col+1)
@@ -352,7 +352,7 @@ void __cdecl GridSpring_Create(void *widget, OBJECT* entity, int p3, float p4, f
                     dist = SpringNode_Delta(nodes + ni,
                                        reinterpret_cast<uintptr_t>(nodes) + (ni + 1 + W) * sizeof(ClothNode), delta);
                     Spring_StoreEdge(widget, sp, sni, sni + 1 + (short)W,
-                                 dist * _DAT_00552530, dist, diag_flag);
+                                 dist * 0.8f, dist, diag_flag);
                     sp++;
                 }
 
@@ -361,7 +361,7 @@ void __cdecl GridSpring_Create(void *widget, OBJECT* entity, int p3, float p4, f
                     dist = SpringNode_Delta(nodes + ni,
                                        reinterpret_cast<uintptr_t>(nodes) + (ni - W + 1) * sizeof(ClothNode), delta);
                     Spring_StoreEdge(widget, sp, sni, (short)(sni - (short)W + 1),
-                                 dist * _DAT_00552530, dist, diag_flag);
+                                 dist * 0.8f, dist, diag_flag);
                     sp++;
                 }
             }

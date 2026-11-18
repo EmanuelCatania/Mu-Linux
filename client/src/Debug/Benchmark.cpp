@@ -55,8 +55,8 @@ int Rand(int n) { return n > 0 ? std::rand() % n : 0; }
 
 bool ModelLoaded(int type)
 {
-    if (!DAT_05828d58 || type < 0) return false;
-    const BMD* m = AsModel(DAT_05828d58 + (std::uintptr_t)type * BMD_STRIDE);
+    if (!ModelsBase || type < 0) return false;
+    const BMD* m = AsModel(ModelsBase + (std::uintptr_t)type * BMD_STRIDE);
     return m->NumMeshs > 0;
 }
 

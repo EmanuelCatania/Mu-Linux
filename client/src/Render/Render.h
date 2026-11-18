@@ -53,7 +53,7 @@ void Render_BottomHUD(void);          // @ 0x004BD2B0
 void Render_ChatBox(void);            // @ 0x004BE4F0
 
 // --- Anti-tamper HashTable maintenance blocks (interspersed in render pipeline) ---
-// Pattern: HashTable_GetIndex + counter@0x161 + XOR 0x584 bytes with DAT_00559050
+// Pattern: HashTable_GetIndex + counter@0x161 + XOR 0x584 bytes with LegacyPacketXorKey16
 void AntiTamper_HashMaintain_A(void); // @ 0x004BF540
 void AntiTamper_HashMaintain_B(void); // @ 0x004BF990
 void AntiTamper_HashMaintain_C(void); // @ 0x004BD650

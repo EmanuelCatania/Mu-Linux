@@ -150,8 +150,8 @@ static void MoveJoint_GenericTail(unsigned char *o)
             if (owner) {
                 const short mdl = *(short *)(owner + 2);
                 float out[3] = { 0.0f, -100.0f, 0.0f };
-                BMD_TransformPosition((void *)((uintptr_t)DAT_05828d58 + BMD_STRIDE * mdl),
-                                      (float *)&DAT_07abf474, out, pos, '\x01');
+                BMD_TransformPosition((void *)((uintptr_t)ModelsBase + BMD_STRIDE * mdl),
+                                      (float *)&MoveJointTempMat, out, pos, '\x01');
             }
             break;
         }
@@ -333,7 +333,7 @@ char * __cdecl MoveJoint(undefined1 *param_1, uint param_2)
         if (dist_4e8 > AsJoint(param_1)->Velocity) {
             const float brightness = (float)(rand() % 4 + 4) * 0.1f;
             float light_4e8[3] = { brightness, brightness * 0.6f, brightness * 0.2f };
-            AddTerrainLight(*pfVar15, AsJoint(param_1)->Position[1], (float*)light_4e8, 4, (float*)&DAT_081cb608[0]);
+            AddTerrainLight(*pfVar15, AsJoint(param_1)->Position[1], (float*)light_4e8, 4, (float*)&PrimaryTerrainLightStorage[0]);
             float step_4e8[3] = { 0.0f, -AsJoint(param_1)->Velocity, 0.0f };
             float rotated_4e8[3];
             Vector_Rotate(step_4e8, matrix_4e8, rotated_4e8);
@@ -364,10 +364,10 @@ char * __cdecl MoveJoint(undefined1 *param_1, uint param_2)
                 uVar7 = (uVar7 - 1 | 0xfffffffc) + 1;
             }
             local_e8_f = (float)(int)(uVar7 + 4);
-            local_d8[3] = local_e8_f * _DAT_005524f4;
-            local_d8[4] = local_d8[3] * _DAT_00552534;
-            local_d8[5] = local_d8[3] * _DAT_005526e4;
-            AddTerrainLight(*pfVar15, AsJoint(param_1)->Position[1], (float*)((local_d8 + 3)), 4, (float*)&DAT_081cb608[0]);
+            local_d8[3] = local_e8_f * 0.1f;
+            local_d8[4] = local_d8[3] * 0.6f;
+            local_d8[5] = local_d8[3] * 0.2f;
+            AddTerrainLight(*pfVar15, AsJoint(param_1)->Position[1], (float*)((local_d8 + 3)), 4, (float*)&PrimaryTerrainLightStorage[0]);
             local_d8[7] = -AsJoint(param_1)->Velocity;
             local_d8[6] = 0.0f;
             local_b8    = 0.0f;
@@ -435,7 +435,7 @@ char * __cdecl MoveJoint(undefined1 *param_1, uint param_2)
         pcVar11 = ((char *)AsJoint(param_1)->Target);
         if (*pcVar11 == '\0') {
             // Linked entity is dead — snap to anchor + height offset, kill slot
-            float fVar28 = AsJoint(param_1)->TargetPosition[2] + _DAT_00552598;
+            float fVar28 = AsJoint(param_1)->TargetPosition[2] + 50.0f;
             *(unsigned int *)&AsJoint(param_1)->LifeTime = 0xffffffff;
             *pfVar15                            = *pfVar14;
             *(undefined4 *)&AsJoint(param_1)->Position[1]    = *(undefined4 *)&AsJoint(param_1)->TargetPosition[1];
@@ -453,13 +453,13 @@ char * __cdecl MoveJoint(undefined1 *param_1, uint param_2)
         local_a8[4] = *(float *)(pcVar11 + 0x2c);
         local_a8[5] = *(float *)(pcVar11 + 0x30);
         Matrix_BuildFromEuler(AsJoint(param_1)->Angle, local_60);
-        local_d8[0] *= _DAT_005529d4;
+        local_d8[0] *= 0.333333343f;
         iVar16       = 3;
-        local_d8[1] *= _DAT_005529d4;
-        local_d8[2] *= _DAT_005529d4;
-        local_a8[4] = (AsJoint(param_1)->Velocity - _DAT_00552848) + local_a8[4];
+        local_d8[1] *= 0.333333343f;
+        local_d8[2] *= 0.333333343f;
+        local_a8[4] = (AsJoint(param_1)->Velocity - 90.0f) + local_a8[4];
         do {
-            local_a8[4] += _DAT_0055284c;
+            local_a8[4] += 30.0f;
             AsJoint(param_1)->TargetPosition[0] += local_d8[0];
             AsJoint(param_1)->TargetPosition[1] += local_d8[1];
             AsJoint(param_1)->TargetPosition[2] += local_d8[2];
@@ -476,10 +476,10 @@ char * __cdecl MoveJoint(undefined1 *param_1, uint param_2)
             iVar16--;
         } while (iVar16 != 0);
         if (0xe < AsJoint(param_1)->LifeTime) goto switchD_caseD_4ef;
-        AsJoint(param_1)->Light[0] *= _DAT_00552a8c;
-        AsJoint(param_1)->Light[1] *= _DAT_00552a8c;
+        AsJoint(param_1)->Light[0] *= MoveJointFadeA;
+        AsJoint(param_1)->Light[1] *= MoveJointFadeA;
         {
-            float fVar28 = AsJoint(param_1)->Light[2] * _DAT_00552a8c;
+            float fVar28 = AsJoint(param_1)->Light[2] * MoveJointFadeA;
             AsJoint(param_1)->Light[2] = fVar28;
         }
 #endif
@@ -489,17 +489,17 @@ char * __cdecl MoveJoint(undefined1 *param_1, uint param_2)
     // ── Type 0x498: Quick fade-out ────────────────────────────────────
     if (iVar16 == 0x498) {
         if (AsJoint(param_1)->SubType == 0) {
-            float fVar28 = AsJoint(param_1)->Direction[2] + _DAT_00552660;
+            float fVar28 = AsJoint(param_1)->Direction[2] + 5.0f;
             *pfVar15                         = *pfVar14;
             *(undefined4 *)&AsJoint(param_1)->Position[1]  = *(undefined4 *)&AsJoint(param_1)->TargetPosition[1];
             AsJoint(param_1)->Direction[2]      = fVar28;
             AsJoint(param_1)->Position[2]       = fVar28 + AsJoint(param_1)->Position[2];
         }
         if (4 < AsJoint(param_1)->LifeTime) goto switchD_caseD_4ef;
-        AsJoint(param_1)->Light[0] *= _DAT_00552a90;
-        AsJoint(param_1)->Light[1] *= _DAT_00552a90;
+        AsJoint(param_1)->Light[0] *= MoveJointFadeB;
+        AsJoint(param_1)->Light[1] *= MoveJointFadeB;
         {
-            float fVar28 = AsJoint(param_1)->Light[2] * _DAT_00552a90;
+            float fVar28 = AsJoint(param_1)->Light[2] * MoveJointFadeB;
             goto LAB_00473578_498;
 LAB_00473578_498:
             AsJoint(param_1)->Light[2] = fVar28;
@@ -520,20 +520,20 @@ LAB_00473578_498:
             }
             else {
                 AsJoint(param_1)->Scale =
-                    (float)AsJoint(param_1)->LifeTime * _DAT_00552540;
+                    (float)AsJoint(param_1)->LifeTime * 3.0f;
                 // IDA L898-913: rampa de 1 a 0 en los últimos 10 ticks de vida;
                 // el joint viaja del punto de partida al de reunión.
-                float t_raw = (float)(AsJoint(param_1)->LifeTime + -10) * _DAT_00552a00;
+                float t_raw = (float)(AsJoint(param_1)->LifeTime + -10) * JointLerpStep;
                 float t;
-                if (t_raw >= _DAT_0055256c)      t = _DAT_0055256c;   // 1.0
-                else if (t_raw >= _DAT_00552580) t = t_raw;           // 0.0 <= t < 1.0
+                if (t_raw >= 1.0f)      t = 1.0f;   // 1.0
+                else if (t_raw >= FloatZeroB) t = t_raw;           // 0.0 <= t < 1.0
                 else                             t = 0.0f;
-                float inv_t = _DAT_0055256c - t;
+                float inv_t = 1.0f - t;
                 Ring_ComputeOrbit(param_2 * 0x4539, local_d8, 1.4f);
                 iVar16 = (intptr_t)AsJoint(param_1)->Target;
-                local_d8[0] = local_d8[0] * _DAT_00552900 + *pfVar14;
-                local_d8[1] = local_d8[1] * _DAT_00552900 + AsJoint(param_1)->TargetPosition[1];
-                local_d8[2] = local_d8[2] * _DAT_00552900 + AsJoint(param_1)->TargetPosition[2];
+                local_d8[0] = local_d8[0] * WeatherCeiling + *pfVar14;
+                local_d8[1] = local_d8[1] * WeatherCeiling + AsJoint(param_1)->TargetPosition[1];
+                local_d8[2] = local_d8[2] * WeatherCeiling + AsJoint(param_1)->TargetPosition[2];
                 local_a8[0] = *(float *)(iVar16 + EntityOffset(0x188));
                 local_a8[1] = *(float *)(iVar16 + EntityOffset(0x18c));
                 local_a8[2] = *(float *)(iVar16 + EntityOffset(0x190));
@@ -571,8 +571,8 @@ LAB_004702ce:
             }
             iVar16 = (intptr_t)AsJoint(param_1)->Target;
             fVar22 = fsin(((double)AsJoint(param_1)->LifeTime -
-                           (double)AsJoint(param_1)->Direction[1]) * (double)_DAT_00552874);
-            fVar24 = (double)_DAT_00552540;
+                           (double)AsJoint(param_1)->Direction[1]) * (double)AlphaFadeStep);
+            fVar24 = (double)3.0f;
             AsJoint(param_1)->Direction[0] = (float)(fVar22 * fVar24);
             *pfVar15 = (float)(fVar22 * fVar24 + (double)*pfVar15);
             if (iVar16 == 0) goto switchD_caseD_4ef;
@@ -580,13 +580,13 @@ LAB_004702ce:
                 int hp_val = *(int *)(iVar16 + EntityOffset(0x60));
                 float fVar28;
                 if (hp_val < 0x33) {
-                    fVar28 = (float)hp_val * _DAT_00552a00;
+                    fVar28 = (float)hp_val * JointLerpStep;
                 }
                 else {
-                    fVar28 = (float)(100 - hp_val) * _DAT_00552aa4;
+                    fVar28 = (float)(100 - hp_val) * MoveJointHpScale;
                 }
-                if (_DAT_0055256c < fVar28) {
-                    fVar28 = _DAT_0055256c;
+                if (1.0f < fVar28) {
+                    fVar28 = 1.0f;
                 }
                 AsJoint(param_1)->Scale = fVar28;
             }
@@ -643,7 +643,7 @@ LAB_0047036e:
         iVar16   = (intptr_t)AsJoint(param_1)->Target;
         *pfVar14 = *(float *)(iVar16 + EntityOffset(0x10));
         *(undefined4 *)&AsJoint(param_1)->TargetPosition[1] = *(undefined4 *)(iVar16 + EntityOffset(0x14));
-        AsJoint(param_1)->TargetPosition[2]      = *(float *)(iVar16 + EntityOffset(0x18)) + _DAT_00552488;
+        AsJoint(param_1)->TargetPosition[2]      = *(float *)(iVar16 + EntityOffset(0x18)) + 10.0f;
 
         iVar16 = AsJoint(param_1)->SubType;
 
@@ -702,12 +702,12 @@ LAB_0047036e:
         iVar13 = dc_signed + (int)(param_2 * 0xd1e3);
         local_a8[2] = 0.1113f;
         iVar16 = AsJoint(param_1)->SubType;
-        float fFreq  = _DAT_00552a9c;
-        float fScale = _DAT_00552aa0;
+        float fFreq  = RingOrbitScaleX;
+        float fScale = RingOrbitScaleY;
         if (iVar16 == 1) {
             local_a8[2] = 0.05565f;
-            fFreq  = _DAT_00552a94;
-            fScale = _DAT_00552a98;
+            fFreq  = MoveJointTrigFreqA;
+            fScale = MoveJointTrigScaleB;
         }
         int seed1 = iVar13 + 0x2b67;
         float ang0 = (float)iVar13 * fFreq;
@@ -726,24 +726,24 @@ LAB_0047036e:
 
         if (iVar16 == 0 || iVar16 == 4) {
             AsJoint(param_1)->Position[0] =
-                (float)(fVar24 * (double)_DAT_00552878 + (double)*pfVar14);
+                (float)(fVar24 * (double)80.0f + (double)*pfVar14);
             AsJoint(param_1)->Position[1] =
-                local_a8[1] * _DAT_00552878 + AsJoint(param_1)->TargetPosition[1];
+                local_a8[1] * 80.0f + AsJoint(param_1)->TargetPosition[1];
             AsJoint(param_1)->Position[2] =
-                local_a8[3] * _DAT_00552908 + AsJoint(param_1)->TargetPosition[2] + _DAT_005528fc;
+                local_a8[3] * 120.0f + AsJoint(param_1)->TargetPosition[2] + MoveJointZOffset;
             goto switchD_caseD_4ef;
         }
         if (iVar16 == 1) {
             *(unsigned int *)&AsJoint(param_1)->Light[0] = 0x3e4ccccd;  // 0.2f
             *(unsigned int *)&AsJoint(param_1)->Light[1] = 0x3e4ccccd;
             AsJoint(param_1)->Position[0] =
-                (float)(fVar24 * (double)_DAT_00552938 + (double)*pfVar14);
+                (float)(fVar24 * (double)MoveJointTrigScale1 + (double)*pfVar14);
             AsJoint(param_1)->Position[1] =
-                local_a8[1] * _DAT_00552938 + AsJoint(param_1)->TargetPosition[1];
+                local_a8[1] * MoveJointTrigScale1 + AsJoint(param_1)->TargetPosition[1];
             AsJoint(param_1)->Position[2] =
-                local_a8[3] * _DAT_00552958 + AsJoint(param_1)->TargetPosition[2];
+                local_a8[3] * TeleportZOffset + AsJoint(param_1)->TargetPosition[2];
             {
-                float fVar28 = sin_s1 * _DAT_005526e4 + _DAT_005528b4;
+                float fVar28 = sin_s1 * 0.2f + 0.4f;
                 AsJoint(param_1)->Light[2] = fVar28;
             }
             goto switchD_caseD_4ef;
@@ -855,7 +855,7 @@ LAB_0047036e:
             AsJoint(param_1)->Light[2] = color_4e5;
             const float darkness_4e5 = (float)(rand() % 4 + 4) * -0.01f;
             float light_4e5[3] = { darkness_4e5, darkness_4e5, darkness_4e5 };
-            AddTerrainLight(*pfVar15, AsJoint(param_1)->Position[1], (float*)light_4e5, 4, (float*)&DAT_081cb608[0]);
+            AddTerrainLight(*pfVar15, AsJoint(param_1)->Position[1], (float*)light_4e5, 4, (float*)&PrimaryTerrainLightStorage[0]);
             goto switchD_caseD_4ef;
         }
 
@@ -980,7 +980,7 @@ LAB_0047036e:
             }
             const float brightness_4ea = (float)(rand() % 4 + 8) * 0.03f;
             float terrainLight_4ea[3] = { brightness_4ea * 0.4f, brightness_4ea, brightness_4ea * 0.8f };
-            AddTerrainLight(*pfVar15, AsJoint(param_1)->Position[1], (float*)terrainLight_4ea, 2, (float*)&DAT_081cb608[0]);
+            AddTerrainLight(*pfVar15, AsJoint(param_1)->Position[1], (float*)terrainLight_4ea, 2, (float*)&PrimaryTerrainLightStorage[0]);
             if (subtype_4ea == 6 || subtype_4ea == 9)
                 Particle_Spawn(1191, pfVar15, AsJoint(param_1)->Angle, AsJoint(param_1)->Light, 3, 0.05f, 0);
             else
@@ -1100,7 +1100,7 @@ LAB_0047036e:
 
         const float terrainLight = (float)(rand() % 4 + 4) * -0.01f;
         float light[3] = { terrainLight, terrainLight, terrainLight };
-        AddTerrainLight(*pfVar15, AsJoint(param_1)->Position[1], (float*)light, 4, (float*)&DAT_081cb608[0]);
+        AddTerrainLight(*pfVar15, AsJoint(param_1)->Position[1], (float*)light, 4, (float*)&PrimaryTerrainLightStorage[0]);
         goto switchD_caseD_4ef;
     }
 
@@ -1157,7 +1157,7 @@ LAB_0047036e:
                 light[1] = intensity * 0.1f;
                 light[2] = intensity * 0.2f;
             }
-            AddTerrainLight(*pfVar15, AsJoint(param_1)->Position[1], (float*)light, 2, (float*)&DAT_081cb608[0]);
+            AddTerrainLight(*pfVar15, AsJoint(param_1)->Position[1], (float*)light, 2, (float*)&PrimaryTerrainLightStorage[0]);
 
             float step[3] = { 0.0f, -AsJoint(param_1)->Velocity, 0.0f };
             Vector_Rotate(step, matrix, rotated);
@@ -1233,10 +1233,10 @@ LAB_0047036e:
             bVar21 = ((uVar7 - 1 | 0xfffffffe) == 0xffffffff);
         }
         if (!bVar21) {
-            AsJoint(param_1)->Position[0] += _DAT_005524f0;
+            AsJoint(param_1)->Position[0] += GridToWorldScale;
         }
         else {
-            AsJoint(param_1)->Position[0] -= _DAT_005524f0;
+            AsJoint(param_1)->Position[0] -= GridToWorldScale;
         }
         uVar7 = _rand();
         uVar7 = uVar7 & 0x80000001;
@@ -1245,10 +1245,10 @@ LAB_0047036e:
             bVar21 = ((uVar7 - 1 | 0xfffffffe) == 0xffffffff);
         }
         if (!bVar21) {
-            AsJoint(param_1)->Position[1] += _DAT_005524f0;
+            AsJoint(param_1)->Position[1] += GridToWorldScale;
         }
         else {
-            AsJoint(param_1)->Position[1] -= _DAT_005524f0;
+            AsJoint(param_1)->Position[1] -= GridToWorldScale;
         }
         Joint_SegmentTick((intptr_t)param_1, local_30);
         goto switchD_caseD_4ef;

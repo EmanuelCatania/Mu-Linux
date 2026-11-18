@@ -4,7 +4,7 @@
 #include "Game/PathContext.h"
 #include "Platform/Text.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -83,7 +83,7 @@ extern void MapFileDecrypt(BYTE* buf, int size);
 static int PF_AStar(int sx, int sy, int tx, int ty, int iWall, bool bErrorCheck,
                     unsigned char* path, float fDistance)
 {
-    const unsigned char* attr = (const unsigned char*)&DAT_0838bc70;
+    const unsigned char* attr = (const unsigned char*)&TerrainWallFlags;
 
     if (sx < 0 || sx >= 256 || sy < 0 || sy >= 256 ||
         tx < 0 || tx >= 256 || ty < 0 || ty >= 256) return 0;
@@ -293,16 +293,16 @@ static int PF_AStar(int sx, int sy, int tx, int ty, int iWall, bool bErrorCheck,
 // IDA: PathFinding2 @ 0x0043F3E0 — PathFinding2(sx, sy, tx, ty, path_buf, radius)
 // Calls A* solver (PATH_FindPath). On fail, checks terrain walk flags at src/dst
 // to decide filter mode (2 or 4) and retries. On success (path_len >= 2),
-// copies waypoints from DAT_05826df4 result buffer into path_buf.
+// copies waypoints from PathFindContext result buffer into path_buf.
 // path_buf layout: [0]=0, [1]=0, [2]=wp_count, [3..17]=wp_x, [0x12..0x20]=wp_y.
 unsigned int __cdecl Path_FindRoute(int sx, int sy, int tx, int ty,
                                    unsigned char* path, float radius)
 {
     int filterMode = 2;
-    // _this es el contexto del pathfinder (DAT_05826df4), como en el wrapper que
+    // _this es el contexto del pathfinder (PathFindContext), como en el wrapper que
     // documenta Net_Process.cpp:
-    //   PATH_FindPath(DAT_05826df4, id, t, x, y, 1, 2, t)
-    PathContext* pfCtx = DAT_05826df4;
+    //   PATH_FindPath(PathFindContext, id, t, x, y, 1, 2, t)
+    PathContext* pfCtx = PathFindContext;
 
     // El contexto lo construye PathContext_Create() (src/Game/PathFinder.cpp,
     // llamada desde WinMain), que replica el ctor del binario: 0x0043F280..0x0043F2C7,
@@ -344,7 +344,7 @@ unsigned int __cdecl Path_FindRoute(int sx, int sy, int tx, int ty,
 
         if (PF_AStar(sx, sy, tx, ty, 2, true, path, radius)) return 1;
 
-        const unsigned char* tw = (const unsigned char*)&DAT_0838bc70;
+        const unsigned char* tw = (const unsigned char*)&TerrainWallFlags;
         int iWall2 = 2;
         if (sx >= 0 && sx < 256 && sy >= 0 && sy < 256 &&
             tx >= 0 && tx < 256 && ty >= 0 && ty < 256) {
@@ -370,10 +370,10 @@ unsigned int __cdecl Path_FindRoute(int sx, int sy, int tx, int ty,
         // bit 0, y vuelve a 2 sólo si el destino tiene además el bit 1:
         //     iVar3 = 4;  if ((TerrainWall[dst] & 2) == 2) iVar3 = local_4 /*2*/;
         // Camino muerto hoy (pfReady siempre false).
-        if ((DAT_0838bc70[srcAttr] & 1) == 1 || (DAT_0838bc70[dstAttr] & 1) == 1) {
+        if ((TerrainWallFlags[srcAttr] & 1) == 1 || (TerrainWallFlags[dstAttr] & 1) == 1) {
             int dstAttr2 = Terrain_GetTileIndex((unsigned int)tx, (unsigned int)ty);
             filterMode = 4;
-            if ((DAT_0838bc70[dstAttr2] & 2) == 2) {
+            if ((TerrainWallFlags[dstAttr2] & 2) == 2) {
                 filterMode = 2;
             }
         }
@@ -531,7 +531,7 @@ unsigned int __cdecl Entity_AdvancePath(void *entity, char flag)
     }
 
     // 2026-04-30 SIMPLIFIED: en lugar de Catmull-Rom (que con coeficientes
-    // _DAT_00552880..88c daba targets atrás del hero / dirección opuesta y
+    // 0.0703125f..88c daba targets atrás del hero / dirección opuesta y
     // hacía giros en círculo), ir directamente al siguiente waypoint con
     // lerp lineal.  Pierde "smoothness" del spline pero hace que el walker
     // efectivamente avance.
@@ -539,8 +539,8 @@ unsigned int __cdecl Entity_AdvancePath(void *entity, char flag)
     if (next_wp >= (int)wp_count) {
         return 1;   // arrived
     }
-    float target_x = ((float)*(byte *)(ent + EntityOffset(0x357) + next_wp) + _DAT_00552504) * _DAT_005524f0;
-    float target_y = ((float)*(byte *)(ent + EntityOffset(0x366) + next_wp) + _DAT_00552504) * _DAT_005524f0;
+    float target_x = ((float)*(byte *)(ent + EntityOffset(0x357) + next_wp) + HalfScale) * GridToWorldScale;
+    float target_y = ((float)*(byte *)(ent + EntityOffset(0x366) + next_wp) + HalfScale) * GridToWorldScale;
 
     // Distance check
     float dx   = AsCharacter(ent)->Object.Position[0] - target_x;
@@ -548,8 +548,8 @@ unsigned int __cdecl Entity_AdvancePath(void *entity, char flag)
     float dist = sqrtf(dx * dx + dy * dy);
 
     // Threshold: ~25 units tight enough to prevent overshoot, generous
-    // enough to consume waypoints quickly. Original used _DAT_005524fc.
-    float threshold = _DAT_005524fc;
+    // enough to consume waypoints quickly. Original used 20.0f.
+    float threshold = 20.0f;
     if (threshold < 25.0f) threshold = 25.0f;
 
     if (dist <= threshold) {
@@ -565,8 +565,8 @@ unsigned int __cdecl Entity_AdvancePath(void *entity, char flag)
         // Update target for facing calc this frame (so hero turns immediately)
         next_wp = (int)cur_wp + 1;
         if (next_wp < (int)wp_count) {
-            target_x = ((float)*(byte *)(ent + EntityOffset(0x357) + next_wp) + _DAT_00552504) * _DAT_005524f0;
-            target_y = ((float)*(byte *)(ent + EntityOffset(0x366) + next_wp) + _DAT_00552504) * _DAT_005524f0;
+            target_x = ((float)*(byte *)(ent + EntityOffset(0x357) + next_wp) + HalfScale) * GridToWorldScale;
+            target_y = ((float)*(byte *)(ent + EntityOffset(0x366) + next_wp) + HalfScale) * GridToWorldScale;
         }
     }
 
@@ -606,7 +606,7 @@ unsigned int __cdecl Entity_AdvancePath(void *entity, char flag)
 }
 
 // IDA: CheckWall @ 0x004830B0 — bool __cdecl CheckWall(int sx1, int sy1, int sx2, int sy2)
-// Bresenham desde (sx1,sy1) hasta (sx2,sy2) sobre TerrainWall (DAT_0838bc70);
+// Bresenham desde (sx1,sy1) hasta (sx2,sy2) sobre TerrainWall (TerrainWallFlags);
 // devuelve 1 si la linea esta despejada, 0 si topa con un tile bloqueante.
 // Nombres: tile = v4 · err = v5 · dx = v6 · dy = v7 · xStep = v8 · yStep = v9
 //          major = v10 · minorDelta = y · minorInc = v11 · steps = x
@@ -639,7 +639,7 @@ char __cdecl Path_IsLineClear(int sx1, int sy1, int sx2, int sy2) {
 
     int steps = 0;                                                   // IDA: x
     do {
-        const byte attr = ((byte*)&DAT_0838bc70)[tile];              // IDA: v12
+        const byte attr = ((byte*)&TerrainWallFlags)[tile];              // IDA: v12
         if (attr >= 4 && (attr & 0x20) != 0x20) return 0;            // IDA L58
         err += minorDelta;
         if (err > major / 2) { tile += minorInc; err -= major; }

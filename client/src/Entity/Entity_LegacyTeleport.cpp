@@ -36,8 +36,8 @@ extern void __cdecl operator_delete(void* ptr);
 // Apaga los joints activos con ese Type, Target y SubType (-1 = cualquiera).
 extern "C" void __cdecl DeleteJoint(int Type, intptr_t Target, int SubType)
 {
-    JOINT* joints = AsJoint(DAT_07b27150);
-    const int count = (int)(sizeof(DAT_07b27150) / sizeof(JOINT));   // kJointPoolSize
+    JOINT* joints = AsJoint(JointPoolBase);
+    const int count = (int)(sizeof(JointPoolBase) / sizeof(JOINT));   // kJointPoolSize
     for (int i = 0; i < count; ++i) {
         JOINT* j = &joints[i];
         if (j->Live != 0 &&
@@ -54,7 +54,7 @@ extern "C" void __cdecl DeleteJoint(int Type, intptr_t Target, int SubType)
 // CreatePoint(float Position[3], int Value,
 //   float Color[3], float scale)  (101 bytes)
 //
-// Spawns a damage popup / floating text in the point pool DAT_07c80110
+// Spawns a damage popup / floating text in the point pool DamagePointPool
 // (100 × 0x70 bytes). La usa Net_Process para los numeros de dano.
 //
 // El cuerpo vive en `Entity_TeleportAnim` (Combat/Skills_WarriorLegacy.cpp), un

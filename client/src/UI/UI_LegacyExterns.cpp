@@ -12,7 +12,7 @@
 #include "Platform/GuardedOperation.h"
 #include "Platform/ITimer.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -85,9 +85,9 @@ extern void MapFileDecrypt(BYTE* buf, int size);
 //   6. CharMenu_RenderTextList with computed Y / count
 extern "C++" {
 extern char    GlobalText[GLOBALTEXT_ROWS][300];   // ver globals.h
-extern char    lpString_07e90798[];
-extern int     DAT_07e91708[30];
-extern int     DAT_07ea7b10[30];
+extern char    TextListStorage[];
+extern int     TextListColor[30];
+extern int     TextBold[30];
 }
 
 static void SkillTooltip_RenderLines(int sx, int sy, char lines[][100], int count)
@@ -129,9 +129,9 @@ static void SkillTooltip_RenderLines(int sx, int sy, char lines[][100], int coun
 
     int lineY = drawY + padY;
     for (int i = 0; i < count; ++i) {
-        DAT_00559c78 = (i == 0) ? 0xFFFFFF00 : 0xFFFFFFFF;
+        m_dwTextColor = (i == 0) ? 0xFFFFFF00 : 0xFFFFFFFF;
         m_dwBackColor = 0;
-        CUIRenderText_RenderText((HDC)(uintptr_t)DAT_055c9ff8, drawX + padX, lineY, lines[i], 0);
+        CUIRenderText_RenderText((HDC)(uintptr_t)UiRenderTextObj, drawX + padX, lineY, lines[i], 0);
         lineY += lineH;
     }
 }
@@ -178,10 +178,10 @@ static void FUN_004c9730_old(float a1, int a2, int a3)
     GetSkillInformation(skillType, 1, szName, &piMana, &piDistance, &piSkillMana);
 
     // ── Build TextList lines ────────────────────────────────────────────────
-    char* TextList0 = lpString_07e90798;
-    auto TextListN = [&](int i) -> char* { return lpString_07e90798 + i * 100; };
-    int* TextListColor = DAT_07e91708;
-    int* TextBold = DAT_07ea7b10;
+    char* TextList0 = TextListStorage;
+    auto TextListN = [&](int i) -> char* { return TextListStorage + i * 100; };
+    int* TextListColor = TextListColor;
+    int* TextBold = TextBold;
 
     Platform::TextFormatSecure(TextList0, 100, "\n");
     Platform::TextFormatSecure(TextListN(1), 100, "%s", szName);
@@ -296,13 +296,13 @@ void __cdecl RenderSkillTooltip(float a1, int a2, int a3)
     int skillTipX = *(int*)&a1;
     // Skill[60] comienza en +87 dentro de la reserva de 0x584 bytes.
     if (a3 < 0 || a3 >= 60 || !CharacterAttribute || !Hero ||
-        CharacterAttribute != DAT_07cf1ffc) return;
+        CharacterAttribute != CharacterMachinePtr) return;
 
     unsigned char skillType = *(unsigned char*)((char*)CharacterAttribute + a3 + 87);
     if (skillType == 0 || skillType >= 64) return;
 
-    unsigned char* skillBaseTbl = DAT_07d29d20;
-    unsigned char* skillStatTbl = DAT_07cf1ff8 ? DAT_07cf1ff8 : skillBaseTbl;
+    unsigned char* skillBaseTbl = SkillTableBase;
+    unsigned char* skillStatTbl = SkillShadowTable ? SkillShadowTable : skillBaseTbl;
     if (!skillBaseTbl && !skillStatTbl) return;
 
     char szName[256] = {};
@@ -336,7 +336,7 @@ void __cdecl RenderSkillTooltip(float a1, int a2, int a3)
 
     // La fila ya esta acotada a 64 * 0x28; Damage ocupa +0x24..25.
     // Los bonus +70/+72 pertenecen al CharacterMachine reservado en WinMain.
-    if (CharacterMachine && CharacterMachine == DAT_07cf1ffc && skillStatRec) {
+    if (CharacterMachine && CharacterMachine == CharacterMachinePtr && skillStatRec) {
         if (!Platform::RunValidatedOperation([&]() {
             int baseDamage = (int)*(WORD*)(skillStatRec + 0x24);
             if (baseDamage > 0 && baseDamage < 5000) {
@@ -359,9 +359,9 @@ void __cdecl RenderSkillTooltip(float a1, int a2, int a3)
     //   opcional "no puede usarla"          color 5 (blanco con franja)
     //   ultimo  = "\n"
     //
-    // Usa lpString_07e90798 + CharMenu_RenderTextList, igual que el binario —
+    // Usa TextListStorage + CharMenu_RenderTextList, igual que el binario —
     // misma rutina que el tooltip de item y el menu de personaje.
-    auto  TextListN     = [](int i) -> char* { return lpString_07e90798 + i * 100; };
+    auto  TextListN     = [](int i) -> char* { return TextListStorage + i * 100; };
     auto  GlobalTextOr  = [](int idx, const char* fallback) -> const char* {
         if (idx >= 0 && idx < GLOBALTEXT_ROWS && GlobalText[idx][0])
             return GlobalText[idx];
@@ -370,50 +370,50 @@ void __cdecl RenderSkillTooltip(float a1, int a2, int a3)
 
     int idx = 0;
     for (int i = 0; i < 30; ++i) {
-        lpString_07e90798[i * 100] = 0;
+        TextListStorage[i * 100] = 0;
     }
 
     crt_sprintf(TextListN(idx), "\n");
-    DAT_07e91708[idx] = 0;
-    DAT_07ea7b10[idx] = 0;
+    TextListColor[idx] = 0;
+    TextBold[idx] = 0;
     idx++;
 
     Platform::TextFormatTruncated(TextListN(idx), 100, Platform::TruncateText, "%s", szName);
-    DAT_07e91708[idx] = 1;
-    DAT_07ea7b10[idx] = 1;
+    TextListColor[idx] = 1;
+    TextBold[idx] = 1;
     idx++;
 
     crt_sprintf(TextListN(idx), "\n");
-    DAT_07e91708[idx] = 0;
-    DAT_07ea7b10[idx] = 0;
+    TextListColor[idx] = 0;
+    TextBold[idx] = 0;
     idx++;
 
     if (piMinDamage > 0 || piMaxDamage > 0) {
         Platform::TextFormatTruncated(TextListN(idx), 100, Platform::TruncateText,
                     GlobalTextOr(170, "Wizardry Dmg:%d~%d"), piMinDamage, piMaxDamage);
-        DAT_07e91708[idx] = 0;
-        DAT_07ea7b10[idx] = 0;
+        TextListColor[idx] = 0;
+        TextBold[idx] = 0;
         idx++;
     }
     if (piDistance > 0) {
         Platform::TextFormatTruncated(TextListN(idx), 100, Platform::TruncateText,
                     GlobalTextOr(174, "Range: %d"), piDistance);
-        DAT_07e91708[idx] = 0;
-        DAT_07ea7b10[idx] = 0;
+        TextListColor[idx] = 0;
+        TextBold[idx] = 0;
         idx++;
     }
     {
         Platform::TextFormatTruncated(TextListN(idx), 100, Platform::TruncateText,
                     GlobalTextOr(175, "Mana: %d"), piMana);
-        DAT_07e91708[idx] = 0;
-        DAT_07ea7b10[idx] = 0;
+        TextListColor[idx] = 0;
+        TextBold[idx] = 0;
         idx++;
     }
     if (piSkillMana > 0) {
         Platform::TextFormatTruncated(TextListN(idx), 100, Platform::TruncateText,
                     GlobalTextOr(360, "AG: %d"), piSkillMana);
-        DAT_07e91708[idx] = 0;
-        DAT_07ea7b10[idx] = 0;
+        TextListColor[idx] = 0;
+        TextBold[idx] = 0;
         idx++;
     }
 
@@ -421,14 +421,14 @@ void __cdecl RenderSkillTooltip(float a1, int a2, int a3)
     // unico color con franja de fondo (m_dwBackColor = 0xff0000a0).
     if (Hero && ((*(BYTE*)((char*)Hero + EntityOffset(0x1BC)) & 7) == 1) && skillType == 47) {
         Platform::TextFormatTruncated(TextListN(idx), 100, Platform::TruncateText, "%s", GlobalTextOr(96, ""));
-        DAT_07e91708[idx] = 5;
-        DAT_07ea7b10[idx] = 0;
+        TextListColor[idx] = 5;
+        TextBold[idx] = 0;
         idx++;
     }
 
     crt_sprintf(TextListN(idx), "\n");
-    DAT_07e91708[idx] = 0;
-    DAT_07ea7b10[idx] = 0;
+    TextListColor[idx] = 0;
+    TextBold[idx] = 0;
     idx++;
 
     // Posicion Y — port literal de 0x004C9DF7..0x004C9E36:
@@ -439,7 +439,7 @@ void __cdecl RenderSkillTooltip(float a1, int a2, int a3)
         SIZE sz;
         sz.cx = 0;
         sz.cy = 0;
-        gFont.MeasureText(gFont.GetTextDC(), lpString_07e90798, 1, &sz);
+        gFont.MeasureText(gFont.GetTextDC(), TextListStorage, 1, &sz);
         int v31 = (idx - 3) * sz.cy + (3 * sz.cy) / 2;
         int yBox = a2 - (int)((float)v31 / gWindow.GetScreenRateY());
         CharMenu_RenderTextList(skillTipX, yBox, idx, 0, 2, 1);
@@ -494,7 +494,7 @@ void __cdecl UI_DrawText(int param_1, int param_2, char *param_3, int param_4, i
         }
     }
 
-    CUIRenderText_RenderText((HDC)(uintptr_t)DAT_055c9ff8, x, param_2,
+    CUIRenderText_RenderText((HDC)(uintptr_t)UiRenderTextObj, x, param_2,
                  (const char*)param_3, (DWORD)param_4);
 }
 
@@ -571,7 +571,7 @@ void __cdecl CutText(void *param_1_v, char* param_2, void *param_3_v, int param_
 // Render/GL_2D.cpp). GL_DrawTexture Y-flipa via `vh - param_3`. Acá hacemos
 // lo mismo para raster pos.
 //
-// Color: DAT_00559c78 es el COLORREF GDI (0x00BBGGRR). Se convierte a glColor.
+// Color: m_dwTextColor es el COLORREF GDI (0x00BBGGRR). Se convierte a glColor.
 // El Alpha del byte alto (cuando está seteado, ej 0xffd2e6ff) se respeta.
 // ── Escala "píxeles de framebuffer" → "unidades del ortho 2D" ───────────────
 //   · La GEOMETRÍA 2D (RenderColor / RenderBitmap) se emite en unidades del
@@ -878,7 +878,7 @@ void __cdecl CUIRenderText_RenderText(HDC /*hdc_unused*/, int x, int y, const ch
     // sub_410AF0) las ramas que aplican son:
     //     if (x < 0) x = 0;
     //     if (Width + x > WindowWidth)  x = WindowWidth - Width;
-    //     if (byte_7E11D6E) {
+    //     if (HudTextVisibleFlag) {
     //         if (y < 0) y = 0;
     //         v12 = WindowHeight - 47 * WindowHeight / 640;
     //         if (Height + y > v12) y = v12 - Height;
@@ -901,7 +901,7 @@ void __cdecl CUIRenderText_RenderText(HDC /*hdc_unused*/, int x, int y, const ch
         const int off = gWindow.GetUiOffsetX();
         if (x < -off) x = -off;
         if ((float)x + wOrtho > (float)vw + (float)off) x = (int)((float)vw + (float)off - wOrtho);
-        if (DAT_07e11d6e) {
+        if (HudTextVisibleFlag) {
             if (y < 0) y = 0;
             float bottom = (float)vh - (47.0f * (float)vh) / 640.0f;
             if ((float)y + hOrtho > bottom) y = (int)(bottom - hOrtho);
@@ -913,13 +913,13 @@ void __cdecl CUIRenderText_RenderText(HDC /*hdc_unused*/, int x, int y, const ch
     // Y-flip: game pasa y con top=0, ortho GL usa bottom=0.
     int   rasterY = (int)vh - y - s_ascent;
 
-    // Color base desde DAT_00559c78 (COLORREF 0x00BBGGRR + opcional alpha en
+    // Color base desde m_dwTextColor (COLORREF 0x00BBGGRR + opcional alpha en
     // byte 3).  Con marcadores presentes esto es solo el color del PRIMER tramo;
     // el resto sale de markers[].fg (ver el loop de abajo).
     //
     // Se respeta el alpha que el CALLER setea via glColor4f(...,α) antes de
     // RenderText (lo usa p.ej. el cross-fade del banner clase/zona): se
-    // multiplican el alpha del texto-color (DAT_00559c78 byte 3) y el del caller.
+    // multiplican el alpha del texto-color (m_dwTextColor byte 3) y el del caller.
     float curColor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     Gfx::CurrentColor(curColor);
     unsigned char callerA = (unsigned char)(curColor[3] * 255.0f + 0.5f);
@@ -978,7 +978,7 @@ void __cdecl CUIRenderText_RenderText(HDC /*hdc_unused*/, int x, int y, const ch
             if (endChar   > drawLen)  endChar   = drawLen;
             if (endChar <= startChar) continue;
 
-            DWORD fg    = (run == 0) ? DAT_00559c78 : markers[run - 1].fg;
+            DWORD fg    = (run == 0) ? m_dwTextColor : markers[run - 1].fg;
             DWORD bc    = (run == 0) ? SetBackgroundTextColor : markers[run - 1].bg;
             int   runPx = (run == 0) ? 0            : markers[run - 1].pixelStart;
             float runX  = (float)x + (float)runPx;   // pixel + pixel

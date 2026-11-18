@@ -7,7 +7,7 @@
 #include "Render/Materials.h"
 #include "Item/ContentCatalog.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -54,9 +54,9 @@ extern void MapFileDecrypt(BYTE* buf, int size);
 // BMD_TransformPosition to animate/position it.
 void __cdecl ItemDrop_SetupRenderRef(BYTE* param_1) {
     // +0x3C guarda sólo 32 bits; el dueño completo vive en g_ParticleOwner.
-    intptr_t iVar1 = (intptr_t)g_ParticleOwner[(param_1 - reinterpret_cast<BYTE*>(DAT_07abf5f0)) / 0x70];
+    intptr_t iVar1 = (intptr_t)g_ParticleOwner[(param_1 - reinterpret_cast<BYTE*>(SpritePoolBase)) / 0x70];
     float local_c[3] = {0.0f, 0.0f, 0.0f};
-    BYTE* this_ = reinterpret_cast<BYTE*>(DAT_05828d58 + *(short*)(iVar1 + 2) * BMD_STRIDE);
+    BYTE* this_ = reinterpret_cast<BYTE*>(ModelsBase + *(short*)(iVar1 + 2) * BMD_STRIDE);
     if (*(int*)(param_1 + 4) == 0x4d0)
         local_c[1] = -120.0f;
     *(unsigned int*)(this_ + 0x6c + BMD_FIELD_SHIFT) = *(unsigned int*)(iVar1 + 0x10);
@@ -65,7 +65,7 @@ void __cdecl ItemDrop_SetupRenderRef(BYTE* param_1) {
     uint uVar2 = *(uint*)(param_1 + 8) & 0x80000001;
     if ((int)uVar2 < 0) uVar2 = (uVar2 - 1 | 0xfffffffe) + 1;
     BMD_TransformPosition(this_,
-        (float*)((unsigned int)(*(byte*)(DAT_07abf5d8 + EntityOffset(0x274 + static_cast<intptr_t>(static_cast<int32_t>(uVar2)) * 0x18))) * 0x30
+        (float*)((unsigned int)(*(byte*)(Hero + EntityOffset(0x274 + static_cast<intptr_t>(static_cast<int32_t>(uVar2)) * 0x18))) * 0x30
                  + *(intptr_t*)&AsObject(iVar1)->BoneMatrices),
         local_c,
         (float*)(param_1 + 0x10),
@@ -157,17 +157,17 @@ fallthrough:;
 apply:;
     float fVar1 = param_2 * param_3;
     switch (uVar4) {
-    case 0:  param_4[2]=0.0f; param_4[0]=fVar1; param_4[1]=fVar1*_DAT_00552504; return;
-    case 1:  param_4[2]=0.0f; param_4[0]=fVar1; param_4[1]=fVar1*_DAT_005526e4; return;
-    case 2: case 3: { float h=fVar1*_DAT_00552504; param_4[0]=0.0f; param_4[1]=h; param_4[2]=fVar1; return; }
-    case 4:  { float h=fVar1*_DAT_00552530; param_4[0]=0.0f; param_4[1]=h; param_4[2]=fVar1*_DAT_005528b4; return; }
+    case 0:  param_4[2]=0.0f; param_4[0]=fVar1; param_4[1]=fVar1*HalfScale; return;
+    case 1:  param_4[2]=0.0f; param_4[0]=fVar1; param_4[1]=fVar1*0.2f; return;
+    case 2: case 3: { float h=fVar1*HalfScale; param_4[0]=0.0f; param_4[1]=h; param_4[2]=fVar1; return; }
+    case 4:  { float h=fVar1*0.8f; param_4[0]=0.0f; param_4[1]=h; param_4[2]=fVar1*0.4f; return; }
     case 5:  param_4[0]=fVar1; param_4[1]=fVar1; param_4[2]=fVar1; return;
-    case 6:  param_4[0]=fVar1*_DAT_00552534; param_4[1]=fVar1*_DAT_00552530; param_4[2]=fVar1*_DAT_005528b4; return;
-    case 7:  param_4[0]=fVar1*_DAT_005526e8; param_4[1]=fVar1*_DAT_00552530; param_4[2]=fVar1; return;
-    case 8:  { float h=fVar1*_DAT_00552530; param_4[0]=h; param_4[1]=h; param_4[2]=fVar1; return; }
-    case 9:  { float h=fVar1*_DAT_00552504; param_4[0]=h; param_4[1]=h; param_4[2]=fVar1*_DAT_00552530; return; }
-    case 10: param_4[0]=fVar1*_DAT_00552adc; param_4[1]=fVar1*_DAT_00552948; param_4[2]=fVar1*_DAT_00552504; return;
-    case 0xb: { float h=fVar1*_DAT_005526e4; param_4[0]=fVar1; param_4[1]=h; param_4[2]=h; return; }
+    case 6:  param_4[0]=fVar1*0.6f; param_4[1]=fVar1*0.8f; param_4[2]=fVar1*0.4f; return;
+    case 7:  param_4[0]=fVar1*0.9f; param_4[1]=fVar1*0.8f; param_4[2]=fVar1; return;
+    case 8:  { float h=fVar1*0.8f; param_4[0]=h; param_4[1]=h; param_4[2]=fVar1; return; }
+    case 9:  { float h=fVar1*HalfScale; param_4[0]=h; param_4[1]=h; param_4[2]=fVar1*0.8f; return; }
+    case 10: param_4[0]=fVar1*AspectRatioScale; param_4[1]=fVar1*EntitySinBias; param_4[2]=fVar1*HalfScale; return;
+    case 0xb: { float h=fVar1*0.2f; param_4[0]=fVar1; param_4[1]=h; param_4[2]=h; return; }
     default: return;
     }
 }
@@ -202,10 +202,10 @@ void __cdecl Weapon_SetColorAlt(int param_1, float param_2, float param_3, float
     } else if (iVar4 == 1) {
         param_4[2] = 0.0f;
         param_4[0] = fVar1 * param_4[0];
-        param_4[1] = fVar1 * param_4[1] * _DAT_00552504;
+        param_4[1] = fVar1 * param_4[1] * HalfScale;
     } else if (iVar4 == 2) {
         param_4[0] = 0.0f;
-        param_4[1] = fVar1 * param_4[1] * _DAT_00552504;
+        param_4[1] = fVar1 * param_4[1] * HalfScale;
         param_4[2] = fVar1 * param_4[2];
     }
 }
@@ -318,7 +318,7 @@ void __cdecl DeleteCloth(CHARACTER* character, OBJECT* object, PART_t* part)
 // Uses __ftol for int grid coords from float positions.
 void __cdecl RenderTerrainAlphaBitmap(int type, float x, float y, float sx, float sy, float *col, float angle, float alpha)
 {
-    if (alpha == _DAT_0055256c)
+    if (alpha == 1.0f)
         BufferedDraw::Color3fv(col);
     else
         BufferedDraw::Color4f(col[0], col[1], col[2], alpha);
@@ -328,19 +328,19 @@ void __cdecl RenderTerrainAlphaBitmap(int type, float x, float y, float sx, floa
     Matrix_BuildFromEuler(rot_data, rot_mat);
     GL_BindTextureSlot(type);
 
-    float cx = x * _DAT_00552594;
-    float cy = y * _DAT_00552594;
+    float cx = x * EffectScaleUnit;
+    float cy = y * EffectScaleUnit;
     int icx = (int)cx;
     int icy = (int)cy;
     float size = (sx > sy) ? sx : sy;
     if (size <= 0.0f)
         return;
-    float half = size * _DAT_00552504;
-    float inv  = _DAT_0055256c / size;
+    float half = size * HalfScale;
+    float inv  = 1.0f / size;
     float xScale = (sy != 0.0f) ? (sx / sy) : 1.0f;
     int   itiles = (int)size + 1;   // IDA: (int)((__int64)v8 + 1), con v8 = tamano entero
     float loopRadius = (float)itiles;
-    float oneTile = _DAT_0055256c;
+    float oneTile = 1.0f;
 
     for (float tj = -loopRadius; tj <= loopRadius; tj += oneTile) {
         float v0 = ((tj + (float)icy - cy) + half) * inv;
@@ -350,16 +350,16 @@ void __cdecl RenderTerrainAlphaBitmap(int type, float x, float y, float sx, floa
             float u0 = ((ti + (float)icx - cx) + half) * inv;
             float u1 = ((ti + oneTile + (float)icx - cx) + half) * inv;
             float inp[4][3] = {
-                {u0 - _DAT_00552504, v0 - _DAT_00552504, 0.0f},
-                {u1 - _DAT_00552504, v0 - _DAT_00552504, 0.0f},
-                {u1 - _DAT_00552504, v1 - _DAT_00552504, 0.0f},
-                {u0 - _DAT_00552504, v1 - _DAT_00552504, 0.0f},
+                {u0 - HalfScale, v0 - HalfScale, 0.0f},
+                {u1 - HalfScale, v0 - HalfScale, 0.0f},
+                {u1 - HalfScale, v1 - HalfScale, 0.0f},
+                {u0 - HalfScale, v1 - HalfScale, 0.0f},
             };
             for (int k = 0; k < 4; k++) {
                 float out[3];
                 Vector_Rotate(inp[k], rot_mat, out);
-                corners[k][0] = xScale * out[0] + _DAT_00552504;
-                corners[k][1] = out[1] + _DAT_00552504;
+                corners[k][0] = xScale * out[0] + HalfScale;
+                corners[k][1] = out[1] + HalfScale;
                 corners[k][2] = out[2];
             }
             Terrain_RenderQuad((float)icx + ti, (float)icy + tj, 1.0f, 1,

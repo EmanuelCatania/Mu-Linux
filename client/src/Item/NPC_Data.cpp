@@ -7,13 +7,13 @@
 // Lee NPCName.txt: "<Type> <idx> \"<Name>\"" por linea, hasta "end"/EOF.
 // GetToken (TextParser_GetToken) saltea el header "//..." y las comillas.
 //
-// Tabla en &DAT_07cf2000 (EditMonsterNumber = cantidad), stride 0x36 por entrada:
+// Tabla en &LegacyMonsterScript (EditMonsterNumber = cantidad), stride 0x36 por entrada:
 //   [0]     Type   = 1er token (columna 1 del archivo = entity type)
 //   [1..32] Name   = 3er token (columna 3; el 2do se saltea)
 void __cdecl NPCName_LoadTextData(const char *path)
 {
-    DAT_07d7806c = (FILE *)crt_fopen(path, DAT_005580ac);
-    if (!DAT_07d7806c) return;
+    BmdFileHandle = (FILE *)crt_fopen(path, FopenModeRb);
+    if (!BmdFileHandle) return;
 
     while (1) {
         int tok = TextParser_GetToken();                    // GetToken → Type token
@@ -36,5 +36,5 @@ void __cdecl NPCName_LoadTextData(const char *path)
         // DESVIACION (Fase 4, texto Unicode): el archivo puede venir en UTF-8 o en 1252.
         TextEngine::NormalizeTextFileInPlace(dst, 32);
     }
-    crt_fclose(DAT_07d7806c);
+    crt_fclose(BmdFileHandle);
 }

@@ -12,7 +12,7 @@
 // IDA (0x50F700):
 //
 //   v1 = fopen(FileName, "wt");
-//   v2 = &unk_7E0FFC8;
+//   v2 = &MacroText;
 //   do { fprintf(v1, "%s\n", v2); v2 += 256; } while ((int)v2 < (int)&ItemKey);
 //   return fclose(v1);
 //
@@ -21,7 +21,7 @@
 // UI_InGameMenu, al lado de SaveOptionsToServer97k (sub_50F7A0).
 //
 // Guard propio del port: el original no chequea el fopen y deferencia el NULL.
-void __cdecl FUN_0050f700(const char* map_name)
+void __cdecl SaveMacro(const char* map_name)
 {
     FILE* fp = Platform::GetFileSystem().Open(map_name, "wt");
     if (!fp) return;
@@ -41,17 +41,17 @@ static void SceneObject_StoreFloatBits(float& value, std::uint32_t bits)
 // at DAT_083A021C[cell]/DAT_083A0220[cell] (16x16 grid, 4-DWORD stride).
 //
 // Cálculo de celda (verbatim contra asm @ 0x4ff5a7):
-//   FLD [pos.x]  FMUL [DAT_00552d20]  __ftol  → grid_x
-//   FLD [pos.y]  FMUL [DAT_00552d20]  __ftol  → grid_y
-//   DAT_00552d20 = 6.25e-4f = 1/1600  (cell = 1600 unidades de mundo)
+//   FLD [pos.x]  FMUL [WorldToBucketGridBits]  __ftol  → grid_x
+//   FLD [pos.y]  FMUL [WorldToBucketGridBits]  __ftol  → grid_y
+//   WorldToBucketGridBits = 6.25e-4f = 1/1600  (cell = 1600 unidades de mundo)
 // __ftol usa el modo de redondeo actual (por defecto nearest-even), no
 // truncate-toward-zero. Para los mocks del login todos caen en (0,0)/(0,1).
 // Rechaza si grid_x<0 || grid_y<0 || grid_x>15 || grid_y>15.
 void* __cdecl CreateObject(int param_1, float* param_2, float* param_3, float param_4) {
     // __ftol implementa truncate-toward-zero (semántica de cast C de float→int),
     // no nearest-even: no usar lrintf (diverge en negativos).
-    int igx = (int)(param_2[0] * _DAT_00552d20);
-    int igy = (int)(param_2[1] * _DAT_00552d20);
+    int igx = (int)(param_2[0] * WorldToBucketGrid);
+    int igy = (int)(param_2[1] * WorldToBucketGrid);
     if (igx < 0 || igy < 0 || igx > 15 || igy > 15) return nullptr;
     BYTE  bVar4 = (BYTE)((char)igx * 0x10 + (char)igy);
     UINT  uVar2 = (UINT)bVar4;
@@ -233,12 +233,12 @@ lbl_skip_init:
     return puVar3;
 }
 // IDA: DeleteBug (0x004FFFA0)
-// Walk butterfly slot array (10 entries × 0x1BC stride at DAT_083a1218..DAT_083a1218+0x1158),
+// Walk butterfly slot array (10 entries × 0x1BC stride at ButterflyObjectPool..ButterflyObjectPool+0x1158),
 // clear active flag (slot[0]=0) on every slot whose owner field (slot+0xFC = DWORD index 63)
 // matches `Owner`. Each slot occupies 111 DWORDs (= 0x1BC bytes); we step in DWORD units.
 // Ported verbatim from IDA reference 0045C8C0_ChangeCharacterExt's helper.
 void __cdecl DeleteBug(intptr_t Owner) {
-    DWORD* Butterflies = (DWORD*)DAT_083a1218;
+    DWORD* Butterflies = (DWORD*)ButterflyObjectPool;
     for (int slot = 0; slot < 10; ++slot) {
         if (*(BYTE*)Butterflies) {
             if ((intptr_t)AsObject(Butterflies)->Owner == Owner) {
@@ -250,8 +250,8 @@ void __cdecl DeleteBug(intptr_t Owner) {
 }
 
 // IDA: CreateBug (0x004FFFD0)
-// Allocates a free slot in butterfly/effect array at DAT_083A1218 (stride 0x1BC, 10 entries up
-// to DAT_083A1218+0x1158). Initialises slot from owner entity (param_3) and world_pos (param_2).
+// Allocates a free slot in butterfly/effect array at ButterflyObjectPool (stride 0x1BC, 10 entries up
+// to ButterflyObjectPool+0x1158). Initialises slot from owner entity (param_3) and world_pos (param_2).
 // Per IDA: only spawns when owner class==390 OR Type==816.
 // Special cases: type 0x330(816)/0x331(817) → randomise spawn XY around owner pos.
 //                type 0xC3(195)/0x10B(267)  → set bug-color tint to 0.9 (0x3F666666 = "fff?").
@@ -262,11 +262,11 @@ void __cdecl CreateBug(int param_1, void *param_2_v, void *param_3_v, int param_
     intptr_t param_3 = (intptr_t)param_3_v;
     if ((*(short*)(param_3 + 2) == 0x186) || (param_1 == 0x330)) {
         // El original corta en 0x83A236F (fin del pool en el binario); acá el
-        // pool es DAT_083a1218: 10 slots de 0x1BC.
-        char *pcVar5 = DAT_083a1218;
+        // pool es ButterflyObjectPool: 10 slots de 0x1BC.
+        char *pcVar5 = ButterflyObjectPool;
         while (*pcVar5 != '\0') {
             pcVar5 += OBJECT_STRIDE;
-            if (pcVar5 >= DAT_083a1218 + 10 * OBJECT_STRIDE) return;
+            if (pcVar5 >= ButterflyObjectPool + 10 * OBJECT_STRIDE) return;
         }
         RenderFxSnapshots_New(pcVar5);
         *(DWORD *)&AsObject(pcVar5)->SubType   = param_4;

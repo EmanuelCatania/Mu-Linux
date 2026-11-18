@@ -50,37 +50,37 @@ void SaveObject(void *address, std::size_t size, bool registered=false) {
 // suprimen llamadas a creadores. Los sprites conservan su Capture/ReplayStep.
 void RenderDerivedState_Begin() {
     active=false; used=0; savedObjects.Reset();
-    const bool ready=SceneFlag==2 ? DAT_083a7c49!=0 :
-        SceneFlag==4 ? CharSelectSceneInitialized && DAT_05826cb0>50 :
-        SceneFlag==5 && DAT_083a7c10 && DAT_07e11d1c<=30;
+    const bool ready=SceneFlag==2 ? InitLogIn!=0 :
+        SceneFlag==4 ? CharSelectSceneInitialized && CurrentProtocolState>50 :
+        SceneFlag==5 && EnableMainRender && InputCooldownTicks<=30;
     if (!ready) return;
-    active=true; scene=SceneFlag; world=gMapManager.GetCurrentMap(); models=DAT_05828d58;
+    active=true; scene=SceneFlag; world=gMapManager.GetCurrentMap(); models=ModelsBase;
     // DESVIACION: los slots libres de personajes e items no se dibujan ni se
     // interpolan; copiar sólo los vivos.
-    if (DAT_07abf5d0) for (int slot=0; slot<400; ++slot) {
-        auto *character=(CHARACTER *)DAT_07abf5d0+slot;
+    if (CharactersClient) for (int slot=0; slot<400; ++slot) {
+        auto *character=(CHARACTER *)CharactersClient+slot;
         if (character->Object.Live) SaveObject(character,sizeof(CHARACTER));
     }
-    SaveObject(DAT_07abf050,sizeof(CHARACTER));
-    if (DAT_07e12840) for (int slot=0; slot<1000; ++slot) {
-        auto *item=(BYTE *)DAT_07e12840+slot*GROUND_ITEM_STRIDE+72;
+    SaveObject(CharSelPreviewEntity,sizeof(CHARACTER));
+    if (GroundItemPool) for (int slot=0; slot<1000; ++slot) {
+        auto *item=(BYTE *)GroundItemPool+slot*GROUND_ITEM_STRIDE+72;
         if (AsObject(item)->Live) SaveObject(item,sizeof(OBJECT));
     }
-    for (int slot=0; slot<kEffectPoolSize; ++slot) SaveObject(DAT_07b11670+slot*OBJECT_STRIDE,sizeof(OBJECT));
+    for (int slot=0; slot<kEffectPoolSize; ++slot) SaveObject(EffectPoolBase+slot*OBJECT_STRIDE,sizeof(OBJECT));
     for (int slot=0; slot<40; ++slot) SaveObject(g_WeatherSlotPool+slot*OBJECT_STRIDE,sizeof(OBJECT));
-    for (int slot=0; slot<10; ++slot) SaveObject(DAT_083a1218+slot*OBJECT_STRIDE,sizeof(OBJECT));
+    for (int slot=0; slot<10; ++slot) SaveObject(ButterflyObjectPool+slot*OBJECT_STRIDE,sizeof(OBJECT));
     // Los objetos del mapa se guardan al tocarlos (RenderDerivedState_SaveObject):
     // el dibujo sólo modifica los visibles y la interpolación los que se movieron.
     RenderFxSnapshots_SaveRenderState();
     if (models) Save((void *)models,ResourceTables::ModelCount()* BMD_STRIDE);
-    Save(DAT_05826e18,sizeof(DAT_05826e18));
+    Save(BoneQuaternionScratch,sizeof(BoneQuaternionScratch));
     Save(g_BoneScratch,sizeof(g_BoneScratch));
-    Save(&DAT_06989c9c,12*sizeof(float));
-    Save(&_DAT_005597c8,sizeof(_DAT_005597c8));
+    Save(&RootBoneMatrix,12*sizeof(float));
+    Save(&EntityLodScale,sizeof(EntityLodScale));
     Save(&ObjectSelect_Type,sizeof(ObjectSelect_Type));
     Save(&ObjectSelect_Angle,sizeof(ObjectSelect_Angle));
-    Save(&_DAT_07ea9530,sizeof(_DAT_07ea9530));
-    Save(&_DAT_07ea9534,sizeof(_DAT_07ea9534));
+    Save(&ItemRenderRotY,sizeof(ItemRenderRotY));
+    Save(&ItemRenderRotZ,sizeof(ItemRenderRotZ));
     Save(&ObjectSelect_HeadAngle,sizeof(ObjectSelect_HeadAngle));
     Save(&ObjectSelect_AnimationFrame,sizeof(ObjectSelect_AnimationFrame));
     Save(&ObjectSelect_PriorAnimationFrame,sizeof(ObjectSelect_PriorAnimationFrame));
@@ -101,7 +101,7 @@ void RenderDerivedState_Forget(const void *owner) {
 void RenderDerivedState_End() {
     if (!active) return;
     active=false;
-    if (scene!=SceneFlag || world!=gMapManager.GetCurrentMap() || models!=DAT_05828d58) return;
+    if (scene!=SceneFlag || world!=gMapManager.GetCurrentMap() || models!=ModelsBase) return;
     for (std::size_t i=0; i<used; ++i) {
         Block &block=blocks[i];
         if (!block.valid) continue;

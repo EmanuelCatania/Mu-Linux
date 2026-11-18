@@ -3,7 +3,7 @@
 #include "stdafx.h"
 #include "Game/PathContext.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -42,10 +42,10 @@ extern void MapFileDecrypt(BYTE* buf, int size);
 #endif
 
 
-// IDA: FUN_0043f2d0 @ 0x0043F2D0 — Pathfinder_Reset: frees + re-initialises A* context at DAT_05826df4.
+// IDA: FUN_0043f2d0 @ 0x0043F2D0 — Pathfinder_Reset: frees + re-initialises A* context at PathFindContext.
 // Despite the "Font_Reset" comment in functions.h, this is clearly the A* grid init.
 void __cdecl PathFinder_ResetContext(void) {
-    PathContext *ctx = DAT_05826df4;
+    PathContext *ctx = PathFindContext;
     if (ctx->Flags   != nullptr) { operator_delete(ctx->Flags);   ctx->Flags = nullptr; }
     if (ctx->Cost    != nullptr) { operator_delete(ctx->Cost);    ctx->Cost = nullptr; }
     if (ctx->ParentX != nullptr) { operator_delete(ctx->ParentX); ctx->ParentX = nullptr; }
@@ -54,7 +54,7 @@ void __cdecl PathFinder_ResetContext(void) {
     ctx->DirtyMax = -1;
     ctx->Width    = 0x100;
     ctx->Height   = 0x100;
-    ctx->Walk     = reinterpret_cast<unsigned char *>(&DAT_0838bc70);
+    ctx->Walk     = reinterpret_cast<unsigned char *>(&TerrainWallFlags);
     ctx->Size     = 0x10000;
     ctx->Flags    = static_cast<unsigned char *>(operator_new(0x10000));
     ctx->Cost     = static_cast<int *>(operator_new(ctx->Size * sizeof(int)));

@@ -18,12 +18,12 @@ void __cdecl CreateArrow(intptr_t c, intptr_t o, intptr_t to, WORD SkillIndex, W
     int weaponType0 = (int)AsCharacter(c)->Weapon[0].Type;  // Weapon[0].Type
     int weaponType1 = (int)AsCharacter(c)->Weapon[1].Type;  // Weapon[1].Type
 
-    bool isHero = (reinterpret_cast<const void*>(static_cast<std::uintptr_t>(c)) == DAT_07abf5d8);
+    bool isHero = (reinterpret_cast<const void*>(static_cast<std::uintptr_t>(c)) == Hero);
 
     if (isHero) {
         // anti-tamper hash table — skipped (CharacterMachine encrypt/decrypt/lookup)
         // Read weapon types from CharacterMachine instead
-        const BYTE* cm = static_cast<const BYTE*>(DAT_07cf1ffc);
+        const BYTE* cm = static_cast<const BYTE*>(CharacterMachinePtr);
         // The projectile switch uses CharacterMachine+536; its companion
         // trail switch uses +604.
         weaponType0 = (int)*(short*)(cm + 0x218);
@@ -178,8 +178,8 @@ void __cdecl CreateArrow(intptr_t c, intptr_t o, intptr_t to, WORD SkillIndex, W
 void __cdecl CreateArrows(intptr_t c, intptr_t o, intptr_t to, WORD SkillIndex, WORD Skill, WORD SKKey) {
     // 0x00474BD0 — Multi-arrow skill handler.
     // SKKey '3' or '4': single arrow + increment arrow counter in CharacterMachine.
-    // Skill 1: triple shot (center + 2 angle offsets via _DAT_00552834 / _DAT_0055284c).
-    // Skill 2: five-way shot with 4 additional angle offsets via _DAT_00552ab0 / _DAT_00552584.
+    // Skill 1: triple shot (center + 2 angle offsets via 15.0f / 30.0f).
+    // Skill 2: five-way shot with 4 additional angle offsets via ArrowAngleOffsetSmall / ArrowAngleOffsetLarge.
     // Anti-tamper hash table operations surround the arrow counter increment — skipped.
 
     // CreateArrows @ 0x474BD0 adjusts Object.Direction at +36 around the
@@ -193,8 +193,8 @@ void __cdecl CreateArrows(intptr_t c, intptr_t o, intptr_t to, WORD SkillIndex, 
 
         // anti-tamper hash table — skipped (encrypt CharacterMachine)
         // Increment the native projectile serial at CharacterMachine +1408.
-        // CharacterMachine = DAT_07cf1ffc
-        char* cm = static_cast<char*>(DAT_07cf1ffc);
+        // CharacterMachine = CharacterMachinePtr
+        char* cm = static_cast<char*>(CharacterMachinePtr);
         cm[1408] = cm[1408] + 1;
         // anti-tamper hash table — skipped (decrypt CharacterMachine)
     }
@@ -204,31 +204,31 @@ void __cdecl CreateArrows(intptr_t c, intptr_t o, intptr_t to, WORD SkillIndex, 
 
         if ((char)Skill == 1) {
             // Triple shot: center already created, now +offset and -offset
-            *pAngleZ += _DAT_00552834;
+            *pAngleZ += 15.0f;
             CreateArrow(c, o, to, SkillIndex, 1, SKKey);
-            *pAngleZ -= _DAT_0055284c;  // goes to negative offset from original
+            *pAngleZ -= 30.0f;  // goes to negative offset from original
             CreateArrow(c, o, to, SkillIndex, 1, SKKey);
-            *pAngleZ += _DAT_00552834;  // restore to original angle
+            *pAngleZ += 15.0f;  // restore to original angle
 
             // anti-tamper hash table — skipped (encrypt CharacterMachine)
-            char* cm = static_cast<char*>(DAT_07cf1ffc);
+            char* cm = static_cast<char*>(CharacterMachinePtr);
             cm[1408] = cm[1408] + 1;
             // anti-tamper hash table — skipped (decrypt CharacterMachine)
         }
         else if ((char)Skill == 2) {
             // Five-way shot: center already created, now 4 additional angles
-            *pAngleZ += _DAT_00552ab0;
+            *pAngleZ += ArrowAngleOffsetSmall;
             CreateArrow(c, o, to, SkillIndex, 2, SKKey);
-            *pAngleZ += _DAT_00552ab0;
+            *pAngleZ += ArrowAngleOffsetSmall;
             CreateArrow(c, o, to, SkillIndex, 2, SKKey);
-            *pAngleZ -= _DAT_00552584;   // jump to negative side
+            *pAngleZ -= ArrowAngleOffsetLarge;   // jump to negative side
             CreateArrow(c, o, to, SkillIndex, 2, SKKey);
-            *pAngleZ -= _DAT_00552ab0;
+            *pAngleZ -= ArrowAngleOffsetSmall;
             CreateArrow(c, o, to, SkillIndex, 2, SKKey);
-            *pAngleZ += _DAT_00552834;   // restore to original angle
+            *pAngleZ += 15.0f;   // restore to original angle
 
             // anti-tamper hash table — skipped (encrypt CharacterMachine)
-            char* cm = static_cast<char*>(DAT_07cf1ffc);
+            char* cm = static_cast<char*>(CharacterMachinePtr);
             cm[1408] = cm[1408] + 1;
             // anti-tamper hash table — skipped (decrypt CharacterMachine)
         }

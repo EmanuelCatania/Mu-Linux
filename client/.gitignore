@@ -13,6 +13,15 @@ obj/
 /build-*/
 /out/
 
+# Ramas de trabajo locales: cada carpeta de /branches/ es un arbol aparte con
+# su propio repo anidado (p. ej. /branches/test/src). No se versionan aqui.
+/branches/
+# Backups del port: copias historicas del source, nunca se suben.
+/bkp/
+
+# Deploy local del binario de prueba (atajo de conveniencia, no del port).
+bin/Client/deploy-test-client.bat
+
 bin/Client/main.exe
 bin/Client/mu-linux.sh
 bin/Client/main.pdb

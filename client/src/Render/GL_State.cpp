@@ -4,25 +4,25 @@
 //
 // These functions configure the OpenGL blending state for particle/effect
 // rendering. Each one is a no-op if the blend mode is already current
-// (cached in DAT_083a412c).
+// (cached in BlendModeCache).
 //
 // IMPORTANT: IDA shows these wrappers do not toggle GL_DEPTH_TEST. They only
 // switch blend func, cull face, depth mask, alpha test, texture-2D, and fog.
 //
 // Sub-functions (per 5.2 source helpers EnableCullFace/DisableCullFace/DepthMask):
-//   GL_EnableDepthWrites — EnableDepthMask   (glDepthMask(GL_TRUE),  cache DAT_083a42e8)
+//   GL_EnableDepthWrites — EnableDepthMask   (glDepthMask(GL_TRUE),  cache DepthMaskCache)
 //   GL_DisableDepthWrites — DisableDepthMask  (glDepthMask(GL_FALSE))
-//   GL_EnableCullFace — EnableCullFace    (glEnable (GL_CULL_FACE=0xb44), cache DAT_083a411c)
+//   GL_EnableCullFace — EnableCullFace    (glEnable (GL_CULL_FACE=0xb44), cache CullFaceEnableCache)
 //   GL_DisableCullFace — DisableCullFace   (glDisable(GL_CULL_FACE))
 // 2D blend setters (types 2/3/4) call Disable*; 3D/reset setters (type 1 / reset)
 // call Enable*, mirroring the Main 5.2 pattern where every blend-mode wrapper
 // also toggles cull-face + depth-mask for the surfaces it's meant for.
 //
 // Globals:
-//   DAT_083a412c  — current cached blend mode (int)
-//   DAT_083a411d  — alpha-test enabled cache
-//   DAT_083a4125  — texture-2D enabled cache
-//   DAT_083a42ea  — fog enabled cache
+//   BlendModeCache  — current cached blend mode (int)
+//   AlphaTestEnableCache  — alpha-test enabled cache
+//   Texture2DEnableCache  — texture-2D enabled cache
+//   FogEnable  — fog enabled cache
 //
 // OpenGL enum constants:
 //   0xbe2 = GL_BLEND
@@ -41,22 +41,22 @@ void GL_SetBlendAdditive(void)
 
 {
     if(Materials::Select(Materials::Preset::Add))return;
-  if (DAT_083a412c != 3) {
-    DAT_083a412c = 3;
+  if (BlendModeCache != 3) {
+    BlendModeCache = 3;
     Gfx::Enable(Gfx::Cap::Blend);
     Gfx::BlendFunc(Gfx::Factor::One, Gfx::Factor::One);
   }
   GL_DisableCullFace();
   GL_DisableDepthWrites();
-  if (DAT_083a411d != '\0') {
-    DAT_083a411d = '\0';
+  if (AlphaTestEnableCache != '\0') {
+    AlphaTestEnableCache = '\0';
     Gfx::Disable(Gfx::Cap::AlphaTest);
   }
-  if (DAT_083a4125 == '\0') {
-    DAT_083a4125 = '\x01';
+  if (Texture2DEnableCache == '\0') {
+    Texture2DEnableCache = '\x01';
     Gfx::Enable(Gfx::Cap::Texture2D);
   }
-  if (DAT_083a42ea != '\0') {
+  if (FogEnable != '\0') {
     Gfx::Disable(Gfx::Cap::Fog);
   }
   return;
@@ -67,22 +67,22 @@ void GL_SetBlendSrcAlpha(void)
 
 {
     if(Materials::Select(Materials::Preset::Attenuate))return;
-  if (DAT_083a412c != 4) {
-    DAT_083a412c = 4;
+  if (BlendModeCache != 4) {
+    BlendModeCache = 4;
     Gfx::Enable(Gfx::Cap::Blend);
     Gfx::BlendFunc(Gfx::Factor::Zero, Gfx::Factor::OneMinusSrcColor);
   }
   GL_DisableCullFace();
   GL_DisableDepthWrites();
-  if (DAT_083a411d != '\0') {
-    DAT_083a411d = '\0';
+  if (AlphaTestEnableCache != '\0') {
+    AlphaTestEnableCache = '\0';
     Gfx::Disable(Gfx::Cap::AlphaTest);
   }
-  if (DAT_083a4125 == '\0') {
-    DAT_083a4125 = '\x01';
+  if (Texture2DEnableCache == '\0') {
+    Texture2DEnableCache = '\x01';
     Gfx::Enable(Gfx::Cap::Texture2D);
   }
-  if (DAT_083a42ea != '\0') {
+  if (FogEnable != '\0') {
     Gfx::Enable(Gfx::Cap::Fog);
   }
   return;
@@ -90,17 +90,17 @@ void GL_SetBlendSrcAlpha(void)
 
 
 // FUN_00511480 @ 0x00511480 — GL_BindTextureSlot
-// Binds texture slot param_1 (index into DAT_083a7ccc table, stride 0xe).
+// Binds texture slot param_1 (index into BitmapsGlHandle table, stride 0xe).
 // Negative param_1: binds -param_1 directly as a GL texture handle.
-// Caches last-bound slot in DAT_00561574 to avoid redundant rebinds.
+// Caches last-bound slot in BoundTextureSlotCache to avoid redundant rebinds.
 void __cdecl GL_BindTextureSlot(int param_1)
 {
   if(Materials::BindTexture({param_1}))return;
-  if (DAT_00561574 != param_1) {
-    DAT_00561574 = param_1;
+  if (BoundTextureSlotCache != param_1) {
+    BoundTextureSlotCache = param_1;
     if (-1 < param_1) {
       ResourceTables::EnsureTextures(std::size_t(param_1)+1);
-      DWORD texture = (&DAT_083a7ccc)[param_1 * TEXTURE_STRIDE_DWORDS];
+      DWORD texture = (&BitmapsGlHandle)[param_1 * TEXTURE_STRIDE_DWORDS];
 
       // Diagnóstico sin efectos laterales: la instancia puede existir y aun
       // así resultar invisible si el slot no recibió textura/dimensiones.
@@ -131,8 +131,8 @@ void __cdecl GL_BindTextureSlot(int param_1)
 void __cdecl GL_SetBlendSrcOver(char param_1)
 {
     if(Materials::Select(Materials::Preset::Alpha,param_1 != 0))return;
-  if (DAT_083a412c != 2) {
-    DAT_083a412c = 2;
+  if (BlendModeCache != 2) {
+    BlendModeCache = 2;
     Gfx::Enable(Gfx::Cap::Blend);
     Gfx::BlendFunc(Gfx::Factor::SrcAlpha, Gfx::Factor::OneMinusSrcAlpha);
   }
@@ -140,15 +140,15 @@ void __cdecl GL_SetBlendSrcOver(char param_1)
   if (param_1 != '\0') {
     GL_EnableDepthWrites();
   }
-  if (DAT_083a411d == '\0') {
-    DAT_083a411d = '\x01';
+  if (AlphaTestEnableCache == '\0') {
+    AlphaTestEnableCache = '\x01';
     Gfx::Enable(Gfx::Cap::AlphaTest);
   }
-  if (DAT_083a4125 == '\0') {
-    DAT_083a4125 = '\x01';
+  if (Texture2DEnableCache == '\0') {
+    Texture2DEnableCache = '\x01';
     Gfx::Enable(Gfx::Cap::Texture2D);
   }
-  if (DAT_083a42ea != '\0') {
+  if (FogEnable != '\0') {
     Gfx::Enable(Gfx::Cap::Fog);
   }
   return;
@@ -212,7 +212,7 @@ void GL_EndOpenGL(void)
 
 
 // FUN_005142D0 @ 0x005142D0 — GL_SetFogHandle (legacy export: SetErrorMessage)
-// Manages fog texture handle slots DAT_083a7c24/28.
+// Manages fog texture handle slots InGameUiState/28.
 // param_1 == 0: pop current into 0x24, clear 0x28.
 // param_1 != 0 and 0x24 already set: write into 0x28.
 // param_1 != 0 and 0x24 empty: write into 0x24.
@@ -221,17 +221,17 @@ void __cdecl SetErrorMessage(int param_1)
 {
   undefined4 uVar1;
 
-  uVar1 = DAT_083a7c28;
+  uVar1 = InGameUiStateNext;
   if (param_1 == 0) {
-    DAT_083a7c28 = 0;
-    DAT_083a7c24 = uVar1;
+    InGameUiStateNext = 0;
+    InGameUiState = uVar1;
     return;
   }
-  if (DAT_083a7c24 != 0) {
-    DAT_083a7c28 = param_1;
+  if (InGameUiState != 0) {
+    InGameUiStateNext = param_1;
     return;
   }
-  DAT_083a7c24 = param_1;
+  InGameUiState = param_1;
   return;
 }
 
@@ -242,21 +242,21 @@ void __cdecl SetErrorMessage(int param_1)
 void GL_ResetState(void)
 {
     if(Materials::Select(Materials::Preset::Opaque))return;
-  if (DAT_083a412c != 0) {
-    DAT_083a412c = 0;
+  if (BlendModeCache != 0) {
+    BlendModeCache = 0;
     Gfx::Disable(Gfx::Cap::Blend);
   }
   GL_EnableCullFace();
   GL_EnableDepthWrites();
-  if (DAT_083a411d != '\0') {
-    DAT_083a411d = '\0';
+  if (AlphaTestEnableCache != '\0') {
+    AlphaTestEnableCache = '\0';
     Gfx::Disable(Gfx::Cap::AlphaTest);
   }
-  if (DAT_083a4125 == '\0') {
-    DAT_083a4125 = '\x01';
+  if (Texture2DEnableCache == '\0') {
+    Texture2DEnableCache = '\x01';
     Gfx::Enable(Gfx::Cap::Texture2D);
   }
-  if (DAT_083a42ea != '\0') {
+  if (FogEnable != '\0') {
     Gfx::Enable(Gfx::Cap::Fog);
   }
   return;
@@ -267,22 +267,22 @@ void GL_ResetState(void)
 // Sets blend mode GL_ZERO/GL_SRC_COLOR for lightmap overlay rendering.
 void GL_EnableLightMap(void) {
     if(Materials::Select(Materials::Preset::LightMap))return;
-    if (DAT_083a412c != 1) {
-        DAT_083a412c = 1;
+    if (BlendModeCache != 1) {
+        BlendModeCache = 1;
         Gfx::Enable(Gfx::Cap::Blend);
         Gfx::BlendFunc(Gfx::Factor::Zero, Gfx::Factor::SrcColor);
     }
     GL_EnableCullFace();
     GL_EnableDepthWrites();
-    if (DAT_083a411d != '\0') {
-        DAT_083a411d = '\0';
+    if (AlphaTestEnableCache != '\0') {
+        AlphaTestEnableCache = '\0';
         Gfx::Disable(Gfx::Cap::AlphaTest);  // IDA EnableLightMap 0x511890
     }
-    if (DAT_083a4125 == '\0') {
-        DAT_083a4125 = '\x01';
+    if (Texture2DEnableCache == '\0') {
+        Texture2DEnableCache = '\x01';
         Gfx::Enable(Gfx::Cap::Texture2D);
     }
-    if (DAT_083a42ea != '\0') {
+    if (FogEnable != '\0') {
         Gfx::Enable(Gfx::Cap::Fog);         // FogEnable does not enable fixed-function lighting
     }
 }
@@ -297,12 +297,12 @@ int GL_CaptureScreenshot(void)
   int iVar1;
   undefined *puVar2;
 
-  DAT_083a42f4 = 1;
+  ScreenshotActiveFlag = 1;
   puVar2 = (undefined*)operator_new(gWindow.GetHeight() * gWindow.GetRealWidth() * 3);
   Gfx::ReadPixelsRGB(0, 0, gWindow.GetRealWidth(), gWindow.GetHeight(), puVar2);
   WriteJpeg((const char*)&GrabFileName,gWindow.GetRealWidth(),gWindow.GetHeight(),puVar2,100);
   operator_delete(puVar2);
-  iVar1 = DAT_083a42f0 + 1;
-  DAT_083a42f0 = iVar1 % 10000;
+  iVar1 = ScreenshotCounter + 1;
+  ScreenshotCounter = iVar1 % 10000;
   return iVar1 / 10000;
 }

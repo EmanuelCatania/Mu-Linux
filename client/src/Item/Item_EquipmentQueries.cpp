@@ -24,8 +24,8 @@ int __stdcall Item_FindElfWeaponInventorySlot(void) {
     //   CharacterMachine + 604 (slot 1) -> ARCO     (128-134, 145)
     // y la municion va al slot que queda libre: Arrows (143) con arco, Bolts
     // (135) con ballesta.
-    const char* const cmBytes = (const char*)(uintptr_t)DAT_07cf1ffc;
-    const char* const caBytes = (const char*)(uintptr_t)DAT_07cf1ff4;
+    const char* const cmBytes = (const char*)(uintptr_t)CharacterMachinePtr;
+    const char* const caBytes = (const char*)(uintptr_t)CharacterAttributePtr;
     if (!cmBytes || !caBytes)
         return -1;
 
@@ -45,13 +45,13 @@ int __stdcall Item_FindElfWeaponInventorySlot(void) {
         weaponGroup = 135;                                 // ballesta -> Bolts
 
 
-    // Scan equipment table from DAT_07ea9504 downward (stride 0x11 dwords = 0x44 bytes per slot)
+    // Scan equipment table from InventoryGridEnd downward (stride 0x11 dwords = 0x44 bytes per slot)
     // 8 rows x 8 columns, looking for first slot matching weaponGroup with durability > 0
     //
     // El original corta con `if ((int)piRow < 0x7ea9328) return -1;` (dirección
     // absoluta del binario); acá es un contador explícito de 8 columnas
     // ((0x7EA9504 - 0x7EA9328) / 68 + 1 = 8), con `col` de 7 a 0.
-    int* piRow = &DAT_07ea9504;
+    int* piRow = &InventoryGridEnd;
     int col = 7;
     for (int outer = 0; outer < 8; ++outer) {
         int slotIdx = col + 0x38;
@@ -87,7 +87,7 @@ int __stdcall Item_CountElfWeaponInventorySlots(void) {
 }
 
 // FUN_00482e40 @ 0x00482E40 (~109 lines) — count equipped items of weapon group
-// param_1: 0=right, 1=left, 2=crossbow. Reads DAT_00559c60/c64/c68.
+// param_1: 0=right, 1=left, 2=crossbow. Reads QKeyItemType/c64/c68.
 // Scans 8x4 inventory grid counting matching weapon types.
 // IDA: FUN_00482e40
 int __cdecl Item_CountWeaponGroupItems(int a1)
@@ -106,8 +106,8 @@ int __cdecl Item_CountWeaponGroupItems(int a1)
   {
     if ( a1 == 1 )
     {
-      v2 = DAT_00559c64;
-      switch ( DAT_00559c64 )
+      v2 = WKeyItemType;
+      switch ( WKeyItemType )
       {
         case 456:
           goto LABEL_17;
@@ -116,7 +116,7 @@ int __cdecl Item_CountWeaponGroupItems(int a1)
         case 468:
           goto LABEL_16;
         default:
-          if ( DAT_00559c64 >= 448 && DAT_00559c64 <= 451 )
+          if ( WKeyItemType >= 448 && WKeyItemType <= 451 )
           {
             goto LABEL_20;
           }
@@ -125,17 +125,17 @@ int __cdecl Item_CountWeaponGroupItems(int a1)
     }
     if ( a1 == 2 )
     {
-      v2 = DAT_00559c68;
+      v2 = EKeyItemType;
       // IDA: `dword_559C68 >= 457 && (dword_559C68 <= 458 || dword_559C68 == 468)`
       // o sea {457, 458, 468}; el port se habia comido el 458.
-      if ( DAT_00559c68 >= 457 && (DAT_00559c68 <= 458 || DAT_00559c68 == 468) )
+      if ( EKeyItemType >= 457 && (EKeyItemType <= 458 || EKeyItemType == 468) )
       {
-        v3 = DAT_00559c68;
+        v3 = EKeyItemType;
         v1 = 1;
       }
-      else if ( DAT_00559c68 < 448 || DAT_00559c68 > 451 )
+      else if ( EKeyItemType < 448 || EKeyItemType > 451 )
       {
-        if ( DAT_00559c68 < 452 || DAT_00559c68 > 454 )
+        if ( EKeyItemType < 452 || EKeyItemType > 454 )
         {
           v2 = 456;
           v3 = 456;
@@ -161,8 +161,8 @@ LABEL_13:
   }
   else
   {
-    v2 = DAT_00559c60;
-    switch ( DAT_00559c60 )
+    v2 = QKeyItemType;
+    switch ( QKeyItemType )
     {
       case 0x1C8:
         goto LABEL_17;
@@ -174,7 +174,7 @@ LABEL_17:
         v3 = v2;
         break;
       default:
-        if ( DAT_00559c60 < 452 || DAT_00559c60 > 454 )
+        if ( QKeyItemType < 452 || QKeyItemType > 454 )
         {
 LABEL_20:
           v2 = 451;
@@ -196,7 +196,7 @@ LABEL_20:
   }
   do
   {
-    v5 = (int *)&DAT_07ea9504;
+    v5 = (int *)&InventoryGridEnd;
     int columns = 8;
     do
     {

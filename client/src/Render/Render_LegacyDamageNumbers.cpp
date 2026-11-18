@@ -38,7 +38,7 @@ extern void __cdecl operator_delete(void* ptr);
 
 // RenderPoints @ 0x00479330 — RenderPoints (damage popup renderer)
 //
-// Itera el pool DAT_07c80110[100 × 0x70] de damage popups (poblado por
+// Itera el pool DamagePointPool[100 × 0x70] de damage popups (poblado por
 // CreatePoint en Net_Process case 0x15 / ReceiveAttackDamage). Para cada
 // slot activo llama a RenderNumber con la posición de mundo, el valor, el
 // color del slot y alpha = lifetime * 0.4.
@@ -136,7 +136,7 @@ void __cdecl RenderPoints(int, int, int, int)
     GL_DisableDepthTest();                    // DisableDepthTest
 
     for (int i = 0; i < static_cast<int>(kDamagePointCount); ++i) {
-        DamagePoint& point = DAT_07c80110[i];
+        DamagePoint& point = DamagePointPool[i];
         if (!point.Active) continue;
 
         RenderPose pose;

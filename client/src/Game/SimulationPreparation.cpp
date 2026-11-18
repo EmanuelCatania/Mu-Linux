@@ -56,14 +56,14 @@ void CaptureCamera() {
     camera.scene = SceneFlag; camera.world = gMapManager.GetCurrentMap();
     memcpy(camera.matrix, CameraMatrix, sizeof(camera.matrix));
     memcpy(camera.origin, CameraRayOriginX_arr, sizeof(camera.origin));
-    memcpy(camera.target, &DAT_083a4110, sizeof(camera.target));
+    memcpy(camera.target, &MouseRayEndPoint, sizeof(camera.target));
     CapturePose(camera);
     camera.mode=CameraTopViewEnabled ? 1 : 0;
     camera.centerX = ViewportCenterX; camera.centerY = ViewportCenterY;
     camera.width = OpenglWindowWidth; camera.height = OpenglWindowHeight;
     camera.x = OpenglWindowX; camera.y = OpenglWindowY;
-    camera.projection[0] = _DAT_083a42a4; camera.projection[1] = _DAT_083a42a8;
-    camera.projectionBits[0] = DAT_083a42a4; camera.projectionBits[1] = DAT_083a42a8;
+    camera.projection[0] = PerspectiveScaleX; camera.projection[1] = PerspectiveScaleY;
+    camera.projectionBits[0] = PerspectiveScaleXBits; camera.projectionBits[1] = PerspectiveScaleYBits;
     camera.centerYFlip = ScreenCenterYFlip;
 }
 
@@ -72,7 +72,7 @@ void PrepareCamera() {
         // DESVIACION: cámara y suavizado avanzan una vez por paso de 40 ms.
         MoveMainCamera();
         float origin[3] = {};
-        if (DAT_07abf5d8) memcpy(origin, AsObject(DAT_07abf5d8)->Position, sizeof(origin));
+        if (Hero) memcpy(origin, AsObject(Hero)->Position, sizeof(origin));
         const int width = gWindow.IsWide() ? 640 : GetScreenWidth();
         GL_BeginViewport(0, 0, width, 48);
         Camera_SetupFrustum(gWindow.ViewportFraction((int)width), origin);
@@ -86,14 +86,14 @@ void PrepareCamera() {
     }
     // Se reutiliza la preparación GL/CPU existente, sin comandos de dibujo.
     // Los pushes se balancean aquí; no queda una pasada abierta entre ticks.
-    Camera_BuildMouseRay(DAT_083a427c, DAT_083a4278, (float *)&DAT_083a4110);
+    Camera_BuildMouseRay(MouseX, MouseY, (float *)&MouseRayEndPoint);
     CaptureCamera();
     GL_EndOpenGL();
 }
 
 void PrepareItems() {
     if (SceneFlag != 5 || CameraTopViewEnabled) return;
-    BYTE *items = (BYTE *)DAT_07e12840;
+    BYTE *items = (BYTE *)GroundItemPool;
     for (int slot = 0; slot < 1000; ++slot) {
         BYTE *base = items + slot * GROUND_ITEM_STRIDE;
         if (!base[72]) continue;
@@ -110,8 +110,8 @@ void PrepareItems() {
         }
         if (type < 0 || type >= 1200) continue;
         LooseWingVisuals_TickGround((intptr_t)&o);
-        MaterialVisuals_PrepareObject(&o,o.Type,false,o.Alpha>_DAT_005524f8 && !*((BYTE *)&o+140));
-        float point[3] = { o.Position[0], o.Position[1], o.Position[2] + _DAT_0055284c };
+        MaterialVisuals_PrepareObject(&o,o.Type,false,o.Alpha>0.01f && !*((BYTE *)&o+140));
+        float point[3] = { o.Position[0], o.Position[1], o.Position[2] + 30.0f };
         int x, y;
         Camera_ProjectWorldToScreen(point, &x, &y);
         *(short *)(base + 164) = (short)x;
@@ -121,17 +121,17 @@ void PrepareItems() {
 
 void PrepareCharacter(CHARACTER &c) {
     OBJECT &o = c.Object;
-    void *model = (void *)(DAT_05828d58 + o.Type * BMD_STRIDE);
+    void *model = (void *)(ModelsBase + o.Type * BMD_STRIDE);
     if (*(short *)((char *)model + 0x26) == 0) return;
     // DESVIACION: la sincronización del equipo puede cambiar piezas/acción y
     // liberar tela. Debe preceder a su pose SIM y no ejecutarse desde el draw.
-    if (SceneFlag == 5 && (void *)&c == (void *)DAT_07abf5d8) {
+    if (SceneFlag == 5 && (void *)&c == (void *)Hero) {
         HeroEquipWatchdog(&c);
-        model = (void *)(DAT_05828d58 + o.Type * BMD_STRIDE);
+        model = (void *)(ModelsBase + o.Type * BMD_STRIDE);
     }
     char context[sizeof(BMD)];
     memcpy(context, model, sizeof(context));
-    if ((void *)&c == (void *)DAT_07abf5d8 && SceneFlag == 5) o.Visible = 1;
+    if ((void *)&c == (void *)Hero && SceneFlag == 5) o.Visible = 1;
     ObjectPose_PrepareSimulation(AsObject(&c), 1);
     ObjectPose_TickMeshEvents(AsObject(&c), model,
         o.EnableBoneMatrix ? (float *)o.BoneMatrices : (float *)g_BoneScratch, 1);
@@ -139,8 +139,8 @@ void PrepareCharacter(CHARACTER &c) {
         o.EnableBoneMatrix ? (float *)o.BoneMatrices : (float *)g_BoneScratch, 1);
     MaterialVisuals_TickObjectDraw(&o);
     CharacterCloth_Tick(&c);
-    const int slot = (int)(((uintptr_t)&c - (uintptr_t)DAT_07abf5d0) / sizeof(CHARACTER));
-    const bool hero = (void *)&c == (void *)DAT_07abf5d8 && SceneFlag == 5;
+    const int slot = (int)(((uintptr_t)&c - (uintptr_t)CharactersClient) / sizeof(CHARACTER));
+    const bool hero = (void *)&c == (void *)Hero && SceneFlag == 5;
     const int highlighted = !hero && (slot == SelectedCharacter || slot == SelectedNpc);
     CharacterEffectScratch effects;
     Equipment_BeginCharacter(&c);
@@ -159,8 +159,8 @@ void PrepareCharacter(CHARACTER &c) {
             PART_t &piece = c.BodyPart[part];
             if (piece.Type == -1) continue;
             const int type = gContentCatalog.EntityDrawModel(&c, piece.Type);
-            if (type != 707 || o.Alpha <= _DAT_005524f8) continue;
-            void *pants = (void *)(DAT_05828d58 + type * BMD_STRIDE);
+            if (type != 707 || o.Alpha <= 0.01f) continue;
+            void *pants = (void *)(ModelsBase + type * BMD_STRIDE);
             memcpy(context, pants, sizeof(context));
             *(float *)((char *)pants + 0x68 + BMD_FIELD_SHIFT) = o.Scale;
             memcpy((char *)pants + 0x6c + BMD_FIELD_SHIFT, o.Position, sizeof(o.Position));
@@ -171,9 +171,9 @@ void PrepareCharacter(CHARACTER &c) {
 }
 
 bool SceneReady() {
-    if (SceneFlag == 2) return DAT_083a7c49 != 0;
-    if (SceneFlag == 4) return CharSelectSceneInitialized != 0 && DAT_05826cb0 > 50;
-    return SceneFlag == 5 && DAT_083a7c10 != 0 && DAT_07e11d1c <= 30;
+    if (SceneFlag == 2) return InitLogIn != 0;
+    if (SceneFlag == 4) return CharSelectSceneInitialized != 0 && CurrentProtocolState > 50;
+    return SceneFlag == 5 && EnableMainRender != 0 && InputCooldownTicks <= 30;
 }
 }
 
@@ -196,47 +196,47 @@ void Simulation_PrepareStep()
     WorldEffects_BeginStep();
     MoltSilhouette_BeginStep();
     camera.valid=false;
-    if (!SceneReady() || !DAT_07abf5d0 || !DAT_05828d58) return;
+    if (!SceneReady() || !CharactersClient || !ModelsBase) return;
     if (SceneFlag==4) SceneCharSelect_PrepareLighting();
     PrepareCamera();
     // BMD_Animation usa estos temporales compartidos; la publicación SIM sólo
     // conserva sus matrices de salida, sin filtrar contexto a otros callers.
-    char quaternions[sizeof(DAT_05826e18)];
+    char quaternions[sizeof(BoneQuaternionScratch)];
     char bonesScratch[sizeof(g_BoneScratch)];
     float root[12];
-    memcpy(quaternions, DAT_05826e18, sizeof(quaternions));
+    memcpy(quaternions, BoneQuaternionScratch, sizeof(quaternions));
     memcpy(bonesScratch, g_BoneScratch, sizeof(bonesScratch));
-    memcpy(root, &DAT_06989c9c, sizeof(root));
-    const float lod = _DAT_005597c8;
+    memcpy(root, &RootBoneMatrix, sizeof(root));
+    const float lod = EntityLodScale;
     Terrain_TickRenderWater();
     Terrain_PrepareSimulation();
     if (SceneFlag == 5) Particle_PrepareRender();
     Fauna_TickSprites();
     for (int slot = 0; slot < 400; ++slot) {
-        CHARACTER &c = ((CHARACTER *)DAT_07abf5d0)[slot];
+        CHARACTER &c = ((CHARACTER *)CharactersClient)[slot];
         const OBJECT &o = c.Object;
-        if (!o.Live || (!o.Visible && !((void *)&c == (void *)DAT_07abf5d8 && SceneFlag == 5))) continue;
+        if (!o.Live || (!o.Visible && !((void *)&c == (void *)Hero && SceneFlag == 5))) continue;
         PrepareCharacter(c);
     }
     // El panel de creación dibuja otra CHARACTER fuera del pool de 400.
-    if (SceneFlag == 4 && DAT_083a7c14 > 26 && DAT_083a7c14 < 29 && DAT_005616a4 >= 0) {
-        CHARACTER &preview = *(CHARACTER *)DAT_07abf050;
+    if (SceneFlag == 4 && LoginSubState > 26 && LoginSubState < 29 && AnimatedDialogY >= 0) {
+        CHARACTER &preview = *(CHARACTER *)CharSelPreviewEntity;
         preview.Object.Angle[0] = 0.0f;
         preview.Object.Angle[1] = 5.0f;
         preview.Object.Scale = 1.0f;
         PrepareCharacter(preview);
     }
     // IDA: la pasada de picking del editor sigue a los personajes.
-    if (SceneFlag == 5 && DAT_07e11d30 != 0) RenderTerrain(1);
+    if (SceneFlag == 5 && EditFlag != 0) RenderTerrain(1);
     EffectPool_TickRenderState();
-    memcpy(DAT_05826e18, quaternions, sizeof(quaternions));
+    memcpy(BoneQuaternionScratch, quaternions, sizeof(quaternions));
     memcpy(g_BoneScratch, bonesScratch, sizeof(bonesScratch));
-    memcpy(&DAT_06989c9c, root, sizeof(root));
-    _DAT_005597c8 = lod;
+    memcpy(&RootBoneMatrix, root, sizeof(root));
+    EntityLodScale = lod;
     PrepareItems();
     // DESVIACION: selección una vez tras cada paso, también al recuperar
     // demoras. El input siguiente consume estos targets con la latencia previa.
-    if (SceneFlag == 5 || (SceneFlag == 4 && DAT_005616b0 == -1))
+    if (SceneFlag == 5 || (SceneFlag == 4 && SelectedCharConfirm == -1))
         Mouse_UpdateHoverTargets();
 }
 
@@ -245,14 +245,14 @@ void Simulation_RestorePickingCamera()
     if (!camera.valid || camera.scene != SceneFlag || camera.world != gMapManager.GetCurrentMap()) return;
     memcpy(CameraMatrix, camera.matrix, sizeof(camera.matrix));
     memcpy(CameraRayOriginX_arr, camera.origin, sizeof(camera.origin));
-    memcpy(&DAT_083a4110, camera.target, sizeof(camera.target));
+    memcpy(&MouseRayEndPoint, camera.target, sizeof(camera.target));
     // No restaurar la pose aquí: Camera3D puede haber recibido un giro nuevo.
     // El rayo conserva su muestra SIM y el giro se aplicará en el próximo tick.
     ViewportCenterX = camera.centerX; ViewportCenterY = camera.centerY;
     OpenglWindowWidth = camera.width; OpenglWindowHeight = camera.height;
     OpenglWindowX = camera.x; OpenglWindowY = camera.y;
-    _DAT_083a42a4 = camera.projection[0]; _DAT_083a42a8 = camera.projection[1];
-    DAT_083a42a4 = camera.projectionBits[0]; DAT_083a42a8 = camera.projectionBits[1];
+    PerspectiveScaleX = camera.projection[0]; PerspectiveScaleY = camera.projection[1];
+    PerspectiveScaleXBits = camera.projectionBits[0]; PerspectiveScaleYBits = camera.projectionBits[1];
     ScreenCenterYFlip = camera.centerYFlip;
 }
 

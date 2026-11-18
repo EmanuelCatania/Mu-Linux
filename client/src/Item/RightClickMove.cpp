@@ -20,7 +20,7 @@ bool IsCellRangeFree(int x, int y, int width, int height)
 // Como en sub_4D5F20, la ocupación se decide sólo por el Type de la celda.
 int RightClickMove_FindInventorySlot(int type)
 {
-    const ITEM_ATTRIBUTE* attr = (const ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068;
+    const ITEM_ATTRIBUTE* attr = (const ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase;
     if (!attr || type < 0 || type >= ITEM_MAX_EX) return -1;
     const int width = attr[type].Width, height = attr[type].Height;
     if (width <= 0 || width > 8 || height <= 0 || height > 8) return -1;

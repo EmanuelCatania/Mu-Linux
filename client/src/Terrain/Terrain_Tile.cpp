@@ -1,5 +1,5 @@
 // Terrain_Tile.cpp
-// Tile attribute flag operations on the 256×256 tile map at DAT_0838bc70.
+// Tile attribute flag operations on the 256×256 tile map at TerrainWallFlags.
 //
 // IDA: FUN_004f6ef0 @ 0x004f6ef0 — Terrain_SetTileAttributeBits
 // IDA: SubTerrainAttribute @ 0x004f6f10 — Terrain_ClearTileAttributeBits
@@ -16,7 +16,7 @@
 // Sets flag bits param_3 at tile (param_1, param_2).
 void __cdecl Terrain_SetTileAttributeBits(int param_1,int param_2,int param_3)
 {
-  DAT_0838bc70[param_2 * 0x100 + param_1] = (char)(DAT_0838bc70[param_2 * 0x100 + param_1] | (byte)param_3);
+  TerrainWallFlags[param_2 * 0x100 + param_1] = (char)(TerrainWallFlags[param_2 * 0x100 + param_1] | (byte)param_3);
   return;
 }
 
@@ -25,7 +25,7 @@ void __cdecl Terrain_SetTileAttributeBits(int param_1,int param_2,int param_3)
 // Clears flag bits param_3 at tile (param_1, param_2).
 void __cdecl Terrain_ClearTileAttributeBits(int param_1,int param_2,int param_3)
 {
-  DAT_0838bc70[param_2 * 0x100 + param_1] = (char)(DAT_0838bc70[param_2 * 0x100 + param_1] & ~(byte)param_3);
+  TerrainWallFlags[param_2 * 0x100 + param_1] = (char)(TerrainWallFlags[param_2 * 0x100 + param_1] & ~(byte)param_3);
   return;
 }
 

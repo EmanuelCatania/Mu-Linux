@@ -12,7 +12,7 @@ extern "C" void __cdecl UI_Main(int slot_idx, short* inv_base, unsigned int grid
 // 1. Calls FUN_004824c0() to get equipped weapon type index.
 // 2. If weapon == -1, returns immediately (no weapon equipped).
 // 3. anti-tamper hash table — skipped (encrypt CharacterMachine)
-// 4. If class == elf (2) and DAT_07e91388 == 0:
+// 4. If class == elf (2) and ItemPickedFlag == 0:
 //    reads weapon item types from CharacterMachine equipment slots.
 //    - If elf-bow (type 0x80..0x86 or 0x91) equipped and crossbow slot empty:
 //      copies item to pPickedItem, sends equipment swap request to slot 0.
@@ -31,24 +31,24 @@ void __cdecl Item_AutoEquipAmmo(int /*unused*/) {
     if (inventorySlot < 0 || inventorySlot >= 64)
         return;
 
-    BYTE* const characterMachine = (BYTE*)(uintptr_t)DAT_07cf1ffc;
-    BYTE* const characterAttribute = (BYTE*)(uintptr_t)DAT_07cf1ff4;
+    BYTE* const characterMachine = (BYTE*)(uintptr_t)CharacterMachinePtr;
+    BYTE* const characterAttribute = (BYTE*)(uintptr_t)CharacterAttributePtr;
     if (!characterMachine || !characterAttribute)
         return;
 
     // 0048B762..0048B78A: only an unblocked Elf enables the two-hand swap.
-    if ((characterAttribute[11] & 7) != 2 || DAT_07e91388 != 0)
+    if ((characterAttribute[11] & 7) != 2 || ItemPickedFlag != 0)
         return;
 
     // IDA sub_48B680 L120-146.  Los slots estaban invertidos:
     //
     //   if ( (v18 >= 128 && v18 < 135 || v18 == 145) && *v25 == -1 )
-    //   { ... dword_7E11E78 = 0; SendRequestEquipmentItem(0, v19, 0, 0); }   // slot 0
+    //   { ... TargetInvSlot = 0; SendRequestEquipmentItem(0, v19, 0, 0); }   // slot 0
     //   else
     //   {
     //       v20 = *v25;
     //       if ( v20 >= 136 && v20 < 143 || v20 >= 144 && v20 < 160 && v18 == -1 )
-    //       { ... dword_7E11E78 = 1; SendRequestEquipmentItem(0, v21, 0, 1); } // slot 1
+    //       { ... TargetInvSlot = 1; SendRequestEquipmentItem(0, v21, 0, 1); } // slot 1
     //   }
     //
     // `v18` es el test de ARCO y `v20` el de BALLESTA.  Segun sub_4824C0 L76-88
@@ -61,13 +61,13 @@ void __cdecl Item_AutoEquipAmmo(int /*unused*/) {
         && crossbowSlotType == -1)
     {
         targetEquipmentSlot = 0;                       // arco -> flechas al slot 0
-        chatId = (const char*)&DAT_07e11dec;
+        chatId = (const char*)&AutoSwapChatIdA;
     }
     else if ((crossbowSlotType >= 136 && crossbowSlotType < 143)
           || (crossbowSlotType >= 144 && crossbowSlotType < 160 && bowSlotType == -1))
     {
         targetEquipmentSlot = 1;                       // ballesta -> bolts al slot 1
-        chatId = (const char*)&DAT_07e11df0;
+        chatId = (const char*)&AutoSwapChatIdB;
     }
     else
     {
@@ -75,12 +75,12 @@ void __cdecl Item_AutoEquipAmmo(int /*unused*/) {
     }
 
     ITEM* const source = (ITEM*)(OffsetInventoryItems + (size_t)inventorySlot * sizeof(ITEM));
-    memcpy(DAT_07e91350, source, sizeof(ITEM));
+    memcpy(PickedItemData, source, sizeof(ITEM));
 
     const int encodedSourceSlot = inventorySlot + 12;
     UI_Main(encodedSourceSlot, (short*)OffsetInventoryItems, 8);
-    DAT_07e11e78 = (DWORD)targetEquipmentSlot;
-    SendRequestEquipmentItem(0, encodedSourceSlot, (ITEM*)DAT_07e91350,
+    TargetInvSlot = (DWORD)targetEquipmentSlot;
+    SendRequestEquipmentItem(0, encodedSourceSlot, (ITEM*)PickedItemData,
                                   0, targetEquipmentSlot);
     UIChatLogWindow_AddText(chatId, GlobalText[250], 1);
 }

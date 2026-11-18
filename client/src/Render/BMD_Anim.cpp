@@ -31,8 +31,8 @@
 //   this+0x30 (int)   : actions array base (stride 0x10, frameCount at +8, loop at +0)
 //   this+0xa4 (float) : current frame (duplicated)
 //   this+0xa8 (short) : current frame rounded
-//   DAT_0055256c / DAT_00552580 : frame/time constants (typically 1.0f)
-//   DAT_005524f8                : terminal offset (0.001f)
+//   1.0f / FloatZeroBBits : frame/time constants (typically 1.0f)
+//   0.01f                : terminal offset (0.001f)
 //
 // NOTE: original is __thiscall with extra Origin[3]/Angle[3] params that are unused in
 // the body. Our forward-decl in functions.h takes 5 args (__cdecl, this passed as arg1).
@@ -98,7 +98,7 @@ bool __cdecl BMD__PlayAnimation(void *This, float *AnimationFrame, float *PriorA
 extern "C" bool __cdecl CharacterAnimation(intptr_t c, intptr_t o)
 {
     short type = AsObject(o)->Type;
-    BYTE* model = (BYTE*)(uintptr_t)DAT_05828d58 + BMD_STRIDE * type;
+    BYTE* model = (BYTE*)(uintptr_t)ModelsBase + BMD_STRIDE * type;
     float speed = 0.0f;
 
     // model+38 = actionCount (short). If the model has actions, look up speed

@@ -59,10 +59,10 @@ void __cdecl AttackEffect(intptr_t entity)
     float* angle = (float*)(entity + 0x1c);  // world angle
     float* light = (float*)(entity + 0xe8);  // light/color
 
-    // 00445230 reads the queued skill through FUN_0045fae0. +770 is a
+    // 00445230 reads the queued skill through AE_SkillRead. +770 is a
     // hash-table protected byte in the original client; comparing its storage
     // directly made this path depend on the encoded value instead of the skill.
-    const BYTE queuedSkill = FUN_0045fae0((DWORD)&MAIN_HASH_CLASS,
+    const BYTE queuedSkill = AE_SkillRead((DWORD)&MAIN_HASH_CLASS,
                                           (BYTE*)(entity + EntityOffset(770)));
 
     // First switch of 00445230 (lines 293..1689): this selector is +747,
@@ -71,8 +71,8 @@ void __cdecl AttackEffect(intptr_t entity)
     const BYTE action = AsCharacter(entity)->Object.CurrentAction;
     const intptr_t boneMatricesTop = (intptr_t)AsCharacter(entity)->Object.BoneMatrices;
     const int modelTypeTop = AsCharacter(entity)->Object.Type;
-    void* modelTop = (modelTypeTop >= 0 && DAT_05828d58)
-        ? (void*)(DAT_05828d58 + modelTypeTop * BMD_STRIDE) : 0;
+    void* modelTop = (modelTypeTop >= 0 && ModelsBase)
+        ? (void*)(ModelsBase + modelTypeTop * BMD_STRIDE) : 0;
     float zero[3] = { 0.0f, 0.0f, 0.0f };
     float world[3] = { 0.0f, 0.0f, 0.0f };
     float effectAngle[3] = { 0.0f, 0.0f, 0.0f };
@@ -246,7 +246,7 @@ void __cdecl AttackEffect(intptr_t entity)
 
     BYTE* target = (BYTE*)(uintptr_t)CharactersClient + targetSlot * CHARACTER_STRIDE;
     const int modelType = AsCharacter(entity)->Object.Type;
-    if (modelType < 0 || !DAT_05828d58 || !(intptr_t)AsCharacter(entity)->Object.BoneMatrices) return;
+    if (modelType < 0 || !ModelsBase || !(intptr_t)AsCharacter(entity)->Object.BoneMatrices) return;
 
     // The following switch is the skill-3 switch at 00445230:1898.  The
     // apparent `TargetPosition` in IDA is the transformed hand-bone position;
@@ -255,7 +255,7 @@ void __cdecl AttackEffect(intptr_t entity)
     float source[3] = { 0.0f, 0.0f, 0.0f };
     float jointAngle[3] = { 0.0f, 0.0f, 0.0f };
     float white[3] = { 1.0f, 1.0f, 1.0f };
-    void* model = (void*)(DAT_05828d58 + modelType * BMD_STRIDE);
+    void* model = (void*)(ModelsBase + modelType * BMD_STRIDE);
     const intptr_t boneMatrices = (intptr_t)AsCharacter(entity)->Object.BoneMatrices;
     const auto handPosition = [&](int handIndex, float offsetY, int secondHandAt = 2) {
         local[0] = 0.0f;

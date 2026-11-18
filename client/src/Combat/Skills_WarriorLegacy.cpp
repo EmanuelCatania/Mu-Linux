@@ -37,10 +37,10 @@ static BYTE* Warrior_GetSkillRecord97k(int skillType)
 {
     if (skillType < 0 || skillType >= 64)
         return nullptr;
-    if (DAT_07cf1ff8 != 0)
-        return DAT_07cf1ff8 + skillType * 0x28;
-    if (DAT_07d29d20 != 0)
-        return DAT_07d29d20 + skillType * 0x28;
+    if (SkillShadowTable != 0)
+        return SkillShadowTable + skillType * 0x28;
+    if (SkillTableBase != 0)
+        return SkillTableBase + skillType * 0x28;
     return nullptr;
 }
 
@@ -80,14 +80,14 @@ static void Warrior_SendSkill1E(BYTE skill, BYTE x, BYTE y, BYTE direction,
 static void Warrior_CollectMultiTargets(const float* centre, float radius,
                                         WORD relationKey, int* keys, int* count, int maximum)
 {
-    if (!centre || !keys || !count || *count >= maximum || DAT_07abf5d0 == 0)
+    if (!centre || !keys || !count || *count >= maximum || CharactersClient == 0)
         return;
 
     const float radiusSquared = radius * radius;
-    BYTE* characters = (BYTE*)(uintptr_t)DAT_07abf5d0;
+    BYTE* characters = (BYTE*)(uintptr_t)CharactersClient;
     for (int index = 0; index < 400 && *count < maximum; ++index) {
         BYTE* candidate = characters + index * CHARACTER_STRIDE;
-        if (!AsCharacter(candidate)->Object.Live || !AsCharacter(candidate)->Object.Visible || candidate == (BYTE*)(uintptr_t)DAT_07abf5d8 || AsCharacter(candidate)->Dead)
+        if (!AsCharacter(candidate)->Object.Live || !AsCharacter(candidate)->Object.Visible || candidate == (BYTE*)(uintptr_t)Hero || AsCharacter(candidate)->Dead)
             continue;
 
         const int key = *(short *)&AsCharacter(candidate)->Key; // IDA: *(std::int16_t *)(v9 + 456)
@@ -133,7 +133,7 @@ static void Warrior_SendMultiSkill(BYTE skill, const float* centre, BYTE serial,
 //   void __cdecl UseSkillWarrior(int c, int o)   — c = CHARACTER*, o = OBJECT*
 // Correspondencia de nombres con el decompile:
 //   skillType    = v317   (id de skill resuelto en L366-373)
-//   selectedSlot = dword_7D7809C (0x07D7809C, el slot que siembra Attack)
+//   selectedSlot = SelectedSkillSlot (0x07D7809C, el slot que siembra Attack)
 //   targetIdx    = MovementSkillTarget (0x07D780A0)
 //   targetEntity = CharactersClient + 916 * MovementSkillTarget
 //   targetKey    = v285   (*(std::int16_t *)(targetEntity + 476))
@@ -141,7 +141,7 @@ static void Warrior_SendMultiSkill(BYTE skill, const float* centre, BYTE serial,
 //   keys/count   = &v285 / SkillIndex (el par que llena sub_45FDB0)
 //   serial       = *(BYTE *)(CharacterMachine + 1408)  ->  o+136
 // Client-side handler for all Warrior skill activations (1989 lines in Ghidra).
-// 1. Resolves skill ID from DAT_07d78098/DAT_07d7809c (+ CharacterAttribute skill table).
+// 1. Resolves skill ID from SkillModeFlag/SelectedSkillSlot (+ CharacterAttribute skill table).
 // 2. Sends the compact C1:06:10 facing packet built locally at 0x485815.
 // 3. Sets attack animation based on model type (0x186=special warrior anims).
 // 4. Spawns caster sparkle effect 0x4D0, plays random sword sound.
@@ -155,9 +155,9 @@ void __cdecl Combat_UseWarriorSkill(intptr_t c /* IDA: c */, intptr_t o /* IDA: 
     if (!c || !o) return;
     BYTE* character = (BYTE*)(uintptr_t)c; // IDA: c / CHARACTER state buffer
     BYTE* object = (BYTE*)(uintptr_t)o;    // IDA: o / visual OBJECT
-    BYTE* attributes = (BYTE*)(uintptr_t)DAT_07cf1ff4; // IDA: CharacterAttribute @ 0x07CF1FF4
-    const BYTE selectedSlot = (BYTE)DAT_07d7809c; // IDA: dword_7D7809C
-    const BYTE skillType = (DAT_07d78098 && attributes) // IDA: v317
+    BYTE* attributes = (BYTE*)(uintptr_t)CharacterAttributePtr; // IDA: CharacterAttribute @ 0x07CF1FF4
+    const BYTE selectedSlot = (BYTE)SelectedSkillSlot; // IDA: dword_7D7809C
+    const BYTE skillType = (SkillModeFlag && attributes) // IDA: v317
         ? attributes[selectedSlot + 87] : selectedSlot;
 
     // 0x485815: this is a compact facing packet, not Send_MovePacket.
@@ -203,7 +203,7 @@ void __cdecl Combat_UseWarriorSkill(intptr_t c /* IDA: c */, intptr_t o /* IDA: 
     // Native code indexes CharactersClient directly at 0x4859A9.  Attack and
     // Action establish this index before entering this helper; adding a local
     // rejection here changes the original tail (state + C1:11 confirmation).
-    char* targetEntity = (char*)(uintptr_t)DAT_07abf5d0 + targetIdx * CHARACTER_STRIDE; // IDA: v285 source
+    char* targetEntity = (char*)(uintptr_t)CharactersClient + targetIdx * CHARACTER_STRIDE; // IDA: v285 source
     AsCharacter(c)->TargetPosition[0] = *(float*)(targetEntity + 0x10); // TargetPosition.x
     AsCharacter(c)->TargetPosition[1] = *(float*)(targetEntity + 0x14); // TargetPosition.y
     AsCharacter(c)->TargetPosition[2] = *(float*)(targetEntity + 0x18); // TargetPosition.z
@@ -216,7 +216,7 @@ void __cdecl Combat_UseWarriorSkill(intptr_t c /* IDA: c */, intptr_t o /* IDA: 
     // CFG at 0x485A2B continues through every family and serializes v285 as
     // read, including the sentinel value when the selected slot is stale.
     if (skillType == 43) {
-            DAT_07e11d84 = Platform::GetTimer().Ticks();
+            WarriorSkill43Tick = Platform::GetTimer().Ticks();
             float step[3] = { AsCharacter(c)->TargetPosition[0] - *(float*)(o + 16),
                               AsCharacter(c)->TargetPosition[1] - *(float*)(o + 20),
                               AsCharacter(c)->TargetPosition[2] - *(float*)(o + 24) }; // IDA: v320/v321/v322
@@ -258,7 +258,7 @@ void __cdecl Combat_UseWarriorSkill(intptr_t c /* IDA: c */, intptr_t o /* IDA: 
             Warrior_CollectMultiTargets(centre, 100.0f, *(WORD*)(o + 134), keys, &count, 6);
             // IDA 0x485780 L1097-1100: el serial vive en CharacterMachine+1408,
             // no en la entidad (CHARACTER mide 0x394: 1408 caía en el slot siguiente).
-            BYTE* machine = static_cast<BYTE*>(DAT_07cf1ffc);
+            BYTE* machine = static_cast<BYTE*>(CharacterMachinePtr);
             const BYTE serial = machine ? machine[1408] : 0;
             if (machine) machine[1408] = serial + 1;
             *(BYTE*)(o + 136) = serial;
@@ -363,19 +363,19 @@ void __cdecl Entity_SelectTarget_Player(int param_1, int /*target*/) {
 // Legacy helper only; no canonical FUN mapping retained here. `FUN_00444D90` is
 // documented as SetPlayerDie in Entity/Character_Motion.cpp, so the old address label was misleading.
 // Handles landing after a teleport:
-//   If local player (param_1 == DAT_07abf5d8): clears teleport-state flag at DAT_07cf1ff4+0x1c.
+//   If local player (param_1 == Hero): clears teleport-state flag at CharacterAttributePtr+0x1c.
 //   Spawns landing visual effects per class:
 //     0x186 (DarkWizard, sub_id 0xCE-0xD0): effect 0xD2 once + 0xD3 ×10, then sound 0x5E.
 //     0x127 (DarkElf): effects 0xE2+0xE3 ×8, then sound 0x5E.
 //     300 (0x12C): same as 0x186.
 //     other: set anim 6 (land-idle), return.
-//   Post-effects: if +0x108 == _DAT_00552580 (0.0f): play footstep sound from class table.
+//   Post-effects: if +0x108 == FloatZeroB (0.0f): play footstep sound from class table.
 void __cdecl Entity_TeleportEnd(intptr_t entity_idx) {
     BYTE* puVar3 = (BYTE*)(uintptr_t)(int)entity_idx;
 
     // Local player: clear teleport in-flight state (hash-table ops are obfuscation noise)
-    if ((void*)entity_idx == (void*)DAT_07abf5d8) {
-        *(short*)((char*)DAT_07cf1ff4 + 0x1c) = 0;
+    if ((void*)entity_idx == (void*)Hero) {
+        *(short*)((char*)CharacterAttributePtr + 0x1c) = 0;
     }
 
     short sVar2 = *(short*)(puVar3 + 2); // entity_type
@@ -413,8 +413,8 @@ void __cdecl Entity_TeleportEnd(intptr_t entity_idx) {
     PlayBuffer(0x5e, AsObject(entity_idx), 0);
 
 LAB_00445110:
-    // Post-teleport footstep sound: only if anim speed == _DAT_00552580 (ground landed)
-    if (*(float*)&((OBJECT*)(uintptr_t)(puVar3))->AnimationFrame == *(float*)&DAT_00552580) {
+    // Post-teleport footstep sound: only if anim speed == FloatZeroB (ground landed)
+    if (*(float*)&((OBJECT*)(uintptr_t)(puVar3))->AnimationFrame == *(float*)&FloatZeroBBits) {
         if ((sVar2 == 0x186) && (*(int*)(puVar3+4) < 0xce || *(int*)(puVar3+4) > 0xd0)) {
             // DarkWizard swimming vs walking footstep
             if ((((CHARACTER*)puVar3)->Class & 7) == 2)
@@ -423,8 +423,8 @@ LAB_00445110:
                 PlayBuffer(0x4e, AsObject(entity_idx), 0);
             return;
         }
-        // General: look up footstep sound from entity-class table at DAT_05828d58+0xb2
-        short sfx = *(short*)((char*)DAT_05828d58 + 0xb2 + BMD_FIELD_SHIFT + sVar2 * BMD_STRIDE);
+        // General: look up footstep sound from entity-class table at ModelsBase+0xb2
+        short sfx = *(short*)((char*)ModelsBase + 0xb2 + BMD_FIELD_SHIFT + sVar2 * BMD_STRIDE);
         if (sfx != -1)
             PlayBuffer(sfx + 0xaa, AsObject(entity_idx), 0);
     }
@@ -432,13 +432,13 @@ LAB_00445110:
 
 // Legacy helper only; no canonical FUN mapping retained here. `FUN_004792C0` is
 // documented as CreatePoint in Entity_LegacyTeleport.cpp, so the old address label was misleading.
-// Finds a free slot in the teleport-effect pool (DAT_07C80110, stride 0x70, ~12 entries).
-// Fills: active=1, entity_id, src_pos (world_pos + height_offset DAT_00552958), dst_pos.
+// Finds a free slot in the teleport-effect pool (DamagePointPool, stride 0x70, ~12 entries).
+// Fills: active=1, entity_id, src_pos (world_pos + height_offset TeleportZOffsetBits), dst_pos.
 // Slots: [0x00]=active, [0x04]=entity_id, [0x10..0x18]=src_pos, [0x1C..0x24]=dst_pos,
 //        [0x0C]=param_4, [0x38..0x3B]=phase_flags, [0x48..0x4B]=state_chars.
 void __cdecl Entity_TeleportAnim(float* world_pos, float entity_id, float* dst_pos, float param_4) {
     for (int i = 0; i < static_cast<int>(kDamagePointCount); ++i) {
-        DamagePoint& point = DAT_07c80110[i];
+        DamagePoint& point = DamagePointPool[i];
         if (point.Active) continue;
         RenderSnapshots_NewDamagePoint(i);
         point.Active = 1;
@@ -446,7 +446,7 @@ void __cdecl Entity_TeleportAnim(float* world_pos, float entity_id, float* dst_p
         std::memcpy(&point.Value, &entity_id, sizeof(point.Value));
         point.Position[0] = world_pos[0];
         point.Position[1] = world_pos[1];
-        point.Position[2] = world_pos[2] + _DAT_00552958;
+        point.Position[2] = world_pos[2] + TeleportZOffset;
         std::memcpy(point.Color, dst_pos, sizeof(point.Color));
         point.Scale = param_4;
         point.Delay = 0;

@@ -35,7 +35,7 @@ void Terrain_EndBatch();
 extern "C" void GuildCreator_CloseFromResult(void);
 
 // Inventory pool bases — defined in src/Render/HUD_Pass3.cpp.
-// Lo usan los llamadores de FUN_004d23b0 de abajo para recorrer los arrays de grilla correctos.
+// Lo usan los llamadores de Inventory_ClickHandler de abajo para recorrer los arrays de grilla correctos.
 extern "C" BYTE OffsetInventoryItems[];
 extern "C" BOOL ChaosBoxRequestClose(void);
 extern "C" BYTE Inventory[];
@@ -63,33 +63,33 @@ int  __cdecl TERRAIN_INDEX(int param_1, int param_2) { return param_2 * 0x100 + 
 // Dependencias verificadas en IDA (bytes de operando):
 //   Hero=0x07abf5d8, World(0x0055a7ac), WorldTime=0x05826e08,
 //   WaterMove=0x07eeb214, SelectFlag=0x07eab1fc, SelectXF/YF=0x080ab288/28c,
-//   TerrainFlag=0x0838bc44, toggle=0x0839bc88, unk_55A76C=0x0055a76c.
+//   TerrainFlag=0x0838bc44, toggle=0x0839bc88, TerrainOverlayGate=0x0055a76c.
 //   - WorldTime: en el binario es float ((float)timeGetTime() en CalcFPS 0x43FD70);
 //     en nuestro codebase es int g_AnimTick y todos sus readers lo usan como int.
 //     Se lee `(long long)WorldTime % N`, NO `(int)`.  `timeGetTime()`
 //     pasa de 2^31 ms a las ~24.8 dias de uptime y ahi el cast a int satura, con
 //     lo que la animacion de agua queda congelada.  IDA usa `(std::int64_t)WorldTime`
 //     en todos sus sitios justamente por eso.
-//   - unk_55A76C: único xref es el read de abajo (sin writer en el binario) → el
+//   - TerrainOverlayGate: único xref es el read de abajo (sin writer en el binario) → el
 //     2º pass overlay (TerrainFlag=2) es inerte también en el original.
 //   - Callees aún fallback (a portar en esta cadena): RenderTerrainFrustrum
 //     (#2, 0x004F97E0), RenderTerrainTile RenderTerrainTile (#3, 0x004F8480).
 static void Terrain_BeginWavePass() {
-    FUN_004f98c0(
+    Terrain_LightSetup(
         (int)(*(float*)(Hero + 16) * 0.039999999f),   // hero X * 0.04 → tile coord
         (int)(*(float*)(Hero + 20) * 0.039999999f),   // hero Y * 0.04
         3,
         -70,
-        (int)DAT_0839bc88);
+        (int)TerrainLightBufToggle);
 }
 static void Terrain_EndWavePass() {
-    DAT_0839bc88 ^= 1u;
-    Terrain_WaterWaveUpdate((int)DAT_0839bc88);
+    TerrainLightBufToggle ^= 1u;
+    Terrain_WaterWaveUpdate((int)TerrainLightBufToggle);
 }
 // DESVIACION: la pasada visual avanza el agua una vez por paso de 40 ms.
 // El picking conserva sus llamadas adicionales dentro de SIM.
 void Terrain_TickRenderWater() {
-    if (SceneFlag != 5 || DAT_07e11d1c > 30 || !DAT_07abf5d8) return;
+    if (SceneFlag != 5 || InputCooldownTicks > 30 || !Hero) return;
     if (gMapManager.GetCurrentMap() != 10 && !gUserSettings.GetAntilag(ANTILAG_FLOOR)) {
         Terrain_BeginWavePass();
         Terrain_EndWavePass();
@@ -104,19 +104,19 @@ void __cdecl RenderTerrain(char EditFlag) {
     if (EditFlag) Terrain_BeginWavePass();
 
     if (gMapManager.GetCurrentMap() == 8)
-        DAT_07eeb214 = (float)((long long)WorldTime % 40000) * 0.000024999999f;  // WaterMove (Tarkan)
+        WaterMove = (float)((long long)WorldTime % 40000) * 0.000024999999f;  // WaterMove (Tarkan)
     else
-        DAT_07eeb214 = (float)((long long)WorldTime % 20000) * 0.000049999999f;  // WaterMove
+        WaterMove = (float)((long long)WorldTime % 20000) * 0.000049999999f;  // WaterMove
 
     if (EditFlag) {
-        DAT_07eab1fc = 0;                 // SelectFlag = 0
+        TilePickResultFlag = 0;                 // SelectFlag = 0
         Map_InitRayCast();                   // Map_InitRayCast (sub_512D30)
     } else {
         GL_ResetState();                   // DisableAlphaBlend
     }
 
-    DAT_0838bc44 = 0;                     // TerrainFlag = 0
-    const bool modern=!EditFlag && TerrainDraw::Requested() && !DAT_0839bc86;
+    TerrainFlag = 0;                     // TerrainFlag = 0
+    const bool modern=!EditFlag && TerrainDraw::Requested() && !TerrainNoDrawFlag;
     if(modern)Terrain_BeginBufferedPass();
     else if(!EditFlag)Terrain_BeginBatch();
     RenderTerrainFrustrum(EditFlag != 0);
@@ -124,16 +124,16 @@ void __cdecl RenderTerrain(char EditFlag) {
     if(modern && !TerrainDraw::End())RenderTerrainFrustrum(false);
 
     if (EditFlag) {
-        if (DAT_07eab1fc) {               // SelectFlag → render del tile pickeado
-            float sxf = *(float*)&DAT_080ab288;   // SelectXF
-            float syf = *(float*)&DAT_080ab28c;   // SelectYF
+        if (TilePickResultFlag) {               // SelectFlag → render del tile pickeado
+            float sxf = *(float*)&SelectXF;   // SelectXF
+            float syf = *(float*)&SelectYF;   // SelectYF
             RenderTerrainTile(*(int*)&sxf, *(int*)&syf, (int)sxf, (int)syf,
                          1.0f, 1, (int)(unsigned char)EditFlag);
         }
     } else {
         GL_SetBlendSrcOver('\x01');             // EnableAlphaTest(1)
-        if (DAT_0055a76c && gMapManager.GetCurrentMap() != 7) { // overlay (inerte: unk_55A76C nunca seteado)
-            DAT_0838bc44 = 2;             // TerrainFlag = 2
+        if (TerrainOverlayGate && gMapManager.GetCurrentMap() != 7) { // overlay (inerte: 0x0055A76C nunca seteado)
+            TerrainFlag = 2;             // TerrainFlag = 2
             // DESVIACION: el pasto (billboards) recibe sombra pero no la proyecta.
             Gfx::SetShadowCasting(false);
             Terrain_BeginBatch();
@@ -155,20 +155,20 @@ void __cdecl RenderTerrain(char EditFlag) {
 // ── Fallback flat-shaded previa (REEMPLAZADA por el port 1:1 de RenderTerrain) ──
 // Bloque inactivo, conservado solo como referencia del path cámara/proyección.
 static void RenderTerrain_FallbackUnused(char EditFlag) {
-    if (!DAT_07abf5d8) return;
+    if (!Hero) return;
     // BUG-FIX 2026-04-28: Edit mode (EditFlag=1) lo llama Player_InputTick para
     // mouse picking — necesita iterar tiles y llamar a RenderTerrainTile con flag de
     // picking, que calcula la intersección rayo-tile y guarda el resultado en
-    // DAT_080ab288 / DAT_080ab28c. Sin esto el click al suelo no genera path,
+    // SelectXF / SelectYF. Sin esto el click al suelo no genera path,
     // entonces el hero nunca se mueve.
 
     // Simplified iteration: 64x64 tile area centered on hero.
-    if (!DAT_07abf5d8) return;
-    BYTE* hero = (BYTE*)DAT_07abf5d8;
+    if (!Hero) return;
+    BYTE* hero = (BYTE*)Hero;
     float hx = *(float*)(hero + 0x10);
     float hy = *(float*)(hero + 0x14);
-    int gridCenterX = (int)(hx / _DAT_005524f0);
-    int gridCenterY = (int)(hy / _DAT_005524f0);
+    int gridCenterX = (int)(hx / GridToWorldScale);
+    int gridCenterY = (int)(hy / GridToWorldScale);
 
     // BUG-FIX 2026-04-29: 64x64 era muy chico. Cámara con pitch -55° y zoom
     // estándar muestra ~80-100 tiles. Cursor podía caer fuera del scan.
@@ -182,7 +182,7 @@ static void RenderTerrain_FallbackUnused(char EditFlag) {
     if (EditFlag) {
         // Mouse-pick mode: don't draw, just iterate tiles + call RenderTerrainTile
         // with picking flag.  RenderTerrainTile internally tests mouse ray against
-        // el quad del tile y guarda las coordenadas de grilla del impacto en DAT_080ab288/28c.
+        // el quad del tile y guarda las coordenadas de grilla del impacto en SelectXF/28c.
         for (int yi = yStart; yi < yEnd; ++yi) {
             for (int xi = xStart; xi < xEnd; ++xi) {
                 float xf = (float)xi;
@@ -214,10 +214,10 @@ static void RenderTerrain_FallbackUnused(char EditFlag) {
             int idx3 = (yi + 1) * 256 + xi;
             float wx0 = xf * 100.0f, wy0 = yf * 100.0f;
             float wx1 = wx0 + 100.0f, wy1 = wy0 + 100.0f;
-            float h0 = DAT_080cb2cc[idx0];
-            float h1 = DAT_080cb2cc[idx1];
-            float h2 = DAT_080cb2cc[idx2];
-            float h3 = DAT_080cb2cc[idx3];
+            float h0 = BackTerrainHeight[idx0];
+            float h1 = BackTerrainHeight[idx1];
+            float h2 = BackTerrainHeight[idx2];
+            float h3 = BackTerrainHeight[idx3];
 
             // BUG-FIX 2026-05-01: el .map almacena tile-type INDICES (0-13)
             // por celda (TileGrass01=0, TileGrass02=1, TileGround01=2, ...,
@@ -234,9 +234,9 @@ static void RenderTerrain_FallbackUnused(char EditFlag) {
                 lastTex = tileTex;
             }
 
-            // Per-vertex lighting (DAT_0828b608 ya confirmado en valores 0.84-0.94 OK).
+            // Per-vertex lighting (TerrainLightData ya confirmado en valores 0.84-0.94 OK).
             // BUG-FIX 2026-05-03: algunos tiles se renderizan violeta/magenta porque
-            // DAT_0828b608 tiene valores por canal raros (p.ej. R=alto, G=0, B=alto)
+            // TerrainLightData tiene valores por canal raros (p.ej. R=alto, G=0, B=alto)
             // en tiles donde TerrainLight.OZJ tiene un color inusual o
             // FUN_004f71c0 wasn't fully populated. Helper sanitizes per-vertex
             // luz: si algún canal está en 0, lo reemplazamos por el promedio de los otros o 0.85.
@@ -266,10 +266,10 @@ static void RenderTerrain_FallbackUnused(char EditFlag) {
                 out[0] = r; out[1] = g; out[2] = b;
             };
             float c0[3], c1[3], c2[3], c3[3];
-            sanitize(DAT_0828b608[idx0*3+0], DAT_0828b608[idx0*3+1], DAT_0828b608[idx0*3+2], c0);
-            sanitize(DAT_0828b608[idx1*3+0], DAT_0828b608[idx1*3+1], DAT_0828b608[idx1*3+2], c1);
-            sanitize(DAT_0828b608[idx2*3+0], DAT_0828b608[idx2*3+1], DAT_0828b608[idx2*3+2], c2);
-            sanitize(DAT_0828b608[idx3*3+0], DAT_0828b608[idx3*3+1], DAT_0828b608[idx3*3+2], c3);
+            sanitize(TerrainLightData[idx0*3+0], TerrainLightData[idx0*3+1], TerrainLightData[idx0*3+2], c0);
+            sanitize(TerrainLightData[idx1*3+0], TerrainLightData[idx1*3+1], TerrainLightData[idx1*3+2], c1);
+            sanitize(TerrainLightData[idx2*3+0], TerrainLightData[idx2*3+1], TerrainLightData[idx2*3+2], c2);
+            sanitize(TerrainLightData[idx3*3+0], TerrainLightData[idx3*3+1], TerrainLightData[idx3*3+2], c3);
 
             BufferedDraw::Begin(BufferedDraw::Primitive::Quads);
             BufferedDraw::Color3fv(c0);
@@ -300,16 +300,16 @@ static void RenderTerrain_FallbackUnused(char EditFlag) {
 
 // IDA: CreateFrustrum2D (0x004F8EB0)
 // GetScreenWidth NO es un frame counter — es GetScreenWidth(). Los
-// constants `_DAT_00552cbc=1190.0` y `_DAT_00552cb8=540.0` son las half-widths
+// constants `TerrainHalfWidthFar=1190.0` y `TerrainHalfWidthNear=540.0` son las half-widths
 // de la frustum quad (en view-space units), NO velocidades de rotación.
-// _DAT_0055283c = 1/640 (= screen pixel→aspect ratio).
+// ConvertXScale = 1/640 (= screen pixel→aspect ratio).
 //
 // Construye un quad 2D top-view del frustum proyectado: rota por Z=45° las 4
 // corners hardcoded, las traslada por param_1 (cam pos), y las escribe a
 // FrustrumX/218 (X/Y respectivamente) en tile coords (×0.01 = ÷100).
 //
 // Esta versión SÍ funciona para in-game. La duplicada Camera_SetMatrix en
-// src/Render/Camera.cpp es código muerto que opera sobre DAT_07eab1bc..1e8
+// src/Render/Camera.cpp es código muerto que opera sobre FrustrumCorner1X..1e8
 // (corners ya transformadas por Camera_SetupFrustum a world coords), lo cual
 // duplicaría la transformación si se invocara — no se llama desde ningún
 // lado y no debe wirearse.
@@ -328,14 +328,14 @@ static void RenderTerrain_FallbackUnused(char EditFlag) {
 // alta e inclinada, terreno con relieve) y los costados quedaban sin tiles.
 // Acá el cuadro es el rectángulo que encierra la cámara y las cuatro esquinas
 // del frustum llevadas hasta donde dibuja la proyección (están al 90 % del
-// alcance, _DAT_005526e8, y la proyección llega al 140 %, _DAT_00552d34), más
+// alcance, 0.9f, y la proyección llega al 140 %, PerspectiveFarScale), más
 // 800 de margen. Cubre todo lo visible con cualquier inclinación.
 static void CreateFrustrum2D_Footprint()
 {
-    const float ax = FrustrumVertex, ay = DAT_07eab1b4;
-    const float cx[4] = { DAT_07eab1bc, DAT_07eab1c8, DAT_07eab1d4, DAT_07eab1e0 };
-    const float cy[4] = { DAT_07eab1c0, DAT_07eab1cc, DAT_07eab1d8, DAT_07eab1e4 };
-    const float k = _DAT_00552d34 / _DAT_005526e8;
+    const float ax = FrustrumVertex, ay = FrustrumCorner0Y;
+    const float cx[4] = { FrustrumCorner1X, FrustrumCorner2X, FrustrumCorner3X, FrustrumCorner4X };
+    const float cy[4] = { FrustrumCorner1Y, FrustrumCorner2Y, FrustrumCorner3Y, FrustrumCorner4Y };
+    const float k = PerspectiveFarScale / 0.9f;
     float minX = ax, maxX = ax, minY = ay, maxY = ay;
     for (int i = 0; i < 4; ++i) {
         const float x = ax + (cx[i] - ax) * k, y = ay + (cy[i] - ay) * k;
@@ -344,8 +344,8 @@ static void CreateFrustrum2D_Footprint()
         if (y < minY) minY = y;
         if (y > maxY) maxY = y;
     }
-    minX = (minX - 800.0f) * _DAT_005524f8; maxX = (maxX + 800.0f) * _DAT_005524f8;
-    minY = (minY - 800.0f) * _DAT_005524f8; maxY = (maxY + 800.0f) * _DAT_005524f8;
+    minX = (minX - 800.0f) * 0.01f; maxX = (maxX + 800.0f) * 0.01f;
+    minY = (minY - 800.0f) * 0.01f; maxY = (maxY + 800.0f) * 0.01f;
     // Sentido horario: TestFrustrum2D exige producto cruz positivo en cada lado.
     FrustrumX[0] = minX; FrustrumY[0] = maxY;
     FrustrumX[1] = maxX; FrustrumY[1] = maxY;
@@ -368,12 +368,12 @@ static bool CreateFrustrum2D_FromFrustum(const float *ground)
         CreateFrustrum2D_Footprint();
         return true;
     }
-    const float apex[3] = { FrustrumVertex, DAT_07eab1b4, DAT_07eab1b8 };
+    const float apex[3] = { FrustrumVertex, FrustrumCorner0Y, FrustrumCorner0Z };
     const float corner[4][3] = {
-        { DAT_07eab1bc, DAT_07eab1c0, DAT_07eab1c4 },   // arriba-izquierda
-        { DAT_07eab1c8, DAT_07eab1cc, DAT_07eab1d0 },   // arriba-derecha
-        { DAT_07eab1d4, DAT_07eab1d8, DAT_07eab1dc },   // abajo-derecha
-        { DAT_07eab1e0, DAT_07eab1e4, DAT_07eab1e8 },   // abajo-izquierda
+        { FrustrumCorner1X, FrustrumCorner1Y, FrustrumCorner1Z },   // arriba-izquierda
+        { FrustrumCorner2X, FrustrumCorner2Y, FrustrumCorner2Z },   // arriba-derecha
+        { FrustrumCorner3X, FrustrumCorner3Y, FrustrumCorner3Z },   // abajo-derecha
+        { FrustrumCorner4X, FrustrumCorner4Y, FrustrumCorner4Z },   // abajo-izquierda
     };
     const float groundZ = ground[2] - 300.0f;
     if (apex[2] <= groundZ) return false;
@@ -396,8 +396,8 @@ static bool CreateFrustrum2D_FromFrustum(const float *ground)
         float dx = p[i][0] - cx, dy = p[i][1] - cy;
         const float len = sqrtf(dx * dx + dy * dy);
         if (len > 0.001f) { dx = dx / len * 800.0f; dy = dy / len * 800.0f; }
-        FrustrumX[i] = (p[i][0] + dx) * _DAT_005524f8;
-        FrustrumY[i] = (p[i][1] + dy) * _DAT_005524f8;
+        FrustrumX[i] = (p[i][0] + dx) * 0.01f;
+        FrustrumY[i] = (p[i][1] + dy) * 0.01f;
     }
     return true;
 }
@@ -413,11 +413,11 @@ void __cdecl CreateFrustrum2D(float *param_1)
     int iVar2 = GetScreenWidth();   // GetScreenWidth (= 640 normalmente)
     // En pantalla ancha el mundo es de ancho completo: la fracción sale del
     // viewport y el semiancho crece con el aspecto (el frustum de 4:3 lo recortaría).
-    float widthScale = (float)iVar2 * _DAT_0055283c;
+    float widthScale = (float)iVar2 * ConvertXScale;
     if (gWindow.IsWide() && gWindow.GetHeight() > 0)
         widthScale = ((float)gWindow.GetRealWidth() / (float)gWindow.GetHeight()) / (4.0f / 3.0f);
-    float angle_cbc = widthScale * _DAT_00552cbc;  // sw/640 * 1190 = far half-width
-    float angle_cb8 = widthScale * _DAT_00552cb8;  // sw/640 * 540  = near half-width
+    float angle_cbc = widthScale * TerrainHalfWidthFar;  // sw/640 * 1190 = far half-width
+    float angle_cb8 = widthScale * TerrainHalfWidthNear;  // sw/640 * 540  = near half-width
 
     // Euler angles for AngleMatrix (X=0, Y=0, Z=45°) — top-down orientation
     pts[0] = 0.0f; pts[1] = 0.0f; pts[2] = 45.0f;
@@ -436,13 +436,13 @@ void __cdecl CreateFrustrum2D(float *param_1)
         pfVar1[0] += param_1[0];
         pfVar1[1] += param_1[1];
         pfVar1[2] += param_1[2];
-        *(float*)((char*)&FrustrumX + j) = pfVar1[0] * _DAT_005524f8;  // X (tile coords)
-        *(float*)((char*)&FrustrumY + j) = pfVar1[1] * _DAT_005524f8;  // Y
+        *(float*)((char*)&FrustrumX + j) = pfVar1[0] * 0.01f;  // X (tile coords)
+        *(float*)((char*)&FrustrumY + j) = pfVar1[1] * 0.01f;  // Y
     }
 }
 
-// ── FUN_004f98c0 (IDA-activated, absent in Ghidra) ──
-int __cdecl FUN_004f98c0(int a1, int a2, int a3, int a4, int a5)
+// ── Terrain_LightSetup (IDA-activated, absent in Ghidra) ──
+int __cdecl Terrain_LightSetup(int a1, int a2, int a3, int a4, int a5)
 {
   int v5; // esi
   int v6; // edi
@@ -464,7 +464,7 @@ int __cdecl FUN_004f98c0(int a1, int a2, int a3, int a4, int a5)
 
   v5 = a3;
   v6 = a1;
-  v16 = (char *)&DAT_0814b2e0 + 0x40000 * a5;
+  v16 = (char *)&GrassWindWaveBuffer + 0x40000 * a5;
   v17 = 1024.0 / (double)a3 * (1024.0 / (double)a3);
   if ( a1 < 0 )
   {

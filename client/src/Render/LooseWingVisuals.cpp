@@ -27,18 +27,18 @@ intptr_t renderModels=0, publishedModels=0;
 bool inRender=false;
 
 struct Scratch {
-    char bones[sizeof(g_BoneScratch)], quaternions[sizeof(DAT_05826e18)];
+    char bones[sizeof(g_BoneScratch)], quaternions[sizeof(BoneQuaternionScratch)];
     float root[12], lod;
-    Scratch():lod(_DAT_005597c8) {
+    Scratch():lod(EntityLodScale) {
         memcpy(bones,g_BoneScratch,sizeof(bones));
-        memcpy(quaternions,DAT_05826e18,sizeof(quaternions));
-        memcpy(root,&DAT_06989c9c,sizeof(root));
+        memcpy(quaternions,BoneQuaternionScratch,sizeof(quaternions));
+        memcpy(root,&RootBoneMatrix,sizeof(root));
     }
     ~Scratch() {
         memcpy(g_BoneScratch,bones,sizeof(bones));
-        memcpy(DAT_05826e18,quaternions,sizeof(quaternions));
-        memcpy(&DAT_06989c9c,root,sizeof(root));
-        _DAT_005597c8=lod;
+        memcpy(BoneQuaternionScratch,quaternions,sizeof(quaternions));
+        memcpy(&RootBoneMatrix,root,sizeof(root));
+        EntityLodScale=lod;
     }
 };
 }
@@ -47,7 +47,7 @@ void LooseWingVisuals_BeginStep() { expected.clear(); }
 void LooseWingVisuals_ExpectPreview(unsigned int level) { expected.push_back(level); }
 void LooseWingVisuals_BeginRender() {
     recording.clear(); inRender=true;
-    renderScene=SceneFlag; renderWorld=gMapManager.GetCurrentMap(); renderModels=DAT_05828d58;
+    renderScene=SceneFlag; renderWorld=gMapManager.GetCurrentMap(); renderModels=ModelsBase;
 }
 void LooseWingVisuals_SubmitPreview(const OBJECT &object, const float *angle,
     const float *headAngle, float bodyHeight, unsigned int level, bool spin) {
@@ -63,7 +63,7 @@ void LooseWingVisuals_EndRender() {
     if (!inRender) return;
     inRender=false;
     published.clear();
-    if (renderScene!=SceneFlag || renderWorld!=gMapManager.GetCurrentMap() || renderModels!=DAT_05828d58) return;
+    if (renderScene!=SceneFlag || renderWorld!=gMapManager.GetCurrentMap() || renderModels!=ModelsBase) return;
     published.swap(recording);
     publishedScene=renderScene; publishedWorld=renderWorld; publishedModels=renderModels;
 }
@@ -76,7 +76,7 @@ void LooseWingVisuals_EndRender() {
 void LooseWingVisuals_TickPreviews() {
     for (auto &owner:owners) owner->object.Live=0;
     if (publishedScene!=SceneFlag || publishedWorld!=gMapManager.GetCurrentMap() ||
-        publishedModels!=DAT_05828d58 || !DAT_05828d58) return;
+        publishedModels!=ModelsBase || !ModelsBase) return;
     std::vector<bool> consumed(expected.size(),false);
     for (std::size_t index=0;index<published.size();++index) {
         const Preview &value=published[index];
@@ -90,7 +90,7 @@ void LooseWingVisuals_TickPreviews() {
         owner.object.Live=1;
         owner.object.EnableBoneMatrix=1;
         owner.object.BoneMatrices=(vec34_t *)owner.bones.data();
-        void *model=(void *)(DAT_05828d58+790* BMD_STRIDE);
+        void *model=(void *)(ModelsBase+790* BMD_STRIDE);
         EquipmentModelContext context(model);
         Scratch scratch;
         BMD &b=*AsModel(model);
@@ -113,8 +113,8 @@ void LooseWingVisuals_TickPreviews() {
 // IDA: pose de Entity_Render (0x005038E0), antes de RenderPartObject.
 void LooseWingVisuals_TickGround(intptr_t entity) {
     OBJECT &o=*AsObject(entity);
-    if (o.Type!=790 || o.Alpha<=_DAT_005524f8) return;
-    void *model=(void *)(DAT_05828d58+790* BMD_STRIDE);
+    if (o.Type!=790 || o.Alpha<=0.01f) return;
+    void *model=(void *)(ModelsBase+790* BMD_STRIDE);
     EquipmentModelContext context(model);
     Scratch scratch;
     BMD &b=*AsModel(model);

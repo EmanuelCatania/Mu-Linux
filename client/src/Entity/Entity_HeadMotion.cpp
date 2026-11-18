@@ -12,9 +12,9 @@ void __cdecl LookAtTarget(OBJECT* o, const CHARACTER* TargetCharacter) {
     // OBJECT struct (from Ghidra, size 0x1BC):
     //   +0x10 = Position[3] (float), +0x1C = Angle[3] (float, [2]=facing)
     //   +0x34 = HeadTargetAngle[3] (float)
-    // _DAT_00552848 = angle threshold (~80.0f)
-    // _DAT_00552598 = height offset, _DAT_005526e4 = vertical angle scale
-    // _DAT_00552580 = -180.0f guard, _DAT_0055286c = 360.0f wrap
+    // 90.0f = angle threshold (~80.0f)
+    // 50.0f = height offset, 0.2f = vertical angle scale
+    // FloatZeroB = -180.0f guard, AngleDeg360 = 360.0f wrap
 
     if (!TargetCharacter) return;
 
@@ -36,15 +36,15 @@ void __cdecl LookAtTarget(OBJECT* o, const CHARACTER* TargetCharacter) {
 
     float* headTarget = o->HeadTargetAngle;  // o->HeadTargetAngle[3]
 
-    if (deltaAngle < (double)_DAT_00552848) {
+    if (deltaAngle < (double)90.0f) {
         // Within threshold: compute head rotation
         headTarget[0] = oFacing - angle;
-        headTarget[1] = (tZ - (oZ + _DAT_00552598)) * _DAT_005526e4;
+        headTarget[1] = (tZ - (oZ + 50.0f)) * 0.2f;
 
         // Wrap angles if < -180.0f
         for (int i = 0; i < 2; i++) {
-            if (headTarget[i] < _DAT_00552580) {
-                headTarget[i] = headTarget[i] + _DAT_0055286c;
+            if (headTarget[i] < FloatZeroB) {
+                headTarget[i] = headTarget[i] + AngleDeg360;
             }
         }
     } else {
@@ -72,11 +72,11 @@ void __cdecl MoveHead(CHARACTER* character) {
             float* pfVar4 = (float*)(param_1 + 0x34);
             *pfVar4 = (float)(rand() % 128 - 64);          // 0043E940: -64..+63
             *(float*)(param_1 + 0x38) = (float)(rand() % 48 - 16); // -16..+31
-            // Clamp both head angles toward 0 by _DAT_0055286c if below _DAT_00552580
+            // Clamp both head angles toward 0 by AngleDeg360 if below FloatZeroB
             int iVar5 = 2;
             do {
-                if (*pfVar4 < _DAT_00552580) {
-                    *pfVar4 = *pfVar4 + _DAT_0055286c;
+                if (*pfVar4 < FloatZeroB) {
+                    *pfVar4 = *pfVar4 + AngleDeg360;
                 }
                 pfVar4 = pfVar4 + 1;
                 iVar5 = iVar5 - 1;

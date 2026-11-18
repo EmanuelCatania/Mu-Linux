@@ -114,7 +114,7 @@ void CNetwork::OnSocketEvent(WORD evt, WORD err)
         // "Conexión cerrada" sin que el cliente se mate solo.
         extern void UIChatLogWindow_AddText(const char* strID, const char* msg, int color);
         if (!reconnecting)
-            UIChatLogWindow_AddText((const char*)&DAT_083a7c5c, GlobalText[3], 1);
+            UIChatLogWindow_AddText((const char*)&ExitCountdownLogLabel, GlobalText[3], 1);
         if (Platform::GetSocket().IsOpen(SocketClientSocket)) {
             Platform::GetSocket().Close((SOCKET)SocketClientSocket);
             SocketClientSocket = static_cast<SOCKET>(Platform::InvalidSocket);
@@ -125,10 +125,10 @@ void CNetwork::OnSocketEvent(WORD evt, WORD err)
         if (SceneFlag == 2 && !reconnecting) {
             g_bGameServerConnected = 0;
             CurrentProtocolState = 0;
-            DAT_083a7c14 = 0;
-            DAT_083a7c44 = 0;
-            DAT_083a7c24 = 0;
-            DAT_083a7c28 = 0;
+            LoginSubState = 0;
+            ServerClickCooldown = 0;
+            InGameUiState = 0;
+            InGameUiStateNext = 0;
             ServerSelectHi = -1;
             ServerSelectLo = -1;
             if (m_HasConnectServer) {
@@ -247,7 +247,7 @@ void CNetwork::SendToConnectServer(const BYTE* data, int len)
         BeginConnectServerSession();
         MuEmu::SetActive(false);
         extern bool CreateSocketNoExit(const char*, unsigned int);
-        if (!CreateSocketNoExit(PTR_s_connect_muonline_co_kr_005615b8, (unsigned int)g_ServerPort)) return;
+        if (!CreateSocketNoExit(szServerIpAddress, (unsigned int)g_ServerPort)) return;
     }
     if (SocketClientSendBufferLength > 0 || !Platform::GetSocket().IsConnected(SocketClientSocket)) {
         if (len <= 0x2000 - SocketClientSendBufferLength) {
@@ -332,7 +332,7 @@ int CNetwork::SendRaw(const char* buf, int len)
             return -1;
         }
         if (n == 0) break;
-        if (SocketClientLogPrint) FUN_0043de60();
+        if (SocketClientLogPrint) Net_FlushQueue();
         sent += n;
         rem  -= n;
     } while (rem > 0);
@@ -387,7 +387,7 @@ void CNetwork::SendFrameC1(const BYTE* pkt, int totalLen)
 // El chain va ANTES del serial-stomp, en el mismo orden que el companion.
 //
 // Serial: CProtocol::DataSend pisa el byte de tamano con el contador rodante
-// (g_byPacketSerialSend / DAT_05826ceb) justo antes de encriptar, asi que el
+// (g_byPacketSerialSend / LegacyPacketSerialSend) justo antes de encriptar, asi que el
 // primer byte DESENCRIPTADO del lado del server es el serial, no el tamano.
 // El server lo lee como DecSerial y exige la secuencia 0,1,2,... via
 // CheckSerial; cualquier salto -> CloseClient.

@@ -21,16 +21,16 @@ void Map_LoadObjectModels(void)
     char  local_200[256];
     char  local_100[256];
 
-    cVar2 = DAT_0055a7c4;
-    if (DAT_083a410c != '\0') {
-        DAT_0055a7c4 = '\0';
+    cVar2 = g_tex_ext_mode;
+    if (InGameModeFlag != '\0') {
+        g_tex_ext_mode = '\0';
         gMapManager.SetCurrentMap(7);
     }
 
     // Global drop texture always loaded
     OpenJPG("Object8/drop01.jpg", 0x4d9, 0x2600, 0x2900, 0, '\x01');
 
-    if (DAT_0055a7c4 != '\0') goto section2;
+    if (g_tex_ext_mode != '\0') goto section2;
 
     // ── Section 1: per-zone animated creature BMD loads ─────────────────────
     switch (gMapManager.GetCurrentMap()) {
@@ -40,7 +40,7 @@ void Map_LoadObjectModels(void)
         break;
     case 1:
     case 4: // Dungeon
-        OpenModel(0xd7, "Data2/Object2/", "DungeonStone.smd" /* DAT_0055f6ac */);
+        OpenModel(0xd7, "Data2/Object2/", "DungeonStone.smd" /* DungeonStoneModelName */);
         OpenModel(0xb0, "Data2/Object2/", "Bat.smd");
         OpenModel(0xb1, "Data2/Object2/", "mouse.smd");
         break;
@@ -48,37 +48,37 @@ void Map_LoadObjectModels(void)
         OpenModel(0xaf, "Data2/Object1/Animal/", "butterfly.smd");
         break;
     case 5: // LostTower
-        OpenModel(0xe4, "Data2/Object6/", "Meteo1.smd"    /* DAT_0055f644 */);
-        OpenModel(0xe5, "Data2/Object6/", "Meteo2.smd"    /* DAT_0055f628 */);
-        OpenModel(0xe6, "Data2/Object6/", "Meteo3.smd"    /* DAT_0055f61c */);
-        OpenModel(0xe7, "Data2/Object6/", "Meteo4.smd"    /* DAT_0055f60c */);
-        OpenModel(0xe8, "Data2/Object6/", "Meteo5.smd"    /* DAT_0055f5fc */);
-        OpenModel(0xea, "Data2/Monster/", "BossHead.smd"  /* DAT_0055f5c4 */);
-        OpenModel(0xeb, "Data2/Object6/", "Princess.smd"  /* DAT_0055f590 */);
+        OpenModel(0xe4, "Data2/Object6/", "Meteo1.smd"    /* Meteo1ModelName */);
+        OpenModel(0xe5, "Data2/Object6/", "Meteo2.smd"    /* Meteo2ModelName */);
+        OpenModel(0xe6, "Data2/Object6/", "Meteo3.smd"    /* Meteo3ModelName */);
+        OpenModel(0xe7, "Data2/Object6/", "Meteo4.smd"    /* Meteo4ModelName */);
+        OpenModel(0xe8, "Data2/Object6/", "Meteo5.smd"    /* Meteo5ModelName */);
+        OpenModel(0xea, "Data2/Monster/", "BossHead.smd"  /* BossHeadModelName */);
+        OpenModel(0xeb, "Data2/Object6/", "Princess.smd"  /* PrincessModelName */);
         break;
     case 6: // Atlans
-        OpenModel(0xb2, "Data2/Object7/", "SeaCreature.smd" /* DAT_0055f560 */);
-        *(BYTE *)((uintptr_t)AsModel(DAT_05828d58 + BMD_STRIDE * 178)->Actions + 0x1a) = 1;
+        OpenModel(0xb2, "Data2/Object7/", "SeaCreature.smd" /* SeaCreatureModelName */);
+        *(BYTE *)((uintptr_t)AsModel(ModelsBase + BMD_STRIDE * 178)->Actions + 0x1a) = 1;
         break;
     case 7: // Icarus
-        OpenModel(0xb6, "Data2/Object8/", "IcarusWing1.smd" /* DAT_0055f534 */);
-        OpenModel(0xb7, "Data2/Object8/", "IcarusWing2.smd" /* DAT_0055f508 */);
-        OpenModel(0xb8, "Data2/Object8/", "IcarusWing3.smd" /* DAT_0055f4ec */);
-        OpenModel(0xb9, "Data2/Object8/", "IcarusWing4.smd" /* DAT_0055f4d0 */);
-        OpenModel(0xba, "Data2/Object8/", "IcarusWing5.smd" /* DAT_0055f4b0 */);
-        OpenModel(0xbb, "Data2/Object8/", "IcarusWing6.smd" /* DAT_0055f490 */);
-        OpenModel(0xbc, "Data2/Object8/", "IcarusWing7.smd" /* DAT_0055f470 */);
-        OpenModel(0xbd, "Data2/Object8/", "IcarusWing8.smd" /* DAT_0055f458 */);
+        OpenModel(0xb6, "Data2/Object8/", "IcarusWing1.smd" /* IcarusWing1ModelName */);
+        OpenModel(0xb7, "Data2/Object8/", "IcarusWing2.smd" /* ModelNameIcarusWing2 */);
+        OpenModel(0xb8, "Data2/Object8/", "IcarusWing3.smd" /* ModelNameIcarusWing3 */);
+        OpenModel(0xb9, "Data2/Object8/", "IcarusWing4.smd" /* ModelNameIcarusWing4 */);
+        OpenModel(0xba, "Data2/Object8/", "IcarusWing5.smd" /* ModelNameIcarusWing5 */);
+        OpenModel(0xbb, "Data2/Object8/", "IcarusWing6.smd" /* ModelNameIcarusWing6 */);
+        OpenModel(0xbc, "Data2/Object8/", "IcarusWing7.smd" /* ModelNameIcarusWing7 */);
+        OpenModel(0xbd, "Data2/Object8/", "IcarusWing8.smd" /* ModelNameIcarusWing8 */);
         // Mark Icarus objects as billboard-capable (type range 0xbc..0x69b step 0xbc)
         iVar7 = 0xbc;
         do {
             iVar3 = iVar7 + 0xbc;
-            *(BYTE *)((intptr_t)AsModel(DAT_05828d58 + BMD_STRIDE * (181 + iVar7 / 0xbc))->Actions + 10) = 1;
+            *(BYTE *)((intptr_t)AsModel(ModelsBase + BMD_STRIDE * (181 + iVar7 / 0xbc))->Actions + 10) = 1;
             iVar7 = iVar3;
         } while (iVar3 < 0x69c);
         break;
     case 8: // Barracks
-        OpenModel(0xb3, "Data2/Object9/", "Barracks1.smd" /* DAT_0055f434 */);
+        OpenModel(0xb3, "Data2/Object9/", "Barracks1.smd" /* ModelNameBarracks1 */);
         break;
     case 10: // Clouds
         OpenJPG("Effect/clouds.jpg", 0x4f4, 0x2601, 0x2900, 0, '\x01');
@@ -93,7 +93,7 @@ void Map_LoadObjectModels(void)
     case 0xe:
     case 0xf:
     case 0x10: // BloodCastle
-        OpenModel(0xb8, "Data2/Object12/", "BC_Gate.smd" /* DAT_0055f388 */);
+        OpenModel(0xb8, "Data2/Object12/", "BC_Gate.smd" /* ModelNameBCGateSmd */);
         break;
     }
 
@@ -103,9 +103,9 @@ section2:
 
     switch (gMapManager.GetCurrentMap()) {
     case 0: // Lorencia
-        AccessModel(0xae, "Data/Object1/", "bird"   /* DAT_0055f370 */, 1);
+        AccessModel(0xae, "Data/Object1/", "bird"   /* ModelNameBird */, 1);
         OpenTexture(0xae, "Object1/", 0x2600, '\x01');
-        AccessModel(0xb5, "Data/Object1/", "fish"   /* DAT_0055f34c */, 1);
+        AccessModel(0xb5, "Data/Object1/", "fish"   /* ModelNameFish */, 1);
         OpenTexture(0xb5, "Object1/", 0x2600, '\x01');
         break;
     case 1:
@@ -143,18 +143,18 @@ section2:
     case 7: // Icarus — animated wings + water textures
         iVar7 = 0xb6;
         do {
-            AccessModel(iVar7, "Data/Object8/", "fish" /* DAT_0055f34c */, iVar7 + -0xb4);
+            AccessModel(iVar7, "Data/Object8/", "fish" /* ModelNameFish */, iVar7 + -0xb4);
             OpenTexture(iVar7, "Object8/", 0x2600, '\x01');
             iVar3 = iVar7 + -0xb4;
             iVar7 = iVar7 + 1;
         } while (iVar3 < 9);
-        // Load water tile textures into DAT_083a8ad8 array (32 entries × 0x38 stride).
+        // Load water tile textures into IcarusWaterTileNameTable array (32 entries × 0x38 stride).
         //
         // Acceso indexado (IDA usa las direcciones absolutas `0x83a8d08`/`0x83a91d8`
         // como bounds). Las primeras 10 entradas (0x83a8d08 - 0x83a8ad8 = 0x230 =
         // 10 × 0x38) llevan "wt0_%d.jpg".
         for (int texIdx = 0; texIdx < 32; ++texIdx) {
-            char* pEntry = &DAT_083a8ad8[texIdx * 0x38];
+            char* pEntry = &IcarusWaterTileNameTable[texIdx * 0x38];
             const char* fmtPath = (texIdx < 10) ? "Object8/wt0_%d.jpg" : "Object8/wt_%d.jpg";
             const char* fmtName = (texIdx < 10) ? "wt0_%d.jpg"         : "wt_%d.jpg";
             crt_sprintf(local_364, fmtPath);
@@ -185,18 +185,18 @@ section2:
     case 0xe:
     case 0xf:
     case 0x10: // BloodCastle
-        if (DAT_0055a7c4 == '\0') {
-            OpenModel(0xb8,  "Data2/Object12/", "BC_Gate.smd"    /* DAT_0055f388 */);
-            OpenModel(0x106, "Data2/Object12/", "BC_Statue1.smd" /* DAT_0055f1e8 */);
-            OpenModel(0x107, "Data2/Object12/", "BC_Statue2.smd" /* DAT_0055f1d8 */);
-            OpenModel(0x104, "Data2/Object12/", "BC_Coffin1.smd" /* DAT_0055f1c8 */);
-            OpenModel(0x105, "Data2/Object12/", "BC_Coffin2.smd" /* DAT_0055f1b8 */);
-            OpenModel(0xb9,  "Data2/Object12/", "BC_Shine.smd"   /* DAT_0055f1ac */);
+        if (g_tex_ext_mode == '\0') {
+            OpenModel(0xb8,  "Data2/Object12/", "BC_Gate.smd"    /* ModelNameBCGateSmd */);
+            OpenModel(0x106, "Data2/Object12/", "BC_Statue1.smd" /* ModelNameBCStatue1 */);
+            OpenModel(0x107, "Data2/Object12/", "BC_Statue2.smd" /* ModelNameBCStatue2 */);
+            OpenModel(0x104, "Data2/Object12/", "BC_Coffin1.smd" /* ModelNameBCCoffin1 */);
+            OpenModel(0x105, "Data2/Object12/", "BC_Coffin2.smd" /* ModelNameBCCoffin2 */);
+            OpenModel(0xb9,  "Data2/Object12/", "BC_Shine.smd"   /* ModelNameBCShine */);
         }
-        AccessModel(0xb8,  "Data/Object12/", "BC_Gate"    /* DAT_0055f1a4 */, 1);
+        AccessModel(0xb8,  "Data/Object12/", "BC_Gate"    /* ModelNameBCGate */, 1);
         OpenTexture(0xb8,  "Object12/", 0x2600, '\x01');
-        AccessModel(0x106, "Data/Object12/", "BC_Statue"  /* DAT_0055f180 */, 1);
-        AccessModel(0x107, "Data/Object12/", "BC_Statue"  /* DAT_0055f180 */, 2);
+        AccessModel(0x106, "Data/Object12/", "BC_Statue"  /* ModelNameBCStatue */, 1);
+        AccessModel(0x107, "Data/Object12/", "BC_Statue"  /* ModelNameBCStatue */, 2);
         AccessModel(0x104, "Data/Object12/", "StoneCoffin", 1);
         AccessModel(0x105, "Data/Object12/", "StoneCoffin", 2);
         iVar7 = 0;
@@ -213,7 +213,7 @@ section2:
         OpenTexture(0xb9,  "Object12/", 0x2600, '\x01');
         OpenJPG("Effect/clouds.jpg", 0x4f4, 0x2601, 0x2900, 0, '\x01');
         LoadWaveFile(0x6e, "Data/Sound/iBloodCastle.wav", 1, '\0');
-        DAT_0055a7c4 = '\x01';
+        g_tex_ext_mode = '\x01';
         break;
     }
 
@@ -222,7 +222,7 @@ section2:
 
     if (gMapManager.GetCurrentMap() == 0) {
         // Lorencia: load all object models if not yet cached
-        if (DAT_0055a7c4 == '\0') {
+        if (g_tex_ext_mode == '\0') {
             // Trees
             OpenModel(0x00, "Data2/Object1/", "treesmall.smd");
             OpenModel(0x01, "Data2/Object1/", "treebig.smd");
@@ -361,7 +361,7 @@ section2:
             OpenModel(0x9c, "Data2/Object1/", "house_in_beer_02.smd");
             OpenModel(0x9d, "Data2/Object1/", "house_in_beer_03.smd");
 
-            DAT_083a4100 = 1;
+            LorenciaModelsLoadedFlag = 1;
         }
 
         // Animation + texture setup for Lorencia objects
@@ -369,7 +369,7 @@ section2:
         iVar7 = 0;
         do {
             iVar3 = iVar7 + 1;
-            AccessModel(iVar7, "Data/Object1/", "Tree" /* DAT_0055e8a8 */, iVar3);
+            AccessModel(iVar7, "Data/Object1/", "Tree" /* ModelNameTree */, iVar3);
             iVar7 = iVar3;
         } while (iVar3 < 0xd);
         // Grass 0x14..0x19 → anim "Grass" index 1..6
@@ -386,9 +386,9 @@ section2:
         } while (iVar7 < 0xa0);
     } else {
         // Custom / unknown map — load models from a data file
-        if (DAT_0055a7c4 == '\0') {
-            crt_sprintf(local_384, "%d" /* DAT_0055e714 format: zone index path */);
-            ParserFileHandle = (FILE*)crt_fopen(local_384, DAT_005580ac);
+        if (g_tex_ext_mode == '\0') {
+            crt_sprintf(local_384, "%d" /* MapObjPathFmt format: zone index path */);
+            ParserFileHandle = (FILE*)crt_fopen(local_384, FopenModeRb);
             if (ParserFileHandle != NULL) {
                 while (true) {
                     int typeId = ParseNextToken();
@@ -428,20 +428,20 @@ section2:
         // Zone-specific post-load fixups
         if (gMapManager.GetCurrentMap() == 1) {
             // Dungeon: set a float property on model slot 0x76 (offset 0x1d90 into table)
-            *(float *)((uintptr_t)AsModel(DAT_05828d58 + BMD_STRIDE * 40)->Actions + sizeof(ModelAnimationAction) + 4) = 0.4f; // 0x3ecccccd
+            *(float *)((uintptr_t)AsModel(ModelsBase + BMD_STRIDE * 40)->Actions + sizeof(ModelAnimationAction) + 4) = 0.4f; // 0x3ecccccd
         } else if (gMapManager.GetCurrentMap() == 8) {
             // Barracks: clear animated flags on several model slots
-            *(BYTE *)(DAT_05828d58 + BMD_STRIDE * 11 + 0x88 + BMD_FIELD_SHIFT) = 0;
-            *(BYTE *)(DAT_05828d58 + BMD_STRIDE * 12 + 0x88 + BMD_FIELD_SHIFT) = 0;
-            *(BYTE *)(DAT_05828d58 + BMD_STRIDE * 13 + 0x88 + BMD_FIELD_SHIFT) = 0;
-            *(BYTE *)(DAT_05828d58 + BMD_STRIDE * 73 + 0x88 + BMD_FIELD_SHIFT) = 0;
-            *(BYTE *)(DAT_05828d58 + BMD_STRIDE * 75 + 0x88 + BMD_FIELD_SHIFT) = 0;
-            *(BYTE *)(DAT_05828d58 + BMD_STRIDE * 79 + 0x88 + BMD_FIELD_SHIFT) = 0;
+            *(BYTE *)(ModelsBase + BMD_STRIDE * 11 + 0x88 + BMD_FIELD_SHIFT) = 0;
+            *(BYTE *)(ModelsBase + BMD_STRIDE * 12 + 0x88 + BMD_FIELD_SHIFT) = 0;
+            *(BYTE *)(ModelsBase + BMD_STRIDE * 13 + 0x88 + BMD_FIELD_SHIFT) = 0;
+            *(BYTE *)(ModelsBase + BMD_STRIDE * 73 + 0x88 + BMD_FIELD_SHIFT) = 0;
+            *(BYTE *)(ModelsBase + BMD_STRIDE * 75 + 0x88 + BMD_FIELD_SHIFT) = 0;
+            *(BYTE *)(ModelsBase + BMD_STRIDE * 79 + 0x88 + BMD_FIELD_SHIFT) = 0;
         }
     }
 
-    if (DAT_083a410c != '\0') {
-        DAT_0055a7c4 = cVar2;
+    if (InGameModeFlag != '\0') {
+        g_tex_ext_mode = cVar2;
     }
 }
 #endif // disabled alternate Map_LoadObjectModels port

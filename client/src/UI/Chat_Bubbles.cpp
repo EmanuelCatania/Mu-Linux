@@ -21,7 +21,7 @@ extern "C" const char* Guild_GetMarkName(int row);
 
 // Nivel del heroe tal cual lo leen sub_47FED0 y RegistWhisperID.
 static int Whisper_HeroLevel() {
-    const BYTE* ca = (const BYTE*)(uintptr_t)DAT_07cf1ff4;   // IDA: CharacterAttribute
+    const BYTE* ca = (const BYTE*)(uintptr_t)CharacterAttributePtr;   // IDA: CharacterAttribute
     return ca ? *(const unsigned short*)(ca + 14) : 0;
 }
 
@@ -29,7 +29,7 @@ static int Whisper_HeroLevel() {
 // (L2079) con lvl 6: con el heroe por debajo de ese nivel solo se le puede
 // escribir a alguien que ya te susurro (quedo anotado por RegistWhisperID); si
 // no, avisa con GlobalText[479] y devuelve 0.
-int __cdecl FUN_0047fed0(int lvl, const char* name) {
+int __cdecl Chat_WhisperGate(int lvl, const char* name) {
     if (Whisper_HeroLevel() < lvl) {
         for (int row = 0; row < 10; row++) {
             if (!strcmp(name, WhisperRegistID[row]))
@@ -60,8 +60,8 @@ void __cdecl RegistWhisperID(int lvl, const char* text) {
 // Asigna texto a una entrada; lógica inline de CreateChat (IDA 0x00481BA0).
 // Texto largo (>19 caracteres): CutText lo parte en Text[0] y Text[1].
 // Texto corto: va entero a Text[0].
-// param_3==1: system message via vtable call on DAT_055c9ff0.
-void __cdecl FUN_00481a40(CHAT* param_1, char* param_2, int param_3) {
+// param_3==1: system message via vtable call on ChatHistoryWidget.
+void __cdecl Chat_SetBubbleText(CHAT* param_1, char* param_2, int param_3) {
     // param_1: entrada de chat; param_2: texto.
     // param_3: 0 para texto normal, 1 para mensaje mediante vtable.
 
@@ -74,8 +74,8 @@ void __cdecl FUN_00481a40(CHAT* param_1, char* param_2, int param_3) {
         // System message: dispatch slot 28 (vtable +0x70) = ChatLB_AddText
         // (__fastcall this + 4 args).  Previous cdecl form left ECX = junk
         // and corrupted the chat list.
-        if (DAT_055c9ff0 && ChatWidget_GetVTable(DAT_055c9ff0)) {
-            DWORD* obj = (DWORD*)DAT_055c9ff0;
+        if (ChatHistoryWidget && ChatWidget_GetVTable(ChatHistoryWidget)) {
+            DWORD* obj = (DWORD*)ChatHistoryWidget;
             void** vt  = ChatWidget_GetVTable(obj);
             typedef void (__fastcall *FnAddText)(DWORD*, int /*edx*/,
                                                  const char*, const char*,
@@ -102,7 +102,7 @@ void __cdecl FUN_00481a40(CHAT* param_1, char* param_2, int param_3) {
 }
 
 // CreateChat @ 0x00481BA0 (~396 lines) — creates chat bubble above entity
-// Pool de burbujas: 100 CHAT (UI/ChatTypes.h) en DAT_07e016f8.
+// Pool de burbujas: 100 CHAT (UI/ChatTypes.h) en ChatBubblePool.
 // Two paths: (1) find existing slot for same owner and update, (2) find empty slot and create.
 // IDA: CreateChat (0x00481BA0)
 // IDA: CreateChat (0x00481BA0), literales 0x559D60/64: "[" y "] ". El prefijo
@@ -151,9 +151,9 @@ void __cdecl CreateChat(char* ID, char* Text, CHARACTER* entity, int Flag, int S
         }
     }
 
-    char *pool_base = DAT_07e016f8;
+    char *pool_base = ChatBubblePool;
     const int STRIDE = (int)sizeof(CHAT);
-    const int POOL_SLOTS = (int)(sizeof(DAT_07e016f8) / sizeof(CHAT));   // 100
+    const int POOL_SLOTS = (int)(sizeof(ChatBubblePool) / sizeof(CHAT));   // 100
 
     // ── Path 1: Find existing slot owned by this entity ──
     char *slot = pool_base;
@@ -198,8 +198,8 @@ found_new:
         return;
     }
 
-    // Assign text using FUN_00481a40 logic
-    FUN_00481a40(AsChat(slot), Text, Flag);
+    // Assign text using Chat_SetBubbleText logic
+    Chat_SetBubbleText(AsChat(slot), Text, Flag);
     return;
 
 found_existing:
@@ -234,7 +234,7 @@ found_existing:
             AsChat(slot)->LifeTime[1] = AsChat(slot)->LifeTime[0];  // disp1 → disp2
         }
         AsChat(slot)->Owner = entity;
-        FUN_00481a40(AsChat(slot), Text, Flag);
+        Chat_SetBubbleText(AsChat(slot), Text, Flag);
     } else {
         // Texto vacío (hover de nombre NPC/target): SOLO refrescar el timer.
         AsChat(slot)->IDLifeTime = 10;
@@ -253,7 +253,7 @@ void __cdecl AssignChat(char* ID, char* Text, int Flag) {
     // (+0x02 es `entity_type`, 390 para jugadores: no es el kind.)
     // Entity stride 0x394 (=916, coincide con IDA). ID string en +0x1C1 (=449).
 
-    intptr_t base = DAT_07abf5d0;  // CharactersClient
+    intptr_t base = CharactersClient;  // CharactersClient
 
     // Pass 1: search players (Kind == 1) — por nombre
     for (int i = 0; i < 400; i++) {

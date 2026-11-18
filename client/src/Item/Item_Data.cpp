@@ -7,11 +7,11 @@
 // IDA: FUN_0047B130
 // Reads a text-format item data file (Item.txt / local-language variant).
 // Parser loop uses TextParser_GetToken which returns record type:
-//   0 = comment/section header (strcmp with "END" at DAT_00559088; break loop on match)
+//   0 = comment/section header (strcmp with "END" at SentinelEndString; break loop on match)
 //   1 = data record   (iVar4 = row, lVar16 = col)
 //   2 = EOF           (close file, return)
 //
-// Data structure: DAT_07d78068 + (row*0x20 + col)*0x40
+// Data structure: ItemAttributeBase + (row*0x20 + col)*0x40
 //   Each 0x40-byte slot stores:
 //     [0x00..0x1F] = name string (memcpy from TextParserTokenString)
 //     [0x20] = item type group A
@@ -27,7 +27,7 @@
 //     [0x38..0x3B] = accessory sub-fields
 //     [0x3C..0x3F] = pet/charm sub-fields
 //     [0x1E] = stackable flag (set 1 if item type group A > 1)
-//   Mirror copy written to DAT_07cf1ff0 at same offset.
+//   Mirror copy written to ItemAttributeShadowTable at same offset.
 //   [0x27] field in mirror is left-shifted by 1 after copy.
 //
 // Item type dispatch by row (iVar4):
@@ -43,14 +43,14 @@
 //   >13   (others/consumables): skips extra reads
 void __cdecl Item_LoadTextData(const char *path)
 {
-    DAT_07d7806c = (FILE *)crt_fopen(path, DAT_005580ac);
-    if (!DAT_07d7806c) return;
+    BmdFileHandle = (FILE *)crt_fopen(path, FopenModeRb);
+    if (!BmdFileHandle) return;
 
 LAB_loop:
     {
         int recType = TextParser_GetToken();
         if (recType == 2) {
-            crt_fclose(DAT_07d7806c);
+            crt_fclose(BmdFileHandle);
             return;
         }
         // IDA: sub_47B130 (0x0047B130) convierte TokenNumber, no el reloj.
@@ -62,18 +62,18 @@ LAB_loop:
 // IDA: FUN_0047B650
 // Writes item data table to a binary .bmd file with checksum.
 // Allocates 0x8000-byte buffer, copies 0x200 item slots (stride 0x40) from
-// DAT_07d78068, XOR-encrypts each 0x40-byte block via BuxConvert_0,
+// ItemAttributeBase, XOR-encrypts each 0x40-byte block via BuxConvert_0,
 // writes the buffer (fwrite via crt_fwrite), then computes a rolling
-// checksum and appends 4 bytes (checksum seed: DAT_01c5e200 = 0x01c5e200).
+// checksum and appends 4 bytes (checksum seed: ItemBmdChecksumSeed = 0x01c5e200).
 void __cdecl Item_SaveBMD(const char *path)
 {
-    FILE *fp = (FILE *)crt_fopen(path, DAT_005597d4);  // "wb"
+    FILE *fp = (FILE *)crt_fopen(path, FopenModeWb);  // "wb"
     char *buf = (char *)operator_new(0x8000);
     int off = 0;
     char *p = buf;
     do {
         // copy 0x40 bytes from item table slot
-        void *src = (void *)(DAT_07d78068 + off);
+        void *src = (void *)(ItemAttributeBase + off);
         memcpy(p, src, 0x40);
         BuxConvert_0(p, 0x40);  // XOR-encrypt
         off += 0x40;
@@ -81,7 +81,7 @@ void __cdecl Item_SaveBMD(const char *path)
     } while (off < 0x8000);
     crt_fwrite(buf, 0x8000, 1, (int *)fp);
     // compute checksum
-    DWORD cs = DAT_01c5e200;
+    DWORD cs = ItemBmdChecksumSeed;
     for (UINT i = 0; i < 0x7ffd; i += 4) {
         DWORD v  = *(DWORD *)(buf + i);
         DWORD q  = ((i >> 2) - 1) & 1;
@@ -99,15 +99,15 @@ void __cdecl Item_SaveBMD(const char *path)
 // Reads a binary .bmd item data file (counterpart to FUN_0047b650).
 // Allocates 0x8000-byte buffer, reads data + 4-byte checksum, validates
 // checksum (exits with MessageBox on mismatch), XOR-decrypts each 0x40-byte
-// block, copies decrypted records into DAT_07d78068 (raw table) and
-// DAT_07cf1ff0 (shadow table); shifts [+0x27] field left by 1 in shadow.
+// block, copies decrypted records into ItemAttributeBase (raw table) and
+// ItemAttributeShadowTable (shadow table); shifts [+0x27] field left by 1 in shadow.
 void __cdecl Item_LoadBMD(const char *path)
 {
     CHAR msg[256];
-    FILE *fp = (FILE *)crt_fopen(path, DAT_005580ac);  // "rb"
+    FILE *fp = (FILE *)crt_fopen(path, FopenModeRb);  // "rb"
     if (!fp) {
-        crt_sprintf(msg, (const char *)s__s___File_not_exist__00558094, path);
-        CErrorReport_Write(&DAT_055c9bf0, msg);
+        crt_sprintf(msg, (const char *)Err_FileNotExist, path);
+        CErrorReport_Write(&ErrorReportCtx, msg);
         Platform::GetWindow().ShowError(msg, nullptr, true, false);
         gWindow.RequestCloseApplication();
         return;
@@ -119,7 +119,7 @@ void __cdecl Item_LoadBMD(const char *path)
     crt_fclose(fp);
 
     // validate checksum
-    DWORD cs = DAT_01c5e200;
+    DWORD cs = ItemBmdChecksumSeed;
     for (UINT i = 0; i < 0x7ffd; i += 4) {
         DWORD v  = *(DWORD *)(buf + i);
         DWORD q  = ((i >> 2) - 1) & 1;
@@ -129,8 +129,8 @@ void __cdecl Item_LoadBMD(const char *path)
             cs ^= (DWORD)(cs + 0xe2f1) >> (((BYTE)(i >> 2) & 7) + 1);
     }
     if (stored_cs != cs) {
-        crt_sprintf(msg, (const char *)s__s___File_corrupted__00559bd4);
-        CErrorReport_Write(&DAT_055c9bf0, msg);
+        crt_sprintf(msg, (const char *)Err_FileCorrupted);
+        CErrorReport_Write(&ErrorReportCtx, msg);
         Platform::GetWindow().ShowError(msg, nullptr, true, false);
         gWindow.RequestCloseApplication();
         operator_delete(buf);
@@ -142,11 +142,11 @@ void __cdecl Item_LoadBMD(const char *path)
     do {
         BuxConvert_0(p, 0x40);  // XOR-decrypt
         // copy to raw table
-        memcpy((char *)DAT_07d78068 + off, p, 0x40);
+        memcpy((char *)ItemAttributeBase + off, p, 0x40);
         // copy to shadow table
-        memcpy(DAT_07cf1ff0 + off, p, 0x40);
+        memcpy(ItemAttributeShadowTable + off, p, 0x40);
         // shift [+0x27] field in shadow
-        DAT_07cf1ff0[off + 0x27] <<= 1;
+        ItemAttributeShadowTable[off + 0x27] <<= 1;
         off += 0x40;
         p   += 0x40;
     } while (off < 0x8000);
@@ -155,7 +155,7 @@ void __cdecl Item_LoadBMD(const char *path)
     // lo que ya es UTF-8 se deja y el resto se
     // toma como Windows-1252 (NormalizeTextFileInPlace).
     for (off = 0; off < 0x8000; off += 0x40) {
-        TextEngine::NormalizeTextFileInPlace((char *)DAT_07d78068 + off, 30);
-        TextEngine::NormalizeTextFileInPlace(reinterpret_cast<char*>(DAT_07cf1ff0 + off), 30);
+        TextEngine::NormalizeTextFileInPlace((char *)ItemAttributeBase + off, 30);
+        TextEngine::NormalizeTextFileInPlace(reinterpret_cast<char*>(ItemAttributeShadowTable + off), 30);
     }
 }

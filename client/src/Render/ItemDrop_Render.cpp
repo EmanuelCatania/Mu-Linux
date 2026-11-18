@@ -7,7 +7,7 @@
 //
 // ── POOL DE ITEMS ─────────────────────────────────────────────────────────────
 //
-//   Iterador base: DAT_07b27b08 (piVar5 = &DAT_07b27b08)
+//   Iterador base: ItemDropPoolBase (piVar5 = &ItemDropPoolBase)
 //   Los campos son negativos al iterador → el struct real empieza antes.
 //   La posición real del struct = piVar5 - 0x26e * 4 = piVar5 - 0x9B8
 //   Stride: no determinado en las primeras 120 líneas (loop end at 0x7c602bc)
@@ -50,8 +50,8 @@
 //     Para cada punto:
 //       // UV interpolation (fade out desde punta hasta cola)
 //       if tipo in {0x4ec, 0x4ed} o (0x4e6 sub {7,10}):
-//         local_2c = (total - current) * _DAT_005526dc    (UV lineal simple)
-//         local_28 = (total - current - 1) * _DAT_005526dc
+//         local_2c = (total - current) * 0.0625f    (UV lineal simple)
+//         local_28 = (total - current - 1) * 0.0625f
 //       else:
 //         local_2c = (total - current) / (total_pts - 1)  (UV normalizado)
 //         local_28 = (total - current - 1) / (total_pts - 1)
@@ -122,8 +122,8 @@
 //   GL_SetBlendSrcAlpha  → GL_SetBlend2() — blend mode especial para cadenas/transparentes
 //   GL_SetBlendAdditive  → Frame_UpdateTimer()
 //   GL_BindTextureSlot  → Particle_SetTexture(type) — glBindTexture
-//   DAT_005526dc  → UV step constant
-//   DAT_00552500  → lifetime-to-UV scale (0.001f aprox)
+//   0.0625f  → UV step constant
+//   SinFreqWorldTimeBits  → lifetime-to-UV scale (0.001f aprox)
 //   glBegin(7)    → GL_QUADS
 //   glColor3f     → OpenGL color sin alpha
 //   glColor3fv    → OpenGL color desde array

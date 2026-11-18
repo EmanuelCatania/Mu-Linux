@@ -3,7 +3,7 @@
 //
 // Joint_RenderAll — renders all active joints as textured triangle strips.
 //
-// Iterates the joint render pool starting at DAT_07c608b4 (stride 0x2f0
+// Iterates the joint render pool starting at JointRenderPool (stride 0x2f0
 // bytes = 0xbc int-words).  For each active slot (piVar2[-3] != 0):
 //   - Selects blend mode based on joint type and blink flag (+0x1be):
 //       type < 3 and !blink → GL_SetBlendAdditive (additive)
@@ -32,8 +32,8 @@
 //   GL_BindTextureSlot — GL_BindTextureSlot (texture slot)
 //
 // Globals:
-//   DAT_07c608b4 — joint render pool base (ends at 0x7c72e74)
-//   _DAT_0055256c — float 1.0
+//   JointRenderPool — joint render pool base (ends at 0x7c72e74)
+//   1.0f — float 1.0
 
 #include "stdafx.h"
 #include "Render/BufferedDraw.h"
@@ -43,7 +43,7 @@
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
 // IDA: Trail_RenderAll (0x0046C3E0)
-// Pool g_RenderPool_07c608a8 (100 slots × 0x2f0, en globals.cpp); DAT_07c608b4
+// Pool g_RenderPool (100 slots × 0x2f0, en globals.cpp); JointRenderPool
 // es el ancla +12 dentro del slot[0]. Se itera por cuenta explícita.
 void Trail_RenderAll(void)
 
@@ -54,7 +54,7 @@ void Trail_RenderAll(void)
   int *piVar4;
   int local_8;
 
-  piVar2 = (int*)&DAT_07c608b4;
+  piVar2 = (int*)&JointRenderPool;
   for (int slotIdx = 0; slotIdx < 100; ++slotIdx, piVar2 += 0xbc) {
     if ((char)piVar2[-3] != '\0') {
       iVar3 = piVar2[-2];
@@ -74,7 +74,7 @@ void Trail_RenderAll(void)
           piVar4 = piVar2 + 0x5f;
           do {
             BufferedDraw::Begin(BufferedDraw::Primitive::TriangleFan);
-            fVar1 = _DAT_0055256c;
+            fVar1 = 1.0f;
             if (*(short *)(g_TrailOwner[slotIdx] + EntityOffset(0x1be)) == 0) {
               fVar1 = (float)(piVar2[1] - local_8) / (float)piVar2[1];
             }
@@ -86,7 +86,7 @@ void Trail_RenderAll(void)
             BufferedDraw::Vertex3fv((const float*)(piVar4 + -0x5a));
             BufferedDraw::TexCoord2f((float)local_8 / (float)iVar3,0);
             BufferedDraw::Vertex3fv((const float*)piVar4);
-            fVar1 = _DAT_0055256c;
+            fVar1 = 1.0f;
             if (*(short *)(g_TrailOwner[slotIdx] + EntityOffset(0x1be)) == 0) {
               fVar1 = (float)((piVar2[1] - local_8) + -1) / (float)piVar2[1];
             }

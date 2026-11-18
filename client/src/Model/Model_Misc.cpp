@@ -10,7 +10,7 @@
 void __cdecl Model_LoadSkillEffectAssets(void)
 {
     // ── Korean-locale SMD skill meshes ────────────────────────────────────────
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         OpenModel((int)0xbe, "Data2\\Skill\\", "ice.smd");
         OpenModel((int)0xbf, "Data2\\Skill\\", "\xBD\xBA\xC5\xC0.smd");       // freeze aura
         OpenModel((int)0xc0, "Data2\\Skill\\", "wall.smd");
@@ -63,12 +63,12 @@ void __cdecl Model_LoadSkillEffectAssets(void)
         OpenModel((int)0xfc, "Data2\\Skill\\", "\xBD\xBA\xC5\xC0.smd");
         OpenModel((int)0xfd, "Data2\\Skill\\", "magic2.smd");
         OpenModel((int)0xfe, "Data2\\Skill\\", "magic3.smd");
-        if (DAT_0055a7c4 == '\0')
+        if (g_tex_ext_mode == '\0')
             OpenModel((int)0xff, "Data2\\Skill\\", "piercing.smd");
     }
 
     // ── Compressed-asset (BMD) skill loads ────────────────────────────────────
-    DAT_0055a7c4 = '\x01';
+    g_tex_ext_mode = '\x01';
     AccessModel(0xbe,  "Data\\Skill\\", "Ice",   1);
     AccessModel(199,   "Data\\Skill\\", "Ice",   2);
     AccessModel(0xbf,  "Data\\Skill\\", "Fire",  1);
@@ -96,10 +96,10 @@ void __cdecl Model_LoadSkillEffectAssets(void)
         AccessModel(i, "Data\\Skill\\", "Snow",  i - 0xd3);
     AccessModel(0xc3,  "Data\\Skill\\", "Rider", 1);
 
-    if (DAT_0055a7c4 == '\0')
+    if (g_tex_ext_mode == '\0')
         OpenModel((int)0x10b, "Data2\\Skill\\", "\xBD\xBA\xC5\xC0.smd");
     AccessModel(0x10b, "Data\\Skill\\", "Rider", 2);
-    DAT_0055a7c4 = '\x01';
+    g_tex_ext_mode = '\x01';
 
     AccessModel(0x10c, "Data\\Skill\\", "PhoenixShield", 1);
     AccessModel(0xd8,  "Data\\Skill\\", "Arrow",         1);
@@ -125,14 +125,14 @@ void __cdecl Model_LoadSkillEffectAssets(void)
     // Scale adjustment for slot 0xec — DESHABILITADO
     // 0xad80*4 = 0x2B600 → no es índice, sino absoluto 0x05828d58+0x2B600 = 0x05854358
     // (otro DAT_ en el binario original). Ghidra lo renderizó como base+index por error.
-    // *(DWORD*)(*(DWORD*)((BYTE*)DAT_05828d58 + 0xad80*4) + 4) = 0x3f000000; // 0.5f
+    // *(DWORD*)(*(DWORD*)((BYTE*)ModelsBase + 0xad80*4) + 4) = 0x3f000000; // 0.5f
 
     AccessModel(0xf0,  "Data\\Skill\\", "Blast",       1);
     AccessModel(0xf1,  "Data\\Skill\\", "Inferno",     1);
     AccessModel(0xf2,  "Data\\Skill\\", "ArrowDouble", 1);
 
     // EarthQuake variants (Korean SMD re-load before BMD)
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         OpenModel((int)0xf5, "Data2\\Skill\\", "\xBD\xBA\xC5\xC0.smd");
         OpenModel((int)0xf6, "Data2\\Skill\\", "\xBD\xBA\xC5\xC0.smd");
         OpenModel((int)0xf7, "Data2\\Skill\\", "\xBD\xBA\xC5\xC0.smd");
@@ -150,7 +150,7 @@ void __cdecl Model_LoadSkillEffectAssets(void)
     AccessModel(0xfc, "Data\\Skill\\", "EarthQuake", 8);
     AccessModel(0xfd, "Data\\Skill\\", "flashing",  -1);
     AccessModel(0xfe, "Data\\Skill\\", "tail",      -1);
-    DAT_0055a7c4 = 1;
+    g_tex_ext_mode = 1;
     AccessModel(0xf8, "Data\\Skill\\", "EarthQuake", 4);
     AccessModel(0xfa, "Data\\Skill\\", "EarthQuake", 6);
     AccessModel(0xff, "Data\\Skill\\", "Piercing",  -1);
@@ -167,7 +167,7 @@ void __cdecl Model_LoadSkillEffectAssets(void)
     OpenTexture(0xfc,  "Skill\\", 0x2600, '\x01');
     OpenTexture(0xfd,  "Skill\\", 0x2600, '\x01');
     OpenTexture(0xfe,  "Skill\\", 0x2600, '\x01');
-    DAT_0055a7c4 = 1;
+    g_tex_ext_mode = 1;
 
     // IDA 0.98j: OpenSkills (0x523DC0) carga el Tamachan en el slot 183:
     //     AccessModelWithTextures(183, "Data\\Skill\\", "Tama", 1);
@@ -187,5 +187,5 @@ void __cdecl Model_LoadSkillEffectAssets(void)
     OpenTGA("Skill\\flower1.tga", 0x4da, 0x2600, 0x2900, 0, '\x01');
     OpenTGA("Skill\\flower2.tga", 0x4db, 0x2600, 0x2900, 0, '\x01');
     OpenTGA("Skill\\flower3.tga", 0x4dc, 0x2600, 0x2900, 0, '\x01');
-    DAT_0055a7c4 = 1;
+    g_tex_ext_mode = 1;
 }

@@ -72,8 +72,8 @@ extern "C" void __cdecl InsertInventoryItem(BYTE* Inv, int Width, int Height,
             static const int kEquipOffsets[12] = {
                 536, 604, 672, 740, 808, 876, 944, 1012, 1080, 1148, 1216, 1284
             };
-            if (DAT_07cf1ffc) {
-                BYTE* wear = (BYTE*)(uintptr_t)DAT_07cf1ffc + kEquipOffsets[slotIndex];
+            if (CharacterMachinePtr) {
+                BYTE* wear = (BYTE*)(uintptr_t)CharacterMachinePtr + kEquipOffsets[slotIndex];
                 memset(wear, 0, 0x44);
                 *(short*)wear = (short)0xFFFF;
                 *(int*)(wear + 56) = -1;      // Key: mismo estado que deja el F3/10
@@ -138,7 +138,7 @@ extern "C" void __cdecl InsertInventoryItem(BYTE* Inv, int Width, int Height,
     if (Index >= total) return;
 
     // Grid stride: ITEM-raw is 0x44 (68) bytes per slot in 0.97k. Some tables
-    // (e.g. char-list at DAT_07ea5298) use 0x44 too — same shape as inventory.
+    // (e.g. char-list at LegacyInventory) use 0x44 too — same shape as inventory.
     BYTE* slot = Inv + Index * 0x44;
 
     // Copy item header + flags. 12 bytes is what 0.97k packets carry per slot

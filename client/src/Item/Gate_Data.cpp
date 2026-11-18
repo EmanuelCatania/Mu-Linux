@@ -12,8 +12,8 @@
 // Total 100 entries (900 bytes, loop runs while off < 900).
 void __cdecl Gate_LoadTextData(const char *path)
 {
-    DAT_07d7806c = (FILE *)crt_fopen(path, DAT_005580ac);
-    if (!DAT_07d7806c) return;
+    BmdFileHandle = (FILE *)crt_fopen(path, FopenModeRb);
+    if (!BmdFileHandle) return;
 
     do {
         while (true) {
@@ -33,7 +33,7 @@ void __cdecl Gate_LoadTextData(const char *path)
     } while (true);
 
 EOF_done:
-    crt_fclose(DAT_07d7806c);
+    crt_fclose(BmdFileHandle);
 }
 
 // IDA: FUN_0047A170
@@ -42,7 +42,7 @@ EOF_done:
 // XOR-encrypts each 9-byte record via BuxConvert_0, writes via crt_fwrite.
 void __cdecl Gate_SaveBMD(const char *path)
 {
-    FILE *fp  = (FILE *)crt_fopen(path, DAT_005597d4);  // "wb"
+    FILE *fp  = (FILE *)crt_fopen(path, FopenModeWb);  // "wb"
     char *buf = (char *)operator_new(9);
     int off   = 0;
     do {
@@ -65,10 +65,10 @@ void __cdecl Gate_SaveBMD(const char *path)
 void __cdecl Gate_LoadBMD(const char *path)
 {
     CHAR msg[256];
-    FILE *fp = (FILE *)crt_fopen(path, DAT_005580ac);
+    FILE *fp = (FILE *)crt_fopen(path, FopenModeRb);
     if (!fp) {
-        crt_sprintf(msg, (const char *)s__s___File_not_exist__00558094);
-        CErrorReport_Write(&DAT_055c9bf0, msg);
+        crt_sprintf(msg, (const char *)Err_FileNotExist);
+        CErrorReport_Write(&ErrorReportCtx, msg);
         Platform::GetWindow().ShowError(msg, nullptr, true, false);
         gWindow.RequestCloseApplication();
         return;

@@ -11,9 +11,9 @@ namespace {
 bool active=false;
 float fraction=1;
 int CharacterSlot(const void *owner) {
-    if (owner==DAT_07abf050) return 400;
-    const uintptr_t offset=(uintptr_t)owner-(uintptr_t)DAT_07abf5d0;
-    return DAT_07abf5d0 && offset<400*sizeof(CHARACTER) && offset%sizeof(CHARACTER)==0 ? (int)(offset/sizeof(CHARACTER)) : -1;
+    if (owner==CharSelPreviewEntity) return 400;
+    const uintptr_t offset=(uintptr_t)owner-(uintptr_t)CharactersClient;
+    return CharactersClient && offset<400*sizeof(CHARACTER) && offset%sizeof(CHARACTER)==0 ? (int)(offset/sizeof(CHARACTER)) : -1;
 }
 void ApplyObject(OBJECT &object, const RenderPosePair &pair) {
     const RenderPose pose=RenderSnapshots_Interpolate(pair,fraction);
@@ -54,9 +54,9 @@ bool Near(const RenderFxView &view, int offset) {
 void ApplyFx() {
     struct Source { void *base; int stride; };
     const Source sources[]={
-        {DAT_07b11670,OBJECT_STRIDE},{DAT_07b27150,JOINT_STRIDE},{DAT_07abf5f0,0x70},
-        {DAT_07c5ab3c,0x70},{g_WeatherSlotPool,OBJECT_STRIDE},{DAT_083a1218,OBJECT_STRIDE},
-        {DAT_083a2e90,OBJECT_STRIDE},{g_RenderPool_07c608a8,0x2f0},
+        {EffectPoolBase,OBJECT_STRIDE},{JointPoolBase,JOINT_STRIDE},{SpritePoolBase,0x70},
+        {SkillEffectPool,0x70},{g_WeatherSlotPool,OBJECT_STRIDE},{ButterflyObjectPool,OBJECT_STRIDE},
+        {FishObjectPool,OBJECT_STRIDE},{g_RenderPool,0x2f0},
         {g_PlayerRenderPool,OBJECT_STRIDE},{g_PointerPool,0x70}
     };
     static_assert(sizeof(sources)/sizeof(sources[0])==(int)RenderFxPool::Count,"Pools interpolados");
@@ -123,8 +123,8 @@ bool RenderInterpolation_OwnerContinuous(const void *owner) {
     if (!active) return false;
     if (slot>=0) return RenderSnapshots_Character(slot,RenderInterpolation_MaxDisplacement,pair) && pair.continuous;
     if (SceneObjects::Contains(owner)) return RenderSnapshots_Object(owner,RenderInterpolation_MaxDisplacement,pair) && pair.continuous;
-    const uintptr_t itemOffset=(uintptr_t)owner-((uintptr_t)DAT_07e12840+72);
-    if (DAT_07e12840 && itemOffset<1000*GROUND_ITEM_STRIDE && itemOffset%GROUND_ITEM_STRIDE==0)
+    const uintptr_t itemOffset=(uintptr_t)owner-((uintptr_t)GroundItemPool+72);
+    if (GroundItemPool && itemOffset<1000*GROUND_ITEM_STRIDE && itemOffset%GROUND_ITEM_STRIDE==0)
         return RenderSnapshots_Item((int)(itemOffset/GROUND_ITEM_STRIDE),RenderInterpolation_MaxDisplacement,pair) && pair.continuous;
     RenderFxView view;
     return RenderFxSnapshots_Owner(owner,view) && view.bytes!=0x2f0 && view.continuous && Near(view,0x10);
@@ -143,7 +143,7 @@ void RenderInterpolation_Begin(int remainder) {
         CameraDistance=RenderBlend(camera.previous.distance,camera.current.distance,fraction);
     }
     for (int slot=0;slot<401;++slot) {
-        auto *c=slot==400 ? (CHARACTER *)DAT_07abf050 : DAT_07abf5d0 ? (CHARACTER *)DAT_07abf5d0+slot : nullptr;
+        auto *c=slot==400 ? (CHARACTER *)CharSelPreviewEntity : CharactersClient ? (CHARACTER *)CharactersClient+slot : nullptr;
         RenderPosePair pair;
         if (!c || !RenderSnapshots_Character(slot,RenderInterpolation_MaxDisplacement,pair)) continue;
         ApplyObject(c->Object,pair);
@@ -154,10 +154,10 @@ void RenderInterpolation_Begin(int remainder) {
             piece->AnimationFrame=pose.animationFrame; piece->PriorAnimationFrame=pose.priorAnimationFrame;
         }
     }
-    if (DAT_07e12840) for (int slot=0;slot<1000;++slot) {
+    if (GroundItemPool) for (int slot=0;slot<1000;++slot) {
         RenderPosePair pair;
         if (RenderSnapshots_Item(slot,RenderInterpolation_MaxDisplacement,pair))
-            ApplyObject(*(OBJECT *)((unsigned char *)DAT_07e12840+slot*GROUND_ITEM_STRIDE+72),pair);
+            ApplyObject(*(OBJECT *)((unsigned char *)GroundItemPool+slot*GROUND_ITEM_STRIDE+72),pair);
     }
     // DESVIACION: sólo los objetos que se movieron; en los quietos la pose
     // interpolada es la que ya tienen. Guardarlos antes de escribir.
@@ -179,8 +179,8 @@ bool RenderInterpolation_OwnerOffset(const void *owner, float *offset) {
     if (slot>=0) pose=RenderSnapshots_Character(slot,RenderInterpolation_MaxDisplacement,pair);
     else if (SceneObjects::Contains(owner)) pose=RenderSnapshots_Object(owner,RenderInterpolation_MaxDisplacement,pair);
     else {
-        const uintptr_t itemOffset=(uintptr_t)owner-((uintptr_t)DAT_07e12840+72);
-        if (DAT_07e12840 && itemOffset<1000*GROUND_ITEM_STRIDE && itemOffset%GROUND_ITEM_STRIDE==0)
+        const uintptr_t itemOffset=(uintptr_t)owner-((uintptr_t)GroundItemPool+72);
+        if (GroundItemPool && itemOffset<1000*GROUND_ITEM_STRIDE && itemOffset%GROUND_ITEM_STRIDE==0)
             pose=RenderSnapshots_Item((int)(itemOffset/GROUND_ITEM_STRIDE),RenderInterpolation_MaxDisplacement,pair);
     }
     if (!pose) {

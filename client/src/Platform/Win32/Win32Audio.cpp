@@ -60,7 +60,7 @@ void CWaveFile_ctor(CWaveFile* self, BYTE is_streaming)
 
 // CWaveFile::Open  @ 0x00404e90
 // Parses RIFF/WAVE via MMIO, positions hmmio at start of 'data' chunk,
-// writes data-chunk size into g_dwBufferBytes (DAT_00583da8).
+// writes data-chunk size into g_dwBufferBytes (LegacyGdwBufferBytes).
 int CWaveFile_Open(CWaveFile* self, LPSTR filename)
 {
     if (self->is_streaming != 0) return 0;
@@ -370,7 +370,7 @@ void Win32Audio::Shutdown(void) {
 
 
 static void __cdecl FUN_00404e60_impl(int param_1) {
-    *(int *)param_1 = (int)&PTR_FUN_005524c0;
+    *(int *)param_1 = (int)&Vtbl_CWaveFile;
     if (*(HANDLE *)(param_1 + 4) != NULL) {
         mmioClose((HMMIO)*(HANDLE *)(param_1 + 4), 0);
     }

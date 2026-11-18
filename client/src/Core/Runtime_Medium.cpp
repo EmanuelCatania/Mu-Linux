@@ -44,8 +44,8 @@ void __cdecl SaveIME_Status(void) {
     Platform::GetInput().ReadImeState();
 }
 
-// FUN_004c3dd0 @ 0x004C3DD0 (56 bytes) — color value from gold amount
-int __cdecl FUN_004c3dd0(int param_1) {
+// UI_ColorFromZen @ 0x004C3DD0 (56 bytes) — color value from gold amount
+int __cdecl UI_ColorFromZen(int param_1) {
     if (9999999 < param_1) return (int)0xFF0000FF;
     if (999999 < param_1) return (int)0xFF0096FF;
     return ((param_1 < 100000) - 1 & (int)0xFF81EC01) - (int)0x692301;
@@ -120,10 +120,10 @@ void __fastcall CSQuest__setQuestLists(BYTE* ecx, int /*edx*/, BYTE *byList, int
 }
 
 
-// FUN_005404c0 @ 0x005404C0 (71 bytes) — GameGuard: seed RNG from system time
-int __fastcall FUN_005404c0(int param_1) {
+// GameGuard_SeedRng @ 0x005404C0 (71 bytes) — GameGuard: seed RNG from system time
+int __fastcall GameGuard_SeedRng(int param_1) {
     const auto st = Platform::GetTimer().LocalTime();
-    // DAT_083bbb74 = (st.wSecond | ((int)st.wMinute << 16)) * st.wMonth * st.wYear ^ 0xdad53a;
+    // RandomTimeSeed = (st.wSecond | ((int)st.wMinute << 16)) * st.wMonth * st.wYear ^ 0xdad53a;
     return param_1;
 }
 
@@ -181,17 +181,17 @@ void __cdecl CreateClassAttributes(void) {
 
 // DecryptCheckSumKey @ 0x00412D30 (32 bytes) — already implemented above in batch 1
 
-// FUN_00406cd0 @ 0x00406CD0 (79 bytes) — HashWidget deinit (SEH + cleanup)
-void __fastcall FUN_00406cd0(void *param_1_raw) {
+// HashWidget_Deinit @ 0x00406CD0 (79 bytes) — HashWidget deinit (SEH + cleanup)
+void __fastcall HashWidget_Deinit(void *param_1_raw) {
     int *param_1 = (int *)param_1_raw;
-    *param_1 = (intptr_t)&PTR_FUN_005524d8; // intermediate vtable
-    FUN_00406d40((intptr_t)param_1);
+    *param_1 = (intptr_t)&Vtbl_HashTable; // intermediate vtable
+    HashTable_FreeBuckets((intptr_t)param_1);
     param_1[3] = 0; param_1[1] = 0; param_1[2] = 0;
-    *param_1 = (intptr_t)&PTR_FUN_005524d8; // final vtable
+    *param_1 = (intptr_t)&Vtbl_HashTable; // final vtable
 }
 
-// FUN_00406d40 @ 0x00406D40 (102 bytes) — free all hash table buckets
-void __cdecl FUN_00406d40(intptr_t param_1) {
+// HashTable_FreeBuckets @ 0x00406D40 (102 bytes) — free all hash table buckets
+void __cdecl HashTable_FreeBuckets(intptr_t param_1) {
     unsigned int uVar1 = 0;
     do {
         void *lpMem = *(void **)(*(int *)(param_1 + 4) + uVar1);
@@ -227,8 +227,8 @@ void __fastcall LinkedList_InitSentinels(void *param_1_raw) {
 }
 
 
-// FUN_00408070 @ 0x00408070 (117 bytes) — SoundWidget: destroy linked list
-void __fastcall FUN_00408070(void *param_1_raw) {
+// SoundWidget_Deinit @ 0x00408070 (117 bytes) — SoundWidget: destroy linked list
+void __fastcall SoundWidget_Deinit(void *param_1_raw) {
     ClothPresentation_Forget(param_1_raw);
     ClothWidget& w = ClothSystem(param_1_raw);
     w.VTable = reinterpret_cast<void**>(static_cast<uintptr_t>(0x00552520));
@@ -315,8 +315,8 @@ void __fastcall CSQuest__ShowQuestNpcWindow(void *This, int /*edx*/, int index) 
 }
 
 
-// FUN_0040e730 @ 0x0040E730 (105 bytes) — text filter: check word against blocklist
-int __fastcall FUN_0040e730(void *This, int /*edx*/, char *param_1) {
+// Chat_CheckWordBlocklist @ 0x0040E730 (105 bytes) — text filter: check word against blocklist
+int __fastcall Chat_CheckWordBlocklist(void *This, int /*edx*/, char *param_1) {
     char *Token = static_cast<char*>(This) + 200;
     if (*Token == '\0') return 1;
     int i = 0;
@@ -330,8 +330,8 @@ int __fastcall FUN_0040e730(void *This, int /*edx*/, char *param_1) {
     return 1;
 }
 
-// FUN_00451ea0 @ 0x00451EA0 (78 bytes) — transform bone position to world coords
-void __cdecl FUN_00451ea0(intptr_t param_1, void *param_2, int param_3) {
+// Bone_TransformToWorld @ 0x00451EA0 (78 bytes) — transform bone position to world coords
+void __cdecl Bone_TransformToWorld(intptr_t param_1, void *param_2, int param_3) {
     float Position[3] = {0.0f, 0.0f, 0.0f};
     float WorldPosition[3] = {0.0f, 0.0f, 0.0f};
     Position[2] = 1.4013e-45f;
@@ -414,10 +414,10 @@ bool __cdecl OpenSMDFile(char *FileName, int Type, bool Flip) {
 
 
 
-// FUN_004112b0 @ 0x004112B0 (73 bytes) — BST iterator: advance to next (in-order successor)
+// BST_IterNext @ 0x004112B0 (73 bytes) — BST iterator: advance to next (in-order successor)
 void __fastcall FUN_004112b0_impl(int *param_1) {
     int *puVar1 = *(int **)(*param_1 + 8);
-    if ((void *)puVar1 == DAT_055c9b98) {
+    if ((void *)puVar1 == RbTreeSentinel) {
         intptr_t iVar3 = *(int *)(*param_1 + 4);
         if (*param_1 == *(int *)(iVar3 + 8)) {
             do {
@@ -431,22 +431,22 @@ void __fastcall FUN_004112b0_impl(int *param_1) {
         return;
     }
     int *puVar2;
-    for (puVar2 = (int *)*puVar1; (void *)puVar2 != DAT_055c9b98; puVar2 = (int *)*puVar2) {
+    for (puVar2 = (int *)*puVar1; (void *)puVar2 != RbTreeSentinel; puVar2 = (int *)*puVar2) {
         puVar1 = puVar2;
     }
     *param_1 = (intptr_t)puVar1;
 }
 
-// FUN_00411420 @ 0x00411420 (37 bytes) — BST recursive post-order delete
+// BST_DeleteRecursive @ 0x00411420 (37 bytes) — BST recursive post-order delete
 void __cdecl FUN_00411420_impl(int *param_1) {
-    if ((void *)param_1 != DAT_055c9b98) {
+    if ((void *)param_1 != RbTreeSentinel) {
         int *piVar1;
         do {
             FUN_00411420_impl((int *)param_1[2]);
             piVar1 = (int *)*param_1;
             operator_delete(param_1);
             param_1 = piVar1;
-        } while ((void *)piVar1 != DAT_055c9b98);
+        } while ((void *)piVar1 != RbTreeSentinel);
     }
 }
 
@@ -464,7 +464,7 @@ DWORD *__cdecl BSTIterator_PostIncrement(int *_this, DWORD *a2, int a3)
 
   v3 = *_this;
   v4 = *(DWORD ***)(*_this + 8);
-  if ( v4 == (DWORD **)DAT_055c9b98 )
+  if ( v4 == (DWORD **)RbTreeSentinel )
   {
     for ( i = *(DWORD *)(v3 + 4); *_this == *(DWORD *)(i + 8); i = *(DWORD *)(i + 4) )
     {
@@ -479,7 +479,7 @@ DWORD *__cdecl BSTIterator_PostIncrement(int *_this, DWORD *a2, int a3)
   }
   else
   {
-    for ( j = *v4; j != (DWORD *)DAT_055c9b98; j = (DWORD *)*j )
+    for ( j = *v4; j != (DWORD *)RbTreeSentinel; j = (DWORD *)*j )
     {
       v4 = (DWORD **)j;
     }
@@ -491,7 +491,7 @@ DWORD *__cdecl BSTIterator_PostIncrement(int *_this, DWORD *a2, int a3)
 }
 
 
-// FUN_00411870 @ 0x00411870 (95 bytes) — BST iterator: pre-decrement
+// BST_IterPrev @ 0x00411870 (95 bytes) — BST iterator: pre-decrement
 void __fastcall FUN_00411870_impl(int *param_1) {
     int *piVar3 = (int *)*param_1;
     if ((piVar3[0x4d] == 0) && (*(int *)(piVar3[1] + 4) == (intptr_t)piVar3)) {
@@ -499,7 +499,7 @@ void __fastcall FUN_00411870_impl(int *param_1) {
         return;
     }
     intptr_t iVar1 = *piVar3;
-    if ((void *)iVar1 == DAT_055c9b98) {
+    if ((void *)iVar1 == RbTreeSentinel) {
         piVar3 = (int *)piVar3[1];
         if (*param_1 == *piVar3) {
             do {
@@ -511,13 +511,13 @@ void __fastcall FUN_00411870_impl(int *param_1) {
         return;
     }
     intptr_t iVar2;
-    for (iVar2 = *(int *)(iVar1 + 8); iVar2 != (intptr_t)DAT_055c9b98; iVar2 = *(int *)(iVar2 + 8)) {
+    for (iVar2 = *(int *)(iVar1 + 8); iVar2 != (intptr_t)RbTreeSentinel; iVar2 = *(int *)(iVar2 + 8)) {
         iVar1 = iVar2;
     }
     *param_1 = iVar1;
 }
 
-// FUN_004118d0 @ 0x004118D0 (82 bytes) — doubly-linked list: clear all nodes
+// List_ClearAll @ 0x004118D0 (82 bytes) — doubly-linked list: clear all nodes
 void __fastcall FUN_004118d0_impl(intptr_t param_1) {
     int *piVar1 = *(int **)(param_1 + 0x5c);
     int *lpMem = (int *)*piVar1;
@@ -532,7 +532,7 @@ void __fastcall FUN_004118d0_impl(intptr_t param_1) {
     *(int *)(param_1 + 0x88) = 0;
 }
 
-// FUN_004122c0 @ 0x004122C0 (85 bytes) — list: trim excess entries from tail
+// List_TrimExcess @ 0x004122C0 (85 bytes) — list: trim excess entries from tail
 void __fastcall FUN_004122c0_impl(intptr_t param_1) {
     int iVar1 = *(int *)(param_1 + 0x60);
     int iVar2 = *(int *)(param_1 + 0x84);
@@ -549,8 +549,8 @@ void __fastcall FUN_004122c0_impl(intptr_t param_1) {
     }
 }
 
-// FUN_00411300 @ 0x00411300 (95 bytes) — doubly-linked list: insert node after position
-int *__fastcall FUN_00411300(void *This, int /*edx*/, int *param_1, void *param_2, int *param_3) {
+// List_InsertAfter @ 0x00411300 (95 bytes) — doubly-linked list: insert node after position
+int *__fastcall List_InsertAfter(void *This, int /*edx*/, int *param_1, void *param_2, int *param_3) {
     int *puVar3 = *(int **)((intptr_t)param_2 + 4);
     int *puVar1 = (int *)operator_new(0xc);
     int *puVar2 = (int *)param_2;
@@ -569,7 +569,7 @@ int *__fastcall FUN_00411300(void *This, int /*edx*/, int *param_1, void *param_
 }
 
 
-// FUN_00410d90 @ 0x00410D90 (78 bytes) — list: destroy all + free sentinel
+// List_DestroyFreeSentinel @ 0x00410D90 (78 bytes) — list: destroy all + free sentinel
 void __fastcall FUN_00410d90_impl(intptr_t param_1) {
     int *piVar1 = *(int **)(param_1 + 4);
     int *lpMem = (int *)*piVar1;
@@ -625,14 +625,14 @@ LABEL_6:
 // CSQuest_FindQuestItemsInInven @ 0x00482dd0 — CSQuest::FindQuestItemsInInven
 // Counts items in inventory matching nType (param_1), optional level filter (param_3).
 // Returns shortage = nCount - found (0 means at least nCount items present).
-// Inventory grid: 8 rows × 8 cols at DAT_07EA9328..DAT_07EA9504 (stride 0x44 per cell row,
+// Inventory grid: 8 rows × 8 cols at InventoryGridBase..InventoryGridEnd (stride 0x44 per cell row,
 // 0x11 ints = 68 bytes per outer step). Iterates 8 outer × 8 inner = 64 cells.
 // Se itera por cantidad y no contra el bound de IDA (0x7ea9328) porque en este
-// build &DAT_07ea9504 no está en la VA original.
+// build &InventoryGridEnd no está en la VA original.
 int __cdecl CSQuest_FindQuestItemsInInven(int param_1, int param_2, uint param_3)
 {
     int iVar3 = 0;
-    int *piVar4 = &DAT_07ea9504;
+    int *piVar4 = &InventoryGridEnd;
     // El bound de IDA es `while (v5 >= &unk_7EA9328)` arrancando en
     // &unk_7EA9504 con paso de -17 ints (-68 bytes):
     // (0x7EA9504 - 0x7EA9328) / 68 + 1 = 8 columnas.
@@ -685,8 +685,9 @@ static char *__cdecl FUN_00543ac0_impl(BYTE *name) {
 // END BATCH 9
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ── FUN_0052f4d0 (IDA-activated, absent in Ghidra) ──
-int __cdecl FUN_0052f4d0(intptr_t a1, int a2, int a3, int a4)
+// ── Fn_0052f4d0 (IDA-activated, absent in Ghidra) ──
+// Getter muerto en el binario original (0 refs, no aparece en ninguna vtable).
+int __cdecl Unused_GetField2CMinusArg(intptr_t a1, int a2, int a3, int a4)   // IDA: Fn_0052f4d0 (0x0052F4D0)
 {
   return *(DWORD *)(*(DWORD *)(a1 + 4) + 44) - a4;
 }

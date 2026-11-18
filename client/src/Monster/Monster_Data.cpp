@@ -3,15 +3,15 @@
 // Monster_Data_Load @ 0x00511060
 //
 // Loads monster script / base data files.
-// Only executed if DAT_083a410c != 0 (multiplayer / server-mode flag).
+// Only executed if InGameModeFlag != 0 (multiplayer / server-mode flag).
 //
 // Sub-functions:
-//   Monster_LoadScriptTable — load monster script table (enable/disable state via DAT_0055a7c4)
+//   Monster_LoadScriptTable — load monster script table (enable/disable state via g_tex_ext_mode)
 //   Monster_ParseSetBase2 — parse and load "Data2/MonsterSetBase2.txt" monster definitions
 //
 // Globals:
-//   DAT_083a410c   — if non-zero: server/party-enabled mode
-//   DAT_0055a7c4   — loader phase flag (0 = pre-load, 1 = post-load)
+//   InGameModeFlag   — if non-zero: server/party-enabled mode
+//   g_tex_ext_mode   — loader phase flag (0 = pre-load, 1 = post-load)
 //   s_Data2_MonsterSetBase2_txt (0x00561530) — filename literal
 
 #include "stdafx.h"
@@ -19,12 +19,12 @@
 // IDA: Monster_Data_Load
 void __cdecl Monster_LoadStartupData(void)
 {
-    if (DAT_083a410c != '\0') {
-        DAT_0055a7c4 = 0;
+    if (InGameModeFlag != '\0') {
+        g_tex_ext_mode = 0;
         Monster_LoadScriptTable();           // load monster script table
-        DAT_0055a7c4 = 1;
-        if (DAT_083a410c != '\0') {
-            Monster_ParseSetBase2(s_Data2_MonsterSetBase2_txt_00561530);  // load MonsterSetBase2.txt
+        g_tex_ext_mode = 1;
+        if (InGameModeFlag != '\0') {
+            Monster_ParseSetBase2(Path_MonsterSetBase2Txt);  // load MonsterSetBase2.txt
         }
     }
     return;
@@ -36,15 +36,15 @@ void __cdecl Monster_LoadStartupData(void)
 // Monster_LoadScriptTable — loads the monster script/model table.
 //
 // Calls SetMaxTextures to initialize the table with 0x41a entries.
-// Then, only in pre-load phase (DAT_0055a7c4 == 0), registers BMD model
+// Then, only in pre-load phase (g_tex_ext_mode == 0), registers BMD model
 // files from Data2/Monster/ for monster types 0x13d–0x14c and invokes
 // OpenMonsterModel for monster IDs 0x32–0x3e to set up their sound+animation
 // data.
 //
 // Globals:
-//   DAT_0055a7c4               — loader phase (0 = pre-load)
-//   s_Data2_Monster__0055e06c  — "Data2/Monster/" path prefix
-//   s_swordbasic_smd_0055e07c  — "swordbasic.smd" filename
+//   g_tex_ext_mode               — loader phase (0 = pre-load)
+//   Dir_Data2Monster  — "Data2/Monster/" path prefix
+//   Smd_SwordBasic  — "swordbasic.smd" filename
 
 void Monster_LoadScriptTable(void)
 
@@ -52,14 +52,14 @@ void Monster_LoadScriptTable(void)
   int iVar1;
 
   SetMaxTextures(0x41a);
-  if (DAT_0055a7c4 == '\0') {
-    OpenModel((int)0x13d,s_Data2_Monster__0055e06c,s_swordbasic_smd_0055e07c);
-    OpenModel((int)0x147,s_Data2_Monster__0055e06c,&DAT_0055dff0);
-    OpenModel((int)0x148,s_Data2_Monster__0055e06c,&DAT_0055df70);
-    OpenModel((int)0x149,s_Data2_Monster__0055e06c,&DAT_0055dee0);
-    OpenModel((int)0x14a,s_Data2_Monster__0055e06c,&DAT_0055dec0);
-    OpenModel((int)0x14b,s_Data2_Monster__0055e06c,&DAT_0055de84);
-    OpenModel((int)0x14c,s_Data2_Monster__0055e06c,&DAT_0055de10);
+  if (g_tex_ext_mode == '\0') {
+    OpenModel((int)0x13d,Dir_Data2Monster,Smd_SwordBasic);
+    OpenModel((int)0x147,Dir_Data2Monster,&MonsterSmdName147);
+    OpenModel((int)0x148,Dir_Data2Monster,&MonsterSmdName148);
+    OpenModel((int)0x149,Dir_Data2Monster,&MonsterSmdName149);
+    OpenModel((int)0x14a,Dir_Data2Monster,&MonsterSmdName14A);
+    OpenModel((int)0x14b,Dir_Data2Monster,&MonsterSmdName14B);
+    OpenModel((int)0x14c,Dir_Data2Monster,&MonsterSmdName14C);
     iVar1 = 0x32;
     do {
       OpenMonsterModel(iVar1);
@@ -82,15 +82,15 @@ void Monster_LoadScriptTable(void)
 //   - field 4 (ftol) = spawn X
 //   - field 5        = skipped
 //   - field 6 (ftol) = spawn Y
-//   - Stops on record type 2 or when the sentinel string (DAT_00559088)
+//   - Stops on record type 2 or when the sentinel string (SentinelEndString)
 //     matches TextParserTokenString.
 // Creates the monster via CreateMonster and sets field +0x84 = ' '.
 //
 // Globals:
-//   DAT_07d7806c  — file handle
-//   DAT_07d7807c  — next spawn slot index
+//   BmdFileHandle  — file handle
+//   MonsterSpawnSlotIndex  — next spawn slot index
 //   HeroKey  — max spawn slot (skips if equal)
-//   DAT_00559088  — sentinel string "END"
+//   SentinelEndString  — sentinel string "END"
 
 void __cdecl Monster_ParseSetBase2(LPCSTR param_1)
 
@@ -105,8 +105,8 @@ void __cdecl Monster_ParseSetBase2(LPCSTR param_1)
   longlong lVar8;
   longlong lVar9;
 
-  DAT_07d7806c = (FILE *)crt_fopen(param_1,DAT_005580ac);
-  if (DAT_07d7806c != (FILE *)0x0) {
+  BmdFileHandle = (FILE *)crt_fopen(param_1,FopenModeRb);
+  if (BmdFileHandle != (FILE *)0x0) {
     TextParser_GetToken();
     while( true ) {
       iVar2 = TextParser_GetToken();
@@ -114,7 +114,7 @@ void __cdecl Monster_ParseSetBase2(LPCSTR param_1)
       if (iVar2 == 2) break;
       if (iVar2 == 0) {
         pbVar5 = (byte*)TokenString;
-        pbVar3 = (byte*)&DAT_00559088;
+        pbVar3 = (byte*)&SentinelEndString;
         do {
           bVar1 = *pbVar3;
           bVar6 = bVar1 < *pbVar5;
@@ -141,17 +141,17 @@ LAB_0047d09b:
       TextParser_GetToken();
       lVar9 = (longlong)ParserTokenNumber;   // IDA sub_47D020: (std::int64_t)TokenNumber
       TextParser_GetToken();
-      if (DAT_07d7807c == HeroKey) {
-        DAT_07d7807c = DAT_07d7807c + 1;
+      if (MonsterSpawnSlotIndex == HeroKey) {
+        MonsterSpawnSlotIndex = MonsterSpawnSlotIndex + 1;
       }
-      iVar2 = DAT_07d7807c;
-      DAT_07d7807c = DAT_07d7807c + 1;
+      iVar2 = MonsterSpawnSlotIndex;
+      MonsterSpawnSlotIndex = MonsterSpawnSlotIndex + 1;
       pcVar4 = CreateMonster((uint)lVar7,(int)lVar8,(int)lVar9,iVar2,0);
       if (pcVar4 != (char *)0x0) {
         pcVar4[0x84] = ' ';
       }
     }
-    crt_fclose(DAT_07d7806c);
+    crt_fclose(BmdFileHandle);
   }
   return;
 }
@@ -162,7 +162,7 @@ LAB_0047d09b:
 // Monster_SetupSoundAnim — registers sound and animation data for one
 // monster type (param_1 = monster index 0x00–0x3f).
 //
-// Only runs when DAT_0055a7c4 == 0 (pre-load) OR when the monster has
+// Only runs when g_tex_ext_mode == 0 (pre-load) OR when the monster has
 // no existing animations (sound/anim counts == 0).
 // Calls AccessModel to load the base monster script, then sets default
 // animation speeds and special flags in the animation block at
@@ -171,8 +171,8 @@ LAB_0047d09b:
 // via Model_SetAnimationSlots.
 //
 // Globals:
-//   DAT_0055a7c4  — loader phase flag
-//   DAT_05828d58  — monster table base pointer
+//   g_tex_ext_mode  — loader phase flag
+//   ModelsBase  — monster table base pointer
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
@@ -186,11 +186,11 @@ void __cdecl OpenMonsterModel(int param_1)
   int iVar5;
 
   iVar1 = param_1 + 0x10e;
-  iVar2 = DAT_05828d58 + iVar1 * BMD_STRIDE;
-  if (((DAT_0055a7c4 == '\0') || ((*(short *)(iVar2 + 0x26) < 1 && (*(short *)(iVar2 + 0x24) < 1))))
-     && (AccessModel(iVar1,s_Data_Monster__0055ddf8,s_Monster_0055de08,param_1 + 1),
+  iVar2 = ModelsBase + iVar1 * BMD_STRIDE;
+  if (((g_tex_ext_mode == '\0') || ((*(short *)(iVar2 + 0x26) < 1 && (*(short *)(iVar2 + 0x24) < 1))))
+     && (AccessModel(iVar1,Dir_DataMonster,Dir_Monster,param_1 + 1),
         *(short *)(iVar2 + 0x24) != 0)) {
-    OpenTexture(iVar1,s_Monster__0055ddec,0x2600,'\x01');
+    OpenTexture(iVar1,Dir_MonsterSlash,0x2600,'\x01');
     *(undefined4 *)((intptr_t)AsModel(iVar2)->Actions + ModelActionByte(4)) = 0x3e800000;
     *(undefined4 *)((intptr_t)AsModel(iVar2)->Actions + ModelActionByte(0x14)) = 0x3e4ccccd;
     *(undefined4 *)((intptr_t)AsModel(iVar2)->Actions + ModelActionByte(0x24)) = 0x3eae147b;
@@ -203,18 +203,18 @@ void __cdecl OpenMonsterModel(int param_1)
     do {
       if (param_1 == 3) {
         iVar3 = (intptr_t)AsModel(iVar2)->Actions;
-        fVar4 = *(float *)(iVar3 + 4 + iVar5) * _DAT_00552a1c;
+        fVar4 = *(float *)(iVar3 + 4 + iVar5) * 1.0f;
 LAB_005099d1:
         *(float *)(iVar3 + 4 + iVar5) = fVar4;
       }
       else {
         if ((param_1 == 5) || (param_1 == 0x19)) {
           *(float *)((intptr_t)AsModel(iVar2)->Actions + 4 + iVar5) =
-               *(float *)((intptr_t)AsModel(iVar2)->Actions + 4 + iVar5) * _DAT_00552928;
+               *(float *)((intptr_t)AsModel(iVar2)->Actions + 4 + iVar5) * 0.7f;
         }
         if ((param_1 == 0x25) || (param_1 == 0x2a)) {
           iVar3 = (intptr_t)AsModel(iVar2)->Actions;
-          fVar4 = *(float *)(iVar3 + 4 + iVar5) * _DAT_005528b4;
+          fVar4 = *(float *)(iVar3 + 4 + iVar5) * 0.4f;
           goto LAB_005099d1;
         }
       }
@@ -282,7 +282,7 @@ LAB_005099d1:
       LoadWaveFile(0xad, "Data\\Sound\\mBullAttack2.wav",2,'\x01');
       LoadWaveFile(0xae, "Data\\Sound\\mBullDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0,1,2,3,4);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 270 + 0x54 + BMD_FIELD_SHIFT + param_1 * BMD_STRIDE) = 0x14;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 270 + 0x54 + BMD_FIELD_SHIFT + param_1 * BMD_STRIDE) = 0x14;
       return;
     case 1:
       LoadWaveFile(0xaf, "Data\\Sound\\mHound1.wav",2,'\x01');
@@ -291,14 +291,14 @@ LAB_005099d1:
       LoadWaveFile(0xb2, "Data\\Sound\\mHoundAttack2.wav",2,'\x01');
       LoadWaveFile(0xb3, "Data\\Sound\\mHoundDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,5,6,7,8,9);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 271 + 0x54 + BMD_FIELD_SHIFT) = 5;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 271 + 0x54 + BMD_FIELD_SHIFT) = 5;
       return;
     case 2:
       LoadWaveFile(0xb4, "Data\\Sound\\mBudge1.wav",2,'\x01');
       LoadWaveFile(0xb5, "Data\\Sound\\mBudgeAttack1.wav",2,'\x01');
       LoadWaveFile(0xb6, "Data\\Sound\\mBudgeDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,10,0xb,0xb,0xb,0xc);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 272 + 0x54 + BMD_FIELD_SHIFT) = 7;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 272 + 0x54 + BMD_FIELD_SHIFT) = 7;
       return;
     case 3:
     case 0x1d:
@@ -310,14 +310,14 @@ LAB_005099d1:
       LoadWaveFile(0xbd, "Data\\Sound\\mDarkKnightDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0xf,0x10,0x11,0x12,0x13);
       if (param_1 == 3) {
-        *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 273 + 0x54 + BMD_FIELD_SHIFT) = 0x10;
+        *(undefined4 *)(ModelsBase + BMD_STRIDE * 273 + 0x54 + BMD_FIELD_SHIFT) = 0x10;
         return;
       }
       if (param_1 == 0x1d) {
-        *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 299 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
+        *(undefined4 *)(ModelsBase + BMD_STRIDE * 299 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
         return;
       }
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 270 + 0x54 + BMD_FIELD_SHIFT + param_1 * BMD_STRIDE) = 0x13;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 270 + 0x54 + BMD_FIELD_SHIFT + param_1 * BMD_STRIDE) = 0x13;
       return;
     case 4:
       LoadWaveFile(0xbe, "Data\\Sound\\mWizard1.wav",2,'\x01');
@@ -326,7 +326,7 @@ LAB_005099d1:
       LoadWaveFile(0xc1, "Data\\Sound\\mWizardAttack2.wav",2,'\x01');
       LoadWaveFile(0xc2, "Data\\Sound\\mWizardDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x14,0x15,0x16,0x17,0x18);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 274 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 274 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
       return;
     case 5:
       LoadWaveFile(0xc3, "Data\\Sound\\mGiant1.wav",2,'\x01');
@@ -335,7 +335,7 @@ LAB_005099d1:
       LoadWaveFile(0xc6, "Data\\Sound\\mGiantAttack2.wav",2,'\x01');
       LoadWaveFile(199, "Data\\Sound\\mGiantDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x19,0x1a,0x1b,0x1c,0x1d);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 275 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 275 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
       return;
     case 6:
       LoadWaveFile(200, "Data\\Sound\\mLarva1.wav",2,'\x01');
@@ -349,14 +349,14 @@ LAB_005099d1:
       LoadWaveFile(0xd0, "Data\\Sound\\mGhostAttack2.wav",2,'\x01');
       LoadWaveFile(0xd1, "Data\\Sound\\mGhostDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x23,0x24,0x25,0x26,0x27);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 277 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 277 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
       return;
     case 8:
       LoadWaveFile(0xca, "Data\\Sound\\mHellSpider1.wav",2,'\x01');
       LoadWaveFile(0xcb, "Data\\Sound\\mHellSpiderAttack1.wav",2,'\x01');
       LoadWaveFile(0xcc, "Data\\Sound\\mHellSpiderDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x20,0x21,0x21,0x21,0x22);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 278 + 0x54 + BMD_FIELD_SHIFT) = 0x10;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 278 + 0x54 + BMD_FIELD_SHIFT) = 0x10;
       return;
     case 9:
       LoadWaveFile(0xb7, "Data\\Sound\\mSpider1.wav",2,'\x01');
@@ -369,7 +369,7 @@ LAB_005099d1:
       LoadWaveFile(0xd5, "Data\\Sound\\mOgreAttack2.wav",2,'\x01');
       LoadWaveFile(0xd6, "Data\\Sound\\mOgreDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x28,0x29,0x2a,0x2b,0x2c);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 280 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 280 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
       return;
     case 0xb:
       LoadWaveFile(0xd7, "Data\\Sound\\mGorgon1.wav",2,'\x01');
@@ -378,7 +378,7 @@ LAB_005099d1:
       LoadWaveFile(0xda, "Data\\Sound\\mGorgonAttack2.wav",2,'\x01');
       LoadWaveFile(0xdb, "Data\\Sound\\mGorgonDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x2d,0x2e,0x2f,0x30,0x31);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 281 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 281 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
       return;
     case 0xc:
     case 0xd:
@@ -388,15 +388,15 @@ LAB_005099d1:
       LoadWaveFile(0xf1, "Data\\Sound\\mYetiDie.wav",2,'\x01');
       Model_SetAnimationSlots(0x11a,0x44,0x44,0x46,0x46,0x47);
       Model_SetAnimationSlots(0x11b,0x44,0x45,0x46,0x46,0x47);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 282 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 283 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 282 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 283 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
       return;
     case 0xe:
       LoadWaveFile(0xeb, "Data\\Sound\\mAssassinAttack1.wav",2,'\x01');
       LoadWaveFile(0xec, "Data\\Sound\\mAssassinAttack2.wav",2,'\x01');
       LoadWaveFile(0xed, "Data\\Sound\\mAssassinDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0xffff,0xffff,0x41,0x42,0x43);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 284 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 284 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
       *(undefined4 *)((intptr_t)AsModel(iVar2)->Actions + ModelActionByte(0x14)) = 0x3eb33333;
       return;
     case 0xf:
@@ -404,7 +404,7 @@ LAB_005099d1:
       LoadWaveFile(0xdd, "Data\\Sound\\mIceMonster2.wav",2,'\x01');
       LoadWaveFile(0xde, "Data\\Sound\\mIceMonsterDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x32,0x33,0x32,0x32,0x34);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 285 + 0x54 + BMD_FIELD_SHIFT) = 0x13;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 285 + 0x54 + BMD_FIELD_SHIFT) = 0x13;
       return;
     case 0x10:
       LoadWaveFile(0xe2, "Data\\Sound\\mHomord1.wav",2,'\x01');
@@ -426,7 +426,7 @@ LAB_005099d1:
       LoadWaveFile(0xe9, "Data\\Sound\\mIceQueenAttack2.wav",2,'\x01');
       LoadWaveFile(0xea, "Data\\Sound\\mIceQueenDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x3c,0x3d,0x3e,0x3f,0x40);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 288 + 0x54 + BMD_FIELD_SHIFT) = 0x10;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 288 + 0x54 + BMD_FIELD_SHIFT) = 0x10;
       return;
     case 0x13:
       LoadWaveFile(0xf2, "Data\\Sound\\mGoblin1.wav",2,'\x01');
@@ -435,7 +435,7 @@ LAB_005099d1:
       LoadWaveFile(0xf5, "Data\\Sound\\mGoblinAttack2.wav",2,'\x01');
       LoadWaveFile(0xf6, "Data\\Sound\\mGoblinDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x48,0x49,0x4a,0x4b,0x4c);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 289 + 0x54 + BMD_FIELD_SHIFT) = 6;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 289 + 0x54 + BMD_FIELD_SHIFT) = 6;
       return;
     case 0x14:
       LoadWaveFile(0xf7, "Data\\Sound\\mScorpion1.wav",2,'\x01');
@@ -450,7 +450,7 @@ LAB_005099d1:
       LoadWaveFile(0xfd, "Data\\Sound\\mBeetleAttack1.wav",2,'\x01');
       LoadWaveFile(0xfe, "Data\\Sound\\mBeetleDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x52,0x52,0x53,0x53,0x54);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 291 + 0x54 + BMD_FIELD_SHIFT) = 5;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 291 + 0x54 + BMD_FIELD_SHIFT) = 5;
       return;
     case 0x16:
       LoadWaveFile(0xff, "Data\\Sound\\mHunter1.wav",2,'\x01');
@@ -459,7 +459,7 @@ LAB_005099d1:
       LoadWaveFile(0x102, "Data\\Sound\\mHunterAttack2.wav",2,'\x01');
       LoadWaveFile(0x103, "Data\\Sound\\mHunterDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x55,0x56,0x57,0x58,0x59);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 292 + 0x54 + BMD_FIELD_SHIFT) = 6;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 292 + 0x54 + BMD_FIELD_SHIFT) = 6;
       return;
     case 0x17:
       LoadWaveFile(0x104, "Data\\Sound\\mWoodMon1.wav",2,'\x01');
@@ -468,7 +468,7 @@ LAB_005099d1:
       LoadWaveFile(0x107, "Data\\Sound\\mWoodMonAttack2.wav",2,'\x01');
       LoadWaveFile(0x108, "Data\\Sound\\mWoodMonDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x5a,0x5b,0x5c,0x5d,0x5e);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 293 + 0x54 + BMD_FIELD_SHIFT) = 6;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 293 + 0x54 + BMD_FIELD_SHIFT) = 6;
       return;
     case 0x18:
       LoadWaveFile(0x109, "Data\\Sound\\mArgon1.wav",2,'\x01');
@@ -477,7 +477,7 @@ LAB_005099d1:
       LoadWaveFile(0x10c, "Data\\Sound\\mArgonAttack2.wav",2,'\x01');
       LoadWaveFile(0x10d, "Data\\Sound\\mArgonDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x5f,0x60,0x61,0x62,99);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 294 + 0x54 + BMD_FIELD_SHIFT) = 0x10;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 294 + 0x54 + BMD_FIELD_SHIFT) = 0x10;
       return;
     case 0x19:
       LoadWaveFile(0x10e, "Data\\Sound\\mGolem1.wav",2,'\x01');
@@ -486,14 +486,14 @@ LAB_005099d1:
       LoadWaveFile(0x111, "Data\\Sound\\mGolemAttack2.wav",2,'\x01');
       LoadWaveFile(0x112, "Data\\Sound\\mGolemDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,100,0x65,0x66,0x67,0x68);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 295 + 0x54 + BMD_FIELD_SHIFT) = 5;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 295 + 0x54 + BMD_FIELD_SHIFT) = 5;
       return;
     case 0x1a:
       LoadWaveFile(0x113, "Data\\Sound\\mYeti1.wav",2,'\x01');
       LoadWaveFile(0x114, "Data\\Sound\\mSatanAttack1.wav",2,'\x01');
       LoadWaveFile(0x115, "Data\\Sound\\mYetiDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x69,0x69,0x6a,0x6a,0x6b);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 296 + 0x54 + BMD_FIELD_SHIFT) = 6;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 296 + 0x54 + BMD_FIELD_SHIFT) = 6;
       return;
     case 0x1b:
       LoadWaveFile(0x116, "Data\\Sound\\mBalrog1.wav",2,'\x01');
@@ -502,8 +502,8 @@ LAB_005099d1:
       LoadWaveFile(0x119, "Data\\Sound\\mGorgonAttack2.wav",2,'\x01');
       LoadWaveFile(0x11a, "Data\\Sound\\mBalrogDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x6c,0x6d,0x6e,0x6f,0x70);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 297 + 0x54 + BMD_FIELD_SHIFT) = 6;
-      *(undefined1 *)(DAT_05828d58 + BMD_STRIDE * 297 + 0x88 + BMD_FIELD_SHIFT) = 1;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 297 + 0x54 + BMD_FIELD_SHIFT) = 6;
+      *(undefined1 *)(ModelsBase + BMD_STRIDE * 297 + 0x88 + BMD_FIELD_SHIFT) = 1;
       return;
     case 0x1c:
       LoadWaveFile(0x11b, "Data\\Sound\\mShadow1.wav",2,'\x01');
@@ -512,7 +512,7 @@ LAB_005099d1:
       LoadWaveFile(0x11e, "Data\\Sound\\mShadowAttack2.wav",2,'\x01');
       LoadWaveFile(0x11f, "Data\\Sound\\mShadowDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x71,0x72,0x73,0x74,0x75);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 298 + 0x54 + BMD_FIELD_SHIFT) = 5;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 298 + 0x54 + BMD_FIELD_SHIFT) = 5;
       return;
     case 0x1f:
       LoadWaveFile(0x125, "Data\\Sound\\mYeti1.wav",2,'\x01');
@@ -555,7 +555,7 @@ LAB_005099d1:
       LoadWaveFile(0x132, "Data\\Sound\\mBaliAttack2.wav",2,'\x01');
       LoadWaveFile(0x133, "Data\\Sound\\mValkyrieDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x87,0x87,0x88,0x88,0x89);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 305 + 0x54 + BMD_FIELD_SHIFT) = 0x13;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 305 + 0x54 + BMD_FIELD_SHIFT) = 0x13;
       return;
     case 0x24:
     case 0x28:
@@ -564,10 +564,10 @@ LAB_005099d1:
       LoadWaveFile(0x136, "Data\\Sound\\mGorgonDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0x8a,0x8b,0x8a,0x8b,0x8c);
       if (param_1 == 0x24) {
-        *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 306 + 0x54 + BMD_FIELD_SHIFT) = 0x13;
+        *(undefined4 *)(ModelsBase + BMD_STRIDE * 306 + 0x54 + BMD_FIELD_SHIFT) = 0x13;
         return;
       }
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 270 + 0x54 + BMD_FIELD_SHIFT + param_1 * BMD_STRIDE) = 6;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 270 + 0x54 + BMD_FIELD_SHIFT + param_1 * BMD_STRIDE) = 6;
       return;
     case 0x25:
       LoadWaveFile(0x137, "Data\\Sound\\mHydra1.wav",2,'\x01');
@@ -578,136 +578,136 @@ LAB_005099d1:
       *(undefined4 *)((intptr_t)AsModel(iVar2)->Actions + ModelActionByte(100)) = 0x3e4ccccd;
       return;
     case 0x29:
-      LoadWaveFile(0x139,s_Data_Sound_iron1_wav_0055d074,2,'\x01');
-      LoadWaveFile(0x13a,s_Data_Sound_iron_attack1_wav_0055d058,2,'\x01');
+      LoadWaveFile(0x139,Wav_Iron1,2,'\x01');
+      LoadWaveFile(0x13a,Wav_IronAttack1,2,'\x01');
       Model_SetAnimationSlots(iVar1,0x8f,0x8f,0x90,0x90,0x90);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 311 + 0x54 + BMD_FIELD_SHIFT) = 3;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 311 + 0x54 + BMD_FIELD_SHIFT) = 3;
       return;
     case 0x2a:
-      LoadWaveFile(0x13b,s_Data_Sound_jaikan1_wav_0055d040,2,'\x01');
-      LoadWaveFile(0x13c,s_Data_Sound_jaikan2_wav_0055d028,2,'\x01');
-      LoadWaveFile(0x13d,s_Data_Sound_jaikan_attack1_wav_0055d008,2,'\x01');
-      LoadWaveFile(0x13e,s_Data_Sound_jaikan_attack2_wav_0055cfe8,2,'\x01');
-      LoadWaveFile(0x13f,s_Data_Sound_jaikan_die_wav_0055cfcc,2,'\x01');
+      LoadWaveFile(0x13b,Wav_Jaikan1,2,'\x01');
+      LoadWaveFile(0x13c,Wav_Jaikan2,2,'\x01');
+      LoadWaveFile(0x13d,Wav_JaikanAttack1,2,'\x01');
+      LoadWaveFile(0x13e,Wav_JaikanAttack2,2,'\x01');
+      LoadWaveFile(0x13f,Wav_JaikanDie,2,'\x01');
       Model_SetAnimationSlots(iVar1,0x91,0x92,0x93,0x94,0x95);
-      OpenJPG(s_Monster_bv01_2_jpg_0055cfb8,0x56b,0x2601,0x2901,0,'\x01');
-      OpenJPG(s_Monster_bv02_2_jpg_0055cfa4,0x56c,0x2601,0x2901,0,'\x01');
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 312 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
+      OpenJPG(Img_MonsterBv01_2,0x56b,0x2601,0x2901,0,'\x01');
+      OpenJPG(Img_MonsterBv02_2,0x56c,0x2601,0x2901,0,'\x01');
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 312 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
       return;
     case 0x2b:
-      LoadWaveFile(0x140,s_Data_Sound_blood1_wav_0055cf8c,2,'\x01');
-      LoadWaveFile(0x141,s_Data_Sound_blood_attack1_wav_0055cf6c,2,'\x01');
-      LoadWaveFile(0x142,s_Data_Sound_blood_attack2_wav_0055cf4c,2,'\x01');
-      LoadWaveFile(0x143,s_Data_Sound_blood_die_wav_0055cf30,2,'\x01');
+      LoadWaveFile(0x140,Wav_Blood1,2,'\x01');
+      LoadWaveFile(0x141,Wav_BloodAttack1,2,'\x01');
+      LoadWaveFile(0x142,Wav_BloodAttack2,2,'\x01');
+      LoadWaveFile(0x143,Wav_BloodDie,2,'\x01');
       Model_SetAnimationSlots(iVar1,0x96,0x96,0x97,0x98,0x99);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 313 + 0x54 + BMD_FIELD_SHIFT) = 7;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 313 + 0x54 + BMD_FIELD_SHIFT) = 7;
       return;
     case 0x2c:
-      LoadWaveFile(0x144,s_Data_Sound_death1_wav_0055cf18,2,'\x01');
-      LoadWaveFile(0x145,s_Data_Sound_death_attack1_wav_0055cef8,2,'\x01');
-      LoadWaveFile(0x146,s_Data_Sound_death_die_wav_0055cedc,2,'\x01');
+      LoadWaveFile(0x144,Wav_Death1,2,'\x01');
+      LoadWaveFile(0x145,Wav_DeathAttack1,2,'\x01');
+      LoadWaveFile(0x146,Wav_DeathDie,2,'\x01');
       Model_SetAnimationSlots(iVar1,0x9a,0x9a,0x9b,0x9b,0x9c);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 314 + 0x54 + BMD_FIELD_SHIFT) = 6;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 314 + 0x54 + BMD_FIELD_SHIFT) = 6;
       return;
     case 0x2d:
-      LoadWaveFile(0x147,s_Data_Sound_mutant1_wav_0055cec4,2,'\x01');
-      LoadWaveFile(0x148,s_Data_Sound_mutant2_wav_0055ceac,2,'\x01');
-      LoadWaveFile(0x149,s_Data_Sound_mutant_attack1_wav_0055ce8c,2,'\x01');
+      LoadWaveFile(0x147,Wav_Mutant1,2,'\x01');
+      LoadWaveFile(0x148,Wav_Mutant2,2,'\x01');
+      LoadWaveFile(0x149,Wav_MutantAttack1,2,'\x01');
       Model_SetAnimationSlots(iVar1,0x9d,0x9e,0x9f,0x9f,0x9f);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 315 + 0x54 + BMD_FIELD_SHIFT) = 6;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 315 + 0x54 + BMD_FIELD_SHIFT) = 6;
       return;
     case 0x2e:
-      LoadWaveFile(0x14c,s_Data_Sound_mOrcArcherAttack1_wav_0055ce68,2,'\x01');
+      LoadWaveFile(0x14c,Wav_OrcArcherAttack1,2,'\x01');
       LoadWaveFile(0xae, "Data\\Sound\\mBullDie.wav",2,'\x01');
       Model_SetAnimationSlots(iVar1,0xffff,0xffff,0xa2,0xa2,4);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 316 + 0x54 + BMD_FIELD_SHIFT) = 7;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 316 + 0x54 + BMD_FIELD_SHIFT) = 7;
       return;
     case 0x2f:
       LoadWaveFile(0x100, "Data\\Sound\\mHunter2.wav",2,'\x01');
       LoadWaveFile(0xae, "Data\\Sound\\mBullDie.wav",2,'\x01');
-      LoadWaveFile(0x14b,s_Data_Sound_mOrcCapAttack1_wav_0055ce48,2,'\x01');
+      LoadWaveFile(0x14b,Wav_OrcCapAttack1,2,'\x01');
       Model_SetAnimationSlots(iVar1,0x56,0x56,0xa1,0xa1,4);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 317 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 317 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
       return;
     case 0x30:
-      LoadWaveFile(0x14a,s_Data_Sound_mCursedKing1_wav_0055ce2c,2,'\x01');
-      LoadWaveFile(0x14e,s_Data_Sound_mCursedKing2_wav_0055ce10,2,'\x01');
-      LoadWaveFile(0x14d,s_Data_Sound_mCursedKingDie1_wav_0055cdf0,2,'\x01');
+      LoadWaveFile(0x14a,Wav_CursedKing1,2,'\x01');
+      LoadWaveFile(0x14e,Wav_CursedKing2,2,'\x01');
+      LoadWaveFile(0x14d,Wav_CursedKingDie1,2,'\x01');
       Model_SetAnimationSlots(iVar1,0xa0,0xa4,0xffff,0xffff,0xa3);
-      *(undefined4 *)(DAT_05828d58 + BMD_STRIDE * 318 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
+      *(undefined4 *)(ModelsBase + BMD_STRIDE * 318 + 0x54 + BMD_FIELD_SHIFT) = 0x14;
       return;
     case 0x31:
       *(undefined4 *)((intptr_t)AsModel(iVar2)->Actions + ModelActionByte(100)) = 0x3e6147ae;
-      LoadWaveFile(0x15b,s_Data_Sound_mMolt1_wav_0055cd50,2,'\x01');
-      LoadWaveFile(0x15c,s_Data_Sound_mMoltAttack1_wav_0055cd34,2,'\x01');
-      LoadWaveFile(0x15d,s_Data_Sound_mMoltDie_wav_0055cd1c,2,'\x01');
+      LoadWaveFile(0x15b,Wav_Molt1,2,'\x01');
+      LoadWaveFile(0x15c,Wav_MoltAttack1,2,'\x01');
+      LoadWaveFile(0x15d,Wav_MoltDie,2,'\x01');
       Model_SetAnimationSlots(iVar1,0xb1,0xb1,0xb2,0xb2,0xb3);
       return;
     case 0x32:
       *(undefined4 *)((intptr_t)AsModel(iVar2)->Actions + ModelActionByte(100)) = 0x3e6147ae;
-      LoadWaveFile(0x159,s_Data_Sound_mAlquamosAttack1_wav_0055ccfc,2,'\x01');
-      LoadWaveFile(0x15a,s_Data_Sound_mAlquamosDie_wav_0055cce0,2,'\x01');
+      LoadWaveFile(0x159,Wav_AlquamosAttack1,2,'\x01');
+      LoadWaveFile(0x15a,Wav_AlquamosDie,2,'\x01');
       Model_SetAnimationSlots(iVar1,0xaf,0xaf,0xaf,0xaf,0xb0);
       return;
     case 0x33:
       *(undefined4 *)((intptr_t)AsModel(iVar2)->Actions + ModelActionByte(100)) = 0x3e6147ae;
-      LoadWaveFile(0x155,s_Data_Sound_mRainner1_wav_0055ccc4,2,'\x01');
-      LoadWaveFile(0x156,s_Data_Sound_mRainnerAttack1_wav_0055cca4,2,'\x01');
-      LoadWaveFile(0x157,s_Data_Sound_mRainnerDie_wav_0055cc88,2,'\x01');
+      LoadWaveFile(0x155,Wav_Rainner1,2,'\x01');
+      LoadWaveFile(0x156,Wav_RainnerAttack1,2,'\x01');
+      LoadWaveFile(0x157,Wav_RainnerDie,2,'\x01');
       Model_SetAnimationSlots(iVar1,0xab,0xffff,0xac,0xac,0xad);
       return;
     case 0x34:
-      OpenTGA(s_Monster_iui02_tga_0055cddc,0x1ed,0x2600,0x2900,0,'\x01');
-      OpenTGA(s_Monster_iui03_tga_0055cdc8,0x1ef,0x2600,0x2900,0,'\x01');
+      OpenTGA(Img_MonsterIui02,0x1ed,0x2600,0x2900,0,'\x01');
+      OpenTGA(Img_MonsterIui03,0x1ef,0x2600,0x2900,0,'\x01');
       *(undefined4 *)((intptr_t)AsModel(iVar2)->Actions + ModelActionByte(100)) = 0x3e6147ae;
-      LoadWaveFile(0x15e,s_Data_Sound_mMegaCrust1_wav_0055cdac,2,'\x01');
-      LoadWaveFile(0x15f,s_Data_Sound_mMegaCrustAttack1_wav_0055cd88,2,'\x01');
-      LoadWaveFile(0x160,s_Data_Sound_mMegaCrustDie_wav_0055cd68,2,'\x01');
+      LoadWaveFile(0x15e,Wav_MegaCrust1,2,'\x01');
+      LoadWaveFile(0x15f,Wav_MegaCrustAttack1,2,'\x01');
+      LoadWaveFile(0x160,Wav_MegaCrustDie,2,'\x01');
       Model_SetAnimationSlots(iVar1,0xb4,0xb4,0xb5,0xb5,0xb6);
       return;
     case 0x35:
       *(undefined4 *)((intptr_t)AsModel(iVar2)->Actions + ModelActionByte(100)) = 0x3e6147ae;
-      LoadWaveFile(0x152,s_Data_Sound_mPhantom1_wav_0055cc6c,2,'\x01');
-      LoadWaveFile(0x153,s_Data_Sound_mPhantomAttack1_wav_0055cc4c,2,'\x01');
-      LoadWaveFile(0x154,s_Data_Sound_mPhantomDie_wav_0055cc30,2,'\x01');
+      LoadWaveFile(0x152,Wav_Phantom1,2,'\x01');
+      LoadWaveFile(0x153,Wav_PhantomAttack1,2,'\x01');
+      LoadWaveFile(0x154,Wav_PhantomDie,2,'\x01');
       Model_SetAnimationSlots(iVar1,0xa8,0xa8,0xa9,0xa9,0xaa);
       return;
     case 0x36:
       *(undefined4 *)((intptr_t)AsModel(iVar2)->Actions + ModelActionByte(100)) = 0x3e6147ae;
-      LoadWaveFile(0x14f,s_Data_Sound_mDrakan1_wav_0055cc18,2,'\x01');
-      LoadWaveFile(0x150,s_Data_Sound_mDrakanAttack1_wav_0055cbf8,2,'\x01');
-      LoadWaveFile(0x151,s_Data_Sound_mDrakanDie_wav_0055cbdc,2,'\x01');
+      LoadWaveFile(0x14f,Wav_Drakan1,2,'\x01');
+      LoadWaveFile(0x150,Wav_DrakanAttack1,2,'\x01');
+      LoadWaveFile(0x151,Wav_DrakanDie,2,'\x01');
       Model_SetAnimationSlots(iVar1,0xa5,0xa5,0xa6,0xa6,0xa7);
       return;
     case 0x37:
-      LoadWaveFile(0x161,s_Data_Sound_mPhoenix1_wav_0055cbc0,2,'\x01');
-      LoadWaveFile(0x162,s_Data_Sound_mPhoenix1_wav_0055cbc0,2,'\x01');
-      LoadWaveFile(0x163,s_Data_Sound_mPhoenixAttack1_wav_0055cba0,2,'\x01');
+      LoadWaveFile(0x161,Wav_Phoenix1,2,'\x01');
+      LoadWaveFile(0x162,Wav_Phoenix1,2,'\x01');
+      LoadWaveFile(0x163,Wav_PhoenixAttack1,2,'\x01');
       Model_SetAnimationSlots(iVar1,0xb7,0xb8,0xb9,0xb9,0xffff);
     case 0x38:
       *(undefined4 *)((intptr_t)AsModel(iVar2)->Actions + ModelActionByte(100)) = 0x3e6147ae;
       return;
     case 0x39:
-      LoadWaveFile(0x16a,s_Data_Sound_mRedSkull_wav_0055caec,2,'\x01');
-      LoadWaveFile(0x16b,s_Data_Sound_mRedSkullDie_wav_0055cad0,2,'\x01');
-      LoadWaveFile(0x16c,s_Data_Sound_mRedSkullAttack_wav_0055cab0,2,'\x01');
+      LoadWaveFile(0x16a,Wav_RedSkull,2,'\x01');
+      LoadWaveFile(0x16b,Wav_RedSkullDie,2,'\x01');
+      LoadWaveFile(0x16c,Wav_RedSkullAttack,2,'\x01');
       Model_SetAnimationSlots(iVar1,0xc0,0xffff,0xc2,0xffff,0xc1);
       break;
     case 0x3a:
       LoadWaveFile(0x166, "Data\\Sound\\mHunter2.wav",2,'\x01');
-      LoadWaveFile(0x169,s_Data_Sound_mGhaintOrgerDie_wav_0055cb08,2,'\x01');
+      LoadWaveFile(0x169,Wav_GhaintOrgerDie,2,'\x01');
       Model_SetAnimationSlots(iVar1,0xbc,0xffff,0xbe,0xffff,0xbf);
       return;
     case 0x3b:
-      LoadWaveFile(0xae,s_Data_Sound_mBullDie_wav_0055cb6c,2,'\x01');
+      LoadWaveFile(0xae,Wav_BullDie,2,'\x01');
       LoadWaveFile(0x166, "Data\\Sound\\mHunter2.wav",2,'\x01');
-      LoadWaveFile(0x167,s_Data_Sound_mBlackSkullDie_wav_0055cb4c,2,'\x01');
-      LoadWaveFile(0x168,s_Data_Sound_mBlackSkullAttack_wav_0055cb28,2,'\x01');
+      LoadWaveFile(0x167,Wav_BlackSkullDie,2,'\x01');
+      LoadWaveFile(0x168,Wav_BlackSkullAttack,2,'\x01');
       Model_SetAnimationSlots(iVar1,0xbc,0xffff,0xbe,0xffff,0xbd);
       return;
     case 0x3e:
-      LoadWaveFile(0x164,s_Data_Sound_mMagicSkull_wav_0055cb84,2,'\x01');
-      LoadWaveFile(0x165,s_Data_Sound_mMagicSkull_wav_0055cb84,2,'\x01');
+      LoadWaveFile(0x164,Wav_MagicSkull,2,'\x01');
+      LoadWaveFile(0x165,Wav_MagicSkull,2,'\x01');
       Model_SetAnimationSlots(iVar1,0xba,0xffff,0xffff,0xffff,0xbb);
       return;
     }

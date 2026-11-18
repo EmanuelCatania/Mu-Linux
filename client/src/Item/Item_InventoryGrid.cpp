@@ -11,12 +11,12 @@
 // InsertWarehouseItem @ 0x004CC0E0 (~52 lines) — fills warehouse grid cells for an item
 // ConvertItemType(param_2) -> get Width/Height from ItemAttribute[type].
 // For each cell in WxH: set item type, grid coords, call ItemConvert.
-// Stride 0x44 per cell at OffsetWarehouseItems base (DAT_07ea5b30).
-// ItemAttribute = DAT_07d78068 (ITEM_ATTRIBUTE array, stride 0x40).
+// Stride 0x44 per cell at OffsetWarehouseItems base (LegacyWarehouseItems).
+// ItemAttribute = ItemAttributeBase (ITEM_ATTRIBUTE array, stride 0x40).
 void __cdecl InsertWarehouseItem(unsigned int param_1, unsigned char* param_2) {
     // ConvertItemType: item_type = param_2[0] + (param_2[3] & 0x80) * 2
     int iVar3 = (unsigned int)param_2[0] + (param_2[3] & 0x80) * 2;
-    ITEM_ATTRIBUTE* pAttr = (ITEM_ATTRIBUTE*)DAT_07d78068;
+    ITEM_ATTRIBUTE* pAttr = (ITEM_ATTRIBUTE*)ItemAttributeBase;
 
     if (iVar3 == 0xff) return;
 
@@ -73,7 +73,7 @@ void __cdecl SetItemGridFlag(int param_1, BYTE* param_2, unsigned char param_3) 
     ITEM* items = AsItem(param_2);
     const ITEM& item = items[param_1];
     short itemType = item.Type;
-    ITEM_ATTRIBUTE* attr = (ITEM_ATTRIBUTE*)DAT_07d78068;
+    ITEM_ATTRIBUTE* attr = (ITEM_ATTRIBUTE*)ItemAttributeBase;
     BYTE width  = attr[itemType].Width;
     BYTE height = attr[itemType].Height;
     unsigned int originX = (unsigned int)item.x;
@@ -184,21 +184,21 @@ int __cdecl CompareItems(short param_1, int param_2, int param_3) {
 }
 
 // IDA: sub_4CC3C0 (0x004CC3C0).  No ordena nada: marca los items de un pool
-// del trade (32 celdas) contra el historial de items valiosos (word_7E11F78,
+// del trade (32 celdas) contra el historial de items valiosos (TradeItemList,
 // 32 entradas).  Si un item es PEOR que uno del historial del mismo tipo, su
-// footprint queda en 99 (color de advertencia) y byte_7EAA0E8 = 1; si es igual
+// footprint queda en 99 (color de advertencia) y TradeConfirmLatch = 1; si es igual
 // o mejor, en 1.  Los tipos que empataron (resultado 0) vuelven a 1 en todas
 // sus celdas al final.
 extern "C" int __cdecl Item_CompareForTradeHistory(const BYTE* p, const BYTE* n);
 void __cdecl SortInventory(short* param_1) {
     BYTE* const pool = (BYTE*)param_1;
-    DAT_07eaa0e8 = 0;                                   // byte_7EAA0E8
+    TradeConfirmLatch = 0;                                   // 0x07EAA0E8
     for (int i = 0; i < 32; ++i)
         pool[i * 68 + 64] = 1;
 
     int tied[10];                                       // char v19[40]
     int tiedCount = 0;
-    const BYTE* const history = (const BYTE*)&DAT_07e11f78[0];
+    const BYTE* const history = (const BYTE*)&TradeItemList[0];
 
     for (int slot = 0; slot < 32; ++slot) {
         const BYTE* item = pool + slot * 68;
@@ -210,7 +210,7 @@ void __cdecl SortInventory(short* param_1) {
                 continue;
             const int r = Item_CompareForTradeHistory(entry, item);
             if (r == 1) {                               // peor que el historial
-                DAT_07eaa0e8 = 1;
+                TradeConfirmLatch = 1;
                 SetItemGridFlag(slot, pool, 99);
                 continue;
             }
@@ -222,7 +222,7 @@ void __cdecl SortInventory(short* param_1) {
     }
 
     if (tiedCount > 0) {
-        DAT_07eaa0e8 = 0;
+        TradeConfirmLatch = 0;
         for (int t = 0; t < tiedCount; ++t)
             for (int i = 0; i < 32; ++i) {
                 const BYTE* item = pool + i * 68;
@@ -242,15 +242,15 @@ unsigned long long __cdecl CheckInventorySpace(int p1, int p2, unsigned short* p
     // p3 = inventory array base (short*, stride 0x22 words = 0x44 bytes)
     // p4 = grid width, p5 = grid height
     //
-    // Uses DAT_07e91350 (pPickedItem type), DAT_07d78068 (ItemAttribute base) to get item Width/Height.
-    // Converts MouseX/MouseY to grid coords using _DAT_00552a10 and _DAT_00552504 scale factors.
+    // Uses PickedItemData (pPickedItem type), ItemAttributeBase (ItemAttribute base) to get item Width/Height.
+    // Converts MouseX/MouseY to grid coords using 0.05f and HalfScale scale factors.
     // Returns low byte=1 if space available, 0 otherwise.
     // Also handles stackable item merging (arrows 0x1bf..0x1c8, potions 0x87/0x8f).
 
 
     // Get picked item dimensions from ItemAttribute table
-    short pickedType = *(short*)DAT_07e91350;
-    std::uintptr_t attrBase = (int)pickedType * 0x40 + DAT_07d78068;
+    short pickedType = *(short*)PickedItemData;
+    std::uintptr_t attrBase = (int)pickedType * 0x40 + ItemAttributeBase;
     unsigned int itemW = (unsigned int)*(unsigned char*)(attrBase + 0x20);  // Width
     unsigned int itemH = (unsigned int)*(unsigned char*)(attrBase + 0x21);  // Height
 
@@ -261,10 +261,10 @@ unsigned long long __cdecl CheckInventorySpace(int p1, int p2, unsigned short* p
     }
 
     // Convert mouse position to grid coords
-    // gridX = ftol((MouseX - p1) * _DAT_00552a10 * _DAT_00552504 - ... + _DAT_00552504)
-    // From assembly: FILD(MouseX - p1), FMUL(DAT_00552a10), FILD(itemW), FMUL(DAT_00552504), FSUB, FADD(DAT_00552504)
-    int gridX = (int)((float)(MouseX - p1) * _DAT_00552a10 - (float)itemW * _DAT_00552504 + _DAT_00552504);
-    int gridY = (int)((float)(MouseY - p2) * _DAT_00552a10 - (float)itemH * _DAT_00552504 + _DAT_00552504);
+    // gridX = ftol((MouseX - p1) * 0.05f * HalfScale - ... + HalfScale)
+    // From assembly: FILD(MouseX - p1), FMUL(0.05f), FILD(itemW), FMUL(HalfScaleBits), FSUB, FADD(HalfScaleBits)
+    int gridX = (int)((float)(MouseX - p1) * 0.05f - (float)itemW * HalfScale + HalfScale);
+    int gridY = (int)((float)(MouseY - p2) * 0.05f - (float)itemH * HalfScale + HalfScale);
 
     // Count empty cells in the item's footprint
     int emptyCount = 0;
@@ -308,7 +308,7 @@ unsigned long long __cdecl CheckInventorySpace(int p1, int p2, unsigned short* p
         }
         int cellIdx = gridY * p4 + gridX;
         int cellType = (int)*(short*)((char*)OffsetInventoryItems + cellIdx * 0x44);
-        int picked = (int)*(short*)DAT_07e91350;
+        int picked = (int)*(short*)PickedItemData;
 
         if (picked == cellType) {
             // Arrows (0x1bf < type < 0x1c9) stack with same range
@@ -319,7 +319,7 @@ unsigned long long __cdecl CheckInventorySpace(int p1, int p2, unsigned short* p
             if ((picked == 0x87 || picked == 0x8f) &&
                 (cellType == 0x87 || cellType == 0x8f)) {
                 int cellLevel = (*(int*)((char*)OffsetInventoryItems + cellIdx * 0x44 + 4) >> 3) & 0xf;
-                int pickedLevel = ((int)DAT_07e91354 >> 3) & 0xf;
+                int pickedLevel = ((int)PickedItemLevel >> 3) & 0xf;
                 if (pickedLevel == cellLevel) {
                     return 1;
                 }
@@ -327,7 +327,7 @@ unsigned long long __cdecl CheckInventorySpace(int p1, int p2, unsigned short* p
             // DESVIACION (DLL ItemStack.cpp CanInsertItem): los apilables del
             // server (F3/E3) del mismo nivel; el server suma en InventoryAddItemStack.
             const int cellLevel = (*(int*)((char*)OffsetInventoryItems + cellIdx * 0x44 + 4) >> 3) & 0xf;
-            const int pickedLevel = ((int)DAT_07e91354 >> 3) & 0xf;
+            const int pickedLevel = ((int)PickedItemLevel >> 3) & 0xf;
             if (cellLevel == pickedLevel && ItemStack_GetMaxStack(picked, pickedLevel) != 0) {
                 return 1;
             }
@@ -347,7 +347,7 @@ int __cdecl FindEmptySlot(int param_1, const BYTE* param_2, int param_3, int par
     // Returns low byte=1 if found, 0 otherwise.
 
 
-    std::uintptr_t attrBase = param_1 * 0x40 + DAT_07d78068;
+    std::uintptr_t attrBase = param_1 * 0x40 + ItemAttributeBase;
     unsigned int itemH = (unsigned int)*(unsigned char*)(attrBase + 0x21);  // Height
     unsigned int itemW = (unsigned int)*(unsigned char*)(attrBase + 0x20);  // Width
     if (itemW == 0 || itemW > 8 || itemH == 0 || itemH > 8) {

@@ -25,9 +25,9 @@ static void PrepareContext(OBJECT* entity, void* model)
     // Desplazamiento Y especial para la elfa (0x14B) y su variante (0x14A).
     short cls = AsObject(entity)->Type;
     if (cls == 0x14b) {
-        context.BodyOrigin[1] = entity->Position[1] + _DAT_0055290c;
+        context.BodyOrigin[1] = entity->Position[1] + 60.0f;
     } else if (cls == 0x14a) {
-        context.BodyOrigin[1] = entity->Position[1] + _DAT_00552908;
+        context.BodyOrigin[1] = entity->Position[1] + 120.0f;
     }
 }
 static bool ReuseBones(OBJECT* entity, void* model, float* bones, char translate);
@@ -47,28 +47,28 @@ void ObjectPose_PrepareBones(OBJECT* entity, void* model, float* bones, char tra
 void ObjectPose_PrepareBounds(OBJECT* entity, char translate)
 {
     OBJECT &o = *AsObject(entity);
-    if (o.Alpha < _DAT_005524f8) return;
-    if (DAT_07e11d30 == 2) {
+    if (o.Alpha < 0.01f) return;
+    if (EditFlag == 2) {
         Calc_RenderObject(entity, translate, 0);
         return;
     }
     float origin[3] = { o.Position[0], o.Position[1], o.Position[2] };
-    if (o.Type == 0x14b) origin[1] += _DAT_0055290c;
-    else if (o.Type == 0x14a) origin[1] += _DAT_00552908;
+    if (o.Type == 0x14b) origin[1] += 60.0f;
+    else if (o.Type == 0x14a) origin[1] += 120.0f;
     ObjectBounds_Build(o.BoundingBoxMin, o.BoundingBoxMax, origin, o.OBB);
 }
 
 void ObjectPose_PrepareSimulation(OBJECT* entity, char translate)
 {
     OBJECT &o = *AsObject(entity);
-    if (o.Alpha < _DAT_005524f8) return;
-    if (DAT_07e11d30 == 2) {
+    if (o.Alpha < 0.01f) return;
+    if (EditFlag == 2) {
         Calc_RenderObject(entity, translate, 0);
         return;
     }
-    BMD* model = AsModel(DAT_05828d58) + o.Type;
+    BMD* model = AsModel(ModelsBase) + o.Type;
     model->BodyHeight = 0.0f;
-    float *bones = o.EnableBoneMatrix ? (float *)o.BoneMatrices : (float *)&DAT_06970a9c;
+    float *bones = o.EnableBoneMatrix ? (float *)o.BoneMatrices : (float *)&BoneScratchRoot;
     ObjectPose_PrepareBones(entity, model, bones, translate);
     ObjectPose_PrepareBounds(entity, translate);
 }
@@ -78,7 +78,7 @@ void ObjectPose_PrepareSimulation(OBJECT* entity, char translate)
 void ObjectPose_TickMeshEvents(OBJECT* entity, void *model, float *bones, char translate)
 {
     OBJECT &o = *AsObject(entity);
-    if (!o.Live || o.Alpha < _DAT_005524f8) return;
+    if (!o.Live || o.Alpha < 0.01f) return;
     const bool dead = o.CurrentAction == 6;
     const bool materializing = o.Type == 330 && (int)MoveSceneFrame - o.InitialSceneFrame < 25;
     if (!((o.Type == 331 && dead) || (o.Type == 330 && (dead || materializing)))) return;
@@ -95,7 +95,7 @@ void ObjectPose_TickMeshEvents(OBJECT* entity, void *model, float *bones, char t
 // param_2 = anim speed (float), param_3 = RGBA color, param_4 = current anim index,
 // param_5 = RGBA ptr (root-bone position hint), param_6 = position offset float[3],
 // param_7/8 = flags for root-bone translation.
-// Output: bone quaternion+position stored in DAT_05826E18 (bone*0x10 stride).
+// Output: bone quaternion+position stored in BoneQuaternionScratch (bone*0x10 stride).
 //         Final bone matrices written to param_1 (3x4 per bone).
 // DESVIACION: scratch explícito para calcular poses independientes en un lote.
 // La entrada histórica de BMD conserva sus temporales y escrituras originales.
@@ -120,7 +120,7 @@ static void AnimateWithScratch(void* this_, float* param_1, float param_2, unsig
     short curFrame = (short)lv;
     model.CurrentAnimationFrame = curFrame;
     float fFrac = param_2 - (float)(int)curFrame;
-    float fFrac2 = _DAT_0055256c - fFrac;
+    float fFrac2 = 1.0f - fFrac;
     // param_3 es realmente `float PriorFrame` (IDA firma), no un entero. La firma
     // C nuestra lo declara `unsigned int` porque el caller en Calc_RenderObject lo
     // carga con *(DWORD*)(entity+0x10c) y los bits del float caben en un DWORD.
@@ -154,12 +154,12 @@ static void AnimateWithScratch(void* this_, float* param_1, float param_2, unsig
                     // IDA: v43[1] = *(_DWORD *)(v21 + 4); (Y sin ajuste HeadAngle)
                     float posA[4], posB[4];
                     int   curFrameB = model.CurrentAnimationFrame;
-                    posA[0] = animPtrA->EulerAngles[v39 * 3 + 0]     - param_6[0] * _DAT_005528b0;
+                    posA[0] = animPtrA->EulerAngles[v39 * 3 + 0]     - param_6[0] * DegToRad2;
                     posA[1] = animPtrA->EulerAngles[v39 * 3 + 1];
-                    posA[2] = animPtrA->EulerAngles[v39 * 3 + 2] - param_6[1] * _DAT_005528b0;
-                    posB[0] = animPtrB->EulerAngles[curFrameB * 3 + 0]     - param_6[0] * _DAT_005528b0;
+                    posA[2] = animPtrA->EulerAngles[v39 * 3 + 2] - param_6[1] * DegToRad2;
+                    posB[0] = animPtrB->EulerAngles[curFrameB * 3 + 0]     - param_6[0] * DegToRad2;
                     posB[1] = animPtrB->EulerAngles[curFrameB * 3 + 1];
-                    posB[2] = animPtrB->EulerAngles[curFrameB * 3 + 2] - param_6[1] * _DAT_005528b0;
+                    posB[2] = animPtrB->EulerAngles[curFrameB * 3 + 2] - param_6[1] * DegToRad2;
                     EulerToQuat(posA, quatA, 0, 0);
                     EulerToQuat(posB, quatB, 0, 0);
                 } else {
@@ -177,7 +177,7 @@ static void AnimateWithScratch(void* this_, float* param_1, float param_2, unsig
                 }
                 // slerp between quatA and quatB
                 // IDA: `(char *)&unk_5826E18 + 16 * boneIdx` — paso de 16 BYTES.
-                // Con `&DAT_05826e18` (DWORD*) el paso salía de 64 bytes.
+                // Con `&BoneQuaternionScratch` (DWORD*) el paso salía de 64 bytes.
                 int quatBone = boneIdx;
                 if (quatBone < 0 || quatBone >= 200) quatBone = 0;   // guard: la tabla es de 200 huesos
                 float* outQuat = (float*)(quaternionScratch + quatBone * 0x10);
@@ -259,7 +259,7 @@ void __cdecl BMD_Animation(void* model, float* bones, float frame, unsigned int 
     unsigned char priorAction, unsigned int* angles, float* head, char special, char translate)
 {
     AnimateWithScratch(model,bones,frame,priorFrame,priorAction,angles,head,special,translate,
-        DAT_05826e18,&DAT_06989c9c);
+        BoneQuaternionScratch,&RootBoneMatrix);
 }
 
 namespace {
@@ -316,14 +316,14 @@ void PrepareRange(void*,std::size_t begin,std::size_t end) {
             p.direction={0,0,0};
             if(model->LightEnable) {
                 float input[3]={0,-1.5f,0},rotation[12];
-                if(DAT_005597c4) { input[0]=1.3f;input[1]=0;input[2]=2; }
+                if(RenderSubModeFlag) { input[0]=1.3f;input[1]=0;input[2]=2; }
                 Matrix_BuildFromEuler(model->ShadowAngle,rotation);
                 Vector_InverseRotate(input,rotation,p.direction.data());
             }
             TransformMath::Batch batch{p.transforms.data(),p.transforms.size(),p.bones.data(),
                 1.f,model->BodyScale,{model->BodyOrigin[0],model->BodyOrigin[1],model->BodyOrigin[2]},
                 {p.direction[0],p.direction[1],p.direction[2]},
-                {p.coefficients[0],p.coefficients[1],p.coefficients[2]},1.f==_DAT_0055256c,true,model->LightEnable!=0};
+                {p.coefficients[0],p.coefficients[1],p.coefficients[2]},1.f==1.0f,true,model->LightEnable!=0};
             std::size_t count=0;
             for(const auto& mesh:p.transforms)count+=mesh.vertexCount+mesh.normalCount;
             TransformMath::Run(&batch,0,count);
@@ -337,16 +337,16 @@ void PrepareRange(void*,std::size_t begin,std::size_t end) {
 // consume copias validadas y conserva todas sus escrituras en el orden original.
 void ObjectPose_BeginBatch() {
     batchActive=false; geometryPose=nullptr; batchCount=0; jobs.clear();
-    if(SceneFlag!=5 || DAT_07e11d30==2 || !DAT_07abf5d0) return;
+    if(SceneFlag!=5 || EditFlag==2 || !CharactersClient) return;
     // Medición de lotes pequeños: con 4 poses la coordinación era más cara.
     // Contar trabajo antes de copiar fuentes y reservar el equipo para lotes útiles.
     int visible=0;
     std::size_t vertexWork=0,boneWork=0;
     for(int slot=0;slot<400;++slot) {
-        const auto* o=AsObject(DAT_07abf5d0+slot*sizeof(CHARACTER));
-        if(!o->Live || (!o->Visible && (const void*)o!=(const void*)DAT_07abf5d8) ||
-           o->Alpha<_DAT_005524f8 || o->Type<0 || (std::size_t)o->Type>=ResourceTables::ModelCount()) continue;
-        const BMD* model=AsModel(DAT_05828d58)+o->Type;
+        const auto* o=AsObject(CharactersClient+slot*sizeof(CHARACTER));
+        if(!o->Live || (!o->Visible && (const void*)o!=(const void*)Hero) ||
+           o->Alpha<0.01f || o->Type<0 || (std::size_t)o->Type>=ResourceTables::ModelCount()) continue;
+        const BMD* model=AsModel(ModelsBase)+o->Type;
         if(model->NumActions<=0) continue;
         ++visible;
         const int bones=model->NumBones,count=model->NumMeshs;
@@ -364,10 +364,10 @@ void ObjectPose_BeginBatch() {
     ++batchEpoch;
     for(std::size_t slot=0;slot<prepared.size();++slot) {
         auto& p=prepared[slot]; p.valid=false; p.geometry=false;
-        auto* o=AsObject(DAT_07abf5d0+slot*sizeof(CHARACTER));
-        if(!o->Live || (!o->Visible && (void*)o!=(void*)DAT_07abf5d8) || o->Alpha<_DAT_005524f8) continue;
+        auto* o=AsObject(CharactersClient+slot*sizeof(CHARACTER));
+        if(!o->Live || (!o->Visible && (void*)o!=(void*)Hero) || o->Alpha<0.01f) continue;
         if(o->Type<0 || (std::size_t)o->Type>=ResourceTables::ModelCount()) continue;
-        const BMD* model=AsModel(DAT_05828d58)+o->Type;
+        const BMD* model=AsModel(ModelsBase)+o->Type;
         const int count=model->NumBones;
         if(count<=0 || count>200 || model->NumActions<=0 ||
            (uintptr_t)model->Bones<0x10000u || (uintptr_t)model->Actions<0x10000u) continue;
@@ -434,7 +434,7 @@ void ObjectPose_BeginBatch() {
         }
         if(fresh) { frozen.geometry=p.geometry;frozen.usedBones=p.usedBones; }
         if(o->Type!=0x145 && o->Type!=0xe1) AsModel(p.model.data())->LightEnable=o->LightEnable;
-        p.coefficients={_DAT_00552530,_DAT_005528b4,_DAT_005526e4};
+        p.coefficients={0.8f,0.4f,0.2f};
         jobs.push_back(&p);
         actualBones+=p.boneCount;
         if(p.geometry) for(const auto& mesh:p.transforms) actualVertices+=mesh.vertexCount+mesh.normalCount;
@@ -451,7 +451,7 @@ void ObjectPose_EndBatch() { batchActive=false; geometryPose=nullptr; }
 static bool ReuseBones(OBJECT* entity,void* model,float* bones,char translate) {
     geometryPose=nullptr;
     if(!batchActive || translate!=1) return false;
-    const auto base=(uintptr_t)DAT_07abf5d0, address=(uintptr_t)entity;
+    const auto base=(uintptr_t)CharactersClient, address=(uintptr_t)entity;
     if(address<base || address-base>=400*sizeof(CHARACTER) || (address-base)%sizeof(CHARACTER)) return false;
     auto& p=prepared[(address-base)/sizeof(CHARACTER)];
     if(!p.valid || p.originalModel!=model) return false;
@@ -479,9 +479,9 @@ static bool ReuseBones(OBJECT* entity,void* model,float* bones,char translate) {
     const auto* rawBones=reinterpret_cast<const ModelAnimationBone*>(current->Bones);
     for(int i=0;i<p.boneCount;++i) if(!rawBones[i].Dummy) {
         memcpy(bones+i*12,p.bones.data()+i*12,48);
-        memcpy(DAT_05826e18+i*16,p.quaternions.data()+i*16,16);
+        memcpy(BoneQuaternionScratch+i*16,p.quaternions.data()+i*16,16);
     }
-    if(p.writesParent) memcpy(&DAT_06989c9c,p.parent.data(),48);
+    if(p.writesParent) memcpy(&RootBoneMatrix,p.parent.data(),48);
     geometryPose=&p;
     return true;
 }

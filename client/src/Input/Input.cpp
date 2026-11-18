@@ -17,16 +17,16 @@
 // GLOBALS DE ESTADO DEL INPUT
 // ─────────────────────────────────────────────────────────────────────────────
 //
-//   DAT_083a427c  g_MouseX             Posición X del mouse (0..639, normalizada a 640×480)
-//   DAT_083a4278  g_MouseY             Posición Y del mouse (0..479)
-//   DAT_083a4124  g_ClickFlag          1 = LButton pressed (cleared on release; no se setea si DblClick pending)
-//   DAT_083a413c  g_DialogClose        1 = LButton released (set on WM_LBUTTONUP)
+//   MouseX  g_MouseX             Posición X del mouse (0..639, normalizada a 640×480)
+//   MouseY  g_MouseY             Posición Y del mouse (0..479)
+//   MouseLButtonPush  g_ClickFlag          1 = LButton pressed (cleared on release; no se setea si DblClick pending)
+//   MouseLButtonPop  g_DialogClose        1 = LButton released (set on WM_LBUTTONUP)
 //                                      Se limpia si mouse se movió desde el down (055ca03c/40)
-//   DAT_083a42c4  g_DblClickPending    1 = LButton held/down (previene double-fire de g_ClickFlag)
-//   DAT_083a4299  g_DblClickFlag       1 = WM_LBUTTONDBLCLK (doble click)
-//   DAT_055ca03c  g_MouseX_at_down     X del mouse cuando se presionó LButton (para detectar drag)
-//   DAT_055ca040  g_MouseY_at_down     Y del mouse cuando se presionó LButton
-//   DAT_055ca019  g_IME_Active         1 = IME en modo composición (WM_IME_START/ENDCOMPOSITION)
+//   MouseLButton  g_DblClickPending    1 = LButton held/down (previene double-fire de g_ClickFlag)
+//   MouseDblClickFlag  g_DblClickFlag       1 = WM_LBUTTONDBLCLK (doble click)
+//   g_MouseX_at_down  g_MouseX_at_down     X del mouse cuando se presionó LButton (para detectar drag)
+//   g_MouseY_at_down  g_MouseY_at_down     Y del mouse cuando se presionó LButton
+//   g_IME_Active  g_IME_Active         1 = IME en modo composición (WM_IME_START/ENDCOMPOSITION)
 //
 //   Nota: g_DialogClose se usa como "hubo un click sin drag" — las escenas lo leen
 //   para confirmar selecciones (diferente de g_ClickFlag que es "está presionado ahora").
@@ -35,29 +35,29 @@
 // GLOBALS DEL BUFFER DE TEXTO
 // ─────────────────────────────────────────────────────────────────────────────
 //
-//   DAT_07db8710  g_TextBuf[0]         Buffer de texto slot 0 (username/chat, 256 bytes)
-//   DAT_07db8810  g_TextBuf[1]         Buffer de texto slot 1 (password, 256 bytes)
+//   InputTextBuffers  g_TextBuf[0]         Buffer de texto slot 0 (username/chat, 256 bytes)
+//   PasswordInputBuffer  g_TextBuf[1]         Buffer de texto slot 1 (password, 256 bytes)
 //   (fórmula: g_TextBuf_base + slot * 0x100)
 //
-//   DAT_07d780a8  g_TextLen[N]         int[N] — longitud actual de cada slot
+//   InputTextLengths  g_TextLen[N]         int[N] — longitud actual de cada slot
 //   InputTextMax  g_TextMaxLen[N]      int[N] — longitud máxima permitida por slot (de config)
-//   DAT_07e11d78  g_ActiveSlot         Slot activo de input (Tab para rotar)
+//   ActiveInputIndex  g_ActiveSlot         Slot activo de input (Tab para rotar)
 //
 //   Flags de modo de input (todos en WM_CHAR guard):
-//   DAT_00559c84  g_TextMode           General text input active (login screen / chat)
+//   InputEnable  g_TextMode           General text input active (login screen / chat)
 //   GuildInputEnable  g_ChatMode           Chat input mode
-//   DAT_07e11d71  g_IME_Mode           Korean/DBCS IME input active
+//   ImeModeFlag  g_IME_Mode           Korean/DBCS IME input active
 //   GoldInputEnable  g_DigitOnly          Modo solo dígitos (0-9) — PIN/second password
 //   GoldenArcherLuckyNumberTicket  g_UppercaseOnly      Modo solo mayúsculas
-//   DAT_083a7c24  g_UIScene            Si == 0x7E o 0x98: texto activo aunque otras flags == 0
+//   InGameUiState  g_UIScene            Si == 0x7E o 0x98: texto activo aunque otras flags == 0
 //
 //   Para Korean DBCS (WM_IME_COMPOSITION, 0x10F):
-//   DAT_07e11cec  g_DBCS_Hi[slot*4]    Byte alto del carácter DBCS
+//   DbcsHighBytes  g_DBCS_Hi[slot*4]    Byte alto del carácter DBCS
 //   DAT_07e11ced  g_DBCS_Lo[slot*4]    Byte bajo del carácter DBCS
 //   DAT_07e11cee  g_DBCS_Null[slot*4]  Siempre 0 (null terminator)
 //
-//   DAT_055ca031  g_TextBufNearFull    1 = buffer a 1 byte del máximo
-//   DAT_055ca034  g_DBCS_Counter       2=esperando trail byte, 1=byte suelto, 0=ASCII
+//   g_TextBufNearFull  g_TextBufNearFull    1 = buffer a 1 byte del máximo
+//   g_DBCS_Counter  g_DBCS_Counter       2=esperando trail byte, 1=byte suelto, 0=ASCII
 //
 // ─────────────────────────────────────────────────────────────────────────────
 // TABLA DE EDGE-DETECTION DE TECLADO
@@ -115,7 +115,7 @@ uint Key_IsJustPressed(int vk);
 //
 // WM_LBUTTONDBLCLK (0x203):
 //   [obfuscación HashTable]
-//   g_DblClickFlag = 1       (DAT_083a4299)
+//   g_DblClickFlag = 1       (MouseDblClickFlag)
 //
 // WM_RBUTTONDOWN (0x204):
 //   [obfuscación HashTable] — sin globals públicos identificados todavía
@@ -149,7 +149,7 @@ uint Key_IsJustPressed(int vk);
 //     Si slot único y buffer vacío: toggle g_IME_Mode
 //
 //   wParam == 0xD (Enter):
-//     Procesado aparte → DAT_083a4299 = 1 o acción de submit
+//     Procesado aparte → MouseDblClickFlag = 1 o acción de submit
 //     (ver también WM_LBUTTONDBLCLK para char-select)
 //
 //   Char regular (0x20..0x7E + DBCS):
@@ -158,7 +158,7 @@ uint Key_IsJustPressed(int vk);
 //       g_DigitOnly   → solo '0'..'9'
 //       g_UppercaseOnly → solo 'A'..'Z' (crt_toupper = toupper)
 //     DBCS: g_DBCS_Counter decrementado por byte; si era lead byte: counter = 2
-//     Append a g_TextBuf[g_ActiveSlot]: DAT_07db8710 + slot * 0x100 + len
+//     Append a g_TextBuf[g_ActiveSlot]: InputTextBuffers + slot * 0x100 + len
 //     g_TextLen++ (max 255 / g_TextMaxLen[slot])
 //     Si buffer lleno al borde (len == maxLen-1): g_TextBufNearFull = 1
 //
@@ -178,12 +178,12 @@ uint Key_IsJustPressed(int vk);
 //   ImmGetContext(g_hWnd) → hIMC
 //   ImmGetConversionStatus(hIMC, &conversion, &sentence)
 //   Si hay estado IME activo (conversion != 0 || sentence != 0):
-//     Si (save_mask & 1): DAT_07e11d94 = conversion
-//     Si (save_mask & 2): DAT_00559cd8 = sentence
+//     Si (save_mask & 1): ImeOldConv = conversion
+//     Si (save_mask & 2): ImeOldSentMode = sentence
 //     Si clear_mode != 0: ImmSetConversionStatus(hIMC, 0, 0)  — limpiar
 //     Retorna 1 (había estado)
 //   ImmReleaseContext(g_hWnd, hIMC)
-//   DAT_07e11d98 = conversion   (siempre actualiza)
+//   ImeCurrConv = conversion   (siempre actualiza)
 //   Retorna 0 (no había estado activo)
 //   Usado en WM_CHAR para pausar IME durante composición ASCII.
 bool IME_GetAndClearState(char clear_mode, byte save_mask);
@@ -213,7 +213,7 @@ int NumPad_HitTest(void);
 // Ejemplos documentados:
 //   Game_MainLoop / Game_SceneUpdate:
 //     GetAsyncKeyState(VK_SHIFT) → if high bit: toggle screenshot debug mode
-//     Key_IsJustPressed(VK_SNAPSHOT) → toggle screenshot mode (DAT_083a42ec ^= 1)
+//     Key_IsJustPressed(VK_SNAPSHOT) → toggle screenshot mode (ScreenshotModeFlag ^= 1)
 //
 //   Login Scene (Game_SceneUpdate):
 //     Clicks de mouse en áreas de botón como hit-test manual
@@ -233,7 +233,7 @@ int NumPad_HitTest(void);
 //      a. Lee g_ClickFlag
 //      b. Camera_MouseRay(g_MouseX, g_MouseY) → ray en world space
 //      c. Ray × terrain heightmap → world position (x, y)
-//      d. World → grid: gridX = world_x / DAT_005524f0, gridY = world_y / DAT_005524f0
+//      d. World → grid: gridX = world_x / GridToWorldScaleBits, gridY = world_y / GridToWorldScaleBits
 //      e. Si terreno walkable (GetTileType(gridX, gridY) bit0 == 1):
 //           Enviar C1 0xD7 [gridX][gridY] al servidor (client walk request)
 //      f. Actualizar entity+0x306/307 del jugador (predicción de cliente)
@@ -297,19 +297,19 @@ void __cdecl ClearInput(int param_1)
   int iVar2;
   undefined4 *puVar3;
 
-  DAT_07e11d78 = 0;
-  DAT_00559c90 = 0xffffffff;
+  ActiveInputIndex = 0;
+  ActiveInputSlot = 0xffffffff;
   iVar2 = 0;
   do {
     if ((iVar2 != 1) || (param_1 != 0)) {
       // stride 0x100 (256 bytes per slot) — Ghidra mis-read as 0x40
-      puVar3 = (undefined4*)((char*)DAT_07db8710 + iVar2 * 0x100);
+      puVar3 = (undefined4*)((char*)InputTextBuffers + iVar2 * 0x100);
       for (iVar1 = 0x40; iVar1 != 0; iVar1 = iVar1 + -1) {
         *puVar3 = 0;
         puVar3 = puVar3 + 1;
       }
-      DAT_07d780a8[iVar2] = 0;
-      DAT_07e113d8[iVar2] = 0;
+      InputTextLengths[iVar2] = 0;
+      InputFieldFlags[iVar2] = 0;
       InputTextMaxClusters[iVar2] = 0;
     }
     iVar2 = iVar2 + 1;
@@ -325,18 +325,18 @@ void __cdecl ClearInput(int param_1)
 // IDA: CheckFunctionButtons (cola de la rama F4)
 void Input_CycleChatSize(void)
 {
-  ChatListBox_ScrollByN(DAT_055c9ff0);
+  ChatListBox_ScrollByN(ChatHistoryWidget);
   int x, y;
   if (g_bUseChatListBox != 1) {
     x = -10; y = Ui::ClassicChatY;           // modo clasico (debajo de los avisos del sistema)
-  } else if (DAT_07eaa117 == 0 ||
-             (DAT_07eaa116 == 0 && DAT_07eaa11b == 0 && DAT_07eaa119 == 0 &&
-              DAT_07eaa11a == 0 && DAT_07eaa11c == 0 && DAT_07eaa118 == 0)) {
+  } else if (InventoryOpened == 0 ||
+             (CharacterOpened == 0 && TradeOpened == 0 && WarehouseOpened == 0 &&
+              ChaosMixOpened == 0 && EventWindowOpened == 0 && ShopOpened == 0)) {
     x = 0xba; y = 0x1a4;                     // recuadro, sin paneles al costado
   } else {
     x = 0; y = 0x1a4;                        // recuadro con un panel abierto
   }
-  Object_SetRectFields((void*)(uintptr_t)DAT_055c9ff0, x, y);
+  Object_SetRectFields((void*)(uintptr_t)ChatHistoryWidget, x, y);
   PlayBuffer(0x19,0,0);
 }
 
@@ -351,29 +351,29 @@ void Input_ProcessFunctionKeys(void)
 
   SVar3 = Platform::GetInput().KeyState(0x70);
   if ((char)((ushort)SVar3 >> 8) == -0x80) {
-    if (DAT_07e11aac == 0) {
-      DAT_07e11aac = 1;
-      if (DAT_07e11d20 == 3) {
-        DAT_07e11d20 = 0;
+    if (F1KeyDebounce == 0) {
+      F1KeyDebounce = 1;
+      if (HelpWindowMode == 3) {
+        HelpWindowMode = 0;
       }
       else {
-        DAT_07e11d20 = (DAT_07e11d20 + 1) % 3;
+        HelpWindowMode = (HelpWindowMode + 1) % 3;
       }
       PlayBuffer(0x19,0,0);
     }
   }
   else {
-    DAT_07e11aac = 0;
+    F1KeyDebounce = 0;
   }
   SVar3 = Platform::GetInput().KeyState(0x71);
   if ((char)((ushort)SVar3 >> 8) == -0x80) {
-    if (DAT_07e11ab0 == 0) {
-      DAT_00559bf1 = DAT_00559bf1 == '\0';
-      DAT_07e11ab0 = 1;
+    if (F2KeyDebounce == 0) {
+      ChatDisplayToggle = ChatDisplayToggle == '\0';
+      F2KeyDebounce = 1;
       PlayBuffer(0x19,0,0);
       // vtable[+0x30] = slot 12 = ChatLB_scrollByN (__fastcall this+n).
-      if (DAT_055c9ff0 && ChatWidget_GetVTable(DAT_055c9ff0)) {
-          DWORD* obj = (DWORD*)DAT_055c9ff0;
+      if (ChatHistoryWidget && ChatWidget_GetVTable(ChatHistoryWidget)) {
+          DWORD* obj = (DWORD*)ChatHistoryWidget;
           void** vt  = ChatWidget_GetVTable(obj);
           typedef int (__fastcall *FnScroll)(DWORD*, int /*edx*/, int);
           ((FnScroll)vt[12])(obj, 0, 0);
@@ -381,27 +381,27 @@ void Input_ProcessFunctionKeys(void)
     }
   }
   else {
-    DAT_07e11ab0 = 0;
+    F2KeyDebounce = 0;
   }
   SVar3 = Platform::GetInput().KeyState(0x72);
   if ((char)((ushort)SVar3 >> 8) == -0x80) {
-    if (DAT_07e11ab4 == 0) {
-      DAT_07e11ab4 = 1;
-      DAT_00559bf0 = DAT_00559bf0 == '\0';
+    if (F3KeyDebounce == 0) {
+      F3KeyDebounce = 1;
+      WhisperMuteFlag = WhisperMuteFlag == '\0';
       PlayBuffer(0x19,0,0);
     }
   }
   else {
-    DAT_07e11ab4 = 0;
+    F3KeyDebounce = 0;
   }
   SVar3 = Platform::GetInput().KeyState(0x73);
   if ((char)((ushort)SVar3 >> 8) != -0x80) {
-    DAT_07e11ab8 = 0;
+    F4KeyDebounce = 0;
     return;
   }
-  if (DAT_07e11ab8 != 0) {
+  if (F4KeyDebounce != 0) {
     return;
   }
-  DAT_07e11ab8 = 1;
+  F4KeyDebounce = 1;
   Input_CycleChatSize();
 }

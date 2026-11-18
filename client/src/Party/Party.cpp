@@ -9,14 +9,14 @@
 //
 // ── PARTY HP BAR DATA (opcode 0x44) ──────────────────────────────────────────
 //
-//   Table: DAT_07e11e98  stride 0x24 per member slot
+//   Table: PartyHPBarsTable  stride 0x24 per member slot
 //     slot = upper nibble of each packet byte (max 10 members?)
 //     HP%  = lower nibble, clamped to 10 (represents HP in 10% steps)
 //
 //   Packet: [C1][len][44][count][byte_N...]
 //     count = byte[3]
 //     per byte: upper_nibble = member_slot, lower_nibble = hp_percent_step
-//     DAT_07e11e98[slot * 0x24] = min(hp_step, 10)
+//     PartyHPBarsTable[slot * 0x24] = min(hp_step, 10)
 //
 // ── TERRAIN TILE UPDATE (opcode 0x46, FUN_00436d60) ──────────────────────────
 //
@@ -61,7 +61,7 @@
 //     Passes string pointer from packet to background music player.
 //     Purpose: server instructs client to play a specific BGM track.
 //
-//   HashTable operations (MAIN_HASH_CLASS, key DAT_05826ceb) interspersed
+//   HashTable operations (MAIN_HASH_CLASS, key LegacyPacketSerialSend) interspersed
 //   throughout — anti-tamper obfuscation, not game logic.
 //
 // ── GUILD (opcodes 0x90-0x99) ────────────────────────────────────────────────
@@ -73,18 +73,18 @@
 //   Sends a 3-byte ACK [C1][03][31] to the server.
 //   Switches on packet[3] (sub-type 1–5) to select a pre-loaded string buffer,
 //   then calls CreateOkMessageBox to decode and display the guild notification in chat.
-//     1 → DAT_07d5b680  (create success variant A)
-//     2 → DAT_07d5b7ac  (create success variant B)
-//     3 → DAT_07d5c10c  (create success variant C)
-//     4 → DAT_07d5c238  (create success variant D)
-//     5 → DAT_07d5b8d8  (create success variant E)
+//     1 → LegacyGuildCreateMsg1  (create success variant A)
+//     2 → LegacyGuildCreateMsg2  (create success variant B)
+//     3 → LegacyGuildCreateMsg3  (create success variant C)
+//     4 → LegacyGuildCreateMsg4  (create success variant D)
+//     5 → LegacyGuildCreateMsg5  (create success variant E)
 //
 // ── Guild member add result (opcode 0x91, FUN_00436cb0) ──────────────────────
 //   Sub-type dispatch on packet[3]:
-//     ==1: Join request result — if packet[4]==0 show DAT_07d58ea8 (OK message),
-//          else format param_2_07d58fd4 with packet[4] (error/rank code) via wsprintfA.
-//     ==2: Join confirm result — if packet[4]==0 show DAT_07d6813c (OK message),
-//          else format param_2_07d68268 with packet[4] via wsprintfA.
+//     ==1: Join request result — if packet[4]==0 show LegacyGuildReqOkMsg (OK message),
+//          else format Fmt_PartyRequestError with packet[4] (error/rank code) via wsprintfA.
+//     ==2: Join confirm result — if packet[4]==0 show LegacyGuildJoinOkMsg (OK message),
+//          else format Fmt_PartyJoinError with packet[4] via wsprintfA.
 //   Result message shown via CreateOkMessageBox.
 //
 // ── Guild member list (opcode 0x93, FUN_00436a80) ────────────────────────────
@@ -92,7 +92,7 @@
 //     ==0xFF: GuildMemberList_Add(packet[3], packet+5) — add one member record (0x18 bytes).
 //     else:   GuildMemberList_Update(packet[4], packet[3], packet+5) — full list update
 //             (packet[4] = member count, packet[3] = param, packet+5 = data array).
-//   Guild member list table at DAT_083a7af8, stride 0x18 per member.
+//   Guild member list table at GuildMemberTable, stride 0x18 per member.
 //   UI sub-state: 0x8c (member list panel) or 0x9a (single add).
 //
 // ── Guild char-select result (opcode 0x94, FUN_004372c0) ─────────────────────
@@ -102,12 +102,12 @@
 //     Zeroes 64 bytes at GoldenArcherLuckyNumberText (guild entity pool).
 //     Calls ClearInput(0) to reset char-select.
 //     Sets InputTextMax=0xC (login sub-state → CharSelectInit),
-//     clears DAT_00559c84/0x88, GoldInputEnable/74, StorageGoldFlag.
+//     clears InputEnable/0x88, GoldInputEnable/74, StorageGoldFlag.
 //     Sets GoldenArcherLuckyNumberTicket=1 (char-select flag D).
 //   When stage==1 and packet[6..10] are all != -1:
 //     GoldenArcherLuckyNumber = packet[6..9] (dword, guild target tile X)
-//     DAT_00559f5c  = packet[10..11] (word, guild target tile Y)
-//   Clears DAT_07eaa117 and DAT_07eaa116.
+//     GuildTargetTileY  = packet[10..11] (word, guild target tile Y)
+//   Clears InventoryOpened and CharacterOpened.
 //
 // ── Guild update pos (opcode 0x95, FUN_00437380) ──────────────────────────────
 //   If packet[4..5] (ushort) != 0xFFFF:
@@ -116,7 +116,7 @@
 // ── Guild set target pos (opcode 0x96, FUN_004373a0) ─────────────────────────
 //   If packet[4..5], packet[6..7], packet[8..9] are all != -1:
 //     GoldenArcherLuckyNumber = packet[4..7] (dword, guild target X)
-//     DAT_00559f5c  = packet[8..9] (word, guild target Y)
+//     GuildTargetTileY  = packet[8..9] (word, guild target Y)
 //
 // ── Guild join toggle (opcode 0x99, FUN_004373d0) ────────────────────────────
 //   packet[3] == 0 → SetErrorMessage(0x90)  — guild join accept UI
@@ -130,7 +130,7 @@
 #include "Net/Net.h"    // Net_Disconnect, SocketClientSocket / WSAEWOULDBLOCK queue
 
 // World está declarado en globals.h.
-extern BYTE* g_PartyHPTable;           // DAT_07e11e98  stride 0x24
+extern BYTE* g_PartyHPTable;           // PartyHPBarsTable  stride 0x24
 
 #define PARTY_HP_STRIDE  0x24
 
@@ -322,11 +322,11 @@ void Party_Keepalive(void)
 // Server reports result of a guild join request or confirmation.
 //
 // pkt[3]==1: join-request result
-//   pkt[4]==0 → show DAT_07d58ea8 (success)
-//   pkt[4]!=0 → wsprintfA format param_2_07d58fd4 with pkt[4] (error code)
+//   pkt[4]==0 → show LegacyGuildReqOkMsg (success)
+//   pkt[4]!=0 → wsprintfA format Fmt_PartyRequestError with pkt[4] (error code)
 // pkt[3]==2: join-confirm result
-//   pkt[4]==0 → show DAT_07d6813c (success)
-//   pkt[4]!=0 → wsprintfA format param_2_07d68268 with pkt[4] (error code)
+//   pkt[4]==0 → show LegacyGuildJoinOkMsg (success)
+//   pkt[4]!=0 → wsprintfA format Fmt_PartyJoinError with pkt[4] (error code)
 // Result shown via CreateOkMessageBox.
 // ============================================================
 void Guild_AddMemberResult(BYTE* pkt)
@@ -337,11 +337,11 @@ void Guild_AddMemberResult(BYTE* pkt)
     {
         if (pkt[4] == 0)
         {
-            CreateOkMessageBox((char*)&DAT_07d58ea8);
+            CreateOkMessageBox((char*)&LegacyGuildReqOkMsg);
         }
         else
         {
-            Platform::TextFormat(buf, &param_2_07d58fd4, (UINT)pkt[4]);
+            Platform::TextFormat(buf, &Fmt_PartyRequestError, (UINT)pkt[4]);
             CreateOkMessageBox((char*)buf);
         }
     }
@@ -349,11 +349,11 @@ void Guild_AddMemberResult(BYTE* pkt)
     {
         if (pkt[4] == 0)
         {
-            CreateOkMessageBox((char*)&DAT_07d6813c);
+            CreateOkMessageBox((char*)&LegacyGuildJoinOkMsg);
         }
         else
         {
-            Platform::TextFormat(buf, &param_2_07d68268, (UINT)pkt[4]);
+            Platform::TextFormat(buf, &Fmt_PartyJoinError, (UINT)pkt[4]);
             CreateOkMessageBox((char*)buf);
         }
     }
@@ -368,7 +368,7 @@ void Guild_AddMemberResult(BYTE* pkt)
 //   Add one member record (0x18 bytes at pkt+5).
 // pkt[4]!=0xFF → GuildMemberList_Update(pkt[4], pkt[3], pkt+5)
 //   Full member list: pkt[4]=count, pkt[3]=param, pkt+5=data array.
-// Guild member list at DAT_083a7af8, stride 0x18 per entry.
+// Guild member list at GuildMemberTable, stride 0x18 per entry.
 // UI sub-state: 0x9a (add) or 0x8c (full list).
 // ============================================================
 void Guild_MemberList(BYTE* pkt)
@@ -394,9 +394,9 @@ void Guild_MemberList(BYTE* pkt)
 //
 // Stage==1 and pkt[6..10] all != -1: store target tile coords
 //   GoldenArcherLuckyNumber = pkt[6..9] (dword)
-//   DAT_00559f5c  = pkt[10..11] (word)
+//   GuildTargetTileY  = pkt[10..11] (word)
 //
-// Always clears DAT_07eaa117 and DAT_07eaa116.
+// Always clears InventoryOpened and CharacterOpened.
 // ============================================================
 void Guild_CharSelectResult(BYTE* pkt)
 {
@@ -410,7 +410,7 @@ void Guild_CharSelectResult(BYTE* pkt)
         memset(GoldenArcherLuckyNumberText, 0, sizeof(GoldenArcherLuckyNumberText));
         ClearInput(0);                // reset char select
         InputTextMax = 0xC;           // login sub-state → CharSelectInit
-        DAT_00559c84  = 0;
+        InputEnable  = 0;
         InputNumber  = 1;
         GoldInputEnable  = 0;
         InputGold  = 0;
@@ -418,8 +418,8 @@ void Guild_CharSelectResult(BYTE* pkt)
         GoldenArcherLuckyNumberTicket  = 1;
     }
 
-    DAT_07eaa117 = 0;
-    DAT_07eaa116 = 0;
+    InventoryOpened = 0;
+    CharacterOpened = 0;
 
     if (GoldenArcherOpenType == 1
         && *(short*)(pkt + 6)  != -1
@@ -427,7 +427,7 @@ void Guild_CharSelectResult(BYTE* pkt)
         && *(short*)(pkt + 10) != -1)
     {
         GoldenArcherLuckyNumber = *(DWORD*)(pkt + 6);
-        DAT_00559f5c  = *(WORD*) (pkt + 10);
+        GuildTargetTileY  = *(WORD*) (pkt + 10);
     }
 }
 
@@ -452,7 +452,7 @@ void Guild_UpdatePos(BYTE* pkt)
 //
 // Validates pkt[4..5], pkt[6..7], pkt[8..9] are all != -1, then:
 //   GoldenArcherLuckyNumber = pkt[4..7] (dword, target X)
-//   DAT_00559f5c  = pkt[8..9] (word,  target Y)
+//   GuildTargetTileY  = pkt[8..9] (word,  target Y)
 // ============================================================
 void Guild_SetTargetPos(BYTE* pkt)
 {
@@ -461,7 +461,7 @@ void Guild_SetTargetPos(BYTE* pkt)
         && *(short*)(pkt + 8) != -1)
     {
         GoldenArcherLuckyNumber = *(DWORD*)(pkt + 4);
-        DAT_00559f5c  = *(WORD*) (pkt + 8);
+        GuildTargetTileY  = *(WORD*) (pkt + 8);
     }
 }
 

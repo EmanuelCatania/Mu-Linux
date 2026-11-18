@@ -54,7 +54,7 @@ void ReleaseForcedLoops()
 
 float DistanceGain(unsigned char* character)
 {
-    unsigned char* hero = (unsigned char*)(uintptr_t)DAT_07abf5d8;
+    unsigned char* hero = (unsigned char*)(uintptr_t)Hero;
     if (!hero || hero == character) return 1.0f;
     const float dx = AsObject(character)->Position[0] - AsObject(hero)->Position[0];
     const float dy = AsObject(character)->Position[1] - AsObject(hero)->Position[1];

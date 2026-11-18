@@ -114,7 +114,7 @@ void __cdecl BMD__RenderBodyShadow(void *model, int param_1, int param_2)
 
         // DESVIACION: con la malla residente y la pose capturada, la misma
         // proyección se hace en el shader en vez de vértice por vértice.
-        if (MeshDraw::DrawShadow(bmd, reinterpret_cast<const char*>(mesh), (const float*)&DAT_0584621c + vertBase * 3, bmd->BodyOrigin))
+        if (MeshDraw::DrawShadow(bmd, reinterpret_cast<const char*>(mesh), (const float*)&BoneVertBufBase + vertBase * 3, bmd->BodyOrigin))
             continue;
         BufferedDraw::Begin(BufferedDraw::Primitive::Triangles);
         for (int polyIdx = 0; polyIdx < polyCount; polyIdx++) {
@@ -123,7 +123,7 @@ void __cdecl BMD__RenderBodyShadow(void *model, int param_1, int param_2)
             const short *idx = (const short*)(poly + 2);     // indices en +2
             for (int k = 0; k < numVerts; k++) {
                 const float *vp =
-                    (const float*)((char*)&DAT_0584621c + (vertBase + idx[k]) * 3 * 4);
+                    (const float*)((char*)&BoneVertBufBase + (vertBase + idx[k]) * 3 * 4);
 
                 const float lx = vp[0] - ox;
                 const float ly = vp[1] - oy;

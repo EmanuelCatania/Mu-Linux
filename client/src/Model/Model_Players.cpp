@@ -12,7 +12,7 @@
 void __cdecl Model_LoadItemMeshes(void)
 {
     // ── Korean SMD item models ────────────────────────────────────────────────
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         // Swords (slots 0x190-0x1a0, numbered prefix)
         for (int i = MODEL_SWORD; i-MODEL_SWORD < 3; i++)
             OpenModels((int)i, "Data2\\Item\\Sword\\Sword", i - 0x18e);
@@ -138,17 +138,17 @@ void __cdecl Model_LoadItemMeshes(void)
     for (int i = MODEL_SWORD; i-MODEL_SWORD < 17; i++)
         AccessModel(i, "Data\\Item\\", "Sword", i - 399);
 
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         OpenModel((int)0x1a1, "Data2\\Item\\Sword\\", "DarkBreaker.smd");
         OpenModel((int)0x1a2, "Data2\\Item\\Sword\\", "ThunderBlade.smd");
     }
     AccessModel(0x1a1, "Data\\Item\\", "Sword", 0x12);
     AccessModel(0x1a2, "Data\\Item\\", "Sword", 0x13);
 
-    if (DAT_0055a7c4 == '\0')
+    if (g_tex_ext_mode == '\0')
         OpenModel((int)0x1a3, "Data2\\Item\\Sword\\", "UniqueSword.smd");
     AccessModel(0x1a3, "Data\\Item\\", "Sword", 0x14);
-    DAT_0055a7c4 = '\x01';
+    g_tex_ext_mode = '\x01';
 
     AccessModel(0x1af, "Data\\Item\\", "Sword", 0x20);
 
@@ -176,14 +176,14 @@ void __cdecl Model_LoadItemMeshes(void)
     for (int i = MODEL_STAFF; i-MODEL_STAFF < 9; i++)
         AccessModel(i, "Data\\Item\\", "Staff", i - 0x22f);
 
-    if (DAT_0055a7c4 == '\0')
+    if (g_tex_ext_mode == '\0')
         OpenModel((int)0x239, "Data2\\Item\\Staff\\", "SpiritStaff.smd");
     AccessModel(0x239, "Data\\Item\\", "Staff", 10);
 
-    if (DAT_0055a7c4 == '\0')
+    if (g_tex_ext_mode == '\0')
         OpenModel((int)0x23a, "Data2\\Item\\Staff\\", "UniqueStaff.smd");
     AccessModel(0x23a, "Data\\Item\\", "Staff", 0xb);
-    DAT_0055a7c4 = '\x01';
+    g_tex_ext_mode = '\x01';
 
     // Bows BMD (0x210-0x216) — 7 iter (528-534)
     for (int i = MODEL_BOW; i-MODEL_BOW < 7; i++)
@@ -197,14 +197,14 @@ void __cdecl Model_LoadItemMeshes(void)
     AccessModel(0x21f, "Data\\Item\\", "Arrows",   2);
     AccessModel(0x220, "Data\\Item\\", "CrossBow", 0x11);
 
-    if (DAT_0055a7c4 == '\0')
+    if (g_tex_ext_mode == '\0')
         OpenModel((int)0x221, "Data2\\Item\\Bow\\", "\xBD\xBA\xC5\xC0.smd");
     AccessModel(0x221, "Data\\Item\\", "Bow", 0x12);
 
-    if (DAT_0055a7c4 == '\0')
+    if (g_tex_ext_mode == '\0')
         OpenModel((int)0x222, "Data2\\Item\\Bow\\", "UniqueBow.smd");
     AccessModel(0x222, "Data\\Item\\", "Bow", 0x13);
-    DAT_0055a7c4 = '\x01';
+    g_tex_ext_mode = '\x01';
 
     // Helpers BMD (familiars 0x330-0x332) — 3 iter (816-818)
     for (int i = MODEL_HELPER_ANGEL; i-MODEL_HELPER_ANGEL < 3; i++)
@@ -219,7 +219,7 @@ void __cdecl Model_LoadItemMeshes(void)
     for (int i = 0x33c; i-0x33c < 2; i++)
         AccessModel(i, "Data\\Item\\", "Necklace", i - 0x33b);
 
-    if (DAT_0055a7c4 == '\0')
+    if (g_tex_ext_mode == '\0')
         OpenModel((int)MODEL_HELPER_DINORANT, "Data2\\Item\\Helper\\", "\xBD\xBA\xC5\xC0.smd");
     AccessModel(MODEL_HELPER_DINORANT, "Data\\Player\\", "Helper", 4);
 
@@ -262,7 +262,7 @@ void __cdecl Model_LoadItemMeshes(void)
     AccessModel(0x3b4, "Data\\Item\\", "Event",    3);
 
     // Blood Castle event items (Korean SMD)
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         OpenModel((int)0x340, "Data2\\Item\\Etc\\", "AngelScroll.smd");
         OpenModel((int)0x341, "Data2\\Item\\Etc\\", "BloodBone.smd");
         OpenModel((int)0x342, "Data2\\Item\\Etc\\", "InvisibleCloak.smd");
@@ -274,14 +274,14 @@ void __cdecl Model_LoadItemMeshes(void)
         AccessModel(slot, "Data\\Item\\", "EventBloodCastle", i);
     }
 
-    DAT_0055a7c4 = '\x01';
+    g_tex_ext_mode = '\x01';
 
     // Quest items (0x367-0x36a)
     for (int i = 0; i < 4; i++)
         AccessModel(i + 0x367, "Data\\Item\\", "Quest", i);
 
     // Extra ETC items (Korean SMD)
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         OpenModel((int)0x366, "Data2\\Item\\ETC\\", "\xBD\xBA\xC5\xC0.smd");
         OpenModel((int)0x33e, "Data2\\Item\\ETC\\", "\xBD\xBA\xC5\xC0.smd");
         OpenModel((int)0x33f, "Data2\\Item\\ETC\\", "\xBD\xBA\xC5\xC0.smd");
@@ -299,7 +299,7 @@ void __cdecl Model_LoadItemMeshes(void)
         AccessModel(i, "Data\\Item\\", "Wing", i - 0x30f);
 
     // Wings SMD (Korean)
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         OpenModel((int)MODEL_WING_SPIRITS, "Data2\\Item\\Wing\\", "elfin_wing2.smd");
         OpenModel((int)MODEL_WING_SOUL, "Data2\\Item\\Wing\\", "\xBD\xBA\xC5\xC0.smd");
         OpenModel((int)MODEL_WING_DRAGON, "Data2\\Item\\Wing\\", "\xBD\xBA\xC5\xC0.smd");
@@ -311,7 +311,7 @@ void __cdecl Model_LoadItemMeshes(void)
     for (int i = MODEL_WING_SPIRITS; i-MODEL_WING_SPIRITS < 4; i++)
         AccessModel(i, "Data\\Item\\", "Wing", i - 0x30f);
 
-    DAT_0055a7c4 = 1;
+    g_tex_ext_mode = 1;
 
     // Gem slots (0x317-0x322, skip 0x31f=9)
     for (int i = 1; i <= 0xd; i++) {
@@ -319,7 +319,7 @@ void __cdecl Model_LoadItemMeshes(void)
             AccessModel(i + 0x316, "Data\\Item\\", "Gem", i);
     }
 
-    DAT_0055a7c4 = 1;
+    g_tex_ext_mode = 1;
 
     AccessModel(799, "Data\\Item\\", "Jewel", 0xf);
 
@@ -336,7 +336,7 @@ void __cdecl Model_LoadItemMeshes(void)
     // va al hilt/mango. Sin esto, el chrome cubría el filo → "barra dorada".
     //
     // Fiel a IDA OpenItems (0x005079D0 L245-249). Los offsets son BYTES dentro del
-    // array de modelos (Models = DAT_05828d58, stride 0xBC, campo Meshs en +0x28), NO
+    // array de modelos (Models = ModelsBase, stride 0xBC, campo Meshs en +0x28), NO
     // direcciones absolutas ni índices ×4.
     // `Models + 0x16c68` = Model[496].Meshs; `+0x28` = mesh[1].
     //   0x16c68 = 496*0xBC+0x28 → Light Spear (MODEL_SPEAR)    mesh[1]
@@ -346,10 +346,10 @@ void __cdecl Model_LoadItemMeshes(void)
     //   0x2be38 = 956*0xBC+0x28 → Event+9                      mesh[1]
     {
         BYTE* m;
-        m = AsModel(DAT_05828d58 + BMD_STRIDE * 496)->Meshs; if (m) m[sizeof(ClothModelMesh) * 1] = 1;
-        m = AsModel(DAT_05828d58 + BMD_STRIDE * 410)->Meshs; if (m) m[sizeof(ClothModelMesh) * 1] = 1;
-        m = AsModel(DAT_05828d58 + BMD_STRIDE * 566)->Meshs; if (m) m[sizeof(ClothModelMesh) * 2] = 1;
-        m = AsModel(DAT_05828d58 + BMD_STRIDE * 470)->Meshs; if (m) m[sizeof(ClothModelMesh) * 1] = 1;
-        m = AsModel(DAT_05828d58 + BMD_STRIDE * 956)->Meshs; if (m) m[sizeof(ClothModelMesh) * 1] = 1;
+        m = AsModel(ModelsBase + BMD_STRIDE * 496)->Meshs; if (m) m[sizeof(ClothModelMesh) * 1] = 1;
+        m = AsModel(ModelsBase + BMD_STRIDE * 410)->Meshs; if (m) m[sizeof(ClothModelMesh) * 1] = 1;
+        m = AsModel(ModelsBase + BMD_STRIDE * 566)->Meshs; if (m) m[sizeof(ClothModelMesh) * 2] = 1;
+        m = AsModel(ModelsBase + BMD_STRIDE * 470)->Meshs; if (m) m[sizeof(ClothModelMesh) * 1] = 1;
+        m = AsModel(ModelsBase + BMD_STRIDE * 956)->Meshs; if (m) m[sizeof(ClothModelMesh) * 1] = 1;
     }
 }

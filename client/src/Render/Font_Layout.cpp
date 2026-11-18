@@ -12,11 +12,11 @@ void __cdecl Font_CreateTextDib(int dc)
     //     biWidth  = 2 * (std::int64_t)*(float *)(a2 + 32);
     //     biHeight =    -(std::int64_t)*(float *)(a2 + 36);
     // OpenFont (0x50F690) la llama con a2 = tabla de bitmaps; +32/+36 son
-    // Bitmaps[0].Width/Height (floats), que en nuestro build son DAT_083a7cc0 /
-    // DAT_083a7cc4. Los puebla el OpenTGA de "Interface/FontInput.tga" que corre
+    // Bitmaps[0].Width/Height (floats), que en nuestro build son BitmapsWidth /
+    // BitmapsHeight. Los puebla el OpenTGA de "Interface/FontInput.tga" que corre
     // justo antes en OpenFont.
-    const LONG fontW = (LONG)(*(float *)&DAT_083a7cc0);   // Bitmaps[0].Width
-    const LONG fontH = (LONG)(*(float *)&DAT_083a7cc4);   // Bitmaps[0].Height
+    const LONG fontW = (LONG)(*(float *)&BitmapsWidth);   // Bitmaps[0].Width
+    const LONG fontH = (LONG)(*(float *)&BitmapsHeight);   // Bitmaps[0].Height
 
     // DESVIACION: si FontInput.tga todavía no pobló Bitmaps[0], estos valores
     // vienen en 0 o basura, y un DIB de esas dimensiones hace que el pixel-copy

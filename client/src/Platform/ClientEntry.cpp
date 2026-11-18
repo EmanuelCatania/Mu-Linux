@@ -20,7 +20,7 @@
 //   g_MouseY       @ 0x083a4278
 //   g_ScreenW      @ 0x0056156c
 //   g_ScreenH      @ 0x00561570
-//   Entity array base @ 0x07abf5d0  = DAT_055c9e48 + rand()%0x80 * 0x394  (RANDOMIZADO)
+//   Entity array base @ 0x07abf5d0  = EntityArrayAlloc + rand()%0x80 * 0x394  (RANDOMIZADO)
 //   Player ptr     @ 0x07abf5d8  = entity array base (slot 0)
 //   NetCtx         @ ((int)(uintptr_t)SocketClient)
 //   socket handle  @ 0x055ca168
@@ -79,7 +79,7 @@ int  Config_Load(void);  // see Config/Config_Load.cpp
 // Secuencia:
 //   1. wglMakeCurrent(NULL, NULL)
 //        si falla: log "GL - Release Of DC And RC Failed"
-//   2. wglDeleteContext(g_hRC)   → DAT_055ca008
+//   2. wglDeleteContext(g_hRC)   → g_hRC
 //        si falla: log "GL - Release Rendering Context Failed"
 //   3. DeleteDC(g_hDC)           → DAT_055ca004
 //        si falla: log "GL - Release Device Context Failed"
@@ -104,7 +104,7 @@ void OpenGL_Release(void)
 //
 // Inicia nProtect GameGuard.
 // param_1: HWND casteado a CHAR* (Ghidra lo tipea como CHAR*)
-//   1. FUN_0053d410(param_1) → si retorno != DAT_005538a0: FUN_00406fd0()
+//   1. FUN_0053d410(param_1) → si retorno != GameGuardOkStatus: FUN_00406fd0()
 //
 // Patchs.cpp bypass:
 //   SetByte(0x00406F36, 0xEB)  → JMP sobre check de init
@@ -114,7 +114,7 @@ void OpenGL_Release(void)
 static void GameGuard_Init(CHAR* hWnd)
 {
     // int result = FUN_0053d410(hWnd);  // npGameGuard::init(hwnd)
-    // if (result != DAT_005538a0):
+    // if (result != GameGuardOkStatus):
     //     FUN_00406fd0();               // GameGuard_InitFail() — messagebox + abort
     (void)hWnd;
 }
@@ -140,17 +140,17 @@ static int GameGuard_GetStatus(void)
 //
 // Watchdog del GameGuard, llamado desde WM_TIMER (id=1000, period=20000ms).
 //   int status = GameGuard_GetStatus()
-//   if (status != DAT_005538a0):
+//   if (status != GameGuardOkStatus):
 //       MessageBoxA(g_hWnd, errorStr, "IError", MB_OK)
 //       Window_FatalError(NULL, '\0')
 //
-// Patch bypass: DAT_005538a0 = 0 y DAT_083bbb14 = NULL
-//   → GameGuard_GetStatus() retorna 0 == DAT_005538a0 → check siempre pasa
+// Patch bypass: GameGuardOkStatus = 0 y DAT_083bbb14 = NULL
+//   → GameGuard_GetStatus() retorna 0 == GameGuardOkStatus → check siempre pasa
 // ─────────────────────────────────────────────────────────────────────────────
 void GameGuard_TickCheck(void)
 {
     // int status = GameGuard_GetStatus();
-    // if (status != DAT_005538a0):
+    // if (status != GameGuardOkStatus):
     //     MessageBoxA(g_hWnd, DAT_007d29e50_errStr, "IError", MB_OK);
     //     Window_FatalError(NULL, '\0');
 }
@@ -204,14 +204,14 @@ void GameGuard_TickCheck(void)
 //
 // SECUENCIA REAL DE INICIALIZACIÓN (del decompile, líneas 1-560):
 //
-//   1.  FUN_00406af0()                          — app init / anti-tamper setup
-//   2.  HashTable tracking de DAT_055ca01c
+//   1.  App_InitAntiTamper()                          — app init / anti-tamper setup
+//   2.  HashTable tracking de Unknown32_055CA01C
 //   3.  FUN_00510fe0()                          — world pre-init
 //   4.  MuExe_IntegrityCheck()                  — verifica integridad del .exe
 //       FileVersion_Get() → formatea string de versión
 //   5.  Client_GetSystemInfo(local_3d4)          — IDA: FUN_004065F0
-//   6.  Config_ReadServerAddr(this, cmdLine, &DAT_055c9e04, &port)
-//         → PTR_s_connect_muonline_co_kr_005615b8 = &DAT_055c9e04
+//   6.  Config_ReadServerAddr(this, cmdLine, &ServerAddressStr, &port)
+//         → szServerIpAddress = &ServerAddressStr
 //         → g_ServerPort = port
 //       si cmdline == "-1":
 //         WinExec(serverAddr, SW_SHOW)           — lanza otra instancia
@@ -236,30 +236,30 @@ void GameGuard_TickCheck(void)
 //         0x500 (1280) → 0x0f
 //       CreateFontA(0,0,0,0,400,...)   → DAT_055ca00c  (normal)
 //       CreateFontA(0,0,0,0,700,...) ×2 → DAT_055ca010, DAT_055ca014  (bold)
-//  16.  setlocale(0, DAT_055c9d00)  — WSAStartup(0x0202, &wsaData)
+//  16.  setlocale(0, LocaleStringPtr)  — WSAStartup(0x0202, &wsaData)
 //  17.  SetTimer(hWnd, 1000, 20000, NULL)  — GameGuard watchdog (20s)
 //  18.  srand(crt_time(NULL))       — time() seed; + obfuscación rand()
 //
 //  19.  BUFFER ALLOCATIONS:
 //         GateAttribute = new(900)             → cleared 0xe1*4 bytes
-//         DAT_07d29d20 = new(0xa00)           → cleared 0x280*4 bytes
-//         DAT_07cf1ff8 = new(0xa00)           → cleared 0x280*4 bytes
-//         DAT_055c9e44 = new(0x18000)         → DAT_07d78068 = base + rand()%0x400 * 0x40
+//         SkillTableBase = new(0xa00)           → cleared 0x280*4 bytes
+//         SkillShadowTable = new(0xa00)           → cleared 0x280*4 bytes
+//         ItemAttrTableBase = new(0x18000)         → ItemAttributeBase = base + rand()%0x400 * 0x40
 //                                               cleared 0x2000*4 bytes
-//         DAT_07cf1ff0 = new(0x8000)          → cleared 0x2000*4 bytes
-//         DAT_055c9e48 = new(0x764d4)         → DAT_07abf5d0 = base + rand()%0x80 * 0x394
+//         ItemAttributeShadowTable = new(0x8000)          → cleared 0x2000*4 bytes
+//         EntityArrayAlloc = new(0x764d4)         → CharactersClient = base + rand()%0x80 * 0x394
 //                                               ← ENTITY ARRAY (BASE RANDOMIZADA CADA LAUNCH)
 //                                               cleared 0x166b5*4 bytes
-//         local_9ac    = new(0x584)           → DAT_07cf1ffc (HashTable object)
+//         local_9ac    = new(0x584)           → CharacterMachinePtr (HashTable object)
 //                                               cleared 0x161*4 bytes
 //
-//  20.  DAT_07cf1ff4 = DAT_07cf1ffc
-//       CHARACTER_MACHINE_Init(DAT_07cf1ffc)  — HashTable_Init
-//  21.  DAT_07abf5d8 = DAT_07abf5d0  — player ptr = entity array base (slot 0)
+//  20.  CharacterAttributePtr = CharacterMachinePtr
+//       CHARACTER_MACHINE_Init(CharacterMachinePtr)  — HashTable_Init
+//  21.  Hero = CharactersClient  — player ptr = entity array base (slot 0)
 //  22.  vtable constructions:
-//         new(0x5c8) → FUN_0040c7d0 → DAT_055c9ff0
-//         new(0xbc)  → FUN_0040e990 → DAT_055c9ff4
-//         new(0xc)   → exception_ctor → DAT_055c9ff8
+//         new(0x5c8) → Fn_0040c7d0 → ChatHistoryWidget
+//         new(0xbc)  → Fn_0040e990 → WhisperChatWidget
+//         new(0xc)   → exception_ctor → UiRenderTextObj
 //  23.  SystemParametersInfoA(0x61, 1, ...)  — ajusta velocidad del ratón
 //
 //  ── MESSAGE LOOP ────────────────────────────────────────────────────────────
@@ -270,7 +270,7 @@ void GameGuard_TickCheck(void)
 //
 //  ── ANTI-TAMPER ─────────────────────────────────────────────────────────────
 //   ~60 bloques unreachable (dead code). 63 phantom stack params (anti-tamper stack padding).
-//   HashTable tracking de DAT_055ca01c, g_iNoMouseTime, etc. entre cada paso.
+//   HashTable tracking de Unknown32_055CA01C, g_iNoMouseTime, etc. entre cada paso.
 // ─────────────────────────────────────────────────────────────────────────────
 // ── TRACING DE DEBUG (temporal, para diagnosticar la pantalla negra) ──────────
 extern "C" void DbgLogPublic(const char* msg);
@@ -414,7 +414,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR lpCmdLine, int nC
 void Client_SocketEvent(uint16_t event, uint16_t error) { gNetwork.OnSocketEvent(event, error); }
 void Client_ClosePortable() {
     gPing.Reset(); gFrameLimiter.Shutdown();
-    DAT_055ca018 = 1;
+    AppQuitFlag = 1;
     CWsctlc_Close(reinterpret_cast<uintptr_t>(SocketClient));
     for (int buffer = 0; buffer < 420; ++buffer) Sound_ReleaseBuffer(buffer);
     OpenGL_Release();
@@ -489,13 +489,13 @@ int main(int, char**)
 #endif
 
     // 1-5: anti-tamper init, world pre-init, integrity check
-    // FUN_00406af0();
+    // App_InitAntiTamper();
     // FUN_00510fe0();
     // MuExe_IntegrityCheck();
     // Client_GetSystemInfo(local_3d4); // IDA: FUN_004065F0
 
     // 6: Config_ReadServerAddr — toma la dirección de Config/ServerConfig.h y
-    // sobreescribe el buffer al que apunta PTR_s_connect_muonline_co_kr_005615b8.
+    // sobreescribe el buffer al que apunta szServerIpAddress.
     {
         extern char g_ServerIPBuf[128];
         unsigned short cfgPort = g_ServerPort;
@@ -548,7 +548,7 @@ int main(int, char**)
     // 14b: DirectSound8 init — creates g_lpDS, primary buffer w/ DSBCAPS_CTRL3D,
     // QueryInterface IID_IDirectSound3DListener, SetFormat 22050/16/stereo,
     // y pone en cero todos los arrays por slot. Setea g_EnableSound=TRUE si tuvo éxito
-    // (que es a lo que DAT_00590ac8 aliasa ahora vía macro).
+    // (que es a lo que g_EnableSound aliasa ahora vía macro).
     {
         HRESULT hrDS = InitDirectSound(gWindow.GetHwnd());
         DbgLog(SUCCEEDED(hrDS) ? "InitDirectSound OK" : "InitDirectSound FAILED");
@@ -558,7 +558,7 @@ int main(int, char**)
 
     // 14c: STATIC SERVER LIST — workaround hasta que Net_ProcessPacket implemente
     // el dispatcher F1/02 (server list, 1824 líneas en el original). Sin esto,
-    // DAT_083a45d8 queda en ceros y Scene_Login_ServerSelect no dibuja botones.
+    // ServerListBuffer queda en ceros y Scene_Login_ServerSelect no dibuja botones.
     //
     // Layout por entrada (stride 0x21e):
     //   +0x00  char[20]  name
@@ -570,13 +570,13 @@ int main(int, char**)
     // Solo en modo directo (sin ConnectServer en ServerConfig). Con ConnectServer la lista
     // la trae el F4/02 como en el original: si el CS no responde, queda vacia.
     if (!gNetwork.HasConnectServer()) {
-        char* srv0 = DAT_083a45d8;                           // entry index 0
+        char* srv0 = ServerListBuffer;                           // entry index 0
         memset(srv0, 0, 0x21e);
         Platform::TextCopy(srv0, "MuServer", 20);                     // +0x00 name
         srv0[0x14] = 1;                                      // +0x14 num_channels
         *(unsigned short*)(srv0 + 0x2c) = 1;                 // channel[0] id → "1"
         // Load byte = ocupación del server (0..100). El original lo recibe por
-        // red (ReceiveServerList @0x423E10: byte_83A4606 = ReceiveBuffera[2]) y
+        // red (ReceiveServerList @0x423E10: ServerChannelLoad = ReceiveBuffera[2]) y
         // con 0 cuentas logeadas llega 0 → barra vacía. Como conectamos directo
         // al GameServer (sin flujo ConnectServer F4/02), usamos la lista estática
         // e inicializamos load=0 para replicar ese estado "server vacío". El
@@ -609,42 +609,42 @@ int main(int, char**)
 
     // 19: alocación de buffers (tamaños sacados del decompile)
     GateAttribute = static_cast<GATE_ATTRIBUTE*>(malloc(900)); memset(GateAttribute, 0, 0xe1 * 4);
-    DAT_07d29d20 = static_cast<BYTE*>(malloc(0xa00)); memset(DAT_07d29d20, 0, 0x280 * 4);
-    DAT_07cf1ff8 = static_cast<BYTE*>(malloc(0xa00)); memset(DAT_07cf1ff8, 0, 0x280 * 4);
+    SkillTableBase = static_cast<BYTE*>(malloc(0xa00)); memset(SkillTableBase, 0, 0x280 * 4);
+    SkillShadowTable = static_cast<BYTE*>(malloc(0xa00)); memset(SkillShadowTable, 0, 0x280 * 4);
 
     // ItemAttribute — base aleatorizada (anti-tamper, pero igual necesitamos el alloc)
     // DESVIACION (0.97.20): la tabla tiene ITEM_MAX_EX filas (agregados del
     // catálogo del server por encima de 512); el binario reservaba 0x18000.
-    DAT_055c9e44 = reinterpret_cast<std::uintptr_t>(malloc((ITEM_MAX_EX + 0x400) * 0x40));
-    DAT_07d78068 = DAT_055c9e44 + (rand() % 0x400) * 0x40;
-    memset((void*)DAT_07d78068, 0, ITEM_MAX_EX * 0x40);
-    DAT_07cf1ff0 = static_cast<BYTE*>(malloc(0x8000));
-    memset(DAT_07cf1ff0, 0, 0x2000 * 4);
+    ItemAttrTableBase = reinterpret_cast<std::uintptr_t>(malloc((ITEM_MAX_EX + 0x400) * 0x40));
+    ItemAttributeBase = ItemAttrTableBase + (rand() % 0x400) * 0x40;
+    memset((void*)ItemAttributeBase, 0, ITEM_MAX_EX * 0x40);
+    ItemAttributeShadowTable = static_cast<BYTE*>(malloc(0x8000));
+    memset(ItemAttributeShadowTable, 0, 0x2000 * 4);
 
     // Array de entidades — CRÍTICO, todo lo accede
-    DAT_055c9e48 = reinterpret_cast<std::uintptr_t>(malloc(529 * CHARACTER_STRIDE));
-    DAT_07abf5d0 = DAT_055c9e48 + (rand() % 0x80) * CHARACTER_STRIDE;
-    memset((void*)DAT_07abf5d0, 0, 401 * CHARACTER_STRIDE);
+    EntityArrayAlloc = reinterpret_cast<std::uintptr_t>(malloc(529 * CHARACTER_STRIDE));
+    CharactersClient = EntityArrayAlloc + (rand() % 0x80) * CHARACTER_STRIDE;
+    memset((void*)CharactersClient, 0, 401 * CHARACTER_STRIDE);
 
     // CharacterMachine / HashTable
     {
         void* ht = malloc(0x584);
         memset(ht, 0, 0x161 * 4);
-        DAT_07cf1ffc = ht;
+        CharacterMachinePtr = ht;
     }
 
     // 20-21: CharacterAttribute = CharacterMachine; Hero = entity array slot 0
-    DAT_07cf1ff4 = DAT_07cf1ffc;
+    CharacterAttributePtr = CharacterMachinePtr;
     // También hay que setear el global C++ `CharacterMachine` (definido en
-    // globals.cpp, separado de DAT_07cf1ffc): HUD_Pass5 (Render_HudPass_4BD650_)
+    // globals.cpp, separado de CharacterMachinePtr): HUD_Pass5 (Render_HudPass_4BD650_)
     // chequea `if (!CharacterMachine || !CharacterAttribute) return;` y sin esto el
     // HUD no dibuja HP/MP/skills.
     extern void* CharacterMachine;
-    CharacterMachine = DAT_07cf1ffc;
-    // CHARACTER_MACHINE_Init(DAT_07cf1ffc);   // HashTable_Init — TODO: implement
-    DAT_07abf5d8 = (char*)DAT_07abf5d0;  // player ptr = entity array slot 0
+    CharacterMachine = CharacterMachinePtr;
+    // CHARACTER_MACHINE_Init(CharacterMachinePtr);   // HashTable_Init — TODO: implement
+    Hero = (char*)CharactersClient;  // player ptr = entity array slot 0
 
-    // Contexto del pathfinder (DAT_05826df4).
+    // Contexto del pathfinder (PathFindContext).
     //
     // Se construye igual que el binario (0x0043F280..0x0043F2C7: reserva de 0x424
     // bytes, vtable de la cola de prioridad en +0x414 y campos en cero); con un
@@ -658,48 +658,48 @@ int main(int, char**)
     PathContext_Create();
 
     // 22: vtable object construction (font/UI system objects)
-    // DAT_055c9ff0 es el objeto del motor del chat-listbox (no un HGLRC): lo
+    // ChatHistoryWidget es el objeto del motor del chat-listbox (no un HGLRC): lo
     // construye sub_40C7D0 (ctor) sobre operator_new(0x5C8). Sin el ctor la vtable
     // queda nula y todos los sitios de dispatch (Render_GameFrame +0x10,
     // UIChatLogWindow_AddText +0x70, CreateChat +0x70) crashean.
     // ChatListBox_Construct portea sub_40C5D0+sub_40C7D0 1:1.
-    DAT_055c9ff0 = static_cast<BYTE*>(ChatListBox_Construct());
-    // DAT_055c9ff4 es el segundo widget de chat (susurro / panel de notificaciones,
+    ChatHistoryWidget = static_cast<BYTE*>(ChatListBox_Construct());
+    // WhisperChatWidget es el segundo widget de chat (susurro / panel de notificaciones,
     // esquina superior derecha). El WinMain de IDA llama operator_new(0xBC) +
     // sub_40E990 (hermana de sub_40C7D0, con nodo de lista más chico, 0x18, y 24
     // filas visibles). Sin construirlo la vtable queda nula y el dispatch
     // vtable[+0x14] desde GuildCreator_HitTest crashea.
-    DAT_055c9ff4 = static_cast<BYTE*>(ChatListBox_ConstructWhisper());
+    WhisperChatWidget = static_cast<BYTE*>(ChatListBox_ConstructWhisper());
 
     // Los slots vacíos del inventario tienen que tener Type=0xFFFF, no 0: los
     // scanners de grilla del motor (Item_FindQuickSlotByCategory/sub_482850/
     // sub_482E40) toman el 0 como un tipo de arma válido y matchean celdas vacías.
     HUD_InitInventoryPools();
-    DAT_055c9ff8 = (uintptr_t)calloc(1, 0x18);
+    UiRenderTextObj = (uintptr_t)calloc(1, 0x18);
 
     // Fallback de la tabla de modelos: Model_LoadPlayerAndItemMeshes
     // (IDA: OpenPlayers) sólo corre
     // durante la carga del mapa (state=5). Los spawns de entidades de la escena de
-    // login deferencian DAT_05828d58 + etype*0xbc + offset y crashean si es NULL.
+    // login deferencian ModelsBase + etype*0xbc + offset y crashean si es NULL.
     // Alocamos un fallback en cero, grande como para etype hasta ~0x300.
-    if (DAT_05828d58 == 0) {
-        DAT_06f42a58=ResourceTables::ModelBase();
-        DAT_05828d58 = reinterpret_cast<std::uintptr_t>(DAT_06f42a58);
+    if (ModelsBase == 0) {
+        ModelMemoryPool=ResourceTables::ModelBase();
+        ModelsBase = reinterpret_cast<std::uintptr_t>(ModelMemoryPool);
     }
 
-    // Class name table (DAT_07d2b494, stride 300, indexed por cidx = (klass&7) +
+    // Class name table (ClassNameTable, stride 300, indexed por cidx = (klass&7) +
     // 4*(klass>>3)). En el original vive en GlobalText[20..] (cargado del .bmd de
     // texto); acá lo poblamos directo con los nombres para el create-panel
-    // (RenderText 285,+200 lee `DAT_07d2b494 + class*300`) y para consistencia con
+    // (RenderText 285,+200 lee `ClassNameTable + class*300`) y para consistencia con
     // el char-list.
     {
-        extern char DAT_07d2b494[9000];
+        extern char ClassNameTable[9000];
         static const char* kCN[7] = {
             "Dark Wizard", "Dark Knight", "Fairy Elf", "Magic Gladiator",
             "Soul Master", "Blade Knight", "Muse Elf"
         };
         for (int i = 0; i < 7; ++i)
-            Platform::TextCopy(DAT_07d2b494 + i * 300, kCN[i], 300);
+            Platform::TextCopy(ClassNameTable + i * 300, kCN[i], 300);
     }
 
     SceneFlag = 1;  // SceneFlag: 1=Intro, 2=Login, 3=Loading, 4=CharSelect, 5=InGame
@@ -732,22 +732,22 @@ int main(int, char**)
 #endif
         {
             // ── CLICK-FLAG CLAMP (global) ───────────────────────────────────
-            // DAT_083a4124 (MouseLButtonPush) sólo debe valer {0,1} (lo
+            // MouseLButtonPush (MouseLButtonPush) sólo debe valer {0,1} (lo
             // settea WndProc en LBUTTONDOWN/UP).  En char-select aparecía
             // 0x4397355A cada frame → phantom clicks en TODAS las escenas
             // (login/server-select/char-select/in-game) que lo leen como
             // truthy.  Algún stub stompea via buffer overflow; mientras
             // localizo al culpable, este clamp suprime el wild value antes
-            // del frame.  Misma protección para DAT_083a4299 (DBLCLK flag).
-            if (DAT_083a4124 != 0 && DAT_083a4124 != 1) {
+            // del frame.  Misma protección para MouseDblClickFlag (DBLCLK flag).
+            if (MouseLButtonPush != 0 && MouseLButtonPush != 1) {
                 static unsigned s_corruptCnt = 0;
                 if (s_corruptCnt < 30) {
                     s_corruptCnt++;
                 }
-                DAT_083a4124 = 0;
+                MouseLButtonPush = 0;
             }
-            if ((BYTE)DAT_083a4299 != 0 && (BYTE)DAT_083a4299 != 1) {
-                DAT_083a4299 = 0;
+            if ((BYTE)MouseDblClickFlag != 0 && (BYTE)MouseDblClickFlag != 1) {
+                MouseDblClickFlag = 0;
             }
             // No hay mensajes pendientes: ejecutar frame
             Scene_Dispatch(gWindow.GetHdc());
@@ -771,7 +771,7 @@ int main(int, char**)
 // ── Window_FatalError @ 0x004129F0 (~15 líneas, completo) ───────────────────
 //
 // Llamado desde GameGuard_TickCheck cuando GG muere o su canal de eventos falla.
-//   1. DAT_055ca020 = 1                    — g_FatalError flag
+//   1. g_FatalError = 1                    — g_FatalError flag
 //   2. crt_sprintf(local_64, DAT_07d29e50) — formatea mensaje de error (buf 100 bytes)
 //   3. MessageBoxA(g_hWnd, local_64, "IError", MB_OK)
 //   4. SendMessageA(g_hWnd, WM_DESTROY, 0, 0)
@@ -779,13 +779,13 @@ int main(int, char**)
 //        SendMessageA(param_1, 0x2B1A, 0, 0)  — custom GG shutdown msg
 //        SendMessageA(param_1, WM_CLOSE, 0, 0)
 //
-// Patch bypass: DAT_083bbb14=NULL + DAT_005538a0=0
-//   → GameGuard_GetStatus() retorna 0 == DAT_005538a0 → Window_FatalError nunca llamada
+// Patch bypass: DAT_083bbb14=NULL + GameGuardOkStatus=0
+//   → GameGuard_GetStatus() retorna 0 == GameGuardOkStatus → Window_FatalError nunca llamada
 // ─────────────────────────────────────────────────────────────────────────────
 void Window_FatalError(HWND param_1, char param_2)
 {
     CHAR local_64[100];
-    // DAT_055ca020 = 1;
+    // g_FatalError = 1;
     // crt_sprintf(local_64, (byte*)&DAT_07d29e50);
     // MessageBoxA(g_hWnd, local_64, "IError", MB_OK);
     // SendMessageA(g_hWnd, WM_DESTROY, 0, 0);

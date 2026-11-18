@@ -44,7 +44,7 @@ void ShopInsertItem(int slot, const BYTE* Item)
             AsItem(cell)->Key = (r == 0 && c == 0) ? 1u : 0u; // Key (gate render)
             // CRÍTICO: x/y = posición-origen del item en el grid (slot%8, slot/8),
             // escrito en TODAS las celdas del footprint (igual que sub_4CC0E0 ->x=a1%8
-            // ->y=a1/8). El hover (Item_ClickHandler.cpp, FUN_004d23b0) normaliza celdas de
+            // ->y=a1/8). El hover (Item_ClickHandler.cpp, Inventory_ClickHandler) normaliza celdas de
             // footprint al origen vía `inv_base + 34*(grid_w*y+x)`; con x/y=0 toda celda
             // normalizaría al slot 0 y el tooltip mostraría siempre el primer item.
             AsItem(cell)->x               = (BYTE)(slot % 8);             // x
@@ -77,10 +77,10 @@ BYTE* ItemMove_GetEquipSlotPtr(int slot)
         536, 604, 672, 740, 808, 876, 944, 1012, 1080, 1148, 1216, 1284
     };
 
-    if (slot < 0 || slot >= 12 || DAT_07cf1ffc == 0) {
+    if (slot < 0 || slot >= 12 || CharacterMachinePtr == 0) {
         return nullptr;
     }
-    return (BYTE*)(uintptr_t)DAT_07cf1ffc + kEquipOffsets[slot];
+    return (BYTE*)(uintptr_t)CharacterMachinePtr + kEquipOffsets[slot];
 }
 
 bool ItemMove_IsInventoryEquipSlot(BYTE* pool, int slot)
@@ -142,9 +142,9 @@ void ItemMove_ApplyServerSlot(BYTE* pool, int slot, const BYTE* itemWire12, cons
 
 BYTE* ItemMove_GetActiveSecondaryPool()
 {
-    if (DAT_07eaa11b) return OffsetTradeItems;
-    if (DAT_07eaa119) return OffsetWarehouseItems;
-    if (DAT_07eaa11a) return OffsetMixItems;
+    if (TradeOpened) return OffsetTradeItems;
+    if (WarehouseOpened) return OffsetWarehouseItems;
+    if (ChaosMixOpened) return OffsetMixItems;
     return OffsetTradeItems;
 }
 
@@ -183,7 +183,7 @@ void ItemMove_UpdateInventoryDurability(int slot, BYTE durability)
         return;
     }
 
-    ITEM_ATTRIBUTE* attr = (ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068;
+    ITEM_ATTRIBUTE* attr = (ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase;
     int width = 1;
     int height = 1;
     if (attr && origin->Type >= 0 && origin->Type <= 0xFFF) {
@@ -228,7 +228,7 @@ bool ItemMove_LooksLikeStackMerge(BYTE* targetPool, int targetSlot, const BYTE* 
         return false;
     }
 
-    ITEM_ATTRIBUTE* attr = (ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068;
+    ITEM_ATTRIBUTE* attr = (ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase;
     if (!attr || sourceType < 0 || sourceType >= ITEM_MAX_EX) {
         return false;
     }
@@ -252,27 +252,27 @@ bool ItemMove_LooksLikeStackMerge(BYTE* targetPool, int targetSlot, const BYTE* 
 
 void ItemMove_ClearPickedState()
 {
-    DAT_07e91388 = 0;
-    DAT_07eaa165 = 0;
+    ItemPickedFlag = 0;
+    ItemMoveInFlightFlag = 0;
     EnableUse = 0;
-    DAT_07ea5b18 = 0xFFFFFFFFu;
-    DAT_07e11e78 = 0xFFFFFFFFu;
-    DAT_07ea9844 = 0;
-    DAT_07ea9800 = 0;
-    DAT_07eaa160 = 0;
-    DAT_083a4124 = 0;
-    DAT_083a42eb = 0;
+    SourceInvSlot = 0xFFFFFFFFu;
+    TargetInvSlot = 0xFFFFFFFFu;
+    ItemRenderMode = 0;
+    InventoryBasePtr = 0;
+    CheckInventoryPtr = 0;
+    MouseLButtonPush = 0;
+    AutoDropTriggerFlag = 0;
     g_ItemMoveSourcePool = 0;
     g_ItemMoveTargetPool = 0;
 
-    memset(DAT_07e91350, 0, sizeof(DAT_07e91350));
-    *(short*)DAT_07e91350 = (short)0xFFFF;
+    memset(PickedItemData, 0, sizeof(PickedItemData));
+    *(short*)PickedItemData = (short)0xFFFF;
     pPickedItem = -1;
     Level = 0;
     byte_7E9136B = 0;
 
-    // (Aca se borraban registros enteros de DAT_07ea8448/5b68/9880/7bc0 y
-    //  DAT_07e11fb0, que eran copias sueltas sin lectores.  Ahora son alias de
+    // (Aca se borraban registros enteros de LegacyInvGridKey/5b68/9880/7bc0 y
+    //  TradeItemKeyBase, que eran copias sueltas sin lectores.  Ahora son alias de
     //  campo de los pools reales y ese memset los pisaria corrido 0x38.)
 
     ItemMove_ClearPoolPreview(OffsetInventoryItems, 64);
@@ -310,24 +310,24 @@ void NetRecv_24(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (!sourcePool) sourcePool = OffsetInventoryItems;
     if (!targetPool) targetPool = OffsetInventoryItems;
     if (Msg[3] == 0xFF) {
-        bool stackMergeAck = ItemMove_LooksLikeStackMerge(targetPool, (int)Msg[4], (BYTE*)DAT_07e91350);
+        bool stackMergeAck = ItemMove_LooksLikeStackMerge(targetPool, (int)Msg[4], (BYTE*)PickedItemData);
         // Server denied. Restore picked item to source slot OR
         // sólo limpia el flag de "cargando" (el slot de origen todavía tiene
         // el item — lo limpiamos localmente al levantarlo, pero el server
         // no lo movió). Lo reinsertamos en el origen.
         if (!stackMergeAck) {
-            ItemMove_RestoreSlot(sourcePool, (int)DAT_07ea5b18, (BYTE*)DAT_07e91350);
+            ItemMove_RestoreSlot(sourcePool, (int)SourceInvSlot, (BYTE*)PickedItemData);
         } else if (g_ItemMoveTargetDurBefore >= 0) {
             // Merge parcial o destino lleno: lo que no entró vuelve al origen.
             // El server no avisa el origen si le queda algo (InventoryAddItemStack).
             const ITEM* target = (const ITEM*)OffsetInventoryItems + ((int)Msg[4] - 12);
             const int added = (int)target->Durability - g_ItemMoveTargetDurBefore;
-            const int left = (int)((ITEM*)DAT_07e91350)->Durability - (added > 0 ? added : 0);
+            const int left = (int)((ITEM*)PickedItemData)->Durability - (added > 0 ? added : 0);
             if (left > 0) {
                 BYTE item[sizeof(ITEM)];
-                memcpy(item, DAT_07e91350, sizeof(ITEM));
+                memcpy(item, PickedItemData, sizeof(ITEM));
                 ((ITEM*)item)->Durability = (BYTE)left;
-                ItemMove_RestoreSlot(sourcePool, (int)DAT_07ea5b18, item);
+                ItemMove_RestoreSlot(sourcePool, (int)SourceInvSlot, item);
             }
         }
         ItemMove_ClearPickedState();
@@ -339,7 +339,7 @@ void NetRecv_24(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             //
             // El item se construye SOLO desde los 4 bytes wire del server
             // (autoritativo), igual que el snapshot F3/10 y el buy 0x32: el ITEM struct
-            // agarrado (DAT_07e91350) NO está en formato wire y sus bytes 4-11
+            // agarrado (PickedItemData) NO está en formato wire y sus bytes 4-11
             // (Durability/Option1/x/y/Key…) se reinterpretarían como opciones/serial.
             // InsertInventoryItem lee hasta Item[4]; dejamos ext=0.
             BYTE targetSlot = Msg[4];
@@ -399,16 +399,16 @@ void NetRecv_30(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             // (Sin exclusion mutua de paneles: no esta en IDA y el click al NPC ya
             //  exige ShopOpened == 0 y WarehouseOpened == 0.)
             WarehouseOpened = 1;
-            DAT_00559f5f = 0;     // byte_559F5F
-            DAT_07eaa14c = 0;     // dword_7EAA14C
+            StoragePinOkFlag = 0;     // 0x00559F5F
+            PinInputModeState = 0;     // 0x07EAA14C
             break;
         case 3:  // Chaos Machine (mix)
             gChaosMixRates.Reset();
             ChaosBoxCloseAck();   // mecanismo de cierre de MuEmu (catalogo A)
             ChaosMixOpened = 1;
-            DAT_07eaa140 = 0;     // MixState = 0
+            MixState = 0;     // MixState = 0
             for (int i = 0; i < 4; i++)
-                DAT_0055a3e8[i] = Msg[4 + i];
+                ChaosMixInfo[i] = Msg[4 + i];
             SetErrorMessage(143);
             break;
         case 4:  // Event window (type 0)
@@ -431,7 +431,7 @@ void NetRecv_30(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             break;
         default:  // Shop (buy/sell)
             ShopOpened = 1;
-            *((BYTE*)&DAT_07eaa150 + 2) = 0;   // BYTE2(dword_7EAA150)=0
+            *((BYTE*)&ServerContextId + 2) = 0;   // BYTE2(0x07EAA150)=0
             break;
     }
     CharacterOpened = 0;
@@ -463,7 +463,7 @@ void NetRecv_31(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         // sounds 67/48).  The server also uses type=3 for the initial
         // open snapshot, so preserve that case by requiring a mix
         // request already in flight.
-        const bool mixFailedSnapshot = (DAT_07eaa140 == 1);
+        const bool mixFailedSnapshot = (MixState == 1);
 
         for (int i = 0; i < 32; ++i) {
             BYTE* cell = OffsetMixItems + i * 0x44;
@@ -487,7 +487,7 @@ void NetRecv_31(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         }
 
         if (mixFailedSnapshot) {
-            DAT_07eaa140 = 2;
+            MixState = 2;
             UIChatLogWindow_AddText("", GlobalText[594], 2);
             PlayBuffer(67, 0, 0);
             PlayBuffer(48, 0, 0);
@@ -578,7 +578,7 @@ void NetRecv_31(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (sub == 3 || sub == 5) {
         ClearItemPool(OffsetMixItems, 32);
         if (sub == 3 || sub == 5) {
-            DAT_07eaa140 = 0;
+            MixState = 0;
         }
         for (int i = 0; i < count && cursor + 13 <= Size; ++i) {
             BYTE slot = Msg[cursor];
@@ -590,7 +590,7 @@ void NetRecv_31(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         return;
     }
 
-    if (DAT_07eaa119 != 0) {
+    if (WarehouseOpened != 0) {
         ClearItemPool(OffsetWarehouseItems, 120);
         for (int i = 0; i < count && cursor + 13 <= Size; ++i) {
             BYTE slot = Msg[cursor];
@@ -639,11 +639,11 @@ void NetRecv_32(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // al separarlos (0x05826D18 vs 0x05826D1C) el de compra quedo sin
     // quien lo bajara → sólo se podía comprar UNA vez por sesión.
     BuyCost = 0;
-    // El reset de DAT_05826d1c (EnableUse) en este case es un add-on
+    // El reset de EnableUse (EnableUse) en este case es un add-on
     // del port —IDA no lo hace acá—, pero hoy es lo que evita que
     // equipar/usar se trabe.  Se conserva hasta portar sus writers
     // reales (InitGame / ReceiveLife / ReceiveDurability).
-    DAT_05826d1c = 0;
+    EnableUse = 0;
 }
 
 // 0x33
@@ -657,13 +657,13 @@ void NetRecv_33(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (flag != 0) {
         if (flag == 0xFF || flag == 0xFE) {
             ItemMove_ClearPickedState();
-            DAT_05826d1c = 0;
+            EnableUse = 0;
             UIChatLogWindow_AddText(nullptr, GlobalText[733], 2);
         } else {
             ItemMove_ClearPickedState();
-            DAT_05826d1c = 0;
-            if (Size >= 8 && DAT_07cf1ffc != 0) {
-                *(DWORD*)((BYTE*)DAT_07cf1ffc + 1352) = *(DWORD*)(Msg + 4);
+            EnableUse = 0;
+            if (Size >= 8 && CharacterMachinePtr != 0) {
+                *(DWORD*)((BYTE*)CharacterMachinePtr + 1352) = *(DWORD*)(Msg + 4);
             }
             PlayBuffer(29, 0, 0);
         }
@@ -681,11 +681,11 @@ void NetRecv_33(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         //
         // Desviacion consciente: en vez de dejarlo pegado al cursor lo
         // devolvemos a su slot de origen. El efecto observable es el mismo
-        // (no se pierde) y ademas libera `EquipmentItem` (DAT_07eaa165,
+        // (no se pierde) y ademas libera `EquipmentItem` (ItemMoveInFlightFlag,
         // el mismo global de IDA 0x07EAA165), que si queda seteado
         // bloquea los drops siguientes.
         RestorePickedItemToSource();
-        DAT_05826d1c = 0;
+        EnableUse = 0;
     }
 }
 
@@ -697,27 +697,27 @@ void NetRecv_34(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     // PMSG_ITEM_REPAIR_SEND es PBMSG_HEAD (3 bytes) + DWORD money
     // alineado a 4, o sea el zen esta en +4.  Leerlo en +3 metia el
     // byte de padding y el zen quedaba en basura (ej. -835).
-    if (Size >= 8 && DAT_07cf1ffc != 0) {
+    if (Size >= 8 && CharacterMachinePtr != 0) {
         DWORD gold = *(DWORD*)(Msg + 4);
         if (gold != 0) {
-            *(DWORD*)((BYTE*)DAT_07cf1ffc + 1352) = gold;
-            CalculateAll(static_cast<BYTE*>(DAT_07cf1ffc), 0, 0);   // sub_47E3C0
+            *(DWORD*)((BYTE*)CharacterMachinePtr + 1352) = gold;
+            CalculateAll(static_cast<BYTE*>(CharacterMachinePtr), 0, 0);   // sub_47E3C0
             PlayBuffer(37, 0, 0);
         }
     }
-    DAT_05826d1c = 0;
+    EnableUse = 0;
 }
 
 // 0x81
 void NetRecv_81(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
 {
     NetLog("NET:  -> 0x81 StorageGold size=%d", Size);
-    if (Size >= 12 && DAT_07cf1ffc != 0) {
+    if (Size >= 12 && CharacterMachinePtr != 0) {
         BYTE result = Msg[3];
         if (result != 0) {
             DWORD storageGold = *(DWORD*)(Msg + 4);
             DWORD gold = *(DWORD*)(Msg + 8);
-            BYTE* charMachine = (BYTE*)(uintptr_t)DAT_07cf1ffc;
+            BYTE* charMachine = (BYTE*)(uintptr_t)CharacterMachinePtr;
             *(DWORD*)(charMachine + 1356) = storageGold;
             *(DWORD*)(charMachine + 1352) = gold;
         }
@@ -728,9 +728,9 @@ void NetRecv_81(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
 void NetRecv_82(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
 {
     NetLog("NET:  -> 0x82 StorageExit");
-    DAT_07eaa119 = 0;
-    DAT_00559f5f = 0;
-    DAT_07eaa14c = 0;
+    WarehouseOpened = 0;
+    StoragePinOkFlag = 0;
+    PinInputModeState = 0;
 }
 
 // 0x83
@@ -741,12 +741,12 @@ void NetRecv_83(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         BYTE status = Msg[3];
         switch (status) {
         case 0:
-            DAT_00559f5f = 0;
-            DAT_07eaa148 = 0;
+            StoragePinOkFlag = 0;
+            ShopItemSelectionC = 0;
             break;
         case 1:
-            DAT_00559f5f = 1;
-            DAT_07eaa148 = 0;
+            StoragePinOkFlag = 1;
+            ShopItemSelectionC = 0;
             break;
         case 10: SetErrorMessage(134); break;   // PIN incorrecto
         case 11: SetErrorMessage(135); break;   // ya tenia candado
@@ -755,19 +755,19 @@ void NetRecv_83(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             // IDA ReceiveStorageStatus (0x434450): PIN aceptado.  Si
             // habia una accion esperando el PIN (la arma el drop o el
             // retiro de zen), se completa ahora.
-            if (DAT_00559f5f && !DAT_07eaa148) {
-                if ((int)DAT_07ea9804 == -1) {
-                    Send_ActionRequest((unsigned char)DAT_07ea9808, (int)DAT_07ea980c);
+            if (StoragePinOkFlag && !ShopItemSelectionC) {
+                if ((int)ShopContextA == -1) {
+                    Send_ActionRequest((unsigned char)ShopContextB, (int)ShopContextC);
                 } else {
-                    DAT_07eaa165 = 1;   // EquipmentItem
+                    ItemMoveInFlightFlag = 1;   // EquipmentItem
                     g_ItemMoveSourcePool = &OffsetWarehouseItems[0];
                     g_ItemMoveTargetPool = &OffsetInventoryItems[0];
-                    SendRequestEquipmentItem((int)DAT_07ea9804, (int)DAT_07ea9808,
-                        (ITEM*)DAT_07e91350, (int)DAT_07ea980c, (int)DAT_07ea9810);
+                    SendRequestEquipmentItem((int)ShopContextA, (int)ShopContextB,
+                        (ITEM*)PickedItemData, (int)ShopContextC, (int)EquipTargetSlot);
                 }
             }
-            DAT_00559f5f = 1;
-            DAT_07eaa148 = 1;
+            StoragePinOkFlag = 1;
+            ShopItemSelectionC = 1;
             break;
         default:
             break;
@@ -785,7 +785,7 @@ void NetRecv_86(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     const BYTE result = Msg[3];
     switch (result) {
     case 1:
-        DAT_07eaa140 = 2;
+        MixState = 2;
         for (int slot = 0; slot < 32; ++slot) {
             BYTE* item = OffsetMixItems + slot * 0x44;
             *(short*)item = (short)0xFFFF;
@@ -799,19 +799,19 @@ void NetRecv_86(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         break;
     case 2:
     case 0x0B:
-        DAT_07eaa140 = 0;
+        MixState = 0;
         UIChatLogWindow_AddText("", GlobalText[596], 2);
         break;
     case 4:
         CreateOkMessageBox(GlobalText[649]);
-        DAT_07eaa140 = 2;
+        MixState = 2;
         break;
     case 9:
         CreateOkMessageBox(GlobalText[689]);
-        DAT_07eaa140 = 2;
+        MixState = 2;
         break;
     default:
-        DAT_07eaa140 = 2;
+        MixState = 2;
         break;
     }
 }
@@ -835,10 +835,10 @@ void NetRecv_87(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     ChaosBoxCloseAck();
     InventoryOpened = 0;
     CloseInventoryRelatedWindows();
-    DAT_07e91388 = 0;
+    ItemPickedFlag = 0;
     // The category selector is client-local (unlike the original
     // box lifecycle), so dismiss it if a close ACK races it.
-    if (DAT_083a7c24 == 143) {
+    if (InGameUiState == 143) {
         SetErrorMessage(0);
     }
 }
@@ -852,7 +852,7 @@ void NetRecv_23(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     //   Msg[3] != 0  → drop OK
     //     If Msg[4] >= 12 → equipment slot update (UI_Main path)
     //     Else            → inventory slot drop (CharacterMachine update)
-    //   En los dos casos de éxito: limpia DAT_07e91388 (arrastre activo)
+    //   En los dos casos de éxito: limpia ItemPickedFlag (arrastre activo)
     //   and reset SendDropItem = -1
     if (Size < 4) return;
     BYTE result = Msg[3];
@@ -864,14 +864,14 @@ void NetRecv_23(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     //  - result!=0 (drop OK): el server removió el item; sólo hay que soltar el
     //    cursor (el slot ya está vacío desde el pickup).
     if (result == 0) {
-        ItemMove_RestoreSlot(OffsetInventoryItems, (int)DAT_07ea5b18,
-                             (BYTE*)DAT_07e91350);
+        ItemMove_RestoreSlot(OffsetInventoryItems, (int)SourceInvSlot,
+                             (BYTE*)PickedItemData);
     } else {
         PlayBuffer(29, 0, 0);
     }
     ItemMove_ClearPickedState();
-    DAT_07e91388 = 0;
-    DAT_07e11990 = -1;  // SendDropItem = -1
+    ItemPickedFlag = 0;
+    LegacySelectedOperate = -1;  // SendDropItem = -1
 }
 
 // 0x22
@@ -893,10 +893,10 @@ void NetRecv_22(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (slot == 0xFF) {
         // Pickup failed
     } else if (slot == 0xFE) {
-        if (Size >= 8 && DAT_07cf1ffc != 0) {
+        if (Size >= 8 && CharacterMachinePtr != 0) {
             DWORD gold = ((DWORD)Msg[4] << 24) | ((DWORD)Msg[5] << 16)
                        | ((DWORD)Msg[6] << 8)  |  (DWORD)Msg[7];
-            BYTE* charMachine = (BYTE*)(uintptr_t)DAT_07cf1ffc;
+            BYTE* charMachine = (BYTE*)(uintptr_t)CharacterMachinePtr;
             const int before = *(int*)(charMachine + 0x548);
             *(DWORD*)(charMachine + 0x548) = gold;
             // DESVIACION (DLL CProtocol::CGItemGetRecv): aviso en el chat con
@@ -915,7 +915,7 @@ void NetRecv_22(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         // ConvertItemType de abajo termina leyendo los primeros bytes
         // de la struct del personaje, casi nunca da un tipo de joya y
         // por eso el zen suena con pGetItem.wav (29).
-        Item = (const BYTE*)(uintptr_t)DAT_07cf1ffc;
+        Item = (const BYTE*)(uintptr_t)CharacterMachinePtr;
     } else {
         // PMSG_ITEM_GET_SEND es [C3][08][22][result][i0..i3] = Size 8
         // (ItemInfo son 4 bytes, MAX_ITEM_INFO): no exigir el formato de 12
@@ -959,7 +959,7 @@ void NetRecv_22(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
                       type == 399 || type == 470);
         PlayBuffer(jewel ? 49 : 29, AsObject(Hero), 0);
     }
-    DAT_07e11998 = -1;  // SendGetItem
+    SendGetItem = -1;  // SendGetItem
 }
 
 // 0x28
@@ -1051,8 +1051,8 @@ void NetRecv_2F(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     BYTE durVal = Msg[4];
     BYTE consumed = Msg[5];
     NetLog("NET:  → 0x2F Durability slot=%d dur=%d consumed=%d", slot, durVal, consumed);
-    if (DAT_07cf1ffc != 0 && slot < 12) {
-        BYTE* charMachine = (BYTE*)(uintptr_t)DAT_07cf1ffc;
+    if (CharacterMachinePtr != 0 && slot < 12) {
+        BYTE* charMachine = (BYTE*)(uintptr_t)CharacterMachinePtr;
         *(charMachine + 68 * slot + 562) = durVal;
     }
     if (consumed) {

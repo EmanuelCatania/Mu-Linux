@@ -7,7 +7,7 @@
 // pickup / drop / sell / right-click-use / hotkey-assign / pet-renaming.
 //
 // La llaman los paneles de UI/UI_PanelInput.cpp (4-7 sitios) en cada tick:
-//   - Main inventory: `FUN_004d23b0(InventoryStartX+15, InventoryStartY+200,
+//   - Main inventory: `Inventory_ClickHandler(InventoryStartX+15, InventoryStartY+200,
 //     OffsetInventoryItems, 8, 8, 0)`
 //   - Trade slots (own/peer): grids 8x4
 //   - Warehouse: 8x15 con flag=1 (sell mode) o flag=0 (open mode)
@@ -39,11 +39,11 @@
 //   - Repair: build packet 0x35 (sub-mode 1 / 2 / 3)
 //   - Use potion/scroll: build packet 0x29 + EnableUse=10 cooldown
 //   - Right-click "open scroll" specials: 0x49 sub 0x91 type 1/2 (item 467/434)
-//   - Right-click pet egg (item 431): qmemcpy slot a word_7EA5240 + ShowCheckBox
+//   - Right-click pet egg (item 431): qmemcpy slot a PreviewItemData + ShowCheckBox
 //   - Right-click default: pickup with WarehouseOpened auto-drop logic
-//   - Ctrl+Q/W/E hotkey assignment: dword_559C60[slot] = item type
+//   - Ctrl+Q/W/E hotkey assignment: QKeyItemType[slot] = item type
 //
-// Cadena: FUN_004d23b0 → pPickedItem set → Inventory_DropDispatch (drop
+// Cadena: Inventory_ClickHandler → pPickedItem set → Inventory_DropDispatch (drop
 // dispatcher) → SendRequestEquipmentItem.
 
 #include "stdafx.h"
@@ -75,45 +75,44 @@ extern "C" {
 static BYTE* const g_InventoryPoolForClickGuard = Inventory;
 
 // IDA aliases for our DAT_ globals
-#define pPickedItem        (*(BYTE(*)[0x44])DAT_07e91350)
-#define dword_7E91388      DAT_07e91388        // pickup-active flag
-#define dword_7EA9800      DAT_07ea9800        // current inv base ptr
-// dword_7EA9844 NO existe: en el binario 0x7EA9844 es un BYTE flag (bSell).
+#define pPickedItem        (*(BYTE(*)[0x44])PickedItemData)
+#define dword_7E91388      ItemPickedFlag        // pickup-active flag
+#define dword_7EA9800      InventoryBasePtr        // current inv base ptr
+// ItemRenderMode NO existe: en el binario 0x7EA9844 es un BYTE flag (bSell).
 // La "posicion del item agarrado" vive en Inventory[32].Type → macro ItemPickedPos.
-#define byte_7EA9844       (*((BYTE*)&DAT_07ea9844))   // first byte of dword_7EA9844 = mode flag
-#define byte_83A42EB       DAT_083a42eb        // auto-drop trigger flag
+#define byte_7EA9844       (*((BYTE*)&ItemRenderMode))   // first byte of 0x07EA9844 = mode flag
+#define byte_83A42EB       AutoDropTriggerFlag        // auto-drop trigger flag
 #define dword_55CC16C      SocketClientSendBufferLength        // queued send buffer cursor
 // IDA separa 0x05826D18 (lo escribe ProtocolCore y lo lee sub_4D23B0: cooldown
 // de COMPRA) de 0x05826D1C (InitGame, ReceiveLife, ReceiveDurability: cooldown
 // de equipar/usar, `EnableUse`). No unificarlos: comprar bloquearía el equipar.
-#define dword_5826D18      BuyCost
 
 // CheckInventory: aliasa el puntero al ITEM del slot bajo el mouse que usa Scene_MapTick
-// to dispatch RenderItemInfo (tooltip). El símbolo es `DAT_07eaa160` (Scene_MapTick
-// lo pasa como 3er arg a RenderItemInfo), no `dword_7E11D24`, que es estado del
+// to dispatch RenderItemInfo (tooltip). El símbolo es `CheckInventoryPtr` (Scene_MapTick
+// lo pasa como 3er arg a RenderItemInfo), no `MenuF1ItemType`, que es estado del
 // input de texto (sub_494520).
-extern uintptr_t DAT_07eaa160;                     // IDA `CheckInventory`
-#define CheckInventory     DAT_07eaa160
+extern uintptr_t CheckInventoryPtr;                     // IDA `CheckInventory`
+#define CheckInventory     CheckInventoryPtr
 
-// Tabla de hotkeys en dword_559C60[3] (Q/W/E) — los globals ya están declarados como
+// Tabla de hotkeys en QKeyItemType[3] (Q/W/E) — los globals ya están declarados como
 // `int` in globals.h.
-// (Indexamos DAT_00559c60 como un array de 3 int para guardar los hotkeys.)
+// (Indexamos QKeyItemType como un array de 3 int para guardar los hotkeys.)
 
 // byte_7EA5249: slot de inventario del item que abrio el dialogo (campo +9
-// del ITEM copiado en DAT_07ea5240).
-#define DAT_07ea5249_byte  (DAT_07ea5240[9])
+// del ITEM copiado en PreviewItemData).
+#define DAT_07ea5249_byte  (PreviewItemData[9])
 
 // Posiciones del overlay del baúl (se usan en la rama del click derecho por defecto).
-// DAT_07eaa0c8/cc están declarados en globals.h.
+// PinDialogOriginX/cc están declarados en globals.h.
 
-// dword_5826D18 = cooldown de RepairEnable (en nuestro build es `int DAT_05826d1c`
-// según globals.h). Usamos la coincidencia más cercana — el valor numérico sigue el
-// repair-cooldown frames.
+// BuyCost (0x05826D18) = cooldown de COMPRA (lo escribe ProtocolCore, lo lee
+// sub_4D23B0). Nuestro repair usa `EnableUse` como coincidencia más cercana - el
+// valor numérico sigue el repair-cooldown frames.
 
 // Índices de los IDs de mensaje "trade ocupado" / "no podés usar esto" — declarados como DWORD o
 // char en globals.h, y se acceden con aritmética de offsets sobre UIChatLogWindow_AddText.
 // En el original de IDA, byte_7EAA184/188/18C son strings de id de slot. Nuestro build
-// los referencia vía la familia DAT_07eaa11b, que tiene otra semántica —
+// los referencia vía la familia TradeOpened, que tiene otra semántica —
 // los mensajes se mandan con ID vacío porque la UI del chat lo acepta así.
 
 // ── Declaraciones adelantadas de los helpers que usamos ──────────────────────
@@ -127,7 +126,6 @@ void __cdecl DeleteBug(intptr_t Owner);
 extern int  __cdecl PressKey(int vk);
 extern unsigned int __cdecl ItemMove_SnapMouseToEmptySlot(int origin_x, int origin_y,
                                                            const void* inv_base, int grid_w, int grid_h);
-#define sub_4D6020 ItemMove_SnapMouseToEmptySlot
 
 // Latches de MousePosition para el pickup con click derecho. En IDA los originales están en
 // 0x083a42e0 / 0x083a42e4, pero en nuestro build esas direcciones se superponen con CameraAngle
@@ -146,7 +144,7 @@ extern "C" BYTE OffsetTradeItems[];
 
 // ── sub_4D6020 (367 bytes) — port FIEL desde IDA ────────────────────────────
 // Busca un slot vacío en la grilla destino donde entre pPickedItem, y después
-// engancha el cursor del mouse (DAT_083a427c/DAT_083a4278) al centro de
+// engancha el cursor del mouse (MouseX/MouseY) al centro de
 // ese slot. Devuelve 1 si lo encontró, 0 si no.
 //
 // Args: (origin_x, origin_y, grid_base, grid_w, grid_h)
@@ -157,7 +155,7 @@ unsigned int __cdecl ItemMove_SnapMouseToEmptySlot(int origin_x, int origin_y,
 
     short pickedType = *(short*)pPickedItem;
     if (pickedType < 0) return 0;
-    ITEM_ATTRIBUTE* attr = (ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068;
+    ITEM_ATTRIBUTE* attr = (ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase;
     if (!attr) return 0;
     int itemW = attr[pickedType].Width;
     int itemH = attr[pickedType].Height;
@@ -186,10 +184,10 @@ unsigned int __cdecl ItemMove_SnapMouseToEmptySlot(int origin_x, int origin_y,
             }
             if (empty == itemW * itemH) {
                 // Snap mouse to slot center
-                DAT_083a427c = (DWORD)(int)(
+                MouseX = (DWORD)(int)(
                     ((double)itemW * 0.5 + (double)x - 0.5) * 20.0
                     + (double)origin_x);
-                DAT_083a4278 = (DWORD)(int)(
+                MouseY = (DWORD)(int)(
                     ((double)itemH * 0.5 + (double)y - 0.5) * 20.0
                     + (double)origin_y);
                 return 1;
@@ -201,7 +199,7 @@ unsigned int __cdecl ItemMove_SnapMouseToEmptySlot(int origin_x, int origin_y,
 
 // Compatibility entry point retained solely for the preserved IDA port module.
 // IDA: FUN_004d6020
-unsigned int __cdecl FUN_004d6020(int origin_x, int origin_y,
+unsigned int __cdecl ItemMove_SnapMouseToEmptySlotCompat(int origin_x, int origin_y,
                                    const void* grid_base, int grid_w, int grid_h)
 {
     return ItemMove_SnapMouseToEmptySlot(origin_x, origin_y, grid_base, grid_w, grid_h);
@@ -222,21 +220,21 @@ unsigned int __cdecl FUN_004d6020(int origin_x, int origin_y,
 //                 3 = generic NPC sell confirm
 //
 // Returns: TRUE always (matches IDA — never errors out).
-extern char DAT_083a44c4[7 * 0x26];      // g_lpszMessageBoxCustom (266 bytes)
-// DAT_083a42f8 (2 entradas × 5 ints) y su alias DAT_083a430c (= entrada 1)
-// vienen de globals.h — NO redeclarar aca: DAT_083a430c es un macro que
-// proyecta dentro de DAT_083a42f8, y declararlo como array independiente
+extern char MessageBoxCustomBuf[7 * 0x26];      // g_lpszMessageBoxCustom (266 bytes)
+// DialogButtonRects (2 entradas × 5 ints) y su alias DialogButton1Rect (= entrada 1)
+// vienen de globals.h — NO redeclarar aca: DialogButton1Rect es un macro que
+// proyecta dentro de DialogButtonRects, y declararlo como array independiente
 // dejaba los botones Yes/No escritos en memoria que el render no lee.
 
-// NextErrorMessage vive en DAT_083a7c28.
-extern DWORD DAT_083a7c24;               // ErrorMessage (currently-shown dialog)
-extern DWORD DAT_083a7c28;               // NextErrorMessage (queued)
-#define ErrorMessage      DAT_083a7c24
-#define NextErrorMessage  DAT_083a7c28
+// NextErrorMessage vive en InGameUiStateNext.
+extern DWORD InGameUiState;               // ErrorMessage (currently-shown dialog)
+extern DWORD InGameUiStateNext;               // NextErrorMessage (queued)
+#define ErrorMessage      InGameUiState
+#define NextErrorMessage  InGameUiStateNext
 
 void __cdecl ShowCheckBox(int num, int index, int message)
 {
-    char* lpMessageLines = DAT_083a44c4;        // 7 × 38-byte line buffer
+    char* lpMessageLines = MessageBoxCustomBuf;        // 7 × 38-byte line buffer
     int   numLines = num;
 
     if (message == 153) {
@@ -244,8 +242,8 @@ void __cdecl ShowCheckBox(int num, int index, int message)
         // the egg's "level" → pet kind (Demon/Spirit/Drake/etc.).
         char Buffer[52];
         memset(Buffer, 0, 50);
-        if (*(short*)DAT_07ea5240 == 431) {
-            int eggKind = (((int)DAT_07ea5244) >> 3) & 0xF;
+        if (*(short*)PreviewItemData == 431) {
+            int eggKind = (((int)PreviewItemLevel) >> 3) & 0xF;
             const char* kindName = nullptr;
             switch (eggKind) {
             case 0: kindName = GlobalText[168]; break;  // Demon
@@ -282,24 +280,24 @@ void __cdecl ShowCheckBox(int num, int index, int message)
     }
     g_iNumLineMessageBoxCustom = numLines;
     // El render de las líneas del message box (UI_StatsPanel case 0x97/0x99) usa
-    // DAT_083a4324 como count del loop; en el binario es la misma dirección que
+    // MessageBoxLineCount como count del loop; en el binario es la misma dirección que
     // g_iNumLineMessageBoxCustom, en nuestro build están separados: se setean ambos.
-    extern DWORD DAT_083a4324;
-    DAT_083a4324 = (DWORD)numLines;
+    extern DWORD MessageBoxLineCount;
+    MessageBoxLineCount = (DWORD)numLines;
 
-    // Yes button rectangle: id=1 at (21, 90) size 70x21 → DAT_083a42f8[0..4]
-    DAT_083a42f8[0] = 1;
-    DAT_083a42f8[1] = 21;
-    DAT_083a42f8[2] = 90;
-    DAT_083a42f8[3] = 70;
-    DAT_083a42f8[4] = 21;
+    // Yes button rectangle: id=1 at (21, 90) size 70x21 → DialogButtonRects[0..4]
+    DialogButtonRects[0] = 1;
+    DialogButtonRects[1] = 21;
+    DialogButtonRects[2] = 90;
+    DialogButtonRects[3] = 70;
+    DialogButtonRects[4] = 21;
 
-    // No button rectangle: id=3 at (120, 90) size 70x21 → DAT_083a430c[0..4]
-    DAT_083a430c[0] = 3;
-    DAT_083a430c[1] = 120;
-    DAT_083a430c[2] = 90;
-    DAT_083a430c[3] = 70;
-    DAT_083a430c[4] = 21;
+    // No button rectangle: id=3 at (120, 90) size 70x21 → DialogButton1Rect[0..4]
+    DialogButton1Rect[0] = 3;
+    DialogButton1Rect[1] = 120;
+    DialogButton1Rect[2] = 90;
+    DialogButton1Rect[3] = 70;
+    DialogButton1Rect[4] = 21;
 
     if (message != 0) {
         // Mostrar este mensaje — encolarlo si ya hay otro diálogo arriba.
@@ -320,7 +318,7 @@ extern int __cdecl PressKey(int vk);
 
 // Build & send a C1-header packet [C1][size][header...payload].
 //
-// No incrementar acá `DAT_05826ceb` (g_byPacketSerialSend): el serial sólo
+// No incrementar acá `LegacyPacketSerialSend` (g_byPacketSerialSend): el serial sólo
 // viaja en los frames C3/C4 y el server sólo avanza su contador con esos
 // (CSerialCheck::CheckSerial). El bump lo hace gNetwork.Send, que es
 // quien escribe el serial en el frame.
@@ -361,7 +359,7 @@ static void SendC3Packet(BYTE* payload, int payloadSize)
 //
 // IDA (sub_4DF410) manda `(int)(xf * 0.0099999998)` y `(int)(yf * ...)`, donde
 // xf/yf son CollisionPosition, el punto del terreno bajo el CURSOR:
-//     DAT_083a4130 / DAT_083a4134, los mismos que ya usa el click-to-move
+//     TerrainPickPosX / TerrainPickPosY, los mismos que ya usa el click-to-move
 //     (Combat_Targeting.cpp) con la formula identica `* 0.01f`.
 // MU 5.2 lo confirma (NewUIMyInventory.cpp L512-515):
 //     RenderTerrain(true);
@@ -377,13 +375,13 @@ static bool GetHeroDropTile(BYTE* outX, BYTE* outY)
 
     // Pick del terreno bajo el cursor (mismo patron que Combat_Targeting).
     RenderTerrain('\x01');                    // RenderTerrain(true): arma el rayo
-    const int gridX = (int)*(float*)&DAT_080ab288;   // SelectXF
-    const int gridY = (int)*(float*)&DAT_080ab28c;   // SelectYF
-    if (!RenderTerrainTile(*(int*)&DAT_080ab288, *(int*)&DAT_080ab28c,
+    const int gridX = (int)*(float*)&SelectXF;   // SelectXF
+    const int gridY = (int)*(float*)&SelectYF;   // SelectYF
+    if (!RenderTerrainTile(*(int*)&SelectXF, *(int*)&SelectYF,
                       gridX, gridY, 1.0f, 1, 1))
         return false;
-    *outX = (BYTE)(int)(DAT_083a4130 * 0.01f);   // CollisionPosition[0]
-    *outY = (BYTE)(int)(DAT_083a4134 * 0.01f);   // CollisionPosition[1]
+    *outX = (BYTE)(int)(TerrainPickPosX * 0.01f);   // CollisionPosition[0]
+    *outY = (BYTE)(int)(TerrainPickPosY * 0.01f);   // CollisionPosition[1]
     return true;
 }
 
@@ -397,7 +395,7 @@ void RestorePickedItemToSource(void)
 {
     if (dword_7E91388 == 0) return;
     BYTE* srcPool = dword_7EA9800;
-    int   srcSlot = (int)DAT_07ea5b18;
+    int   srcSlot = (int)SourceInvSlot;
     if (srcPool && srcSlot >= 0) {
         // Reconstruir los bytes "wire" desde el ITEM struct guardado y
         // re-insertarlo en su celda original.
@@ -410,8 +408,8 @@ void RestorePickedItemToSource(void)
     dword_7E91388 = 0;
     memset(pPickedItem, 0, 0x44);
     dword_7EA9800 = 0;
-    DAT_07ea5b18  = 0xFFFFFFFFu;
-    DAT_07eaa165  = 0;
+    SourceInvSlot  = 0xFFFFFFFFu;
+    ItemMoveInFlightFlag  = 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -459,7 +457,7 @@ extern "C" int __cdecl Item_CompareForTradeHistory(const BYTE* p, const BYTE* n)
 }
 
 // IDA: sub_4CC530 (0x004CC530) — recuerda un item valioso recibido por trade
-// en la lista de 32 entradas word_7E11F78 (DAT_07e11f78): alas y pets
+// en la lista de 32 entradas 0x07E11F78 (TradeItemList): alas y pets
 // (384..390, 399, 416..419, 461/462/464), items +5 o mas y excellent.  Si ya
 // hay uno igual o mejor no hace nada; si el nuevo es mejor lo reemplaza; si no
 // esta, lo agrega en la primera entrada libre.
@@ -474,7 +472,7 @@ extern "C" void __cdecl Item_TradeHistoryAdd(int slot, BYTE* pool)
 
     bool sameTypeKept = false;
     for (int i = 0; i < 32; ++i) {
-        BYTE* entry = DAT_07e11f78 + 68 * i;
+        BYTE* entry = TradeItemList + 68 * i;
         if (*(short*)entry == -1) continue;
         const int r = Item_CompareForTradeHistory(entry, item);
         if (r == 0) return;
@@ -483,7 +481,7 @@ extern "C" void __cdecl Item_TradeHistoryAdd(int slot, BYTE* pool)
     }
     if (sameTypeKept) return;
     for (int i = 0; i < 32; ++i) {
-        BYTE* entry = DAT_07e11f78 + 68 * i;
+        BYTE* entry = TradeItemList + 68 * i;
         if (*(short*)entry == -1) { memcpy(entry, item, 0x44); return; }
     }
 }
@@ -500,7 +498,7 @@ extern "C" void __cdecl UI_Main(int slot_idx, short* inv_base, unsigned int grid
         short type = slot->Type;
         if (type == -1) return;
 
-        ITEM_ATTRIBUTE* attr = &((ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068)[type];
+        ITEM_ATTRIBUTE* attr = &((ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase)[type];
         int width = attr->Width;
         int height = attr->Height;
         int y = slot->y;
@@ -540,7 +538,7 @@ extern "C" void __cdecl UI_Main(int slot_idx, short* inv_base, unsigned int grid
         536, 604, 672, 740, 808, 876, 944, 1012, 1080, 1148, 1216, 1284
     };
 
-    BYTE* CM = (BYTE*)DAT_07cf1ffc;
+    BYTE* CM = (BYTE*)CharacterMachinePtr;
     if (CM == nullptr) return;
     BYTE* wearSlot = CM + 68 * slot_idx + 536;
     if (*(WORD*)wearSlot != 0xFFFF) {
@@ -554,7 +552,7 @@ extern "C" void __cdecl UI_Main(int slot_idx, short* inv_base, unsigned int grid
         *(DWORD*)(wearSlot + 56) = 0xFFFFFFFFu;
 
         // Ajustes del puntero al héroe para los slots de equipo conocidos.
-        BYTE* heroPtr = (BYTE*)DAT_07abf5d8;
+        BYTE* heroPtr = (BYTE*)Hero;
         if (heroPtr) {
             switch (slot_idx) {
             case 0:  // Lefthand weapon
@@ -582,15 +580,15 @@ extern "C" void __cdecl UI_Main(int slot_idx, short* inv_base, unsigned int grid
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FUN_004d23b0 — port FIEL desde IDA `004D23B0_sub_4D23B0.c` (14783 bytes).
+// Inventory_ClickHandler — port FIEL desde IDA `004D23B0_sub_4D23B0.c` (14783 bytes).
 // Inventory grid render + click dispatcher.  See file header for signature.
 // ─────────────────────────────────────────────────────────────────────────────
-void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
+void __cdecl Inventory_ClickHandler(char* origin_x, int origin_y, short* inv_base,
                           int grid_w, int grid_h, char mode_flag)
 {
 
     // ── Guards (IDA lines 307-318) ──────────────────────────────────────────
-    bool wasClick = (DAT_083a4124 != 0);
+    bool wasClick = (MouseLButtonPush != 0);
 
 
     if (grid_h <= 0)                { return; }
@@ -600,19 +598,19 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
     // llama desde el RENDER, despues del marcado del drop, y borraria esas marcas.
 
     if ((int)EnableUse > 0)         { return; }
-    // DAT_07eaa165 es el guard "item-move en vuelo": se setea al mandar el 0x24 y
+    // ItemMoveInFlightFlag es el guard "item-move en vuelo": se setea al mandar el 0x24 y
     // sólo lo limpia la RESPUESTA del server (ItemMove_ClearPickedState).
     // Desviación: timeout de seguridad, si lleva >2 s seteado se libera (si no, un
     // move perdido bloquearía el inventario/baúl para siempre).
-    if (DAT_07eaa165 != 0) {
+    if (ItemMoveInFlightFlag != 0) {
         static DWORD s_guardSince = 0;
         DWORD now = Platform::GetTimer().Ticks();
         if (s_guardSince == 0) s_guardSince = now;
         else if (now - s_guardSince > 2000) {
             s_guardSince = 0;
-            DAT_07eaa165 = 0;
+            ItemMoveInFlightFlag = 0;
         }
-        if (DAT_07eaa165 != 0) {
+        if (ItemMoveInFlightFlag != 0) {
             return;
         }
     } else {
@@ -634,8 +632,8 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
             int cellY = rowY;
 
             // Hit-test: el mouse está adentro de esta celda Y el slot tiene un item
-            if ((int)DAT_083a427c < cellX || (int)DAT_083a427c >= cellX + 20 ||
-                (int)DAT_083a4278 < cellY || (int)DAT_083a4278 >= cellY + 20 ||
+            if ((int)MouseX < cellX || (int)MouseX >= cellX + 20 ||
+                (int)MouseY < cellY || (int)MouseY >= cellY + 20 ||
                 rowSlot[0] == -1)
             {
                 // Asignación de hotkey (Ctrl+Q/W/E) cuando no se está sobre un item
@@ -644,11 +642,11 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                 continue;
             }
             // DIAG: cell passed hit-test
-            if (DAT_083a4124 != 0) {
+            if (MouseLButtonPush != 0) {
             }
 
             // ── Hovered cell with item: highlight footprint (color=2) ──────
-            // Guards defensivos: DAT_07d78068 sin inicializar (loader race) o `type` fuera
+            // Guards defensivos: ItemAttributeBase sin inicializar (loader race) o `type` fuera
             // de rango darían `attr + type*64` inválido.
             ITEM_ATTRIBUTE* attr = (ITEM_ATTRIBUTE*)(uintptr_t)ItemAttribute_Base();
             if (!attr) { continue; }
@@ -679,17 +677,17 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
             int   itemW     = attr[type].Width;
             int   itemH     = attr[type].Height;
             if (itemW <= 0 || itemW > 8 || itemH <= 0 || itemH > 8) {
-                if (DAT_083a4124) {
+                if (MouseLButtonPush) {
                 }
                 continue;
             }
             if ((int)slotX + itemW > grid_w) {
-                if (DAT_083a4124) {
+                if (MouseLButtonPush) {
                 }
                 continue;
             }
             if ((int)slotY + itemH > grid_h) {
-                if (DAT_083a4124) {
+                if (MouseLButtonPush) {
                 }
                 continue;
             }
@@ -714,11 +712,11 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
             // RenderItemInfo. Per IDA L388-395:
             //   sx = origin_x + 20*slotX + 20*ItemAttribute[type].Width / 2
             //   sy = origin_y + 20*slotY
-            extern DWORD DAT_07ea840c;   // tooltip X (= IDA `sx`)
-            extern DWORD DAT_07ea8408;   // tooltip Y (= IDA `sy`)
-            DAT_07ea840c = (DWORD)((int)(uintptr_t)origin_x +
+            extern DWORD TooltipPosX;   // tooltip X (= IDA `sx`)
+            extern DWORD TooltipPosY;   // tooltip Y (= IDA `sy`)
+            TooltipPosX = (DWORD)((int)(uintptr_t)origin_x +
                                    20 * (int)slotX + 20 * itemW / 2);
-            DAT_07ea8408 = (DWORD)(origin_y + 20 * (int)slotY);
+            TooltipPosY = (DWORD)(origin_y + 20 * (int)slotY);
 
             int gridSlotIdx    = grid_w * slotY + slotX;
 
@@ -739,13 +737,13 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
             // Server espera: [C1][04][32][slot], C3-encrypted (PMSG_ITEM_BUY_RECV,
             // HackPacketCheck Encrypt=1; ItemManager.h:63).
             if (mode_flag != 0) {
-                if (!DAT_083a4124) return;   // no LMB push — wait
-                if ((int)dword_5826D18 != 0) return;  // buy cooldown activo
-                DAT_083a4124 = 0;            // consume click
+                if (!MouseLButtonPush) return;   // no LMB push — wait
+                if ((int)BuyCost != 0) return;  // buy cooldown activo
+                MouseLButtonPush = 0;            // consume click
 
                 int slotIdx = ((BYTE*)rowSlot)[62] + grid_w * ((BYTE*)rowSlot)[63];
                 // guarda el precio para que el server pueda confirmar (anti-dupe)
-                dword_5826D18 = (DWORD)ItemValue((ITEM*)(inv_base + 34 * slotIdx), 0);
+                BuyCost = (DWORD)ItemValue((ITEM*)(inv_base + 34 * slotIdx), 0);
 
                 BYTE pkt[4];
                 pkt[0] = 0x32;              // CGItemBuyRecv
@@ -758,7 +756,7 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
 
             // ── BRANCH C: RepairEnable mode (NPC repair UI active) ─────────
             // IDA: RepairEnable_0 (0x07EAA134).
-            if (DAT_07eaa134 != 0) {
+            if (RepairEnableFlag != 0) {
                 // Tipos de item que SE PUEDEN reparar (= armas/armaduras con
                 // durability), excluding stackables like potions/jewels.
                 // Per IDA lines 579-586.
@@ -767,9 +765,9 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                       kind == 143 || kind >= ITEM_POTION_BASE ||
                       (kind >= 391 && kind <= 403) ||
                       (kind >= 430 && kind <= 435))
-                    && DAT_083a4124)
+                    && MouseLButtonPush)
                 {
-                    DAT_083a4124 = 0;
+                    MouseLButtonPush = 0;
 
                     // Per IDA sub_4D23B0 L588-640 el paquete es
                     //   [C1][05][34][slot][RepairEnable]
@@ -779,7 +777,7 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                     BYTE pkt[4];
                     pkt[0] = 0x34;
                     pkt[1] = (BYTE)slotIdx;
-                    pkt[2] = (BYTE)DAT_07eaa138;    // RepairEnable (0=NPC, 1=self)
+                    pkt[2] = (BYTE)RepairEnable;    // RepairEnable (0=NPC, 1=self)
                     // HackPacketCheck.txt índice 52 (=0x34) → Encrypt=1: el
                     // server exige frame C3. Mandarlo C1 daba "Packet
                     // encryption error" → CloseClient (la desconexión al
@@ -790,11 +788,11 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
             }
 
             // ── BRANCH D: Left-click → PICKUP ──────────────────────────────
-            if (DAT_083a4124 != 0) {     // MouseLButtonPush
+            if (MouseLButtonPush != 0) {     // MouseLButtonPush
                 int sx = ((BYTE*)rowSlot)[62];
                 int sy = ((BYTE*)rowSlot)[63];
                 int abs = grid_w * sy + sx;
-                DAT_083a4124 = 0;
+                MouseLButtonPush = 0;
 
                 dword_7EA9800 = reinterpret_cast<BYTE*>(inv_base);
                 memcpy(pPickedItem, (BYTE*)(inv_base + 34 * abs), 0x44);
@@ -806,17 +804,17 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                 if ((BYTE*)inv_base == (BYTE*)&OffsetInventoryItems[0]) {
                     sourceSlot += 12;
                 }
-                DAT_07ea5b18 = (DWORD)sourceSlot;
-                ItemPickedPos = sourceSlot;   // era DAT_07ea9844 (= bSell) — ver globals.h
-                DAT_07e9138e = (byte)slotX;
-                DAT_07e9138f = (byte)slotY;
+                SourceInvSlot = (DWORD)sourceSlot;
+                ItemPickedPos = sourceSlot;   // era ItemRenderMode (= bSell) — ver globals.h
+                InvGridSelCol = (byte)slotX;
+                InvGridSelRow = (byte)slotY;
                 UI_Main(sourceSlot, inv_base, grid_w);
                 dword_7E91388 = 1;          // mark "carrying an item"
                 CheckInventory = 0;
 
                 // Trade: cuando el item está en la grilla de trade Y ya
                 // confirmed our side (m_bMyConfirm), uncomfirm + tell server.
-                if (DAT_07eaa11b != 0 &&
+                if (TradeOpened != 0 &&
                     m_bMyConfirm != 0 &&     // m_bMyConfirm
                     (BYTE*)inv_base == (BYTE*)&OffsetTradeItems[0])
                 {
@@ -847,7 +845,7 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                     // IDA sub_4D23B0 L1440: `if ( Teleport ) return;`
                     // Teleport = 0x05826D14 (Teleport).
                     if (Teleport != 0) return;
-                    if (DAT_07eaa119 != 0 || DAT_07eaa11b != 0) {
+                    if (WarehouseOpened != 0 || TradeOpened != 0) {
                         UIChatLogWindow_AddText("", GlobalText[474], 2);
                         continue;
                     }
@@ -900,12 +898,12 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                     (useType >= 456 && useType <= 457) ||
                      useType == 468)
                 {
-                    if (DAT_07eaa119 != 0) {
+                    if (WarehouseOpened != 0) {
                         // Baúl abierto → no se puede usar
                         UIChatLogWindow_AddText("", GlobalText[474], 2);
                         continue;
                     }
-                    if (DAT_07eaa11b != 0) {
+                    if (TradeOpened != 0) {
                         UIChatLogWindow_AddText("", GlobalText[474], 2);
                         continue;
                     }
@@ -931,7 +929,7 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                     (useType >= 400 && useType <= 403))
                 {
                     // Class/level/stat requirement gate (per IDA L1278-1283).
-                    BYTE* CA = (BYTE*)DAT_07cf1ff4;
+                    BYTE* CA = (BYTE*)CharacterAttributePtr;
                     if (CA &&
                         (*(WORD*)(CA + 14) < attr[type].RequireLevel ||
                          *(WORD*)(CA + 26) < ((WORD*)rowSlot)[16]   ||
@@ -939,7 +937,7 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                     {
                         continue;
                     }
-                    if (DAT_07eaa119 != 0 || DAT_07eaa11b != 0) {
+                    if (WarehouseOpened != 0 || TradeOpened != 0) {
                         UIChatLogWindow_AddText("", GlobalText[474], 2);
                         continue;
                     }
@@ -963,13 +961,13 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
 
                 // ── Item 431 (Pet egg) — open ShowCheckBox dialog ─────────
                 if (useType == 431) {
-                    BYTE* CA = (BYTE*)DAT_07cf1ff4;
+                    BYTE* CA = (BYTE*)CharacterAttributePtr;
                     if (CA && *(WORD*)(CA + 14) < 10) {
                         // Por debajo de nivel 10 — muestra el mensaje "todavía no podés usar esto"
                         CreateOkMessageBox(GlobalText[749]);
                     } else {
                         // Copy item data + open the "really name your pet?" box
-                        memcpy(DAT_07ea5240,
+                        memcpy(PreviewItemData,
                                (BYTE*)(uintptr_t)&OffsetInventoryItems[0] + 68 * slotIdx,
                                0x44);
                         DAT_07ea5249_byte = (BYTE)slotIdx;
@@ -983,43 +981,43 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                 // con lógica extra de auto-drop cuando el baúl está abierto.
                 dword_7EA9800 = reinterpret_cast<BYTE*>(inv_base);
                 memcpy(pPickedItem, (BYTE*)(inv_base + 34 * gridSlotIdx), 68);
-                g_PickupLatchX = (DWORD)DAT_083a427c;
-                g_PickupLatchY = (DWORD)DAT_083a4278;
+                g_PickupLatchX = (DWORD)MouseX;
+                g_PickupLatchY = (DWORD)MouseY;
 
                 if ((BYTE*)inv_base == (BYTE*)&OffsetInventoryItems[0]) {
                     // Pickup from main inventory
                     // DESVIACION (DLL RightClickMove.cpp MoveItemToInterface):
                     // además del baúl, el trade y el chaos (sin mezcla en curso).
-                    if (DAT_07eaa11b != 0) {                         // TradeOpened
-                        byte_83A42EB = (char)sub_4D6020(
+                    if (TradeOpened != 0) {                         // TradeOpened
+                        byte_83A42EB = (char)ItemMove_SnapMouseToEmptySlot(
                             (int)(TradeInventoryStartX + 15),
                             (int)(TradeInventoryStartY + 0x10E),
                             &OffsetTradeItems[0],
                             8, 4);
-                    } else if (DAT_07eaa11a != 0 && MixState != 1) {  // ChaosMixOpened
-                        byte_83A42EB = (char)sub_4D6020(
-                            (int)(DAT_07eaa0c8 + 15),
-                            (int)(DAT_07eaa0cc + 0x6E),
+                    } else if (ChaosMixOpened != 0 && MixState != 1) {  // ChaosMixOpened
+                        byte_83A42EB = (char)ItemMove_SnapMouseToEmptySlot(
+                            (int)(PinDialogOriginX + 15),
+                            (int)(PinDialogOriginY + 0x6E),
                             &OffsetMixItems[0],
                             8, 4);
-                    } else if (DAT_07eaa119 != 0) {
+                    } else if (WarehouseOpened != 0) {
                         // Warehouse open → try auto-drop into warehouse
-                        byte_83A42EB = (char)sub_4D6020(
-                            (int)(DAT_07eaa0c8 + 15),
-                            (int)(DAT_07eaa0cc + 50),
+                        byte_83A42EB = (char)ItemMove_SnapMouseToEmptySlot(
+                            (int)(PinDialogOriginX + 15),
+                            (int)(PinDialogOriginY + 50),
                             &OffsetWarehouseItems[0],
                             8, 15);
-                    } else if (DAT_07eaa165 == 0) {
+                    } else if (ItemMoveInFlightFlag == 0) {
                         // DESVIACION (DLL RightClickMove.cpp CheckEquipItem):
                         // sin ventana abierta, el item va a su casillero.
                         const int target = RightClickMove_FindEquipSlot((const ITEM*)pPickedItem);
                         if (target >= 0) {
                             const int abs = grid_w * ((BYTE*)rowSlot)[63] + ((BYTE*)rowSlot)[62] + 12;
-                            DAT_07ea5b18 = (DWORD)abs;
+                            SourceInvSlot = (DWORD)abs;
                             UI_Main(abs, inv_base, grid_w);
                             CheckInventory = 0;
-                            DAT_07e11e78 = (DWORD)target;
-                            DAT_07eaa165 = 1;                        // EquipmentItem
+                            TargetInvSlot = (DWORD)target;
+                            ItemMoveInFlightFlag = 1;                        // EquipmentItem
                             g_ItemMoveSourcePool = &OffsetInventoryItems[0];
                             g_ItemMoveTargetPool = &OffsetInventoryItems[0];
                             SendRequestEquipmentItem(0, abs, (ITEM*)pPickedItem, 0, target);
@@ -1032,7 +1030,7 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                     if (!byte_83A42EB) {
                         const ITEM* stackItem = (const ITEM*)pPickedItem;
                         if (ItemStack_GetMaxStack(stackItem->Type, (stackItem->Level >> 3) & 0xF) != 0) {
-                            if (DAT_07eaa11b || (DAT_07eaa11a && MixState != 1) || DAT_07eaa119) {
+                            if (TradeOpened || (ChaosMixOpened && MixState != 1) || WarehouseOpened) {
                                 UIChatLogWindow_AddText("", GlobalText[474], 2);
                             } else {
                                 const BYTE slot = (BYTE)(grid_w * ((BYTE*)rowSlot)[63] + ((BYTE*)rowSlot)[62] + 12);
@@ -1044,10 +1042,10 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                     if (byte_83A42EB) {
                         int abs = grid_w * ((BYTE*)rowSlot)[63] +
                                   ((BYTE*)rowSlot)[62] + 12;
-                        DAT_07ea5b18 = (DWORD)abs;
-                        ItemPickedPos = abs;   // era DAT_07ea9844 (= bSell) — ver globals.h
-                        DAT_07e9138e = (byte)slotX;
-                        DAT_07e9138f = (byte)slotY;
+                        SourceInvSlot = (DWORD)abs;
+                        ItemPickedPos = abs;   // era ItemRenderMode (= bSell) — ver globals.h
+                        InvGridSelCol = (byte)slotX;
+                        InvGridSelRow = (byte)slotY;
                         UI_Main(abs, inv_base, grid_w);
                         dword_7E91388 = 1;
                         CheckInventory = 0;
@@ -1060,10 +1058,10 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                     // InventoryStartY+200) — los VALORES, igual que en el resto de los call sites.
                     // DESVIACION (DLL RightClickMove.cpp): también desde el
                     // trade y el chaos, no sólo con el baúl abierto.
-                    if (DAT_07eaa119 != 0 ||
+                    if (WarehouseOpened != 0 ||
                         (BYTE*)inv_base == (BYTE*)&OffsetTradeItems[0] ||
                         (BYTE*)inv_base == (BYTE*)&OffsetMixItems[0]) {
-                        byte_83A42EB = (char)sub_4D6020(
+                        byte_83A42EB = (char)ItemMove_SnapMouseToEmptySlot(
                             (int)(InventoryStartX + 15),
                             (int)(InventoryStartY + 200),
                             &OffsetInventoryItems[0],
@@ -1072,10 +1070,10 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                     if (byte_83A42EB) {
                         int abs = grid_w * ((BYTE*)rowSlot)[63] +
                                   ((BYTE*)rowSlot)[62];
-                        DAT_07ea5b18 = (DWORD)abs;
-                        ItemPickedPos = abs;   // era DAT_07ea9844 (= bSell) — ver globals.h
-                        DAT_07e9138e = (byte)slotX;
-                        DAT_07e9138f = (byte)slotY;
+                        SourceInvSlot = (DWORD)abs;
+                        ItemPickedPos = abs;   // era ItemRenderMode (= bSell) — ver globals.h
+                        InvGridSelCol = (byte)slotX;
+                        InvGridSelRow = (byte)slotY;
                         UI_Main(abs, inv_base, grid_w);
                         dword_7E91388 = 1;
                         CheckInventory = 0;
@@ -1089,7 +1087,7 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
 
             // ── BRANCH F: Ctrl + Q/W/E → hotkey assignment ─────────────────
             // Per líneas 989-1009 de IDA. Guarda el tipo de item en la tabla de 3 slots
-            // table at dword_559C60[0..2].
+            // table at QKeyItemType[0..2].
             SHORT ctrl = Platform::GetInput().KeyState(0x11);   // VK_CONTROL
             if ((char)((unsigned short)ctrl >> 8) == (char)0x80) {
                 int hk = -1;
@@ -1098,8 +1096,8 @@ void __cdecl FUN_004d23b0(char* origin_x, int origin_y, short* inv_base,
                 else if (PressKey(0x45)) hk = 2;   // E
                 if (hk >= 0) {
                     short tt = *(short*)(uintptr_t)CheckInventory;
-                    // dword_559C60[3] is contiguous (Q/W/E hotkey ring).
-                    int* hkArr = &DAT_00559c60;
+                    // QKeyItemType[3] is contiguous (Q/W/E hotkey ring).
+                    int* hkArr = &QKeyItemType;
                     hkArr[hk] = (int)tt;
                 }
             }
@@ -1115,7 +1113,7 @@ extern "C" void __cdecl Inventory_RenderAndClick(char* origin_x, int origin_y,
                                                   short* inv_base, int grid_w,
                                                   int grid_h, char mode_flag)
 {
-    FUN_004d23b0(origin_x, origin_y, inv_base, grid_w, grid_h, mode_flag);
+    Inventory_ClickHandler(origin_x, origin_y, inv_base, grid_w, grid_h, mode_flag);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1123,7 +1121,7 @@ extern "C" void __cdecl Inventory_RenderAndClick(char* origin_x, int origin_y,
 //
 // Dispatcher de drop del inventario: punto de entrada por frame que llama el tick
 // PacketUpdate de la escena (Net_PacketSession.cpp). Cuando el jugador tiene
-// un item levantado (dword_7E91388 > 0), esta función llama a
+// un item levantado (ItemPickedFlag > 0), esta función llama a
 // `Inventory_DropItem` (FUN_004D6470 = sub_4D6470) up to four times — once
 // por cada contexto de inventario visible: principal, trade, baúl y mix. Cada
 // llamada intenta soltar el item si el mouse-up cae sobre esa grilla.
@@ -1132,9 +1130,9 @@ extern "C" void __cdecl Inventory_RenderAndClick(char* origin_x, int origin_y,
 // guards antes de mandar el paquete de venta al NPC. Si no: soltar al piso
 // (item-drop packet 0x23).
 //
-// State machine: dword_7EAA13C tracks "sell-confirm" / "drop-confirm"
+// State machine: ItemActionMode tracks "sell-confirm" / "drop-confirm"
 // dialogs spawned via ShowCheckBox(3, ...) — case 1 = sell ok, case 2 =
-// drop ok. Both are completed via byte_559F5E response (1=yes, 2=no).
+// drop ok. Both are completed via MultiSelectResultA response (1=yes, 2=no).
 //
 // Anti-tamper: cada envío de paquete pasa por la misma encriptación XOR /
 // hash-table noise pattern documented in Item_ClickHandler.cpp's main
@@ -1163,9 +1161,9 @@ void __cdecl Inventory_DropDispatch(unsigned int a1, unsigned int /*a2*/)
     // ── Header: ChaosMix state machine ───────────────────────────────────────
     // (IDA L200-217). Con ChaosMixOpened, refresca MixType según el contenido de la grilla.
     // Este bloque no depende del item levantado — corre en cada tick.
-    extern char DAT_07eaa11a;        // ChaosMixOpened
-    extern DWORD DAT_07eaa140;       // MixState
-    if (DAT_07eaa11a != 0) {
+    extern char ChaosMixOpened;        // ChaosMixOpened
+    extern DWORD MixState;       // MixState
+    if (ChaosMixOpened != 0) {
         // IDA 004DF410: la receta se deriva de la Chaos Box en cada tick. En
         // el cliente original el tipo 1 podía quedar reservado a variantes de
         // evento recibidas en el talk packet; MuEmu no expone esa variante y
@@ -1176,59 +1174,59 @@ void __cdecl Inventory_DropDispatch(unsigned int a1, unsigned int /*a2*/)
         gChaosMixRates.Update((int)MixType, (const ITEM*)OffsetMixItems);
     }
 
-    if (DAT_07eaa165 != 0) return;   // EquipmentItem in-flight
+    if (ItemMoveInFlightFlag != 0) return;   // EquipmentItem in-flight
 
     // ── Respuestas de los diálogos de venta, suelo y confirmación de Trade ───
-    extern DWORD DAT_07eaa13c;       // estado activo (1=venta, 2=suelo, 3=Trade)
-    extern char  DAT_00559f5e;       // dialog response (1=yes, 2=no)
-    if (DAT_07eaa13c == 1) {
-        if (DAT_00559f5e == 1) {
+    extern DWORD ItemActionMode;       // estado activo (1=venta, 2=suelo, 3=Trade)
+    extern char  MultiSelectResultA;       // dialog response (1=yes, 2=no)
+    if (ItemActionMode == 1) {
+        if (MultiSelectResultA == 1) {
             // User confirmed sell-to-NPC. Server: [C1][04][33][slot], C3
             // (PMSG_ITEM_SELL_RECV, Encrypt=1).
-            DAT_07eaa13c = 0; DAT_00559f5e = 0;
+            ItemActionMode = 0; MultiSelectResultA = 0;
             BYTE pkt[4];
             pkt[0] = 0x33;
-            pkt[1] = (BYTE)DAT_07ea5b18;
+            pkt[1] = (BYTE)SourceInvSlot;
             SendC3Packet(pkt, 2);
-        } else if (DAT_00559f5e == 2) {
+        } else if (MultiSelectResultA == 2) {
             // Al CANCELAR el confirm, el item vuelve al slot de origen y se suelta el cursor.
-            DAT_07eaa13c = 0; DAT_00559f5e = 0;
+            ItemActionMode = 0; MultiSelectResultA = 0;
             RestorePickedItemToSource();
         }
         return;
     }
-    if (DAT_07eaa13c == 2) {
-        if (DAT_00559f5e == 1) {
-            DAT_07eaa13c = 0; DAT_00559f5e = 0;
+    if (ItemActionMode == 2) {
+        if (MultiSelectResultA == 1) {
+            ItemActionMode = 0; MultiSelectResultA = 0;
             // IDA 004DF410 case 2 (L402-431): este dialogo es SOLO la
             // confirmacion del Chaos Mix -- lo abre el boton OK de la Chaos
-            // Machine (ChaosMix_HitTest, unico writer de dword_7EAA13C = 2).  El
+            // Machine (ChaosMix_HitTest, unico writer de ItemActionMode = 2).  El
             // original pone MixState = 1 y manda C1:03:86 sin mas; para MuEmu
             // se agrega el tipo de receta reconocido localmente.
-            DAT_07eaa140 = 1;
+            MixState = 1;
             Net_SendChaosBoxMix((BYTE)MixType);
-        } else if (DAT_00559f5e == 2) {
-            DAT_07eaa13c = 0; DAT_00559f5e = 0;
+        } else if (MultiSelectResultA == 2) {
+            ItemActionMode = 0; MultiSelectResultA = 0;
             RestorePickedItemToSource();   // ver nota arriba
         }
         return;
     }
-    if (DAT_07eaa13c == 3) {
-        // IDA: FUN_004DF410 case 3. FUN_004EB7F0 abre ShowCheckBox(4,371,151)
-        // cuando el latch byte_7EAA0E8 sigue activo y la confirmación local fue
+    if (ItemActionMode == 3) {
+        // IDA: FUN_004DF410 case 3. SecondPassword_ShowCheckBox abre ShowCheckBox(4,371,151)
+        // cuando el latch TradeConfirmLatch sigue activo y la confirmación local fue
         // invalidada. OK rearma el estado alternando m_bMyConfirm y reenvía
         // C1:04:3C:<estado>; Cancel sólo descarta el diálogo.
-        if (DAT_00559f5e == 1) {
-            DAT_07eaa13c = 0;
-            DAT_00559f5e = 0;
+        if (MultiSelectResultA == 1) {
+            ItemActionMode = 0;
+            MultiSelectResultA = 0;
             m_bMyConfirm = m_bMyConfirm ? 0 : 1;
-            DAT_07eaa0e8 = 1;
+            TradeConfirmLatch = 1;
 
             BYTE pkt[4] = { 0xC1, 0x04, 0x3C, (BYTE)m_bMyConfirm };
             gNetwork.Send(pkt, sizeof(pkt));
-        } else if (DAT_00559f5e == 2) {
-            DAT_07eaa13c = 0;
-            DAT_00559f5e = 0;
+        } else if (MultiSelectResultA == 2) {
+            ItemActionMode = 0;
+            MultiSelectResultA = 0;
         }
         return;
     }
@@ -1244,43 +1242,43 @@ void __cdecl Inventory_DropDispatch(unsigned int a1, unsigned int /*a2*/)
         &OffsetInventoryItems[0], 8, 8, 0);
     // Trade grid (8x4, origin = TradeStart + 15,270) if trade open
     unsigned int dropTrade = 0;
-    if (DAT_07eaa11b != 0) {
-        extern DWORD DAT_07ea5290, DAT_07ea528c;   // TradeInventoryStartX/Y
+    if (TradeOpened != 0) {
+        extern DWORD TradeInventoryStartX, TradeInventoryStartY;   // TradeInventoryStartX/Y
         dropTrade = CallDropItem((int)a1,
-            (int)(DAT_07ea5290 + 15),
-            (int)(DAT_07ea528c + 270),
+            (int)(TradeInventoryStartX + 15),
+            (int)(TradeInventoryStartY + 270),
             &OffsetTradeItems[0], 8, 4, 1);
     }
 
     // Warehouse grid (8x15) if warehouse open
     unsigned int dropWH = 0;
-    if (DAT_07eaa119 != 0) {
+    if (WarehouseOpened != 0) {
         dropWH = CallDropItem((int)a1,
-            (int)(DAT_07eaa0c8 + 15),
-            (int)(DAT_07eaa0cc + 50),
+            (int)(PinDialogOriginX + 15),
+            (int)(PinDialogOriginY + 50),
             &OffsetWarehouseItems[0], 8, 15, 2);
     }
 
     // Grilla de mezcla del caos (8x4) si está abierta y la mezcla no se está procesando
     unsigned int dropMix = 0;
-    if (DAT_07eaa11a != 0 && DAT_07eaa140 != 1) {
+    if (ChaosMixOpened != 0 && MixState != 1) {
         dropMix = CallDropItem((int)a1,
-            (int)(DAT_07eaa0c8 + 15),
-            (int)(DAT_07eaa0cc + 110),
+            (int)(PinDialogOriginX + 15),
+            (int)(PinDialogOriginY + 110),
             &OffsetMixItems[0], 8, 4, 3);
     }
 
     // ── Mouse-up → drop didn't land in any inventory: shop sell or ground ──
     // A successful grid drop leaves the mouse edge set until the next input
     // update.  The fallback must therefore be gated by the return values, not
-    // merely by DAT_083a4124: otherwise the Chaos panel cancel path restores
+    // merely by MouseLButtonPush: otherwise the Chaos panel cancel path restores
     // the source after it has already sent its authoritative 0x24 request.
     const bool gridDropSent = (dropMain || dropTrade || dropWH || dropMix);
     if (gridDropSent) {
-        DAT_083a4124 = 0;
+        MouseLButtonPush = 0;
         return;
     }
-    if (DAT_083a4124) {
+    if (MouseLButtonPush) {
         // El panel Chaos real consume el click en toda su superficie antes de
         // que el dispatcher llegue al fallback de soltar al suelo. Mientras se
         // conserva el render genérico, esa capa de hit-test no existe y un
@@ -1288,15 +1286,15 @@ void __cdecl Inventory_DropDispatch(unsigned int a1, unsigned int /*a2*/)
         // derecho, filtrarse a EquipmentHitTest.  El rectángulo es el panel
         // izquierdo de Chaos (origen dword_7EAA0C8/CC, ancho 190) más su borde
         // de 5 px, que coincide con la franja observada x=451.
-        if (DAT_07eaa11a != 0 &&
-            (int)DAT_083a427c >= (int)DAT_07eaa0c8 &&
-            (int)DAT_083a427c <  (int)DAT_07eaa0c8 + 195 &&
-            (int)DAT_083a4278 >= (int)DAT_07eaa0cc &&
-            (int)DAT_083a4278 <  (int)DAT_07eaa0cc + 450)
+        if (ChaosMixOpened != 0 &&
+            (int)MouseX >= (int)PinDialogOriginX &&
+            (int)MouseX <  (int)PinDialogOriginX + 195 &&
+            (int)MouseY >= (int)PinDialogOriginY &&
+            (int)MouseY <  (int)PinDialogOriginY + 450)
         {
-            DAT_083a4124 = 0;
-            DAT_07e11d28 = 0;
-            DAT_00559bec = 6;
+            MouseLButtonPush = 0;
+            MoveDebounceCounter = 0;
+            MouseUpdateTimeMax = 6;
             RestorePickedItemToSource();
             return;
         }
@@ -1305,38 +1303,38 @@ void __cdecl Inventory_DropDispatch(unsigned int a1, unsigned int /*a2*/)
         // maneja las casillas de equipo (cubre las 4 grillas) y devuelve 0 apenas la
         // celda calculada da negativa, que es toda la zona arriba del grid
         // (mouseY < InventoryStartY+200). Esa región la maneja sub_4CDC70
-        // (FUN_004cdc70, desde sub_4E6550), así que acá se sale SIN consumir el click
+        // (Item_EquipSlotLogic, desde sub_4E6550), así que acá se sale SIN consumir el click
         // para que le llegue.
         if (!dropMain && !dropTrade && !dropWH && !dropMix &&
             InventoryOpened != 0 &&
-            (int)DAT_083a427c >= (int)InventoryStartX &&
-            (int)DAT_083a4278 <  (int)(InventoryStartY + 200))
+            (int)MouseX >= (int)InventoryStartX &&
+            (int)MouseY <  (int)(InventoryStartY + 200))
         {
             return;
         }
 
-        DAT_083a4124 = 0;
-        // NB: MouseUpdateTime (DAT_07e11d28) and MouseUpdateTimeMax
-        // (DAT_00559bec) se resetea para hacer debounce de la UI en el frame siguiente.
-        DAT_07e11d28 = 0;
-        DAT_00559bec = 6;
+        MouseLButtonPush = 0;
+        // NB: MouseUpdateTime (MoveDebounceCounter) and MouseUpdateTimeMax
+        // (MouseUpdateTimeMax) se resetea para hacer debounce de la UI en el frame siguiente.
+        MoveDebounceCounter = 0;
+        MouseUpdateTimeMax = 6;
 
         if (!dropMain && !dropTrade && !dropWH && !dropMix) {
             short pickType = *(short*)pPickedItem;
             int   pickLevel = (((int*)pPickedItem)[1] >> 3) & 0xF;
 
             // Shop NPC open + mouse over shop area → sell-with-confirm
-            if (DAT_07eaa118 != 0   // ShopOpened
-                && (int)DAT_083a427c >= (int)(DAT_07eaa0c8 + 15)
-                && (int)DAT_083a427c <  (int)(DAT_07eaa0c8 + 195)
-                && (int)DAT_083a4278 >= (int)(DAT_07eaa0cc + 50)
-                && (int)DAT_083a4278 <  (int)(DAT_07eaa0cc + 370))
+            if (ShopOpened != 0   // ShopOpened
+                && (int)MouseX >= (int)(PinDialogOriginX + 15)
+                && (int)MouseX <  (int)(PinDialogOriginX + 195)
+                && (int)MouseY >= (int)(PinDialogOriginY + 50)
+                && (int)MouseY <  (int)(PinDialogOriginY + 370))
             {
                 // Items que piden confirmacion al venderlos (joyas, armas
                 // especiales, +5 o mas, y EXCELLENT).  Lista 1:1 con IDA
                 // sub_4DF410 L753-766.
                 //
-                // El byte de excellent es byte_7E9136B, los 6 bits bajos.  Se
+                // El byte de excellent es PickedItemDurExtra, los 6 bits bajos.  Se
                 // lee con la misma expresion que la rama de tirar-al-piso de
                 // mas abajo.
                 const BYTE sellExcByte = *((BYTE*)pPickedItem + 0x6b - 0x44);
@@ -1351,8 +1349,8 @@ void __cdecl Inventory_DropDispatch(unsigned int a1, unsigned int /*a2*/)
                     ((sellExcByte & 0x3F) != 0);
 
                 if (needConfirm) {
-                    DAT_07eaa13c = 1;
-                    DAT_00559f5e = (char)0xFF;   // = -1, "waiting for response"
+                    ItemActionMode = 1;
+                    MultiSelectResultA = (char)0xFF;   // = -1, "waiting for response"
                     ShowCheckBox(3, 536, 151);
                     return;
                 }
@@ -1363,11 +1361,11 @@ void __cdecl Inventory_DropDispatch(unsigned int a1, unsigned int /*a2*/)
                 }
 
                 // Direct sell — [C1][04][33][slot], C3 (Encrypt=1).
-                DAT_07eaa13c = 0;
-                DAT_00559f5e = (char)0xFF;
+                ItemActionMode = 0;
+                MultiSelectResultA = (char)0xFF;
                 BYTE pkt[4];
                 pkt[0] = 0x33;
-                pkt[1] = (BYTE)DAT_07ea5b18;
+                pkt[1] = (BYTE)SourceInvSlot;
                 SendC3Packet(pkt, 2);
                 return;
             }
@@ -1378,7 +1376,7 @@ void __cdecl Inventory_DropDispatch(unsigned int a1, unsigned int /*a2*/)
             //     UIChatLogWindow_AddText(byte_7EAA194, GlobalText[269], 2)
             // Lista de tipos 1:1 con IDA (incluye 435 y el gate de excellent).
             {
-                BYTE excByte = *((BYTE*)pPickedItem + 0x6b - 0x44);  // byte_7E9136B
+                BYTE excByte = *((BYTE*)pPickedItem + 0x6b - 0x44);  // 0x07E9136B
                 bool bForbidden =
                     (pickType >= ITEM_HELPER_ANGEL && pickType <= ITEM_HELPER_DINORANT) ||
                     pickType == ITEM_JEWEL_BLESS || pickType == ITEM_JEWEL_SOUL || pickType == ITEM_JEWEL_LIFE ||
@@ -1404,22 +1402,22 @@ void __cdecl Inventory_DropDispatch(unsigned int a1, unsigned int /*a2*/)
             // item al suelo (la zona de abajo del grid son la barra de zen y los
             // botones). Con v144 = 0 el bloque del suelo no corre y la ejecucion cae en
             // LABEL_301: `sub_4CD3B0(1, 0)`, que devuelve el item a su celda.
-            if (InventoryOpened != 0 && (int)DAT_083a427c >= (int)InventoryStartX) {
+            if (InventoryOpened != 0 && (int)MouseX >= (int)InventoryStartX) {
                 Item_ReturnPickedItem();
                 return;
             }
 
             // Desviación: soltar sobre el panel del BAUL o el de la CHAOS MACHINE (que van a
-            // la izquierda, en dword_7EAA0C8) pero fuera de sus celdas no tira al suelo.
+            // la izquierda, en PinDialogOriginX) pero fuera de sus celdas no tira al suelo.
             // En IDA no hace falta porque el drop sobre esos paneles lo consume
             // `sub_4D6470` entero (36 KB, maneja los cuatro grids Y sus zonas
             // muertas).  Nuestro port partio esa responsabilidad entre
             // `Inventory_DropItemEx` (solo las celdas) y este dispatcher, asi
             // que el hueco hay que taparlo aca, con el mismo criterio que el guard de las
             // casillas de equipo.
-            if ((DAT_07eaa119 != 0 || DAT_07eaa11a != 0)) {
-                const int px = (int)DAT_083a427c, py = (int)DAT_083a4278;
-                const int ox = (int)DAT_07eaa0c8, oy = (int)DAT_07eaa0cc;
+            if ((WarehouseOpened != 0 || ChaosMixOpened != 0)) {
+                const int px = (int)MouseX, py = (int)MouseY;
+                const int ox = (int)PinDialogOriginX, oy = (int)PinDialogOriginY;
                 if (px >= ox && px < ox + 190 && py >= oy && py < oy + 433) {
                     // IDA L1004-1010 (baul/chaos && MouseX >= dword_7EAA0C8 ->
                     // v144 = 0) -> LABEL_301: el item vuelve a su celda.
@@ -1435,7 +1433,7 @@ void __cdecl Inventory_DropDispatch(unsigned int a1, unsigned int /*a2*/)
             pkt[0] = 0x23;
             pkt[1] = dx;   // celda bajo el cursor
             pkt[2] = dy;
-            pkt[3] = (BYTE)DAT_07ea5b18;
+            pkt[3] = (BYTE)SourceInvSlot;
             SendC3Packet(pkt, 4);
         }
     }

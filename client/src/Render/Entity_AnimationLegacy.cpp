@@ -44,27 +44,27 @@ extern void __cdecl operator_delete(void* ptr);
 
 
 // FUN_004FAA70 @ 0x004FAA70 — Entity_PrepareRenderData(entity_ptr, shadow_pass, lod).
-// Copies entity data into the class render struct at DAT_05828D58 + entity_type*0xBC.
-// Guards on entity visibility (entity+0x168 >= DAT_005524F8).
+// Copies entity data into the class render struct at ModelsBase + entity_type*0xBC.
+// Guards on entity visibility (entity+0x168 >= 0).
 // Calls Sprite_Draw (BMD_Animation) and shadow/bone pass (Skeleton_Transform, BMD__RenderBody).
 // Returns 1 on success, 0 if out of range.
 // IDA: Calc_RenderObject (0x004FAA70)
 int __cdecl Calc_RenderObject(OBJECT* object, char param_2, int param_3) {
     BYTE* param_1 = reinterpret_cast<BYTE*>(object);
     float fVar2 = AsObject(param_1)->Alpha;
-    if (fVar2 < _DAT_005524f8)
+    if (fVar2 < 0.01f)
         return 0;
-    BMD* this_ = AsModel(DAT_05828d58) + object->Type;
+    BMD* this_ = AsModel(ModelsBase) + object->Type;
     this_->BodyHeight = 0.0f;
     this_->ContrastEnable = AsObject(param_1)->ContrastEnable;
     Entity_GetLightScale(reinterpret_cast<uintptr_t>(param_1), reinterpret_cast<uintptr_t>(this_));
-    void* puVar3 = AsObject(param_1)->EnableBoneMatrix == 0 ? (void*)&DAT_06970a9c
+    void* puVar3 = AsObject(param_1)->EnableBoneMatrix == 0 ? (void*)&BoneScratchRoot
                                                                   : AsObject(param_1)->BoneMatrices;
     ObjectPose_PrepareBones(object, this_, (float*)puVar3, param_2);
     short cls = AsObject(param_1)->Type;
-    _DAT_005597c8 = 1.0f;
-    if      (param_3 == 3) _DAT_005597c8 = 1.4f;
-    else if (param_3 == 2) _DAT_005597c8 = 1.2f;
+    EntityLodScale = 1.0f;
+    if      (param_3 == 3) EntityLodScale = 1.4f;
+    else if (param_3 == 2) EntityLodScale = 1.2f;
     else if (param_3 == 1) {
         // Contorno de seleccion (hover sobre monstruo/NPC).  IDA 0x4FAA70
         // case 1: DOS pasadas en RENDER_COLOR (flag 64), primero un contorno
@@ -77,17 +77,17 @@ int __cdecl Calc_RenderObject(OBJECT* object, char param_2, int param_3) {
             if (npc) {
                 this_->BodyLight[0] = pass ? 0.16f : 0.02f;
                 this_->BodyLight[1] = pass ? 0.7f  : 0.1f;
-                _DAT_005597c8 = pass ? 1.08f : 1.2f;
+                EntityLodScale = pass ? 1.08f : 1.2f;
             } else {
                 this_->BodyLight[0] = pass ? 0.7f  : 0.1f;
                 this_->BodyLight[1] = pass ? 0.07f : 0.01f;
                 if (cls == 0x12e)
-                    _DAT_005597c8 = pass ? 1.08f : 1.2f;
+                    EntityLodScale = pass ? 1.08f : 1.2f;
                 else
-                    _DAT_005597c8 = (pass ? 0.039999999f : 0.1f) / AsObject(param_1)->Scale + 1.0f;
+                    EntityLodScale = (pass ? 0.039999999f : 0.1f) / AsObject(param_1)->Scale + 1.0f;
             }
             this_->BodyLight[2] = 0.0f;
-            puVar3 = (*(char *)&AsObject(param_1)->EnableBoneMatrix=='\0') ? &DAT_06970a9c : static_cast<void*>(object->BoneMatrices);
+            puVar3 = (*(char *)&AsObject(param_1)->EnableBoneMatrix=='\0') ? &BoneScratchRoot : static_cast<void*>(object->BoneMatrices);
             // IDA pasa `Translate` tal cual a sub_4404E0 (BMD_Animation recibe !Translate).
             Skeleton_Transform(this_, reinterpret_cast<float*>(puVar3), object->BoundingBoxMin,
                          object->BoundingBoxMax, object->OBB, param_2);
@@ -97,21 +97,21 @@ int __cdecl Calc_RenderObject(OBJECT* object, char param_2, int param_3) {
                          AsObject(param_1)->BlendMeshTexCoordV,  AsObject(param_1)->HiddenMesh, 0xffffffff);
         }
         Entity_GetLightScale(reinterpret_cast<uintptr_t>(param_1), reinterpret_cast<uintptr_t>(this_));
-        _DAT_005597c8 = 1.0f;
+        EntityLodScale = 1.0f;
     }
-    puVar3 = (*(char *)&AsObject(param_1)->EnableBoneMatrix=='\0') ? (void*)&DAT_06970a9c : static_cast<void*>(object->BoneMatrices);
+    puVar3 = (*(char *)&AsObject(param_1)->EnableBoneMatrix=='\0') ? (void*)&BoneScratchRoot : static_cast<void*>(object->BoneMatrices);
     Skeleton_Transform(this_, reinterpret_cast<float*>(puVar3), object->BoundingBoxMin,
                  object->BoundingBoxMax, object->OBB, param_2);
     return 1;
 }
 // Skeleton_Transform @ 0x004404e0 — Skeleton_Transform (thiscall: bone→vertex pipeline)
 // Applies bone matrices from param_1 to all mesh vertices; stores results in
-// DAT_05846224 (vertex buffer, stride 3 floats per vertex, indexed by sub-mesh).
+// BoneVertOutBase (vertex buffer, stride 3 floats per vertex, indexed by sub-mesh).
 // param_1  = bone transform array (param_1[bone*0x30] = 3x4 matrix)
 // param_2  = AABB min ptr (in), param_3 = AABB max ptr (in)
 // param_4  = AABB output ptr [12 floats: min.xyz, size.xyz, 3 zeros, size.w]
 // param_5  = if non-zero: also applies entity scale+offset (this+0x68/6c/70/74)
-// Uses _DAT_005597c8 scale flag: if != 1.0 → calls Vector_Rotate (scaled transform).
+// Uses EntityLodScale scale flag: if != 1.0 → calls Vector_Rotate (scaled transform).
 void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2, float* param_3,
                            float* param_4, char param_5) {
     // [0-2]=AABB min, [3-5]=AABB max / work dir, [6..8]=transformed dir.
@@ -133,8 +133,8 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
     // itere por normales y v37 += 15000 al final del mesh avance a la base del
     // siguiente mesh ABSOLUTAMENTE. Con un único puntero se acumularía el offset
     // de normales y se desalinearían los slots que BMD_DrawMesh lee en
-    // DAT_077e298c + meshIdx*15000.
-    float* local_68_base = (float*)&DAT_077e298c;  // base del mesh actual
+    // IntensityTransformBuf + meshIdx*15000.
+    float* local_68_base = (float*)&IntensityTransformBuf;  // base del mesh actual
     float* local_68      = local_68_base;          // puntero de trabajo
     intptr_t local_74;
 
@@ -154,7 +154,7 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
 
     // optional lighting direction compute
     if (*(char*)&((BMD*)(uintptr_t)(this_))->LightEnable != '\0') {
-        if (DAT_005597c4 == '\0') {
+        if (RenderSubModeFlag == '\0') {
             local_54[3] = 0.0f; local_54[4] = -1.5f; local_54[5] = 0.0f;
         } else {
             local_54[3] = 1.3f; local_54[4] = 0.0f; local_54[5] = 2.0f;
@@ -163,7 +163,7 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
         Vector_InverseRotate(local_54 + 3, local_30, local_54 + 6);
     }
     // init AABB for bounding-box mode
-    if (DAT_07e11d30 == 2) {
+    if (EditFlag == 2) {
         local_54[0]=999999.0f; local_54[1]=999999.0f; local_54[2]=999999.0f;
         local_54[3]=-999999.0f; local_54[4]=-999999.0f; local_54[5]=-999999.0f;
     }
@@ -190,7 +190,7 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
     // DESVIACION: agrupar sólo matemática independiente (IDA 0x004404E0).
     // Editor y datos inválidos conservan el recorrido original y sus diagnósticos.
     std::size_t transformCount = 0;
-    bool parallelSafe = DAT_07e11d30 != 2;
+    bool parallelSafe = EditFlag != 2;
     for (int i=0; parallelSafe && i<meshCount; ++i) {
         const char* mesh=(const char*)(uintptr_t)(uintptr_t)((BMD*)(uintptr_t)(this_))->Meshs+i*sizeof(ClothModelMesh);
         const int vc=*(const short*)(mesh+4), nc=*(const short*)(mesh+6);
@@ -198,10 +198,10 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
         transformCount+=vc+nc;
     }
     // No despertar trabajadores para las numerosas mallas pequeñas del juego.
-    const float transformCoefficients[3]={_DAT_00552530,_DAT_005528b4,_DAT_005526e4};
+    const float transformCoefficients[3]={0.8f,0.4f,0.2f};
     bool transformed = parallelSafe && ObjectPose_RestoreGeometry(this_,(const float*)(uintptr_t)param_1,
-        _DAT_005597c8,param_5,local_54+6,transformCoefficients,(float*)&DAT_0584621c,
-        (float*)&DAT_06f433bc,(float*)&DAT_077e298c);
+        EntityLodScale,param_5,local_54+6,transformCoefficients,(float*)&BoneVertBufBase,
+        (float*)&TransformedNormalBuf,(float*)&IntensityTransformBuf);
     if (!transformed && parallelSafe && transformCount >= 4096) {
         static std::vector<TransformMath::Mesh> transformMeshes;
         transformMeshes.clear();
@@ -213,8 +213,8 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
             // Si se superponen slots de salida, conservar el orden secuencial.
             if((uintptr_t)vp<0x10000u || (uintptr_t)np<0x10000u ||
                vc>15000 || nc>15000) { parallelSafe=false; break; }
-            transformMeshes.push_back({vp,np,(float*)((char*)&DAT_0584621c+i*180000),
-                (float*)((char*)&DAT_06f433bc+i*180000),(float*)&DAT_077e298c+i*15000,
+            transformMeshes.push_back({vp,np,(float*)((char*)&BoneVertBufBase+i*180000),
+                (float*)((char*)&TransformedNormalBuf+i*180000),(float*)&IntensityTransformBuf+i*15000,
                 (std::size_t)vc,(std::size_t)nc});
         }
         const int nBones=*(const short*)((char*)this_+0x22);
@@ -230,11 +230,11 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
         }
         if(parallelSafe) {
             TransformMath::Batch batch{transformMeshes.data(),transformMeshes.size(),
-                (const float*)(uintptr_t)param_1,_DAT_005597c8,*(float*)&((BMD*)(uintptr_t)(this_))->BodyScale,
+                (const float*)(uintptr_t)param_1,EntityLodScale,*(float*)&((BMD*)(uintptr_t)(this_))->BodyScale,
                 {*(float*)&((BMD*)(uintptr_t)(this_))->BodyOrigin[0],*(float*)&((BMD*)(uintptr_t)(this_))->BodyOrigin[1],*(float*)&((BMD*)(uintptr_t)(this_))->BodyOrigin[2]},
                 {local_54[6],local_54[7],local_54[8]},
-                {_DAT_00552530,_DAT_005528b4,_DAT_005526e4},
-                _DAT_005597c8==_DAT_0055256c,param_5!='\0',*(char*)&((BMD*)(uintptr_t)(this_))->LightEnable!='\0'};
+                {0.8f,0.4f,0.2f},
+                EntityLodScale==1.0f,param_5!='\0',*(char*)&((BMD*)(uintptr_t)(this_))->LightEnable!='\0'};
             auto& workers=TransformWorkers::SharedTeam();
             workers.Run(transformCount,&batch,TransformMath::Run);
             transformed=true;
@@ -273,8 +273,8 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
                 continue;
             }
         }
-        local_74 = -(reinterpret_cast<intptr_t>(&DAT_0584621c) + local_64);
-        float* pfOut = (float*)((char*)&DAT_05846224 + local_64);
+        local_74 = -(reinterpret_cast<intptr_t>(&BoneVertBufBase) + local_64);
+        float* pfOut = (float*)((char*)&BoneVertOutBase + local_64);
         // GUARD (desviación): el indice de hueso del vertice (`*vs`) indexa
         // `BoneTransform` con stride 0x30, y ese bloque lo aloca
         // CreateCharacterPointer como `operator_new(48 * numBones)`.  Un vertice
@@ -303,7 +303,7 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
                 continue;
             }
             float* pfDst = pfOut - 2;
-            if (_DAT_005597c8 == _DAT_0055256c) {
+            if (EntityLodScale == 1.0f) {
                 Vector_Transform((float*)(vs + 2), (float*)(*vs * 0x30 + param_1), pfDst);
                 if (param_5 != '\0') {
                     float sc = *(float*)&((BMD*)(uintptr_t)(this_))->BodyScale;
@@ -311,15 +311,15 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
                 }
             } else {
                 Vector_Rotate((float*)(vs + 2), (float*)(*vs * 0x30 + param_1), pfDst);
-                pfDst[0]  = _DAT_005597c8 * pfDst[0]  + *(float*)(*vs * 0x30 + 0x0c + param_1);
-                pfOut[-1] = _DAT_005597c8 * pfOut[-1] + *(float*)(*vs * 0x30 + 0x1c + param_1);
-                *pfOut    = _DAT_005597c8 * *pfOut    + *(float*)(*vs * 0x30 + 0x2c + param_1);
+                pfDst[0]  = EntityLodScale * pfDst[0]  + *(float*)(*vs * 0x30 + 0x0c + param_1);
+                pfOut[-1] = EntityLodScale * pfOut[-1] + *(float*)(*vs * 0x30 + 0x1c + param_1);
+                *pfOut    = EntityLodScale * *pfOut    + *(float*)(*vs * 0x30 + 0x2c + param_1);
                 if (param_5 != '\0') {
                     float sc = *(float*)&((BMD*)(uintptr_t)(this_))->BodyScale;
                     pfDst[0] *= sc; pfOut[-1] *= sc; *pfOut *= sc;
                 }
             }
-            if (DAT_07e11d30 == 2) {
+            if (EditFlag == 2) {
                 // update AABB (min/max per axis)
                 if (pfDst[0] < local_54[0]) local_54[0] = pfDst[0];
                 if (local_54[3] < pfDst[0]) local_54[3] = pfDst[0];
@@ -337,14 +337,14 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
         }
         // normal transform + per-vertex lighting (IDA sub_4404E0 L172-206).
         // Son DOS buffers separados:
-        //   • normal transformada → NORMAL buffer (DAT_06f433bc + local_64,
+        //   • normal transformada → NORMAL buffer (TransformedNormalBuf + local_64,
         //     stride 3 floats), que lee el chrome env-map en BMD_DrawMesh.
         //   • intensidad de luz (dot con la dir de luz) → LIGHT buffer
-        //     (DAT_077e298c, stride 1 float).
-        // `v20 = &unk_6F433BC + v9` (normal) y `v35 = v37` (light) son punteros
+        //     (IntensityTransformBuf, stride 1 float).
+        // `v20 = &TransformedNormalBuf + v9` (normal) y `v35 = v37` (light) son punteros
         // independientes, fiel a IDA.
         local_68 = local_68_base;   // v35 — light buffer (1 float/vertex)
-        float* pfNrmBase = (float*)((char*)&DAT_06f433bc + local_64);  // v20 — normal buffer (3 floats/normal)
+        float* pfNrmBase = (float*)((char*)&TransformedNormalBuf + local_64);  // v20 — normal buffer (3 floats/normal)
         int normCount = (int)(short)*(short*)(meshPtr + 6);
         for (intptr_t ni = 0; ni < normCount; ni++) {
             short* ns = (short*)(ni * 0x14 + (intptr_t)((ClothModelMesh*)(uintptr_t)meshPtr)->Normals);
@@ -354,8 +354,8 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
                 // dot(transformed_light_dir, transformed_normal):
                 // Ghidra local_38 == local_54[7] (Y), local_34 == local_54[8] (Z).
                 float lit = (local_54[7] * pfNrmBase[1] + local_54[6] * pfNrmBase[0] + local_54[8] * pfNrmBase[2])
-                            * _DAT_00552530 + _DAT_005528b4;
-                if (lit < _DAT_005526e4) lit = _DAT_005526e4;
+                            * 0.8f + 0.4f;
+                if (lit < 0.2f) lit = 0.2f;
                 *local_68 = lit;
             }
             local_68++;       // light buffer += 1 float
@@ -363,7 +363,7 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
         }
         // ── DIAG: dump first transformed vertex of mesh 0 on first call ──
         if (diagInGame && diag_this_call < 200 && local_58 == 0 && vertCount > 0) {
-            float* pfFirst = (float*)((char*)&DAT_05846224 + 0);
+            float* pfFirst = (float*)((char*)&BoneVertOutBase + 0);
         }
         local_6c += sizeof(ClothModelMesh);
         // Avanzar la BASE del mesh 15000 floats (60000 bytes)
@@ -381,17 +381,17 @@ void __cdecl Skeleton_Transform(void* this_, float* boneMatrices, float* param_2
         const auto* vp=(const unsigned char*)(uintptr_t)(intptr_t)((ClothModelMesh*)(uintptr_t)mesh)->Vertices;
         const auto* np=(const unsigned char*)(uintptr_t)(intptr_t)((ClothModelMesh*)(uintptr_t)mesh)->Normals;
         if((uintptr_t)vp<0x10000u || (uintptr_t)np<0x10000u || vc<=0 || vc>20000 || nc<0 || nc>20000) continue;
-        skinSources.push_back({mesh,vp,np,(const float*)((const char*)&DAT_0584621c+i*180000),
-            (const float*)&DAT_077e298c+i*15000,vc,nc});
+        skinSources.push_back({mesh,vp,np,(const float*)((const char*)&BoneVertBufBase+i*180000),
+            (const float*)&IntensityTransformBuf+i*15000,vc,nc});
     }
-    const float zero[3]{},coefficients[3]{_DAT_00552530,_DAT_005528b4,_DAT_005526e4};
+    const float zero[3]{},coefficients[3]{0.8f,0.4f,0.2f};
     Skinning::Capture(this_,(const float*)(uintptr_t)param_1,(std::min)(200,int(*(short*)((char*)this_+0x22))),
-        _DAT_005597c8,param_5?*(float*)&((BMD*)(uintptr_t)(this_))->BodyScale:1.f,
+        EntityLodScale,param_5?*(float*)&((BMD*)(uintptr_t)(this_))->BodyScale:1.f,
         param_5?(float*)((char*)this_+0x6c + BMD_FIELD_SHIFT):zero,local_54+6,coefficients,skinSources.data(),skinSources.size());
     if (diagInGame && s_xform_dbg < 200) s_xform_dbg++;
     // El editor usa los extremos de la malla; la ruta normal, los bounds locales.
-    const float* boundsMin = DAT_07e11d30 == 2 ? local_54 : param_2;
-    const float* boundsMax = DAT_07e11d30 == 2 ? local_54 + 3 : param_3;
+    const float* boundsMin = EditFlag == 2 ? local_54 : param_2;
+    const float* boundsMax = EditFlag == 2 ? local_54 + 3 : param_3;
     ObjectBounds_Build(boundsMin, boundsMax, (float*)((char*)this_ + 0x6c + BMD_FIELD_SHIFT), param_4);
     // compute largest dimension for bounding radius
     float dx=local_54[3]-local_54[0], dy=local_54[4]-local_54[1], dz=local_54[5]-local_54[2];

@@ -23,8 +23,8 @@ template<class T> void Cached(Switch value,T& cache,Gfx::Cap cap) {
 void DepthWrite(Switch value) {
     if(value==Switch::Keep)return;
     const bool next=value==Switch::On;
-    if((DAT_083a42e8!=0)==next)return;
-    DAT_083a42e8=next?1:0;Gfx::DepthMask(next);
+    if((DepthMaskCache!=0)==next)return;
+    DepthMaskCache=next?1:0;Gfx::DepthMask(next);
 }
 }
 bool Enabled(){return enabled;}
@@ -35,8 +35,8 @@ void Toggle() {
 }
 bool Apply(const Material& m) {
     if(!enabled)return false;
-    if(m.blend!=Blend::Keep&&DAT_083a412c!=static_cast<int>(m.blend)) {
-        DAT_083a412c=static_cast<int>(m.blend);
+    if(m.blend!=Blend::Keep&&BlendModeCache!=static_cast<int>(m.blend)) {
+        BlendModeCache=static_cast<int>(m.blend);
         if(m.blend==Blend::Opaque)Gfx::Disable(Gfx::Cap::Blend);
         else {
             using F=Gfx::Factor;
@@ -52,12 +52,12 @@ bool Apply(const Material& m) {
             }
         }
     }
-    Cached(twoSidedDepth?Switch::Off:m.cull,DAT_083a411c,Gfx::Cap::CullFace);DepthWrite(m.depthWrite);
-    Cached(m.alphaTest,DAT_083a411d,Gfx::Cap::AlphaTest);Cached(m.texture,DAT_083a4125,Gfx::Cap::Texture2D);
-    Cached(m.depthTest,DAT_083a411e,Gfx::Cap::DepthTest);
+    Cached(twoSidedDepth?Switch::Off:m.cull,CullFaceEnableCache,Gfx::Cap::CullFace);DepthWrite(m.depthWrite);
+    Cached(m.alphaTest,AlphaTestEnableCache,Gfx::Cap::AlphaTest);Cached(m.texture,Texture2DEnableCache,Gfx::Cap::Texture2D);
+    Cached(m.depthTest,DepthTestEnableCache,Gfx::Cap::DepthTest);
     // FogEnable expresa política de escena, no un caché del estado real.
     // Si vale cero, los helpers históricos NO cambian la niebla.
-    if(DAT_083a42ea&&m.fog!=Fog::Keep)Gfx::SetEnabled(Gfx::Cap::Fog,m.fog==Fog::Scene);
+    if(FogEnable&&m.fog!=Fog::Keep)Gfx::SetEnabled(Gfx::Cap::Fog,m.fog==Fog::Scene);
     return true;
 }
 bool ApplySequence(const MaterialSequence& sequence){
@@ -70,13 +70,13 @@ TwoSidedScope::TwoSidedScope(bool twoSided){
     overrideCull=true;previousCull=Gfx::IsEnabled(Gfx::Cap::CullFace);++twoSidedDepth;
     // Corregir también una entrada con caché incoherente; la propiedad de
     // dos caras es explícita y se mantiene en los materiales interiores.
-    Gfx::Disable(Gfx::Cap::CullFace);DAT_083a411c=0;
+    Gfx::Disable(Gfx::Cap::CullFace);CullFaceEnableCache=0;
 }
 TwoSidedScope::~TwoSidedScope(){
     if(!overrideCull)return;
     --twoSidedDepth;const bool restore=twoSidedDepth?false:previousCull;
     Gfx::SetEnabled(Gfx::Cap::CullFace,restore);
-    DAT_083a411c=restore?1:0;
+    CullFaceEnableCache=restore?1:0;
 }
 bool BeginText(){
     if(!enabled)return false;
@@ -89,18 +89,18 @@ bool BeginText(){
 void EndText(){Gfx::PopAttrib();}
 InheritedBlendScope::InheritedBlendScope(){
     if(!enabled)return;
-    active=true;wasEnabled=Gfx::IsEnabled(Gfx::Cap::Blend);previousBlend=DAT_083a412c;
+    active=true;wasEnabled=Gfx::IsEnabled(Gfx::Cap::Blend);previousBlend=BlendModeCache;
     Gfx::Enable(Gfx::Cap::Blend);
     // No representa ningún preset: BMD__RenderBodyShadow no selecciona mezcla.
     // Invalidar temporalmente evita anunciar factores que no se establecieron.
-    DAT_083a412c=-1;
+    BlendModeCache=-1;
 }
 InheritedBlendScope::~InheritedBlendScope(){
     if(!active)return;
     // La sombra no cambia factores. La barrera envía sus triángulos antes
     // de recuperar activación; los demás estados quedan como en referencia.
     Gfx::SetEnabled(Gfx::Cap::Blend,wasEnabled);
-    DAT_083a412c=previousBlend;
+    BlendModeCache=previousBlend;
 }
 bool BeginOverlay(const OverlayState& s){
     if(!enabled)return false;
@@ -126,8 +126,8 @@ bool BeginView(const ViewState& s){
     Gfx::SetEnabled(Gfx::Cap::AlphaTest,s.alphaTest);Gfx::SetEnabled(Gfx::Cap::Texture2D,s.texture);
     Gfx::SetEnabled(Gfx::Cap::DepthTest,s.depthTest);Gfx::SetEnabled(Gfx::Cap::CullFace,s.cull);
     Gfx::DepthMask(s.depthWrite);
-    DAT_083a411d=s.alphaTest?1:0;DAT_083a4125=s.texture?1:0;
-    DAT_083a411e=s.depthTest?1:0;DAT_083a411c=s.cull?1:0;DAT_083a42e8=s.depthWrite?1:0;
+    AlphaTestEnableCache=s.alphaTest?1:0;Texture2DEnableCache=s.texture?1:0;
+    DepthTestEnableCache=s.depthTest?1:0;CullFaceEnableCache=s.cull?1:0;DepthMaskCache=s.depthWrite?1:0;
     // Materials::Compare comparte el orden de Gfx::Compare.
     Gfx::DepthFunc(static_cast<Gfx::Compare>(s.depthFunction));
     Gfx::AlphaFunc(static_cast<Gfx::Compare>(s.alphaFunction),s.alphaReference);
@@ -145,9 +145,9 @@ bool BindTexture(TextureSlot texture){
     const unsigned slot=static_cast<unsigned>(texture.index);
     // Conservar el caché por slot y el orden de referencia: publicar el índice
     // antes de asegurar la tabla, y resolver el handle sólo si cambia el slot.
-    if(DAT_00561574!=slot){
-        DAT_00561574=slot;ResourceTables::EnsureTextures(std::size_t(slot)+1);
-        const unsigned native=(&DAT_083a7ccc)[std::size_t(slot)* TEXTURE_STRIDE_DWORDS];
+    if(BoundTextureSlotCache!=slot){
+        BoundTextureSlotCache=slot;ResourceTables::EnsureTextures(std::size_t(slot)+1);
+        const unsigned native=(&BitmapsGlHandle)[std::size_t(slot)* TEXTURE_STRIDE_DWORDS];
         Gfx::BindTexture(native);
     }
     return true;
@@ -189,7 +189,7 @@ void Select(const PassState& s){
     }
     case P::Surface:{
         GL_BindTextureSlot(s.textureSlot);
-        const bool alpha=(s.flags&0xc0)==0&&(s.alpha||(&DAT_083a7cc8)[std::size_t(s.textureSlot)* TEXTURE_STRIDE]=='\x04');
+        const bool alpha=(s.flags&0xc0)==0&&(s.alpha||(&BitmapsBpp)[std::size_t(s.textureSlot)* TEXTURE_STRIDE]=='\x04');
         if(!Materials::Apply(MeshDraw::SurfaceMaterial(s.flags,alpha)))ReferenceSurface(s.flags,alpha);
         break;
     }

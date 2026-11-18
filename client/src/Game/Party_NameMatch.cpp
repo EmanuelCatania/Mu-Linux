@@ -3,9 +3,9 @@
 //
 // Party_MatchEntityNames — matches party slot names to live entity indices.
 //
-// Scans the entity array (base DAT_07abf5d0, stride 0x394) for entries with
+// Scans the entity array (base CharactersClient, stride 0x394) for entries with
 // entity_type == 0x186 (player) and pcVar7[0x84] == 1 (active/visible).
-// For each party slot starting at DAT_07e11e9c (stride 0x24):
+// For each party slot starting at LegacyPartySlotArray (stride 0x24):
 //   - Compares slot name (_Str1) with entity name at pcVar7+0x1c1 via strncmp
 //   - On match: writes entity index into *(int*)(_Str1+0x1c), entity pos ptr into *(int*)(_Str1+0x20)
 // Second loop: for slots with index < 0 ("unmatched"),
@@ -19,10 +19,10 @@
 void __cdecl Party_MatchEntityNames(void)
 {
     // sub_4AFB00 scans the 400-entry CharactersClient array (0x394 bytes
-    // per entry), not the address of the DAT_07abf5d0 pointer variable.
+    // per entry), not the address of the CharactersClient pointer variable.
     // The last two predicates are material: a party member that is merely
     // allocated but not on-screen must not receive an overhead HP bar.
-    char* entity = (char*)(uintptr_t)DAT_07abf5d0;
+    char* entity = (char*)(uintptr_t)CharactersClient;
     if (!entity)
         return;
 

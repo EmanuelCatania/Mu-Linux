@@ -6,12 +6,12 @@
 //   2. Determine which entity/item is under the cursor and store hover targets.
 //
 // ── Cursor billboard ──────────────────────────────────────────────────────────
-// RenderTerrainTile(DAT_080ab288, DAT_080ab28c, screenX, screenY, 1.0f, 1, 1):
+// RenderTerrainTile(SelectXF, SelectYF, screenX, screenY, 1.0f, 1, 1):
 //   Returns nonzero if cursor is visible/active.
 // If visible, calls GL_SetBlendAdditive() (hide char anim sprite for cursor area),
 // then RenderTerrainAlphaBitmap(type=8, x, y, sx, sy, color, 0, alpha) to draw the quad.
-//   - States 2/4/5 (login/charselect/ingame): fixed size based on DAT_07e11d5c
-//   - States 1/3 (intro/loading): animated size using DAT_07e11d5c oscillation
+//   - States 2/4/5 (login/charselect/ingame): fixed size based on CursorFrameIndex
+//   - States 1/3 (intro/loading): animated size using CursorFrameIndex oscillation
 //
 // ── Hover targets ─────────────────────────────────────────────────────────────
 // After cursor render, sets hover indices:
@@ -28,7 +28,7 @@
 //   mob/player type 0x22 → type 1 → NPC type 4 → item-ground → special
 //
 // HashTable section (lines ~131-350 in original):
-//   Anti-tamper XOR encode/decode block operating on DAT_07cf1ffc (0x584-byte
+//   Anti-tamper XOR encode/decode block operating on CharacterMachinePtr (0x584-byte
 //   char-data buffer). Hash table operations are
 //   reference-count obfuscation — not game logic. Omitted from implementation.
 //
@@ -55,28 +55,28 @@ void Mouse_UpdateHoverTargets(void)
     // ── 1. Cursor billboard render ────────────────────────────────────────────
     // DESACTIVADO: el billboard 3D (sprite en el suelo del tile hovered) necesita
     // Terrain_RenderQuad, que leia BackTerrainHeight de un DWORD sin asignar
-    // (arreglado: ahora usa DAT_080cb2cc). Falta re-habilitarlo y verificarlo.
+    // (arreglado: ahora usa BackTerrainHeight). Falta re-habilitarlo y verificarlo.
     // El cursor 2D (Cursor_Render) no depende de esto.
     #if 0
     if (SceneFlag == 2 || SceneFlag == 4 || SceneFlag == 5)
     {
         float color[3] = { 1.0f, 0.766f, 0.0f };
-        char visible = RenderTerrainTile(DAT_080ab288, DAT_080ab28c, 0, 0, 1.0f, 1, 1);
+        char visible = RenderTerrainTile(SelectXF, SelectYF, 0, 0, 1.0f, 1, 1);
         if (visible != '\0') {
             GL_SetBlendAdditive();
-            int frame = (SceneFlag == 2) ? 1 : (DAT_07e11d5c + 1);
+            int frame = (SceneFlag == 2) ? 1 : (CursorFrameIndex + 1);
             float sz = (float)frame;
-            RenderTerrainAlphaBitmap(8, DAT_083a4130, DAT_083a4134, sz, sz, color, 0, 1.0f);
+            RenderTerrainAlphaBitmap(8, TerrainPickPosX, TerrainPickPosY, sz, sz, color, 0, 1.0f);
         }
     }
     if (SceneFlag == 1 || SceneFlag == 3) {
         float color[3] = { 1.0f, 0.766f, 0.0f };
-        char visible = RenderTerrainTile(DAT_080ab288, DAT_080ab28c, 0, 0, 1.0f, 1, 1);
+        char visible = RenderTerrainTile(SelectXF, SelectYF, 0, 0, 1.0f, 1, 1);
         if (visible != '\0') {
             GL_SetBlendAdditive();
-            float base = (float)DAT_07e11d5c + (float)DAT_07e11d5c + _DAT_0055256c;
-            float szX = ((int)base / 100) * 100 + _DAT_00552598;
-            float szY = ((int)base / 100) * 100 + _DAT_00552598;
+            float base = (float)CursorFrameIndex + (float)CursorFrameIndex + 1.0f;
+            float szX = ((int)base / 100) * 100 + 50.0f;
+            float szY = ((int)base / 100) * 100 + 50.0f;
             RenderTerrainAlphaBitmap(8, szX, szY, base, base, color, 0, 1.0f);
         }
     }
@@ -90,8 +90,8 @@ void Mouse_UpdateHoverTargets(void)
         SelectedCharacter = -1;
         Attacking = -1;
     } else if (SelectedCharacter >= 0 &&
-               *(char *)(DAT_07abf5d0 + EntityOffset(0x2fd) + SelectedCharacter * CHARACTER_STRIDE) == '\0' &&
-               *(char *)(DAT_07abf5d0 + SelectedCharacter * CHARACTER_STRIDE + 0x84) == '\x02') {
+               *(char *)(CharactersClient + EntityOffset(0x2fd) + SelectedCharacter * CHARACTER_STRIDE) == '\0' &&
+               *(char *)(CharactersClient + SelectedCharacter * CHARACTER_STRIDE + 0x84) == '\x02') {
         // Current hover target is a valid alive monster.
         // Keep the original transient hover state.  Leaving this selected
         // after the cursor moves away turns later ground clicks into a basic
@@ -117,9 +117,9 @@ void Mouse_UpdateHoverTargets(void)
         //                MouseRButton = 0x083A42AC · MouseRButtonPush = 0x083A42D0
         //                m_bAutoAttack = 0x00559C5C · Attacking = 0x00559C58
         if (Attacking == -1 ||
-            DAT_083a42c4 != '\0' || DAT_083a4124 != 0 ||
-            DAT_083a42ac != '\0' || MouseRButtonPush != '\0' ||
-            *(char *)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->Dead != '\0')
+            MouseLButton != '\0' || MouseLButtonPush != 0 ||
+            MouseRButton != '\0' || MouseRButtonPush != '\0' ||
+            *(char *)&((CHARACTER*)(uintptr_t)(Hero))->Dead != '\0')
         {
             SelectedCharacter = -1;
         }
@@ -135,14 +135,14 @@ void Mouse_UpdateHoverTargets(void)
 
     // ── 3. Hover target detection ─────────────────────────────────────────────
 
-    if (DAT_07d78094 != '\0') goto process_click;
+    if (MouseOnWindowFlag != '\0') goto process_click;
 
     {
         SHORT altState = Platform::GetInput().KeyState(0x12);  // VK_MENU = Alt
         if ((char)((unsigned short)altState >> 8) == (char)0x80)
         {
             // Alt held: item-on-ground first, then NPC, mob, player
-            if (DAT_07e91388 == 0)
+            if (ItemPickedFlag == 0)
                 SelectedItem = ItemOnGround_HoverTest();
             if (SelectedItem == -1) {
                 SelectedNpc = Entity_SelectNearest(4);
@@ -159,11 +159,11 @@ void Mouse_UpdateHoverTargets(void)
         }
 
         // No Alt: check swim/idle move state
-        unsigned char moveFlags = *(unsigned char *)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->Class & 7;
+        unsigned char moveFlags = *(unsigned char *)&((CHARACTER*)(uintptr_t)(Hero))->Class & 7;
         if (moveFlags == 2 || moveFlags == 0)
         {
             // HashTable encode/decode block — anti-tamper obfuscation.
-            // Operates on DAT_07cf1ffc (XOR-encoded char data, 0x584 bytes).
+            // Operates on CharacterMachinePtr (XOR-encoded char data, 0x584 bytes).
             // Omitted per project policy (hash table operations are not game logic).
         }
 
@@ -187,8 +187,8 @@ void Mouse_UpdateHoverTargets(void)
             // elfa activo (skills 26-28: curar, mas defensa, mas dano) se invierte,
             // para poder apuntarle a un jugador que tiene un monstruo detras.
             int firstKind = 0x22, secondKind = 1;
-            if (DAT_07abf5d8 && CharacterAttribute) {
-                const BYTE slot  = *(BYTE*)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->CurrentSkill;
+            if (Hero && CharacterAttribute) {
+                const BYTE slot  = *(BYTE*)&((CHARACTER*)(uintptr_t)(Hero))->CurrentSkill;
                 const BYTE skill = ((BYTE*)CharacterAttribute)[87 + slot];
                 if (skill >= 26 && skill <= 28) { firstKind = 1; secondKind = 0x22; }
             }
@@ -199,7 +199,7 @@ void Mouse_UpdateHoverTargets(void)
                     if (SelectedCharacter != -1) goto done;
                     SelectedNpc = Entity_SelectNearest(4);  // NPC
                     if (SelectedNpc == -1) {
-                        if (DAT_07e91388 == 0)
+                        if (ItemPickedFlag == 0)
                             SelectedItem = ItemOnGround_HoverTest();
                         if (SelectedItem == -1)
                             SelectedOperate = SpecialObject_HoverTest();
@@ -236,24 +236,24 @@ done:
 int __cdecl RenderTerrainTile(int iparam_1, int iparam_2, int param_3, int param_4, float param_5, int param_6, int param_7) {
     float param_1 = *(float*)&iparam_1;
     float param_2 = *(float*)&iparam_2;
-    *(float*)&DAT_07feb258 = param_1 * _DAT_005524f0;
-    *(float*)&DAT_07feb25c = param_2 * _DAT_005524f0;
-    DAT_07eab1ec = param_4 * 0x100 + param_3;
-    DAT_07eab1f0 = DAT_07eab1ec + param_6;
-    *(float*)&DAT_07feb260 = (float)DAT_080cb2cc[DAT_07eab1ec];
-    _DAT_07feb264 = *(float*)&DAT_07feb258 + _DAT_005524f0;
-    DAT_07eab1f8 = (param_4 + param_6) * 0x100 + param_3;
-    DAT_07eab1f4 = param_6 + DAT_07eab1f8;
-    _DAT_07feb26c = (float)DAT_080cb2cc[DAT_07eab1f0];
-    _DAT_07feb274 = *(float*)&DAT_07feb25c + _DAT_005524f0;
-    _DAT_07feb278 = (float)DAT_080cb2cc[DAT_07eab1f4];
-    _DAT_07feb284 = (float)DAT_080cb2cc[DAT_07eab1f8];
-    _DAT_07feb268 = *(float*)&DAT_07feb25c;
-    _DAT_07feb270 = _DAT_07feb264;
-    _DAT_07feb27c = *(float*)&DAT_07feb258;
-    _DAT_07feb280 = _DAT_07feb274;
+    *(float*)&TilePickMinX = param_1 * GridToWorldScale;
+    *(float*)&TilePickMinY = param_2 * GridToWorldScale;
+    TerrainTileIdxTL = param_4 * 0x100 + param_3;
+    TerrainTileIdxTR = TerrainTileIdxTL + param_6;
+    *(float*)&TilePickBufZ = (float)BackTerrainHeight[TerrainTileIdxTL];
+    TilePickCornerBX = *(float*)&TilePickMinX + GridToWorldScale;
+    TerrainTileIdxBR = (param_4 + param_6) * 0x100 + param_3;
+    TerrainTileIdxBL = param_6 + TerrainTileIdxBR;
+    TilePickCornerBZ = (float)BackTerrainHeight[TerrainTileIdxTR];
+    TilePickCornerCY = *(float*)&TilePickMinY + GridToWorldScale;
+    TilePickCornerCZ = (float)BackTerrainHeight[TerrainTileIdxBL];
+    TilePickCornerDZ = (float)BackTerrainHeight[TerrainTileIdxBR];
+    TilePickCornerBY = *(float*)&TilePickMinY;
+    TilePickCornerCX = TilePickCornerBX;
+    TilePickCornerDX = *(float*)&TilePickMinX;
+    TilePickCornerDY = TilePickCornerCY;
     if (param_7 == 0) {
-        if (((unsigned char)DAT_0838bc70[DAT_07eab1ec] & 8) != 8)
+        if (((unsigned char)TerrainWallFlags[TerrainTileIdxTL] & 8) != 8)
             RenderTerrainFace(param_1, param_2, param_3, param_4, param_5);   // RenderTerrainFace(xf,yf,xi,yi,lodf)
         return 0;
     }
@@ -266,10 +266,10 @@ int __cdecl RenderTerrainTile(int iparam_1, int iparam_2, int param_3, int param
         if (now - s_lastTilePick > 500) {
             s_lastTilePick = now;
             float* eye = (float*)&CameraRayOriginX_arr[0];
-            float* tgt = (float*)&DAT_083a4110_arr[0];
+            float* tgt = (float*)&MouseRayEndPointStorage[0];
         }
     }
-    if (DAT_07e11d30 != 5) {
+    if (EditFlag != 5) {
         GL_SetAlphaTest('\0');
         BufferedDraw::Color3f(0.0f, 0.0f, 0.0f);
         BufferedDraw::Begin(BufferedDraw::Primitive::LineStrip);
@@ -281,29 +281,29 @@ int __cdecl RenderTerrainTile(int iparam_1, int iparam_2, int param_3, int param
         GL_ResetState();
     }
     float local_c[3];
-    Triangle_ComputeNormal((float*)&DAT_07feb258, &_DAT_07feb264, &_DAT_07feb270, local_c);
-    unsigned int uVar2 = CollisionDetectLineToFace((float*)&CameraRayOriginX, (float*)&DAT_083a4110, 3,
-                                       (float*)&DAT_07feb258, &_DAT_07feb264, &_DAT_07feb270,
-                                       &_DAT_07feb27c, local_c, '\x01');
+    Triangle_ComputeNormal((float*)&TilePickMinX, &TilePickCornerBX, &TilePickCornerCX, local_c);
+    unsigned int uVar2 = CollisionDetectLineToFace((float*)&CameraRayOriginX, (float*)&MouseRayEndPoint, 3,
+                                       (float*)&TilePickMinX, &TilePickCornerBX, &TilePickCornerCX,
+                                       &TilePickCornerDX, local_c, '\x01');
     cVar1 = (char)uVar2;
     if (cVar1 == '\0') {
-        Triangle_ComputeNormal((float*)&DAT_07feb258, &_DAT_07feb270, &_DAT_07feb27c, local_c);
-        uVar2 = CollisionDetectLineToFace((float*)&CameraRayOriginX, (float*)&DAT_083a4110, 3,
-                              (float*)&DAT_07feb258, &_DAT_07feb270, &_DAT_07feb27c,
-                              &_DAT_07feb264, local_c, '\x01');
+        Triangle_ComputeNormal((float*)&TilePickMinX, &TilePickCornerCX, &TilePickCornerDX, local_c);
+        uVar2 = CollisionDetectLineToFace((float*)&CameraRayOriginX, (float*)&MouseRayEndPoint, 3,
+                              (float*)&TilePickMinX, &TilePickCornerCX, &TilePickCornerDX,
+                              &TilePickCornerBX, local_c, '\x01');
         cVar1 = (char)uVar2;
     }
     if (cVar1 == '\x01') {
-        *(float*)&DAT_080ab288 = param_1;
-        *(float*)&DAT_080ab28c = param_2;
-        DAT_07eab1fc = 1;
+        *(float*)&SelectXF = param_1;
+        *(float*)&SelectYF = param_2;
+        TilePickResultFlag = 1;
     }
-    if (DAT_07e11d30 == 3) {
+    if (EditFlag == 3) {
         bool draw = false;
-        if (DAT_07e11d44 == 0) {
-            if (((unsigned char)DAT_0838bc70[DAT_07eab1ec] & 4) == 4) draw = true;
-        } else if (DAT_07e11d44 == 2) {
-            if (((unsigned char)DAT_0838bc70[DAT_07eab1ec] & 1) == 1) draw = true;
+        if (TargetSelectMode == 0) {
+            if (((unsigned char)TerrainWallFlags[TerrainTileIdxTL] & 4) == 4) draw = true;
+        } else if (TargetSelectMode == 2) {
+            if (((unsigned char)TerrainWallFlags[TerrainTileIdxTL] & 1) == 1) draw = true;
         }
         if (draw) {
             GL_DisableDepthTest();
@@ -325,12 +325,12 @@ int __cdecl RenderTerrainTile(int iparam_1, int iparam_2, int param_3, int param
 }
 
 // Map_InitRayCast @ 0x00512D30 — Map_InitRayCast: init ray t_max to ~1.03e7
-// IDA-ported: single store. DAT_083a4120 is the raycast t_max sentinel
+// IDA-ported: single store. RayCastClosestT is the raycast t_max sentinel
 // used by CollisionDetectLineToFace (CollisionDetectLineToFace) to accept nearer hits only.
 // Original binary stores raw bits 0x4B1DCD65 (= 10367333.0f) into the float.
 void Map_InitRayCast()
 {
-    *(DWORD*)&DAT_083a4120 = 0x4B1DCD65;  // ≈ 1.0367e7f — far-plane sentinel
+    *(DWORD*)&RayCastClosestT = 0x4B1DCD65;  // ≈ 1.0367e7f — far-plane sentinel
 }
 
 
@@ -345,10 +345,10 @@ int __cdecl Entity_SelectNearest(int param_1_int)
     bool bVar17 = (SceneFlag == 4);  // SceneFlag == CharSelect
 
     // Pass 1: set highlight flags and color tints for visible entities
-    byte *pbVar4 = (byte *)(DAT_07abf5d0 + 0x84);
+    byte *pbVar4 = (byte *)(CharactersClient + 0x84);
     for (int loop1 = 400; loop1 != 0; loop1--, pbVar4 += CHARACTER_STRIDE) {
         if (((*pbVar4 & param_1) == *pbVar4) && (pbVar4[-0x84] != 0) && (pbVar4[EntityOffset(0x160) - 0x84] != 0) &&
-            (_DAT_00552580 < *(float *)(pbVar4 + EntityOffset(0x168) - 0x84))) {
+            (FloatZeroB < *(float *)(pbVar4 + EntityOffset(0x168) - 0x84))) {
             pbVar4[0x58] = 1;
             float r, g, b;
             switch (*(short *)(pbVar4 + EntityOffset(0x1BE) - 0x84)) {
@@ -376,7 +376,7 @@ int __cdecl Entity_SelectNearest(int param_1_int)
     bool diagFilt = (SceneFlag == 4);
 
     for (int ofs = 0; ofs < 400 * CHARACTER_STRIDE; ofs += CHARACTER_STRIDE, ent_idx++) {
-        char *ent = (char *)(ofs + DAT_07abf5d0);
+        char *ent = (char *)(ofs + CharactersClient);
         if (diagFilt && ent_idx < 5) {
             DWORD now = Platform::GetTimer().Ticks();
             if (now - s_lastFilt[ent_idx] > 1000) {
@@ -384,13 +384,13 @@ int __cdecl Entity_SelectNearest(int param_1_int)
             }
         }
         if ((*ent == '\0') || (*(char *)&AsObject(ent)->Visible == '\0') ||
-            (!(_DAT_00552580 < AsObject(ent)->Alpha)) || (ent[EntityOffset(0x2fd)] != '\0'))
+            (!(FloatZeroB < AsObject(ent)->Alpha)) || (ent[EntityOffset(0x2fd)] != '\0'))
             continue;
 
         // Party name matching for DarkLord entities
-        if ((AsObject(ent)->Type == 0x186) && (*(char *)&AsObject(ent)->Kind == '\x01') && (0 < (int)DAT_07eaa0e0)) {
-            char *slot = (char *)&DAT_07e11e80;
-            for (int pi = 0; pi < (int)DAT_07eaa0e0; pi++, slot += 0x24) {
+        if ((AsObject(ent)->Type == 0x186) && (*(char *)&AsObject(ent)->Kind == '\x01') && (0 < (int)PartyNumber)) {
+            char *slot = (char *)&LegacyParty;
+            for (int pi = 0; pi < (int)PartyNumber; pi++, slot += 0x24) {
                 if (*(int *)(slot + 0x1c) == -2) {
                     const char *eName = EntityName::Get(ent);
                     size_t sVar7 = strlen(eName);
@@ -409,7 +409,7 @@ int __cdecl Entity_SelectNearest(int param_1_int)
         }
 
         // Visibility + nearest check
-        if ((!bVar17) && (ent == (char *)DAT_07abf5d8)) continue;
+        if ((!bVar17) && (ent == (char *)Hero)) continue;
         if ((*(char *)&AsObject(ent)->Kind & param_1) != *(char *)&AsObject(ent)->Kind) continue;
 
         // IDA sub_4AFDC0 L38-52: test del RAYO del mouse contra la OBB de la
@@ -418,12 +418,12 @@ int __cdecl Entity_SelectNearest(int param_1_int)
         {
             float box[12];
             memcpy(box, (const void*)(ent + EntityOffset(0x130)), sizeof(box));
-            if (!Collision_SegmentToOBB((float*)&CameraRayOriginX, (float*)&DAT_083a4110, box))
+            if (!Collision_SegmentToOBB((float*)&CameraRayOriginX, (float*)&MouseRayEndPoint, box))
                 continue;
 
-            const float dy = AsObject(ent)->Position[1] - _DAT_083a42d8;   // CameraPosition[1]
-            const float dz = AsObject(ent)->Position[2] - _DAT_083a42dc;   // CameraPosition[2]
-            const float dx = AsObject(ent)->Position[0] - _DAT_083a42d4;   // CameraPosition[0]
+            const float dy = AsObject(ent)->Position[1] - CameraPositionY;   // CameraPosition[1]
+            const float dz = AsObject(ent)->Position[2] - CameraPositionZ;   // CameraPosition[2]
+            const float dx = AsObject(ent)->Position[0] - CameraPositionX;   // CameraPosition[0]
             const float d2 = dz * dz + dy * dy + dx * dx;
             if (!(d2 < best_perp)) continue;
 
@@ -439,7 +439,7 @@ int __cdecl Entity_SelectNearest(int param_1_int)
                 if (ty < 0) ty = 0; if (ty > 255) ty = 255;
                 const unsigned char tile = TerrainMappingLayer1[tx + (ty << 8)];   // TerrainMappingLayer1
                 const unsigned char roof = (map == 0) ? 4 : 3;
-                if (tile == roof && (DWORD)tile != DAT_07e118e8)           // HeroTile
+                if (tile == roof && (DWORD)tile != WorldMapType)           // HeroTile
                     continue;
             }
             best_perp = d2;
@@ -449,11 +449,11 @@ int __cdecl Entity_SelectNearest(int param_1_int)
     }
 
     // Pass 3: sync party HP bar entity IDs by player name
-    if (0 < (int)DAT_07eaa0e0) {
-        int *piVar12 = (int *)((char *)&DAT_07e11e80 + 0x1c);
-        for (int pi = 0; pi < (int)DAT_07eaa0e0; pi++, piVar12 += 9) {
+    if (0 < (int)PartyNumber) {
+        int *piVar12 = (int *)((char *)&LegacyParty + 0x1c);
+        for (int pi = 0; pi < (int)PartyNumber; pi++, piVar12 += 9) {
             if (*piVar12 < 0) {
-                const char *playerName = EntityName::Get(DAT_07abf5d8);
+                const char *playerName = EntityName::Get(Hero);
                 const char *partyName  = Party_NameOf(piVar12 - 7);
                 size_t n = strlen(playerName);
                 size_t m = strlen(partyName);
@@ -475,7 +475,7 @@ int __cdecl Entity_SelectNearest(int param_1_int)
 // item cuya posicion de PANTALLA esta mas cerca del cursor (umbral ~24 px).  Si
 // el hover de items se comporta distinto al original, ese es el cambio a hacer.
 //
-// El pool DAT_07e12840 es 1000x0x204; layout por slot (base = pool + i*0x204):
+// El pool GroundItemPool es 1000x0x204; layout por slot (base = pool + i*0x204):
 //   base+72   active flag
 //   base+424  visible flag (lo setea el render)
 //   base+16/20  world X/Y del item
@@ -484,7 +484,7 @@ int __cdecl Entity_SelectNearest(int param_1_int)
 // IDA: FUN_004afa40
 int __cdecl ItemOnGround_HoverTest(void)
 {
-    BYTE* pool = (BYTE*)&DAT_07e12840[0];
+    BYTE* pool = (BYTE*)&GroundItemPool[0];
 
     // Pass 1: atenuar todos los items activos + visibles.
     for (int i = 0; i < 1000; ++i) {
@@ -500,8 +500,8 @@ int __cdecl ItemOnGround_HoverTest(void)
     // World_ToScreen) esté cerca del cursor. Screen-space, sin picker de terreno
     // (que dibujaba la cuadrícula). Umbral generoso ~24 px (el modelo del item
     // es chico en el suelo).
-    int mouseX = (int)DAT_083a427c;
-    int mouseY = (int)DAT_083a4278;
+    int mouseX = (int)MouseX;
+    int mouseY = (int)MouseY;
     int best = -1, bestD = 24 * 24 + 1;
     for (int i = 0; i < 1000; ++i) {
         BYTE* base = pool + i * GROUND_ITEM_STRIDE;
@@ -525,7 +525,7 @@ int __cdecl ItemOnGround_HoverTest(void)
 // SpecialObject_HoverTest @ 0x004B0240 (sub_4B0240)
 // Pick de los objetos "operables" del mundo -- sillas, bancos, barandas y los
 // orbes de Noria.  La lista la arma `sub_4FF580` desde `CreateObject` (200
-// entradas de 12 bytes en DAT_083A2370: [0] activo, [2] puntero al objeto) y el
+// entradas de 12 bytes en OperateEntryPool: [0] activo, [2] puntero al objeto) y el
 // indice que devuelve esta funcion va a `SelectedOperate`, que leen
 // `RenderCursor` (para cambiar el cursor) y `Player_InputTick` (para encolar
 // MOVEMENT_OPERATE = sentarse / apoyarse / flotar).
@@ -539,11 +539,11 @@ int __cdecl ItemOnGround_HoverTest(void)
 int __cdecl SpecialObject_HoverTest(void)
 {
     const int stride = 0xc;
-    const int slots  = (int)(sizeof(DAT_083a2370) / stride);
+    const int slots  = (int)(sizeof(OperateEntryPool) / stride);
 
     // Pasada 1 - apagar el resalte de todos.
     for (int i = 0; i < slots; ++i) {
-        char *e   = &DAT_083a2370[i * stride];
+        char *e   = &OperateEntryPool[i * stride];
         intptr_t   obj = (intptr_t)g_OperateObjects[i];
         if (e[0] == 0 || obj == 0) continue;
         if (*(char *)&((OBJECT*)(uintptr_t)(obj))->Visible == 0) continue;   // no visible este frame
@@ -554,7 +554,7 @@ int __cdecl SpecialObject_HoverTest(void)
 
     // Pasada 2 - el primero que corte el rayo del mouse.
     for (int i = 0; i < slots; ++i) {
-        char *e   = &DAT_083a2370[i * stride];
+        char *e   = &OperateEntryPool[i * stride];
         intptr_t   obj = (intptr_t)g_OperateObjects[i];
         if (e[0] == 0 || obj == 0) continue;
         if (*(char *)&((OBJECT*)(uintptr_t)(obj))->Visible == 0) continue;
@@ -562,7 +562,7 @@ int __cdecl SpecialObject_HoverTest(void)
         float box[12];
         memcpy(box, (const void *)(obj + EntityOffset(0x130)), sizeof(box));
 
-        if (Collision_SegmentToOBB((float *)&CameraRayOriginX, (float *)&DAT_083a4110, box)) {
+        if (Collision_SegmentToOBB((float *)&CameraRayOriginX, (float *)&MouseRayEndPoint, box)) {
             *(DWORD *)(obj + 0xe8) = 0x3fc00000;         // 1.5f -- resalte
             *(DWORD *)(obj + 0xec) = 0x3fc00000;
             *(DWORD *)(obj + 0xf0) = 0x3fc00000;
@@ -573,32 +573,32 @@ int __cdecl SpecialObject_HoverTest(void)
 }
 // FUN_004afb00 — implemented in src/Game/Party_NameMatch.cpp (Party_MatchEntityNames)
 // Party_HPBar_HoverCheck @ 0x004E5980 — Party_HPBar_HoverCheck(void)
-// Iterates the party HP bar array (DAT_07e11e9c, stride 0x24 = 9 uints) and checks
-// if the mouse cursor (DAT_083a427c, DAT_083a4278) is within any party member's
+// Iterates the party HP bar array (LegacyPartySlotArray, stride 0x24 = 9 uints) and checks
+// if the mouse cursor (MouseX, MouseY) is within any party member's
 // screen rect. Sets SelectedCharacter (hover entity index) and returns 1 if hovering.
-// SecondPassword UI state flags (DAT_07eaa115..130) control which X position band is used.
+// SecondPassword UI state flags (PartyOpened..130) control which X position band is used.
 // Anti-tamper HashTable blocks in the loop are skipped — only position comparison kept.
 char __cdecl Party_HPBar_HoverCheck(void)
 {
-    if (DAT_07eaa115 != '\0') return 0;
+    if (PartyOpened != '\0') return 0;
 
     // El HUD dibuja esta columna desde GetScreenWidth; compartir su origen
     // evita mantener una segunda lista de combinaciones de paneles abiertos.
     const int local_20 = GetScreenWidth();
 
-    float local_14 = (float)local_20 - _DAT_00552598;   // left edge of HP bar column
+    float local_14 = (float)local_20 - 50.0f;   // left edge of HP bar column
     float local_24 = 5.0f;                              // top of first bar (Y)
     char result = 0;
 
-    UINT  uVar7 = *(BYTE*)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->Class & 7;  // clase del heroe (c->Class & 7)
-    UINT *puVar5 = (UINT*)&DAT_07e11e9c;                // party slot base (stride 9 uints = 0x24)
+    UINT  uVar7 = *(BYTE*)&((CHARACTER*)(uintptr_t)(Hero))->Class & 7;  // clase del heroe (c->Class & 7)
+    UINT *puVar5 = (UINT*)&LegacyPartySlotArray;                // party slot base (stride 9 uints = 0x24)
 
-    for (int i = 0; i < (int)DAT_07eaa0e0; i++, puVar5 += 9) {
+    for (int i = 0; i < (int)PartyNumber; i++, puVar5 += 9) {
         // IDA L83-210: sólo los índices >= 0 se pueden señalar, y sólo para
         // DW o elfa; la fila baja 19 px para esos y para los -1, no para el
         // héroe sin resolver (-3).
         if (*puVar5 >= 0x80000000) {
-            if ((int)*puVar5 == -1) local_24 += _DAT_005527d4;
+            if ((int)*puVar5 == -1) local_24 += PartyHpRowHeight;
             *puVar5 = 0xfffffffe;
             continue;
         }
@@ -606,26 +606,26 @@ char __cdecl Party_HPBar_HoverCheck(void)
             // [HashTable obfuscation block skipped — anti-tamper, not game logic]
 
             // Get entity stat ID for this party slot
-            UINT pVal = (UINT)*(BYTE*)((UINT)*(BYTE*)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->CurrentSkill + 0x57 + (char*)DAT_07cf1ff4);
+            UINT pVal = (UINT)*(BYTE*)((UINT)*(BYTE*)&((CHARACTER*)(uintptr_t)(Hero))->CurrentSkill + 0x57 + (char*)CharacterAttributePtr);
 
             // Check if entity type is a hoverable icon (0x1a/0x1b/0x1c/0xf/0x10)
             bool bTypeOk = (pVal == 0x1a || pVal == 0x1b || pVal == 0x1c ||
                             pVal == 0xf  || pVal == 0x10);
 
             // Check mouse position within screen rect
-            float mouseX = (float)DAT_083a427c;
-            float mouseY = (float)DAT_083a4278;
-            bool bPosOk = (mouseX >= local_14 - _DAT_00552540) &&
-                          (mouseX <= local_14 + _DAT_00552598) &&
+            float mouseX = (float)MouseX;
+            float mouseY = (float)MouseY;
+            bool bPosOk = (mouseX >= local_14 - 3.0f) &&
+                          (mouseX <= local_14 + 50.0f) &&
                           (mouseY >= local_24) &&
-                          (mouseY <= local_24 + _DAT_005527d4);
+                          (mouseY <= local_24 + PartyHpRowHeight);
 
             if (bTypeOk && bPosOk) {
                 result = 1;
                 SelectedCharacter = *puVar5;
             }
         }
-        local_24 += _DAT_005527d4;
+        local_24 += PartyHpRowHeight;
         *puVar5 = 0xfffffffe;
     }
     return result;

@@ -10,14 +10,14 @@
 // Globals:
 //   SceneFlag  — SceneFlag (dispatch switch)
 //   WorldTime  — frame time accumulator
-//   DAT_083a45d4  — login background animation angle
+//   LoginBgAnimValue  — login background animation angle
 //   g_iNoMouseTime  — keepalive counter (> 0x1f → send re-auth)
 //   SocketClientSocket  — socket handle
 //   SocketClientSendBuffer  — send buffer (WSAEWOULDBLOCK queue, max 0x2001)
 //   SocketClientSendBufferLength  — send buffer byte count
-//   DAT_055ca038  — post-send flag (cleared at end of function)
-//   DAT_05826ceb  — packet sequence counter
-//   DAT_00559050  — 16-byte XOR key for keepalive re-randomization
+//   EnterKeyPressedFlag  — post-send flag (cleared at end of function)
+//   LegacyPacketSerialSend  — packet sequence counter
+//   LegacyPacketXorKey16  — 16-byte XOR key for keepalive re-randomization
 
 #include "stdafx.h"
 #include "Platform/ISocket.h"
@@ -36,14 +36,14 @@ extern void OpenGL_Release(void);
 void __cdecl Scene_Dispatch(HDC param_1)
 {
     // ── FRAME ANGLE ANIMATION ─────────────────────────────────────────────────
-    // Original stored WorldTime * _DAT_005524bc into local_41c (unused after);
+    // Original stored WorldTime * 0.004f into local_41c (unused after);
     // omitted here — same effect, no observable side effect.
     {
         // 0.97k @ 005274A8: the item-level glow pulse is driven directly from
         // WorldTime.  The former intermediary is an unported stub returning 0,
-        // which froze DAT_083a45d4 and therefore all +3..+6 item glow colours.
+        // which froze LoginBgAnimValue and therefore all +3..+6 item glow colours.
         const float phase = (float)WorldTime * 0.0040000002f;
-        DAT_083a45d4 = sinf(phase) * 0.15000001f + 0.60000002f;
+        LoginBgAnimValue = sinf(phase) * 0.15000001f + 0.60000002f;
     }
 
     // ── SCENE DISPATCH ────────────────────────────────────────────────────────
@@ -96,32 +96,32 @@ void __cdecl Scene_Dispatch(HDC param_1)
 
         // Sequence counter tracking (anti-tamper)
         {
-            unsigned idx2 = HashTable_GetIndex(&MAIN_HASH_CLASS, &DAT_05826ceb);
+            unsigned idx2 = HashTable_GetIndex(&MAIN_HASH_CLASS, &LegacyPacketSerialSend);
             if (idx2 == 0xffffffff) {
                 void* node = AntiTamper_HashNode();
                 *((BYTE*)node + 1) = 1;
-                HashTable_Insert(&MAIN_HASH_CLASS, node, &DAT_05826ceb);
+                HashTable_Insert(&MAIN_HASH_CLASS, node, &LegacyPacketSerialSend);
             } else {
-                BYTE* node = (BYTE*)HashTable_GetNode(&MAIN_HASH_CLASS, &DAT_05826ceb);
+                BYTE* node = (BYTE*)HashTable_GetNode(&MAIN_HASH_CLASS, &LegacyPacketSerialSend);
                 node[1]++;
                 if (node[1] < 2)
-                    Packet_DecryptByte((BYTE*)&DAT_05826ceb, node);
+                    Packet_DecryptByte((BYTE*)&LegacyPacketSerialSend, node);
             }
         }
 
         // Place seq byte, advance counter
         int seqOff = 1; // ((pkt[0] != 0xC1) ? 1 : 0) + 2 - 1 = 1
-        pkt[seqOff] = DAT_05826ceb;
-        DAT_05826ceb++;
+        pkt[seqOff] = LegacyPacketSerialSend;
+        LegacyPacketSerialSend++;
 
         // Decrement next seq slot ref-count
         {
-            unsigned idx3 = HashTable_GetIndex(&MAIN_HASH_CLASS, &DAT_05826ceb);
+            unsigned idx3 = HashTable_GetIndex(&MAIN_HASH_CLASS, &LegacyPacketSerialSend);
             if (idx3 != 0xffffffff) {
-                BYTE* node = (BYTE*)HashTable_GetNode(&MAIN_HASH_CLASS, &DAT_05826ceb);
+                BYTE* node = (BYTE*)HashTable_GetNode(&MAIN_HASH_CLASS, &LegacyPacketSerialSend);
                 node[1]--;
                 if (node[1] == 0)
-                    Packet_EncryptByte(node, &DAT_05826ceb);
+                    Packet_EncryptByte(node, &LegacyPacketSerialSend);
             }
         }
 
@@ -152,7 +152,7 @@ void __cdecl Scene_Dispatch(HDC param_1)
                         goto send_done;
                     }
                     if (n == 0) break;
-                    if (SocketClientLogPrint) FUN_0043de60();
+                    if (SocketClientLogPrint) Net_FlushQueue();
                     sent += n; rem -= n;
                 } while (rem > 0);
             }
@@ -179,7 +179,7 @@ void __cdecl Scene_Dispatch(HDC param_1)
                         goto send_done;
                     }
                     if (n == 0) break;
-                    if (SocketClientLogPrint) FUN_0043de60();
+                    if (SocketClientLogPrint) Net_FlushQueue();
                     sent += n; rem -= n;
                 } while (rem > 0);
             }
@@ -191,5 +191,5 @@ send_done:
 
     // DESVIACION: en escenas jugables Enter vive hasta el próximo paso SIM;
     // un render sin paso no debe consumir la confirmación de login/selección.
-    if (SceneFlag!=2 && SceneFlag!=4 && SceneFlag!=5) DAT_055ca038 = 0;
+    if (SceneFlag!=2 && SceneFlag!=4 && SceneFlag!=5) EnterKeyPressedFlag = 0;
 }

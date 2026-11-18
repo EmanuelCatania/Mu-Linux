@@ -6,7 +6,7 @@
 #include "Render/Gfx.h"
 #include "Platform/Text.h"
 void __fastcall FUN_0045aaa0_impl(void *_this, char flags);
-void __cdecl    FUN_00408680(void *_this, char flags);
+void __cdecl    ClothNode_ScalarDtor(void *_this, char flags);
 #include "globals.h"
 #include "functions.h"
 
@@ -51,7 +51,7 @@ extern void MapFileDecrypt(BYTE* buf, int size);
 // NO es una lista de guild: es el ranking que sale al terminar Devil Square /
 // Blood Castle.  Lo dispara `RenderErrorMessage` con `case 140: sub_51DDF0()`,
 // tras `sub_51D9E0` (opcode 0x93) que deja ErrorMessage = 140 y copia las
-// entradas a DAT_083a7af8.
+// entradas a GuildMemberTable.
 //
 // Registro (= PMSG_DEVIL_SQUARE_SCORE del server, 0.97.40): +0 name[40] ·
 // +40 score · +44 RewardExperience · +48 RewardMoney.
@@ -63,7 +63,7 @@ int __cdecl RenderMatchScore(void)
 
     Gfx::Color3f(0.5f, 1.0f, 0.5f);
     UI_RenderText(229, 70, GlobalText[647], (LPSIZE)0, '\0', 0);
-    Platform::TextFormat(buf, GlobalText[648], EntityName::Get(DAT_07abf5d8));
+    Platform::TextFormat(buf, GlobalText[648], EntityName::Get(Hero));
     UI_RenderText(229, 86, buf, (LPSIZE)0, '\0', 0);
 
     // Encabezados 680..684.  El original SALTEA el 681 ("Personaje") y le suma
@@ -75,23 +75,23 @@ int __cdecl RenderMatchScore(void)
                       (LPSIZE)0, '\0', 0);
     }
 
-    int count = DAT_083a7c30;
+    int count = GuildMemberCount;
     const int kMaxRows = GUILD_MEMBER_TABLE_BYTES / GUILD_MEMBER_STRIDE;
     if (count > kMaxRows) count = kMaxRows;
-    if (count <= 0) return DAT_083a7c30;
+    if (count <= 0) return GuildMemberCount;
 
     int y = 126;
     Gfx::Color3f(1.0f, 1.0f, 1.0f);
     for (int i = 0; i < count; ++i) {
         // El registro 0 del buffer es el del propio jugador y va ULTIMO: por eso
         // el original indexa con (i+1) % count.
-        const BYTE *e = &DAT_083a7af8[GUILD_MEMBER_STRIDE * ((i + 1) % count)];
+        const BYTE *e = &GuildMemberTable[GUILD_MEMBER_STRIDE * ((i + 1) % count)];
 
         if (i == count - 1) {
             Gfx::Color3f(0.9f, 0.9f, 0.0f);
             UI_RenderText(219, 286, GlobalText[685], (LPSIZE)0, '\0', 0);
             y = 302;
-            Platform::TextFormat(buf, "%2d", DAT_083a7c34);
+            Platform::TextFormat(buf, "%2d", GuildUiAuxParam);
         } else {
             Platform::TextFormat(buf, "%2d", i + 1);
         }
@@ -117,26 +117,26 @@ int __cdecl RenderMatchScore(void)
 
         y += 16;
     }
-    return DAT_083a7c30;
+    return GuildMemberCount;
 }
 
 // GuildOverview_Render @ 0x0051DB00 — GuildOverview_Render
 // Renders guild war overview panel: win/draw title, total score, kills, deaths.
 // Uses GetTextExtentPointA for centering. unaff_EDI is the text width from
 // the last GetTextExtentPointA call — approximated via lstrlenA * pixel_per_char.
-// DAT_083a7c30=0 → "draw" strings; !=0 → "win/loss" strings.
+// GuildMemberCount=0 → "draw" strings; !=0 → "win/loss" strings.
 int __cdecl GuildOverview_Render(void)
 {
     Gfx::Color3f(0.5f, 0.5f, 0.5f);
     const char *title, *subtitle;
     tagSIZE sz = {};
     HDC hdc = (HDC)(uintptr_t)gFont.GetTextDC();
-    if (DAT_083a7c30 == 0) {
-        title    = lpString_07d68bc8;
-        subtitle = lpString_07d68cf4;
+    if (GuildMemberCount == 0) {
+        title    = GuildWinTitleNoGuild;
+        subtitle = GuildWinSubtitleNoGuild;
     } else {
-        title    = lpString_07d68970;
-        subtitle = lpString_07d68a9c;
+        title    = GuildWinTitle;
+        subtitle = GuildWinSubtitle;
     }
     int len = Platform::TextLength(title);
     gFont.MeasureText(hdc, title, len, &sz);
@@ -149,30 +149,30 @@ int __cdecl GuildOverview_Render(void)
     UI_RenderText(0x140 - cx, 0x56, subtitle, (LPSIZE)0, '\0', 0);
 
     Gfx::Color3f(1.0f, 1.0f, 1.0f);
-    DAT_00559c78 = 0xffffffff;
+    m_dwTextColor = 0xffffffff;
     gFont.SelectFont(hdc, (HGDIOBJ)gFont.GetFont(FONT_BOLD));
 
     // Score total
     char buf[256];
-    DAT_00559c78 = 0xffd2ffd2;
-    Platform::TextFormat(buf, &param_2_07d68e20);
+    m_dwTextColor = 0xffd2ffd2;
+    Platform::TextFormat(buf, &Fmt_ScoreTotal);
     len = Platform::TextLength(buf);
     gFont.MeasureText(hdc, buf, len, &sz);
     cx = (int)((unsigned int)(sz.cx * 0x280) / gWindow.GetWidth() >> 1);
     UI_RenderText(0x140 - cx, 0x6a, buf, (LPSIZE)0, '\0', 0);
 
     int iY = 0x82;
-    if (DAT_083a7c30 != 0) {
-        DAT_00559c78 = 0xffd2d2ff;
-        Platform::TextFormat(buf, &param_2_07d68f4c, DAT_083a7b0c);
+    if (GuildMemberCount != 0) {
+        m_dwTextColor = 0xffd2d2ff;
+        Platform::TextFormat(buf, &Fmt_OpponentDeaths, PlayerZen);
         len = Platform::TextLength(buf);
         gFont.MeasureText(hdc, buf, len, &sz);
         cx = (int)((unsigned int)(sz.cx * 0x280) / gWindow.GetWidth() >> 1);
         UI_RenderText(0x140 - cx, 0x82, buf, (LPSIZE)0, '\0', 0);
         iY = 0x9a;
     }
-    DAT_00559c78 = 0xffffd2d2;
-    Platform::TextFormat(buf, &param_2_07d69078, DAT_083a7b04);
+    m_dwTextColor = 0xffffd2d2;
+    Platform::TextFormat(buf, &Fmt_OwnKills, Record0Score);
     len = Platform::TextLength(buf);
     gFont.MeasureText(hdc, buf, len, &sz);
     cx = (int)((unsigned int)(sz.cx * 0x280) / gWindow.GetWidth() >> 1);
@@ -181,37 +181,37 @@ int __cdecl GuildOverview_Render(void)
 
 // IDA: FUN_0051D6F0 (0x0051D6F0)
 // CreateOkMessageBox — show an OK dialog by setting the UI state.
-// Wraps text at 7 chars / 0x26 lines into DAT_083a44c4, sets a fixed panel descriptor,
-// then transitions DAT_083a7c24 or DAT_083a7c28 to state 0x8b.
+// Wraps text at 7 chars / 0x26 lines into MessageBoxCustomBuf, sets a fixed panel descriptor,
+// then transitions InGameUiState or InGameUiStateNext to state 0x8b.
 void __cdecl CreateOkMessageBox(char *msg)
 {
-    DAT_083a4324 = SeparateTextIntoLines(msg, (char *)&DAT_083a44c4, 7, 0x26);
+    MessageBoxLineCount = SeparateTextIntoLines(msg, (char *)&MessageBoxCustomBuf, 7, 0x26);
     // clear panel descriptor (10 dwords)
-    int *p = (int*)&DAT_083a42f8[0];
+    int *p = (int*)&DialogButtonRects[0];
     for (int i = 0; i < 10; i++) p[i] = 0;
     // set fixed descriptor: {1, 0x47, 0x8c, 0x46, 0x15}
-    DAT_083a42f8[0] = 1;
-    DAT_083a42f8[1] = 0x47;
-    DAT_083a42f8[2] = 0x8c;
-    DAT_083a42f8[3] = 0x46;
-    DAT_083a42f8[4] = 0x15;
-    if (DAT_083a7c24 != 0)
-        DAT_083a7c28 = 0x8b;
+    DialogButtonRects[0] = 1;
+    DialogButtonRects[1] = 0x47;
+    DialogButtonRects[2] = 0x8c;
+    DialogButtonRects[3] = 0x46;
+    DialogButtonRects[4] = 0x15;
+    if (InGameUiState != 0)
+        InGameUiStateNext = 0x8b;
     else
-        DAT_083a7c24 = 0x8b;
+        InGameUiState = 0x8b;
 }
 
 // GuildMemberList_Update @ 0x0051D9E0 — GuildMemberList_Update
 // Sets UI state 0x8c, stores count/param2, copies menu descriptor and member list data.
 void __cdecl GuildMemberList_Update(int count, int p2, void *data)
 {
-    if (DAT_083a7c24 == 0) DAT_083a7c24 = 0x8c;
-    else                   DAT_083a7c28 = 0x8c;
-    DAT_083a7c34 = (DWORD)p2;
-    DAT_083a7c30 = count;
+    if (InGameUiState == 0) InGameUiState = 0x8c;
+    else                   InGameUiStateNext = 0x8c;
+    GuildUiAuxParam = (DWORD)p2;
+    GuildMemberCount = count;
     // Copy menu descriptor: 5 DWORDs
     DWORD desc[5] = { 1, 0x47, 0x104, 0x46, 0x15 };
-    for (int i = 0; i < 5; i++) DAT_083a42f8[i] = desc[i];
+    for (int i = 0; i < 5; i++) DialogButtonRects[i] = desc[i];
     // Copy member list data: count registros de GUILD_MEMBER_STRIDE bytes
     // (11 registros, ver globals.h).
     // IDA no acota `count` porque alli el hueco es exactamente ese; aca el
@@ -222,7 +222,7 @@ void __cdecl GuildMemberList_Update(int count, int p2, void *data)
         nMembers = GUILD_MEMBER_TABLE_BYTES / GUILD_MEMBER_STRIDE;
     unsigned int dwords = (unsigned int)(nMembers * GUILD_MEMBER_STRIDE) >> 2;
     unsigned int *src = (unsigned int*)data;
-    unsigned int *dst = (unsigned int*)&DAT_083a7af8[0];
+    unsigned int *dst = (unsigned int*)&GuildMemberTable[0];
     for (unsigned int i = 0; i < dwords; i++) *dst++ = *src++;
 }
 
@@ -230,18 +230,18 @@ void __cdecl GuildMemberList_Update(int count, int p2, void *data)
 // Sets UI state 0x9a, stores param_1 as member count, copies 5-entry menu desc + 6 DWORDs data.
 void __cdecl GuildMemberList_Add(int p1, void *data)
 {
-    if (DAT_083a7c24 == 0) DAT_083a7c24 = 0x9a;
-    else                   DAT_083a7c28 = 0x9a;
-    DAT_083a7c30 = (int)(DWORD)p1;
+    if (InGameUiState == 0) InGameUiState = 0x9a;
+    else                   InGameUiStateNext = 0x9a;
+    GuildMemberCount = (int)(DWORD)p1;
     DWORD desc[5] = { 1, 0x47, 0x82, 0x46, 0x15 };
-    for (int i = 0; i < 5; i++) DAT_083a42f8[i] = desc[i];
+    for (int i = 0; i < 5; i++) DialogButtonRects[i] = desc[i];
     // Un registro (6 DWORDs en el binario; GUILD_MEMBER_STRIDE desde 0.97.40).
-    memcpy(&DAT_083a7af8[0], data, GUILD_MEMBER_STRIDE);
+    memcpy(&GuildMemberTable[0], data, GUILD_MEMBER_STRIDE);
 }
 
 // ItemList_Select @ 0x0051D840 — ItemList_Select(slot)
 // Selects character slot `slot` for the in-game item/skill list display.
-// Sets DAT_005615dc, populates DAT_083a4324 and skill/item display arrays,
+// Sets g_iCurrentDialogScriptStorage, populates MessageBoxLineCount and skill/item display arrays,
 // then transitions UI state to 0x8e.
 // Port fiel de sub_51D840: arma el cuadro de dialogo desde g_DialogScript[a1]
 // (DIALOG_SCRIPT en globals.h) igual que CSQuest::ShowDialogText, mas el
@@ -254,9 +254,9 @@ int __cdecl ItemList_Select(int param_1) {
 
     g_iCurrentDialogScript = param_1;
     g_iNumLineMessageBoxCustom =
-        SeparateTextIntoLines(dlg->m_lpszText, &DAT_083a44c4[0], 7, 38);
+        SeparateTextIntoLines(dlg->m_lpszText, &MessageBoxCustomBuf[0], 7, 38);
 
-    memset(DAT_083a42f8, 0, 0x28);              // rects de los botones
+    memset(DialogButtonRects, 0, 0x28);              // rects de los botones
     memset(g_lpszDialogAnswer, 0, sizeof(g_lpszDialogAnswer));
 
     int i = 0;
@@ -281,8 +281,8 @@ int __cdecl ItemList_Select(int param_1) {
     }
 
     // IDA: ErrorMessage = 142, o NextErrorMessage si ya hay un cartel arriba.
-    if (DAT_083a7c24 != 0) DAT_083a7c28 = 142;
-    else                   DAT_083a7c24 = 142;
+    if (InGameUiState != 0) InGameUiStateNext = 142;
+    else                   InGameUiState = 142;
     return 1;
 }
 // CServerSelWin_UpdateWhileActive — implemented in src/Scene/Scene_ServerSelect_Input.cpp

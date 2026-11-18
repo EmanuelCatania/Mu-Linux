@@ -43,15 +43,15 @@ extern void ClearActionObject(void);
 // Unica implementacion de 0x4CBA60 (`CloseInventoryRelatedWindows` de
 // UI_LegacyGameHelpers.cpp delega aca). La lista de flags es la del
 // disassembly (0x4CBB46..0x4CBD2F):
-//   ShopOpened, byte_7EAA132, RepairEnable_0 (DWORD en 0x07EAA134),
-//   WarehouseOpened, byte_559F5F, dword_7EAA14C, ChaosMixOpened, TradeOpened,
+//   ShopOpened, BKeyToggleGuard, RepairEnable_0 (DWORD en 0x07EAA134),
+//   WarehouseOpened, StoragePinOkFlag, PinInputModeState, ChaosMixOpened, TradeOpened,
 //   EventWindowOpened, g_bEventChipDialogEnable (0x07EAA128),
 //   g_shEventChipCount (0x07EAA12C), g_bServerDivisionEnable/Accept.
 //
 // Pools (0x4CBD36..0x4CBD9C), Type = -1 y Key (+0x38) = 0:
 //   120 registros de la tienda, 32 de la Chaos Machine, 32 de `Inventory` y
-//   32 de OffsetTradeItems; y si byte_7EAA0E8 == 1, tambien los 32 del trade
-//   del otro jugador (word_7E11F78 / dword_7E11FB0).
+//   32 de OffsetTradeItems; y si TradeConfirmLatch == 1, tambien los 32 del trade
+//   del otro jugador (TradeItemList / TradeItemKeyBase).
 // Los DAT_ de esos bucles son alias de campo de los pools (globals.h).  El de
 // 120 es el pool de 0x07EA5B30, que en el arbol es OffsetWarehouseItems; la
 // tienda del port usa ademas su propio ShopItems (en IDA es el mismo pool),
@@ -68,11 +68,11 @@ void __cdecl CloseInventoryRelatedWindows(void) {
     // en 1, con lo que el siguiente NPC no responde.
     if (ShopOpened) Net_SendNpcTalkClose();
     ShopOpened              = 0;   // 0x07EAA118
-    DAT_07eaa132            = 0;   // byte_7EAA132
-    DAT_07eaa134            = 0;   // RepairEnable_0
+    BKeyToggleGuard            = 0;   // 0x07EAA132
+    RepairEnableFlag            = 0;   // RepairEnable_0
     WarehouseOpened         = 0;   // 0x07EAA119
-    DAT_00559f5f            = 0;   // byte_559F5F
-    DAT_07eaa14c            = 0;   // dword_7EAA14C
+    StoragePinOkFlag            = 0;   // 0x00559F5F
+    PinInputModeState            = 0;   // 0x07EAA14C
     ChaosMixOpened          = 0;   // 0x07EAA11A
     TradeOpened             = 0;   // 0x07EAA11B
     EventWindowOpened       = 0;   // 0x07EAA11C
@@ -92,17 +92,17 @@ void __cdecl CloseInventoryRelatedWindows(void) {
     for (int i = 0; i < 32; ++i) {                      // Chaos Machine
         clearItem(OffsetMixItems + i * 0x44);
     }
-    const bool yourTradeLatched = ((BYTE)DAT_07eaa0e8 == 1);   // byte_7EAA0E8
+    const bool yourTradeLatched = ((BYTE)TradeConfirmLatch == 1);   // 0x07EAA0E8
     for (int off = 0; off < 0x880; off += 0x44) {
         clearItem(OffsetTradeItems + off);
         clearItem(Inventory + off);
         if (yourTradeLatched) {
-            *(unsigned short*)(DAT_07e11f78 + off) = 0xFFFF;
-            *(DWORD*)(DAT_07e11fb0 + off)          = 0;
+            *(unsigned short*)(TradeItemList + off) = 0xFFFF;
+            *(DWORD*)(TradeItemKeyBase + off)          = 0;
         }
     }
 
-    DAT_07e11d28 = 0;          // MouseUpdateTime
+    MoveDebounceCounter = 0;          // MouseUpdateTime
     PlayBuffer(25, 0, 0);
     PlayBuffer(28, 0, 0);
 }
@@ -114,8 +114,8 @@ void __cdecl CloseInventoryRelatedWindows(void) {
 // ported from IDA raw/00482BE0_sub_482BE0.c
 // 91-line item-type category lookup. Given a category (0,1,2 = right/left/crossbow
 // equipped, 3 = force Type=454..452, 4 = force Type=451..448), derives the Type
-// range [v2..v1] using DAT_00559c60/64/68 (current equipped weapon per hand) and
-// scans the 8x8 inventory grid (DAT_07EA9328..DAT_07EA9504, 17 ints/row,
+// range [v2..v1] using QKeyItemType/64/68 (current equipped weapon per hand) and
+// scans the 8x8 inventory grid (InventoryGridBase..InventoryGridEnd, 17 ints/row,
 // 136 ints/col) for the first matching slot, returning a packed slot index.
 // Returns -1 if Teleport flag is active and the range collapses to 458, or if no
 // slot matches. NOTE: `Teleport` global is not declared in this translation unit
@@ -141,10 +141,10 @@ int __cdecl Item_FindQuickSlotByCategory(int a1) {
     }
 
     if (a1 == 0) {
-        v1 = DAT_00559c60;
-        if (DAT_00559c60 == 456 || DAT_00559c60 == 457 || DAT_00559c60 == 468) {
-            v2 = DAT_00559c60;
-        } else if (DAT_00559c60 >= 452 && DAT_00559c60 <= 454) {
+        v1 = QKeyItemType;
+        if (QKeyItemType == 456 || QKeyItemType == 457 || QKeyItemType == 468) {
+            v2 = QKeyItemType;
+        } else if (QKeyItemType >= 452 && QKeyItemType <= 454) {
             v1 = 454;
             v2 = 452;
         } else {
@@ -152,10 +152,10 @@ int __cdecl Item_FindQuickSlotByCategory(int a1) {
             v2 = 448;
         }
     } else if (a1 == 1) {
-        v1 = DAT_00559c64;
-        if (DAT_00559c64 == 456 || DAT_00559c64 == 457 || DAT_00559c64 == 468) {
-            v2 = DAT_00559c64;
-        } else if (DAT_00559c64 < 448 || DAT_00559c64 > 451) {
+        v1 = WKeyItemType;
+        if (WKeyItemType == 456 || WKeyItemType == 457 || WKeyItemType == 468) {
+            v2 = WKeyItemType;
+        } else if (WKeyItemType < 448 || WKeyItemType > 451) {
             v1 = 454;
             v2 = 452;
         } else {
@@ -163,13 +163,13 @@ int __cdecl Item_FindQuickSlotByCategory(int a1) {
             v2 = 448;
         }
     } else if (a1 == 2) {
-        v1 = DAT_00559c68;
-        if (DAT_00559c68 == 456 || DAT_00559c68 == 457 || DAT_00559c68 == 468) {
-            v2 = DAT_00559c68;
-        } else if (DAT_00559c68 >= 448 && DAT_00559c68 <= 451) {
+        v1 = EKeyItemType;
+        if (EKeyItemType == 456 || EKeyItemType == 457 || EKeyItemType == 468) {
+            v2 = EKeyItemType;
+        } else if (EKeyItemType >= 448 && EKeyItemType <= 451) {
             v1 = 451;
             v2 = 448;
-        } else if (DAT_00559c68 >= 452 && DAT_00559c68 <= 454) {
+        } else if (EKeyItemType >= 452 && EKeyItemType <= 454) {
             v1 = 454;
             v2 = 452;
         } else {
@@ -213,7 +213,7 @@ void __cdecl ItemConvert(ITEM* ip, int Attribute1, int Attribute2) {
         return;
     }
 
-    ITEM_ATTRIBUTE* table = (ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068;
+    ITEM_ATTRIBUTE* table = (ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase;
     if (!table) return;
 
     ITEM_ATTRIBUTE* p = &table[wType];

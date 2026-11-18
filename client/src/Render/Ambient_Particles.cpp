@@ -3,7 +3,7 @@
 //
 // Fauna ambiental que nada/camina cerca del héroe: los peces de Lorencia y
 // Atlans, y los bichos de Dungeon, Lost Tower y Tarkan. Comparte el pool con
-// RenderFishs (0x00502200): DAT_083a2e90, 10 slots × OBJECT_STRIDE. El binario
+// RenderFishs (0x00502200): FishObjectPool, 10 slots × OBJECT_STRIDE. El binario
 // recorre el pool desde el ancla 0x083A2F78 (= slot + 0xE8), por eso el
 // decompile lee todos los campos con índices negativos; acá se usan los campos
 // del OBJECT.
@@ -38,9 +38,9 @@ inline float* AmbientPrevPos(OBJECT* o)  { return reinterpret_cast<float*>(reint
 inline BYTE*  AmbientFlag8A(OBJECT* o)   { return reinterpret_cast<BYTE*>(o) + 0x8A; }
 inline float* AmbientMatrix(OBJECT* o)   { return reinterpret_cast<float*>(reinterpret_cast<BYTE*>(o) + 0x90); }
 
-inline float HeroX() { return *(const float*)(DAT_07abf5d8 + 0x10); }
-inline float HeroY() { return *(const float*)(DAT_07abf5d8 + 0x14); }
-inline float HeroZ() { return *(const float*)(DAT_07abf5d8 + 0x18); }
+inline float HeroX() { return *(const float*)(Hero + 0x10); }
+inline float HeroY() { return *(const float*)(Hero + 0x14); }
+inline float HeroZ() { return *(const float*)(Hero + 0x18); }
 
 inline int TileAt(float x, float y)
 {
@@ -155,7 +155,7 @@ bool AmbientSpawn(OBJECT* o, int world)
 // IDA L182-310: movimiento, rebote contra paredes y vida útil.
 void AmbientMove(OBJECT* o, int slotIndex)
 {
-    void* model = (void*)(DAT_05828d58 + o->Type * BMD_STRIDE);
+    void* model = (void*)(ModelsBase + o->Type * BMD_STRIDE);
     *(BYTE*)((BYTE*)model + 0xa0 + BMD_FIELD_SHIFT) = o->CurrentAction;
     BMD__PlayAnimation(model, &o->AnimationFrame, &o->PriorAnimationFrame,
                        &o->PriorAction, o->Velocity * 0.5f);
@@ -168,7 +168,7 @@ void AmbientMove(OBJECT* o, int slotIndex)
 
     if ((type >= 181 && type <= 191) || o->LifeTime > 0) {
         SetAction(o, type == 178);
-        Particle_PathUpdate(o, slotIndex, DAT_083a2e90, 10);
+        Particle_PathUpdate(o, slotIndex, FishObjectPool, 10);
         Matrix_BuildFromEuler(o->Angle, AmbientMatrix(o));
 
         float step[3] = { (float)(rand() % 4 + 6) * o->Velocity, 0.0f, 0.0f };
@@ -233,10 +233,10 @@ void AmbientMove(OBJECT* o, int slotIndex)
 
 void __cdecl AmbientParticles_Update(void)
 {
-    if (DAT_07abf5d8 == nullptr)
+    if (Hero == nullptr)
         return;   // guarda propia: el spawn se ancla en la posición del héroe
     for (int i = 0; i < 10; ++i) {
-        OBJECT* o = AsObject(DAT_083a2e90 + i * OBJECT_STRIDE);
+        OBJECT* o = AsObject(FishObjectPool + i * OBJECT_STRIDE);
         const int world = gMapManager.GetCurrentMap();
         // IDA L77: fuera de Atlans y Tarkan sólo se usan los 3 primeros slots.
         if (world != 7 && world != 8 && i >= 3)

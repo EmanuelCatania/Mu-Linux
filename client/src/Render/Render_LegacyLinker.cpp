@@ -42,7 +42,7 @@ extern void ClearActionObject(void);
 // EnableAlphaBlend @ 0x00511710 — GL additive blending setup.
 // Delega en la versión canónica cacheada GL_SetBlendAdditive (GL_State.cpp,
 // misma dirección). No llamar glDepthMask/glDisable(GL_CULL_FACE) directos:
-// desincroniza los caches DAT_083a42e8 (depth mask) y DAT_083a411c (cull) y
+// desincroniza los caches DepthMaskCache (depth mask) y CullFaceEnableCache (cull) y
 // el objeto opaco siguiente puede quedar sin escribir depth. El source 5.2
 // (ZzzOpenglUtil.cpp:468) confirma que EnableAlphaBlend usa el DisableDepthMask
 // CACHEADO, nunca glDepthMask directo.
@@ -88,7 +88,7 @@ void __cdecl AccessModelWithTextures(int id, char* path, char* name, int param) 
     // alloc) con stride 16 bytes. Esa tabla tiene `numBones` entries de 0x10
     // bytes c/u: sólo escribir speeds hasta el límite de bones disponibles
     // (overflow con NPCs de pocos bones).
-    intptr_t slotBase = DAT_05828d58 + id * BMD_STRIDE;
+    intptr_t slotBase = ModelsBase + id * BMD_STRIDE;
     char* actionsTable = (char*)AsModel(slotBase)->Actions;
     short numBones = *(short*)(slotBase + 38);   // realmente numBones, but anim speed lookup uses this
     if (actionsTable && numBones > 0) {
@@ -193,9 +193,9 @@ void __cdecl RenderItem3D(float sx, float sy, float Width, float Height,
     float Position[3];
 
     // Hit-test: mouse over item rect (only when no item is picked-up, OR this IS the picked-up item).
-    if (!DAT_07e91388 || PickUp) {
-        float fMouseX = (float)DAT_083a427c;   // MouseX
-        float fMouseY = (float)DAT_083a4278;   // MouseY
+    if (!ItemPickedFlag || PickUp) {
+        float fMouseX = (float)MouseX;   // MouseX
+        float fMouseY = (float)MouseY;   // MouseY
         if (fMouseX >= sx && fMouseX < sx + Width &&
             fMouseY >= sy && fMouseY < sy + Height) {
             Success = true;
@@ -361,7 +361,7 @@ void __cdecl RenderItem3D(float sx, float sy, float Width, float Height,
     // o numMesh están en garbage. Retornar silencioso si modelo no listo.
     {
         if (modelId < 0 || modelId >= ResourceTables::ModelCount()) return;
-        char* modelEntry = (char*)DAT_05828d58 + modelId * BMD_STRIDE;
+        char* modelEntry = (char*)ModelsBase + modelId * BMD_STRIDE;
         short numMesh = *(short*)(modelEntry + 0x24);
         intptr_t meshBase = (intptr_t)((BMD*)(uintptr_t)(modelEntry))->Meshs;
         // Books 1..16 are loaded at model IDs 880..895.  The original
@@ -391,26 +391,26 @@ void __cdecl MoveObject_Special(OBJECT* object)
   int v7; // ebx
   float Position[3]; // [esp+8h] [ebp-Ch] BYREF
 
-  if ( DAT_0055a7b4 < 0 )
+  if ( ActionObjWorldId < 0 )
   {
     return;
   }
-  if ( DAT_0055a7b0 < 0 )
+  if ( ActionObjCollapseType < 0 )
   {
     return;
   }
-  v1 = DAT_0055a7b8;
-  if ( DAT_0055a7b8 < 0 || gMapManager.GetCurrentMap() != DAT_0055a7b4 )
+  v1 = ActionObjFrameCount;
+  if ( ActionObjFrameCount < 0 || gMapManager.GetCurrentMap() != ActionObjWorldId )
   {
     return;
   }
   v2 = *(WORD *)(a1 + 2);
-  if ( v2 != DAT_0055a7b0 )
+  if ( v2 != ActionObjCollapseType )
   {
     if ( v2 == 9 )
     {
 LABEL_9:
-      if ( !DAT_0055a7b8 )
+      if ( !ActionObjFrameCount )
       {
         *(DWORD *)(a1 + 88) = -1;
         *(WORD *)(a1 + 134) = 4;
@@ -426,24 +426,24 @@ LABEL_9:
   {
     goto LABEL_9;
   }
-  if ( v2 == DAT_0055a7b0 )
+  if ( v2 == ActionObjCollapseType )
   {
-    if ( DAT_0055a7b8 == 20 )
+    if ( ActionObjFrameCount == 20 )
     {
       *(DWORD *)(a1 + 28) = 1108082688;
       *(DWORD *)(a1 + 88) = -1;
       PlayBuffer(108, 0, 0);
-      v1 = DAT_0055a7b8;
+      v1 = ActionObjFrameCount;
     }
     if ( v1 >= 0 )
     {
       v3 = (float *)(a1 + 28);
-      *(float *)(a1 + 28) = DAT_0055a7bc + *(float *)(a1 + 28);
-      DAT_0055a7bc = DAT_0055a7bc + 1.5;
+      *(float *)(a1 + 28) = ViewportHeightFBits + *(float *)(a1 + 28);
+      ViewportHeightFBits = ViewportHeightFBits + 1.5;
       if ( *(float *)(a1 + 28) >= 90.0 )
       {
-        *v3 = *v3 - (double)DAT_0055a7b8;
-        DAT_0055a7bc = 2.0;
+        *v3 = *v3 - (double)ActionObjFrameCount;
+        ViewportHeightFBits = 2.0;
         v4 = *(float *)(a1 + 20);
         v5 = *(float *)(a1 + 24);
         Position[0] = *(float *)(a1 + 16);
@@ -463,14 +463,14 @@ LABEL_9:
           while ( v7 );
         }
       }
-      if ( !DAT_0055a7b8 )
+      if ( !ActionObjFrameCount )
       {
         *(DWORD *)(a1 + 88) = -2;
         *v3 = 90.0;
         ClearActionObject();
         AddTerrainAttributeRange(13, 70, 3, 6, 8u, 0);
       }
-      --DAT_0055a7b8;
+      --ActionObjFrameCount;
     }
   }
 }

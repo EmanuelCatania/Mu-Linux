@@ -2,7 +2,7 @@
 // 3D character preview rendering during login and character selection screens.
 //
 // RenderInfomation3D @ 0x0051e0c0 - Scene_CharPreview
-// FUN_005239a0 @ 0x005239a0 - UI_DrawLoginBg
+// CharSelect_UpdateInput @ 0x005239a0 - UI_DrawLoginBg
 
 #include "stdafx.h"
 #include "Render/Gfx.h"
@@ -15,12 +15,12 @@ void RenderInfomation3D(void)
   byte option1;
   uint level;
 
-  if (DAT_083a7c24 == 0x97) {
-    if (DAT_07eaa13c != 1) {
+  if (InGameUiState == 0x97) {
+    if (ItemActionMode != 1) {
       return;
     }
   }
-  else if (DAT_083a7c24 != 0x99) {
+  else if (InGameUiState != 0x99) {
     return;
   }
 
@@ -29,7 +29,7 @@ void RenderInfomation3D(void)
   Gfx::LoadIdentity();
   GL_SetViewport(0, 0, gWindow.GetRealWidth(), gWindow.GetHeight());
   aspect = (float)((double)gWindow.GetRealWidth() / (double)(int)gWindow.GetHeight());
-  GL_SetPerspective(0x3f800000, aspect, (int)DAT_0056154c, DAT_00561550);
+  GL_SetPerspective(0x3f800000, aspect, (int)CameraViewNearStorage, CameraViewFarStorage);
 
   Gfx::MatrixMode(Gfx::Matrix::ModelView);
   Gfx::PushMatrix();
@@ -38,13 +38,13 @@ void RenderInfomation3D(void)
   GL_EnableDepthTest();
   GL_EnableDepthWrites();
 
-  level = DAT_07e91354;
-  itemType = *(short*)DAT_07e91350;
-  option1 = DAT_07e9136b;
-  if (DAT_083a7c24 == 0x99) {
-    level = DAT_07ea5244;
-    itemType = *(short*)DAT_07ea5240;
-    option1 = DAT_07ea525b;
+  level = PickedItemLevel;
+  itemType = *(short*)PickedItemData;
+  option1 = PickedItemDurExtra;
+  if (InGameUiState == 0x99) {
+    level = PreviewItemLevel;
+    itemType = *(short*)PreviewItemData;
+    option1 = PreviewItemOption1;
   }
 
   RenderItem3D(245.0f, 115.0f, 40.0f, 60.0f, (int)itemType, level, option1, 0, '\x01');
@@ -55,7 +55,7 @@ void RenderInfomation3D(void)
   Gfx::MatrixMode(Gfx::Matrix::ModelView);
 }
 
-void FUN_005239a0(void)
+void CharSelect_UpdateInput(void)
 {
   GL_SetBlendSrcOver('\x01');
   Gfx::Color3f(1.0f, 1.0f, 1.0f);

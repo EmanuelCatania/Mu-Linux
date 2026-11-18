@@ -78,7 +78,7 @@ constexpr int kGuildMemberRecordCount = 42;
 extern "C" char byte_7E91790[];
 extern "C" void GuildList_Clear(void);
 extern "C" void GuildList_AddMember(const char* name, char connected, char partyNumber);
-#define byte_7E919BC  DAT_07e919bc   // tabla global stride 80 (ver globals.h)
+#define byte_7E919BC  GuildInfoTable   // tabla global stride 80 (ver globals.h)
 extern "C" void GuildCreator_OpenFromServer(void);
 extern "C" void GuildCreator_OpenQuestionFromServer(void);
 extern "C" void GuildCreator_CloseFromResult(void);

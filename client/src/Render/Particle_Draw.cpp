@@ -20,7 +20,7 @@
 //
 // ── COLOR SETUP ───────────────────────────────────────────────────────────────
 //
-//   if param_8 == _DAT_0055256c (1.0f):
+//   if param_8 == 1.0f (1.0f):
 //     glColor3fv(param_6)             → color sólido sin alpha
 //   else:
 //     glColor4f(param_6[0], param_6[1], param_6[2], param_8)  → color con alpha
@@ -36,13 +36,13 @@
 //
 // ── PROYECCIÓN MUNDO→PANTALLA ─────────────────────────────────────────────────
 //
-//   fVar3 = param_2 * _DAT_00552594   (world_X * cam_scale → screen tile X)
-//   fVar5 = param_3 * _DAT_00552594   (world_Y * cam_scale → screen tile Y)
+//   fVar3 = param_2 * EffectScaleUnit   (world_X * cam_scale → screen tile X)
+//   fVar5 = param_3 * EffectScaleUnit   (world_Y * cam_scale → screen tile Y)
 //   lVar14 = ftol(fVar3)              (tile X entero)
 //   lVar15 = ftol(fVar5)              (tile Y entero)
 //
 //   Tamaño efectivo: fVar2 = max(param_4, param_5)
-//   fVar6 = fVar2 * _DAT_00552504     (half_size en unidades de tile)
+//   fVar6 = fVar2 * HalfScale     (half_size en unidades de tile)
 //   fVar7 = lVar14 - fVar3 + fVar6    (offset desde esquina del tile)
 //   fVar2 = 1.0 / fVar2               (reciprocal para UV calc)
 //   lVar16 = ftol(fVar3)              (tile entero para loop)
@@ -65,12 +65,12 @@
 //
 //       // Transformar 4 esquinas del quad con la matriz de rotación
 //       for iVar12 = 0 to 0x30 step 0xc:    (4 esquinas × 3 floats = 12 bytes)
-//         local_90[iVar12/4]   -= _DAT_00552504   (centrar UV)
-//         local_90[iVar12/4+1] -= _DAT_00552504
+//         local_90[iVar12/4]   -= HalfScale   (centrar UV)
+//         local_90[iVar12/4+1] -= HalfScale
 //         Vector_Rotate(&local_90[iVar12/4], local_30, &local_60[iVar12/4])
 //           → Matrix_TransformPoint(corner_uv, rotation_mat, out_corner)
-//         local_60[iVar12/4] = (param_4/param_5) * local_60[iVar12/4] + _DAT_00552504
-//         local_60[iVar12/4+1] += _DAT_00552504
+//         local_60[iVar12/4] = (param_4/param_5) * local_60[iVar12/4] + HalfScale
+//         local_60[iVar12/4+1] += HalfScale
 //
 //       // Draw call por sub-tile
 //       Terrain_RenderQuad(lVar14 + local_d0, lVar15 + fVar11, 1.0, 1, local_60, '\0', param_8)
@@ -78,9 +78,9 @@
 //
 // ── CONSTANTES ────────────────────────────────────────────────────────────────
 //
-//   _DAT_00552594  — cam_scale: factor world→tile (world_pos / tile_size → tile index)
-//   _DAT_00552504  — 0.5f (half para centrar)
-//   _DAT_0055256c  — 1.0f (constante "full alpha")
+//   EffectScaleUnit  — cam_scale: factor world→tile (world_pos / tile_size → tile index)
+//   HalfScale  — 0.5f (half para centrar)
+//   1.0f  — 1.0f (constante "full alpha")
 //
 // ── FUNCIÓN CROSS-REFERENCE ───────────────────────────────────────────────────
 //

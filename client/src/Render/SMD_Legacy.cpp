@@ -570,9 +570,9 @@ bool AddAnimation(void *value, bool lock) {
 extern "C" void __cdecl FixupSMD() { Smd::Fixup(); }
 extern "C" void __cdecl SMD2BMDModel(int id, int actions) {
     if (id >= 0 && std::size_t(id) < ResourceTables::ModelCount())
-        Smd::BuildModel(AsModel(DAT_05828d58) + id, actions);
+        Smd::BuildModel(AsModel(ModelsBase) + id, actions);
 }
 extern "C" void __cdecl SMD2BMDAnimation(int id, char lock) {
     if (id >= 0 && std::size_t(id) < ResourceTables::ModelCount())
-        Smd::AddAnimation(AsModel(DAT_05828d58) + id, lock != 0);
+        Smd::AddAnimation(AsModel(ModelsBase) + id, lock != 0);
 }

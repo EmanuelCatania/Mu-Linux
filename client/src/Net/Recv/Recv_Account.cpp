@@ -45,7 +45,7 @@ void Recv_JoinServer(const BYTE* Msg)
         // (el Hero stale del slot 0) → fantasma renderizado + hover pegado.
         HeroKey   = g_HeroKey;
         CurrentProtocolState   = 2;
-        DAT_083a7c14   = 2;          // login sub-state = CredentialInput
+        LoginSubState   = 2;          // login sub-state = CredentialInput
         PlayBuffer(27, 0, 0);
         NetLog("NET:    JoinServer OK: HeroKey=%d state→2/2", g_HeroKey);
         // ── F1/05 HWID (desviación MuEmu) ──────────────────────────────────────────
@@ -97,17 +97,17 @@ void Recv_LoginResult(const BYTE* Msg)
         case 0xC2: case 0xD2: state = 36; break;
         default:   state = 27; break;
     }
-    DAT_05826cb0 = state;
-    DAT_083a7c14 = 3;
+    CurrentProtocolState = state;
+    LoginSubState = 3;
     // Log del resultado de login crudo por intento.  Msg[4]=code server,
-    // state=nuestro DAT_05826cb0.
+    // state=nuestro CurrentProtocolState.
     NetLog("NET:  → F1/01 LOGIN-RESULT code=0x%02X -> state=%u (t=%lu)",
            Msg[4], state, (unsigned long)Platform::GetTimer().Ticks());
 
     // DESVIACIÓN: auto-reintento del PRIMER login fallido con code 0x02.  Contra
     // MuEmu el 1er F1/01 se rechaza (0x02 = pass incorrecta) con datos IDÉNTICOS al
     // 2do intento que SÍ entra (0x01) — quirk del primer paquete C3, no es la
-    // contraseña.  Reintentamos UNA sola vez simulando Enter (DAT_055ca038),
+    // contraseña.  Reintentamos UNA sola vez simulando Enter (EnterKeyPressedFlag),
     // que hace que Game_SceneUpdate re-envíe las MISMAS credenciales.  Si la
     // pass fuera realmente incorrecta, el 2do intento también da 0x02 y ahí sí
     // se muestra el error.  Sólo 0x02 — no reintentamos banned/already-online/
@@ -116,7 +116,7 @@ void Recv_LoginResult(const BYTE* Msg)
         static int s_loginAutoRetried = 0;
         if (Msg[4] == 0x02 && !s_loginAutoRetried) {
             s_loginAutoRetried = 1;
-            DAT_055ca038 = 1;   // simula Enter → re-envía el login (mismas creds)
+            EnterKeyPressedFlag = 1;   // simula Enter → re-envía el login (mismas creds)
             NetLog("NET:    F1/01 AUTO-RETRY (first 0x02 = likely first-packet quirk)");
         } else {
             s_loginAutoRetried = 0;   // reset en éxito o en 2do fallo
@@ -159,22 +159,22 @@ void Recv_LogOut(const BYTE* Msg)
             ReleaseMainData();
         }
         SceneFlag = 4;                // SceneFlag = CharSelect
-        DAT_083a7c14 = 0;                // sub-state reset (will be set to 0x14/0x15 by EnterWorldTick init)
-        DAT_083a7c18 = 0;
-        DAT_05826cb0 = 50;               // CurrentProtocolState
+        LoginSubState = 0;                // sub-state reset (will be set to 0x14/0x15 by EnterWorldTick init)
+        LoginNextSubState = 0;
+        CurrentProtocolState = 50;               // CurrentProtocolState
         // RESET de las guardas de init de escena. EnterWorldTick (state=4) y
         // CharSelectTick (state=5) tienen guardas de init (IDA: DAT_083a7c4b/4c) que
         // sólo permiten re-inicializar la escena la PRIMERA vez. Sin reset, el
-        // substate DAT_083a7c14 heredado del primer login (0x1c, post-OK-click)
+        // substate LoginSubState heredado del primer login (0x1c, post-OK-click)
         // dispararía un F3/03 select-char inmediato → el server respondería con
         // JoinMapServer → el cliente recargaría el mapa en vez de mostrar char-select.
         CharSelectSceneInitialized = 0;
-        DAT_083a7c4c = 0;                // CharSelect per-tick init
-        DAT_083a7c10 = 0;                // IDA: EnableMainRender (0x083A7C10)
-        DAT_083a4299 = 0;                // double-click flag
-        DAT_083a4124 = 0;                // single-click flag
-        DAT_005616ac = -1;               // selected slot
-        DAT_005616b0 = -1;               // creation slot
+        InitMainScene = 0;                // CharSelect per-tick init
+        EnableMainRender = 0;                // IDA: EnableMainRender (0x083A7C10)
+        MouseDblClickFlag = 0;                // double-click flag
+        MouseLButtonPush = 0;                // single-click flag
+        SelectedHero = -1;               // selected slot
+        SelectedCharConfirm = -1;               // creation slot
         // Manda el pedido de lista de personajes F3/00 vía gNetwork.Send para que
         // salga como C3 (encriptado) con el contador de serial correcto + chain-XOR. Los
         // envíos C1 planos, sin serial, el server los descartaba en silencio en
@@ -192,7 +192,7 @@ void Recv_LogOut(const BYTE* Msg)
         // original — una desviación deliberada por el orden del JoinMapServer. Con el
         // World anterior y su heightmap todavía cargado, CreateCharacterPointer le
         // daría a cada personaje del char-select la altura del terreno de ese mapa.
-        DAT_05826cb0 = 0;                // CurrentProtocolState
+        CurrentProtocolState = 0;                // CurrentProtocolState
         InitGame();
         return;
     }
@@ -208,14 +208,14 @@ void Recv_LogOut(const BYTE* Msg)
         CWsctlc_Close(reinterpret_cast<uintptr_t>(SocketClient));  // Net_Disconnect (close socket)
         ReleaseCharacterSceneData(); // IDA: ReleaseCharacterSceneData (0x005102C0)
         SceneFlag = 2;                // SceneFlag = Login
-        DAT_083a7c14 = 0;                // sub-state = ServerSelect
-        DAT_083a7c18 = 0;
-        DAT_05826cb0 = 0;                // CurrentProtocolState
-        DAT_083a7c48 = 0;                // ConnectionCheckEnable
-        DAT_083a7c49 = 0;                // InitLogIn
+        LoginSubState = 0;                // sub-state = ServerSelect
+        LoginNextSubState = 0;
+        CurrentProtocolState = 0;                // CurrentProtocolState
+        ConnectionCheckEnable = 0;                // ConnectionCheckEnable
+        InitLogIn = 0;                // InitLogIn
         CharSelectSceneInitialized = 0;
-        DAT_083a7c4c = 0;                // InitMainScene
-        DAT_083a7c10 = 0;                // IDA: EnableMainRender (0x083A7C10)
+        InitMainScene = 0;                // InitMainScene
+        EnableMainRender = 0;                // IDA: EnableMainRender (0x083A7C10)
         InitGame();
         return;
     }
@@ -223,7 +223,7 @@ void Recv_LogOut(const BYTE* Msg)
 
 // ---------------------------------------------------------------------------
 // F4/04 — CustomServerList (ConnectServer CCCustomServerListSend)
-// Pobla la tabla local de nombres DAT_07d52c34 (stride 300, indexada por
+// Pobla la tabla local de nombres ServerNameTable (stride 300, indexada por
 // ServerCode/20) que ReceiveServerList (F4/02) lee para el nombre de cada
 // grupo. Formato (C2 header):
 //   [C2][sizeHB][sizeLB][F4][04][countHB][countLB] + count × {WORD ServerCode; char Name[32]}
@@ -238,7 +238,7 @@ void Recv_CustomServerList(const BYTE* Msg)
         const char* name = (const char*)(p + 2);
         int group = serverCode / 20;
         if (group >= 0 && group < 24)
-            NetText::FromServer(DAT_07d52c34 + 300 * group, 32, name, 32);  // deja hueco null-term
+            NetText::FromServer(ServerNameTable + 300 * group, 32, name, 32);  // deja hueco null-term
         p += 34;
     }
     NetLog("NET:  → F4/04 CustomServerList count=%d (names populated)", count);
@@ -249,20 +249,20 @@ void Recv_CustomServerList(const BYTE* Msg)
 // Lista de game servers publicada por el ConnectServer. Cada entrada trae
 // {WORD ServerCode; BYTE UserTotal; pad} (stride 4). UserTotal (0..100) es el
 // load que Scene_Login_ServerSelect Pass 4 dibuja como cuadros llenos.
-// El nombre de cada grupo se copia desde DAT_07d52c34 (poblada por F4/04).
-// Layout del display array (DAT_083a45d8, stride 542 por slot):
+// El nombre de cada grupo se copia desde ServerNameTable (poblada por F4/04).
+// Layout del display array (ServerListBuffer, stride 542 por slot):
 //   +0x14 num_channels · +0x2c channel_id (stride 26) · +0x2e load (stride 26)
 // Slot destino = 23 - (ServerCode/20)  (o 24 para el grupo evento 12).
 // ---------------------------------------------------------------------------
 void Recv_ServerList(const BYTE* Msg)
 {
     unsigned char count = Msg[5];
-    DAT_083a7c40 = count;
+    ServerListCount = count;
 
     // Clear num_channels (+0x14) de todos los slots (25). Repuebla desde el
     // paquete; esto también elimina la entrada estática "MuServer" del slot 0.
     for (int s = 0; s < 25; s++)
-        *(unsigned char*)(DAT_083a45d8 + 542 * s + 0x14) = 0;
+        *(unsigned char*)(ServerListBuffer + 542 * s + 0x14) = 0;
 
     if (count == 0)
         return;
@@ -276,14 +276,14 @@ void Recv_ServerList(const BYTE* Msg)
         if (group == 12) {
             slot = 24;
             // grupo evento: nombre desde GlobalText[559] (si existe)
-            if (GlobalText[559]) Platform::TextCopy(DAT_083a78a8, (const char*)GlobalText[559], 20);
+            if (GlobalText[559]) Platform::TextCopy(DisplaySlot24Name, (const char*)GlobalText[559], 20);
         } else {
             slot = 23 - group;
             if (slot < 0 || slot > 24) continue;
             // nombre desde la tabla local poblada por F4/04
-            Platform::TextCopy(DAT_083a45d8 + 542 * slot, DAT_07d52c34 + 300 * group, 20);
+            Platform::TextCopy(ServerListBuffer + 542 * slot, ServerNameTable + 300 * group, 20);
         }
-        char* slotBase = DAT_083a45d8 + 542 * slot;
+        char* slotBase = ServerListBuffer + 542 * slot;
         unsigned char chan = *(unsigned char*)(slotBase + 0x14);   // num_channels actual
         *(unsigned short*)(slotBase + 0x2c + 26 * chan) = serverCode;  // channel_id
         *(unsigned char*) (slotBase + 0x2e + 26 * chan) = load;        // load (UserTotal)
@@ -318,8 +318,8 @@ void Recv_Redirect(const BYTE* Msg)
 // ---------------------------------------------------------------------------
 void Recv_BackToConnecting(void)
 {
-    DAT_05826cb0 = 1;
-    DAT_083a7c14 = 1;
+    CurrentProtocolState = 1;
+    LoginSubState = 1;
 }
 
 // 0xF1

@@ -9,15 +9,15 @@
 
 // ── Missing globals (extern-declared in various .cpp but never defined) ──────
 // Trade.cpp
-BYTE  g_trade_active   = 0;   // DAT_05826d30
-BYTE  g_duel_mode      = 0;   // DAT_05826d31
-BYTE  g_trade_param    = 0;   // DAT_05826d32
-BYTE  g_trade_accepted = 0;   // DAT_05826c04
-DWORD g_trade_requester= 0;   // DAT_05826c00
-char  g_active_shop_name[4]= {};  // lpString_05826bfc
-int   g_cached_shop_slot   = 0;   // DAT_00559684
-BYTE* g_EntityBase    = nullptr;  // DAT_07abf5d0
-intptr_t g_LocalEntity = 0;        // DAT_07abf5d8
+BYTE  g_trade_active   = 0;   // LegacyTradeActive
+BYTE  g_duel_mode      = 0;   // LegacyDuelMode
+BYTE  g_trade_param    = 0;   // LegacyTradeParam
+BYTE  g_trade_accepted = 0;   // LegacyTradeAccepted
+DWORD g_trade_requester= 0;   // LegacyTradeRequester
+char  g_active_shop_name[4]= {};  // GuildNameCacheA
+int   g_cached_shop_slot   = 0;   // CachedShopSlotIndex
+BYTE* g_EntityBase    = nullptr;  // CharactersClient
+intptr_t g_LocalEntity = 0;        // Hero
 
 // Sound.cpp — real DirectSound8 globals live in globals.cpp:
 //   g_EnableSound, g_Enable3DSound, g_lpDS, g_lpDS3DListener, wavefile,
@@ -25,12 +25,12 @@ intptr_t g_LocalEntity = 0;        // DAT_07abf5d8
 //   MaxBufferChannel[], BufferChannel[], Enable3DSound[], BufferName[][].
 
 // Texture.cpp
-int g_bound_texture_id = 0;   // DAT_00561574
+int g_bound_texture_id = 0;   // BoundTextureSlotCache
 int g_screen_height    = 480; // DAT_00561570
 int g_vram_used        = 0;   // m_dwUsedTextureMemory
 
 // Party.cpp
-BYTE* g_PartyHPTable   = nullptr; // DAT_07e11e98
+BYTE* g_PartyHPTable   = nullptr; // PartyHPBarsTable
 
 // ── CRT wrappers (these are real implementations) ────────────────────────────
 

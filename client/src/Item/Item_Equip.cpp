@@ -16,15 +16,15 @@
 #include "Item_Equip.h"
 
 // IDA L239: v13 = *(std::uint8_t *)(dword_7D7809C + CharacterAttribute + 87).
-// El indice es dword_7D7809C (el slot que Attack acaba de sembrar en L1425 con
+// El indice es SelectedSkillSlot (el slot que Attack acaba de sembrar en L1425 con
 // *(BYTE *)(Hero + EntityOffset(913))), no Hero+913 releido. Coinciden en el camino de Attack,
 // pero UseSkillWarrior usa el mismo global y conviene mantenerlos atados.
 static BYTE ItemEquip_SelectedSkill()            // IDA: v13
 {
-    BYTE* const attributes = (BYTE*)(uintptr_t)DAT_07cf1ff4;   // IDA: CharacterAttribute
+    BYTE* const attributes = (BYTE*)(uintptr_t)CharacterAttributePtr;   // IDA: CharacterAttribute
     if (!attributes)
         return 0;
-    return attributes[(BYTE)DAT_07d7809c + 87];
+    return attributes[(BYTE)SelectedSkillSlot + 87];
 }
 
 // IDA: Item_Equip @ 0x483B30, L284-505 and LABEL_149-216. Both the direct
@@ -70,8 +70,8 @@ static char ItemEquip_UseSelectedTargetSkill(intptr_t character /* IDA: sy */,
     BYTE* const target = (BYTE*)(uintptr_t)CharactersClient + CHARACTER_STRIDE * (int)SelectedCharacter;
     // IDA L44-49: sub_483780 es duenio del cast encolado; a diferencia del camino
     // de rango generico de Attack limpia el flag pendiente antes de anotar el slot.
-    DAT_07d78098 = 0;                                 // IDA: dword_7D78098 = 0
-    DAT_07d7809c = skill;                             // IDA: dword_7D7809C = a4
+    SkillModeFlag = 0;                                 // IDA: dword_7D78098 = 0
+    SelectedSkillSlot = skill;                             // IDA: dword_7D7809C = a4
     MovementSkillTarget = (DWORD)SelectedCharacter;          // IDA: MovementSkillTarget
 
     const int targetX = (int)(*(float*)(target + 16) * 0.01f);   // IDA: TargetX
@@ -111,7 +111,7 @@ static char ItemEquip_UseSelectedTargetSkill(intptr_t character /* IDA: sy */,
 // cuando el item trae la opcion Skill (Attribute1 & 0x80).
 static char ItemEquip_DispatchFromItemSkillList(intptr_t character, intptr_t object, BYTE* item)
 {
-    BYTE* const attributes = (BYTE*)(uintptr_t)DAT_07cf1ff4;
+    BYTE* const attributes = (BYTE*)(uintptr_t)CharacterAttributePtr;
     if (!attributes || !Hero || !item)
         return 0;
 
@@ -219,7 +219,7 @@ char __cdecl Item_Equip(intptr_t character /* IDA: o */, intptr_t object /* IDA:
 
     if (useDirectPath) {
         // IDA L284-522.
-        BYTE* const attributes = (BYTE*)(uintptr_t)DAT_07cf1ff4;
+        BYTE* const attributes = (BYTE*)(uintptr_t)CharacterAttributePtr;
         int piMana = 0, piSkillMana = 0;
         GetSkillInformation((int)skill, 1, 0, &piMana, 0, &piSkillMana);
         if (!attributes)

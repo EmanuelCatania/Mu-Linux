@@ -9,8 +9,8 @@
 // MovePointers @ 0x004794a0 — Effect_TickFlare
 // MovePoints @ 0x00479380 — Effect_TickSpark
 //
-// Effect pool:  DAT_07b11670, stride 0x1bc bytes (0x6f * sizeof(float))
-// Joint pool:   DAT_07b27150, stride 0x9d8 bytes
+// Effect pool:  EffectPoolBase, stride 0x1bc bytes (0x6f * sizeof(float))
+// Joint pool:   JointPoolBase, stride 0x9d8 bytes
 
 #include "stdafx.h"
 #include "Render/Gfx.h"
@@ -21,14 +21,14 @@ extern "C" void DbgLogPublic(const char* msg);
 
 
 // MoveEffects — Effect_TickAll
-// Iterates the effect pool (base DAT_07b11670, stride 0x1bc, end 0x7b27150).
+// Iterates the effect pool (base EffectPoolBase, stride 0x1bc, end 0x7b27150).
 // For each active slot (first byte != 0), calls MoveEffect(slot, index).
 // IDA: MoveEffects
 void Effect_TickAll(void)
 {
-  // Pool DAT_07b11670[kEffectPoolSize] (IDA: 200 × 0x1bc).
-  float *pfVar1 = (float *)DAT_07b11670;
-  const uintptr_t poolEnd = (uintptr_t)DAT_07b11670 + sizeof(DAT_07b11670);
+  // Pool EffectPoolBase[kEffectPoolSize] (IDA: 200 × 0x1bc).
+  float *pfVar1 = (float *)EffectPoolBase;
+  const uintptr_t poolEnd = (uintptr_t)EffectPoolBase + sizeof(EffectPoolBase);
   int iVar2 = 0;
   do {
     if (*(char *)pfVar1 != '\0') {
@@ -62,8 +62,8 @@ void Effect_TickAll(void)
 // IDA: MoveJoints
 void Joint_TickAll(void)
 {
-  JOINT* joints = AsJoint(DAT_07b27150);
-  const uint count = (uint)(sizeof(DAT_07b27150) / sizeof(JOINT));   // kJointPoolSize
+  JOINT* joints = AsJoint(JointPoolBase);
+  const uint count = (uint)(sizeof(JointPoolBase) / sizeof(JOINT));   // kJointPoolSize
   for (uint i = 0; i < count; ++i) {
     if (joints[i].Live != 0) {
       MoveJoint((undefined1 *)&joints[i], i);
@@ -112,9 +112,9 @@ Effect_DrawRing(int param_1,float *param_2,undefined4 param_3,undefined4 param_4
   float t = 0.0f;
   float fVar2 = 0.0f;
   do {
-    float fVar1 = t * _DAT_00552aac;
-    fVar2 = t + _DAT_0055256c;
-    float fVar3 = fVar2 * _DAT_00552aac;
+    float fVar1 = t * 0.0833333358f;
+    fVar2 = t + 1.0f;
+    float fVar3 = fVar2 * 0.0833333358f;
 
     // UV ramp — TEXCOORD(dest, U-float, V-bits) writes [U as float][V as int-bits]
     TEXCOORD(&uv[0][0], fVar1, 0x3f800000);
@@ -125,9 +125,9 @@ Effect_DrawRing(int param_1,float *param_2,undefined4 param_3,undefined4 param_4
     // Two rotation matrices around Z at angle1 / angle2.
     angles[0] = 0.0f;
     angles[1] = 0.0f;
-    angles[2] = t * _DAT_0055284c + param_6;
+    angles[2] = t * 30.0f + param_6;
     EulerToMatrix(angles, matA);
-    angles[2] = fVar2 * _DAT_0055284c + param_6;
+    angles[2] = fVar2 * 30.0f + param_6;
     EulerToMatrix(angles, matB);
 
     // Vert 0: matA * (0, param_3, 0) + center
@@ -174,7 +174,7 @@ Effect_DrawRing(int param_1,float *param_2,undefined4 param_3,undefined4 param_4
     }
     BufferedDraw::End();
     t = fVar2;
-  } while (fVar2 < _DAT_00552664);
+  } while (fVar2 < 12.0f);
   return;
 }
 
@@ -245,10 +245,10 @@ void Effect_TickFade(void)
     Joint_BoneOffsetApply(reinterpret_cast<BYTE*>(slot),1);
     // IDA lee/escribe estos campos como float, salvo el contador de vida.
     if (life<10) {
-      const double fade=(double)life*(double)_DAT_005524f4;
-      *(float *)(slot+0xe8)=(float)(fade*(double)_DAT_00552534);
+      const double fade=(double)life*(double)0.1f;
+      *(float *)(slot+0xe8)=(float)(fade*(double)0.6f);
       *(float *)(slot+0xec)=(float)fade;
-      *(float *)(slot+0xf0)=(float)(fade*(double)_DAT_00552530);
+      *(float *)(slot+0xf0)=(float)(fade*(double)0.8f);
     }
     *(float *)(slot+0x24)-=(float)life;
   }
@@ -282,14 +282,14 @@ void Effect_TickFlare(void)
       if (__ptype < 0x4b7) {
         if (__ptype < 0x4b5) {
           if ((__ptype == 7) &&
-             (fVar1 = *pfVar3 - _DAT_00552874, *pfVar3 = fVar1, fVar1 < _DAT_005524f4)) {
+             (fVar1 = *pfVar3 - AlphaFadeStep, *pfVar3 = fVar1, fVar1 < 0.1f)) {
             *(undefined1 *)(pfVar3 + -3) = 0;
           }
         }
         else {
 LAB_004794f9:
           if (__ptype == 1205) {
-            *pfVar3 = *pfVar3 + _DAT_005524bc;
+            *pfVar3 = *pfVar3 + 0.004f;
           }
           pfVar3[7] = 0.1;
           pfVar3[8] = 0.0;
@@ -298,7 +298,7 @@ LAB_004794f9:
             *(undefined1 *)(pfVar3 + -3) = 0;
           }
           if (__pcnt < 0x32) {
-            pfVar3[10] = (float)__pcnt * _DAT_00552914;
+            pfVar3[10] = (float)__pcnt * AnimSpeedB;
           }
         }
       }
@@ -318,20 +318,20 @@ LAB_004794f9:
 // lifetime), decae el lifetime 0.3, lo desactiva al llegar a 0, y encoge la
 // escala 5.0 por tick con piso en 15.
 //
-// En el binario `unk_7C80128` no es un pool aparte: es `DAT_07c80110 + 0x18`
+// En el binario `SparkEffectPool` no es un pool aparte: es `DamagePointPool + 0x18`
 // — el MISMO pool de números que llena `CreatePoint` y recorre `RenderPoints`,
 // sólo que las tres funciones lo abordan desde offsets distintos del slot y
 // usan índices relativos.
 // IDA: MovePoints
 void DamageNumbers_Tick(void)
 {
-    for (DamagePoint& point : DAT_07c80110) {
+    for (DamagePoint& point : DamagePointPool) {
         if (point.Active && --point.Delay < 0) {
             point.Position[2] = point.LifeTime + point.Position[2];
-            point.LifeTime = point.LifeTime - _DAT_005528b8;
-            if (point.LifeTime <= _DAT_00552580) point.Active = 0;
-            point.Scale = point.Scale - _DAT_00552660;
-            if (point.Scale < _DAT_00552834) point.Scale = 15.0f;
+            point.LifeTime = point.LifeTime - 0.3f;
+            if (point.LifeTime <= FloatZeroB) point.Active = 0;
+            point.Scale = point.Scale - 5.0f;
+            if (point.Scale < 15.0f) point.Scale = 15.0f;
         }
     }
 }

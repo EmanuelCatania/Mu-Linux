@@ -12,7 +12,7 @@
 // Sends a chat message packet to server.
 // Flow:
 //   1. Rate-limit: if ChatTime > 0x32, return
-//   2. Duplicate check: compare with last sent text (DAT_05826adc)
+//   2. Duplicate check: compare with last sent text (LastSentChatBuf)
 //   3. Set ChatTime = 0x46, copy text to last-sent buffer
 //   4. Check if Hero->ID contains "webzen" substring (GM detection)
 //   5. Build C1 packet with XOR encryption using 32-byte key
@@ -24,10 +24,10 @@ void __cdecl SendChat(char* Text) {
     // ~60% of original is anti-tamper XOR key init + dead forward/reverse loops.
     // Real logic:
     //   1. Rate-limit: if ChatTime > 0x32, return
-    //   2. Duplicate check vs last-sent buffer (DAT_05826adc)
+    //   2. Duplicate check vs last-sent buffer (LastSentChatBuf)
     //   3. Set ChatTime=0x46, copy text to last-sent buffer
     //   4. GM name check: if Hero->ID contains "webzen", skip chat (anti-impersonation)
-    //   5. Dead check: if Hero->Dead, check if Text starts with GM command (DAT_07d3cdd4)
+    //   5. Dead check: if Hero->Dead, check if Text starts with GM command (GmCommandText)
     //   6. Whisper block commands: "/whisper" → toggle m_bBlockWhisper_1
     //   7. Build C1 packet: [C1][len][01][heroID 10 bytes][text up to 60 bytes]
     //   8. XOR-encrypt payload with 32-byte key, fix header, send via socket
@@ -43,18 +43,18 @@ void __cdecl SendChat(char* Text) {
     if (Chat_TryFortniteCommand(Text)) return;
 
     // Duplicate check: compare with last-sent text
-    if ((int)ChatTime > 0 && strcmp(DAT_05826adc, Text) == 0) return;
+    if ((int)ChatTime > 0 && strcmp(LastSentChatBuf, Text) == 0) return;
 
     // Set cooldown and copy to last-sent buffer
     ChatTime = 0x46;
-    strncpy(DAT_05826adc, Text, sizeof(DAT_05826adc) - 1);
-    DAT_05826adc[sizeof(DAT_05826adc) - 1] = '\0';
+    strncpy(LastSentChatBuf, Text, sizeof(LastSentChatBuf) - 1);
+    LastSentChatBuf[sizeof(LastSentChatBuf) - 1] = '\0';
 
     // GM name check: if Hero->ID contains "webzen" substring, block
-    // Hero is char* (DAT_07abf5d8), ID at offset 0x1C1
+    // Hero is char* (Hero), ID at offset 0x1C1
     {
         const char* heroId = EntityName::Get(Hero);
-        const char* webzenStr = &DAT_005592dc;  // "webzen" string in binary
+        const char* webzenStr = &PlayerNameString;  // "webzen" string in binary
         int webzenLen = (int)strlen(webzenStr);
         if (webzenLen > 0) {
             int heroIdLen = (int)strlen(heroId);
@@ -73,29 +73,29 @@ void __cdecl SendChat(char* Text) {
     // If hero is dead, check for GM command prefix
     // Dead at offset 0x2FD in CHARACTER struct
     if (*(BYTE*)&((CHARACTER*)(uintptr_t)(Hero))->Dead != '\0') {
-        // Only allow GM command (DAT_07d3cdd4) when dead
-        int cmdLen = (int)strlen(&DAT_07d3cdd4);
-        if (cmdLen > 0 && strncmp(Text, &DAT_07d3cdd4, cmdLen) == 0) {
+        // Only allow GM command (GmCommandText) when dead
+        int cmdLen = (int)strlen(&GmCommandText);
+        if (cmdLen > 0 && strncmp(Text, &GmCommandText, cmdLen) == 0) {
             return;  // block GM commands from dead players
         }
     }
     else {
         // Alive: check whisper block toggle commands
         if (Text[0] == '/') {
-            // Check "/whisperblock on" command (DAT_07d3d284)
-            int len1 = (int)strlen(&DAT_07d3d284);
-            if (len1 > 0 && strncmp(Text, &DAT_07d3d284, len1) == 0) {
-                // `m_bBlockWhisper_1` es el GLOBAL 0x07E11DAC (= DAT_07e11dac),
+            // Check "/whisperblock on" command (WhisperCommandText)
+            int len1 = (int)strlen(&WhisperCommandText);
+            if (len1 > 0 && strncmp(Text, &WhisperCommandText, len1) == 0) {
+                // `m_bBlockWhisper_1` es el GLOBAL 0x07E11DAC (= WhisperBlockFlag),
                 // que ya leen Net_Process (F3 toggle) y Chat_InputTick.
-                DAT_07e11dac = 1;
-                UIChatLogWindow_AddText((const char*)&lpDefault_00583d88, &DAT_07d3d608, 1);
+                WhisperBlockFlag = 1;
+                UIChatLogWindow_AddText((const char*)&lpDefault_00583d88, &WhisperTargetText, 1);
                 return;
             }
-            // Check "/whisperblock off" command (DAT_07d3d3b0)
-            int len2 = (int)strlen(&DAT_07d3d3b0);
-            if (len2 > 0 && strncmp(Text, &DAT_07d3d3b0, len2) == 0) {
-                DAT_07e11dac = 0;   // mismo global que el "on" (IDA L129/L135)
-                UIChatLogWindow_AddText((const char*)&lpDefault_00583d88, &DAT_07d3d734, 1);
+            // Check "/whisperblock off" command (PvpCommandText)
+            int len2 = (int)strlen(&PvpCommandText);
+            if (len2 > 0 && strncmp(Text, &PvpCommandText, len2) == 0) {
+                WhisperBlockFlag = 0;   // mismo global que el "on" (IDA L129/L135)
+                UIChatLogWindow_AddText((const char*)&lpDefault_00583d88, &PvpToggleMessage, 1);
                 return;
             }
         }

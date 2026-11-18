@@ -11,7 +11,7 @@
 //   game_substate, hovered entity type, cursor-mode flags (DAT_00559C48/4C/50/54).
 // Uses FUN_005125A0(sprite_id, x, y, 24, 24, u, v, 1, 1) for fixed sprites,
 // or GL_DrawRotatedRect for animated/colored variants.
-// Cursor offset = _DAT_0055264C from mouse pos (DAT_083A427C/78).
+// Cursor offset = 2.0f from mouse pos (MouseX/78).
 // Port 1:1 de IDA `RenderCursor`.
 // Decisión de sprite por prioridad:
 //   SelectedItem       → bitmap 5   (item ground)
@@ -26,7 +26,7 @@
 //   MouseLButton && DontMove  → bitmap 10
 //   MouseLButton && !DontMove → bitmap 3 (move)
 //
-// NULL-guard sobre Hero (DAT_07abf5d8): en el original el crash acá era
+// NULL-guard sobre Hero (Hero): en el original el crash acá era
 // imposible porque SelectedCharacter=-1 en login y Hero siempre apuntaba a
 // una entidad válida in-game; acá Hero=NULL en login si aún no se asignó.
 // IDA: RenderCursor
@@ -43,8 +43,8 @@ void __cdecl Cursor_Render(void) {
     if (frame == 1 || frame == 3 || frame == 5) u_bits = 0x3F000000;  // 0.5f
     if (frame == 2 || frame == 3 || frame == 4) v_bits = 0x3F000000;  // 0.5f
 
-    float cx = (float)(int)DAT_083a427c - _DAT_0055264c;  // MouseX - 2
-    float cy = (float)(int)DAT_083a4278 - _DAT_0055264c;  // MouseY - 2
+    float cx = (float)(int)MouseX - 2.0f;  // MouseX - 2
+    float cy = (float)(int)MouseY - 2.0f;  // MouseY - 2
 
     // ── LABEL_43: default arrow cursor ───────────────────────────────────────
     auto draw_arrow = [&](){
@@ -52,7 +52,7 @@ void __cdecl Cursor_Render(void) {
     };
 
     // Error message o diálogo bloqueante → arrow
-    if (DAT_07eaa14c != 0 || DAT_083a7c24 != 0) { draw_arrow(); return; }
+    if (PinInputModeState != 0 || InGameUiState != 0) { draw_arrow(); return; }
 
     // SelectedItem (hover sobre ítem en el piso)
     if (SelectedItem != -1) {
@@ -72,7 +72,7 @@ void __cdecl Cursor_Render(void) {
         // con nuestra interpretación de sub-state pero no afecta el default.
         // Guard (no esta en IDA): SelectedOperate lo deja el picker del frame
         // anterior; si el objeto se libero en el medio el puntero queda colgado.
-        const int nOperates = (int)(sizeof(DAT_083a2370) / 0xc);
+        const int nOperates = (int)(sizeof(OperateEntryPool) / 0xc);
         const intptr_t operObj   = ((int)SelectedOperate >= 0 && (int)SelectedOperate < nOperates)
                             ? g_OperateObjects[SelectedOperate] : 0;
         if (operObj == 0) {
@@ -94,11 +94,11 @@ void __cdecl Cursor_Render(void) {
     // Hover sobre char vivo + SelectedCharacter → attack crosshair o arrow
     // NULL-guard: en login Hero=NULL y SelectedCharacter=-1, así que el branch
     // se saltea; el guard sólo protege contra misconfig.
-    if (DAT_07abf5d8 != NULL &&
-        *(char*)&((CHARACTER*)(uintptr_t)(DAT_07abf5d8))->SafeZone == '\0' &&
+    if (Hero != NULL &&
+        *(char*)&((CHARACTER*)(uintptr_t)(Hero))->SafeZone == '\0' &&
         SelectedCharacter != -1)
     {
-        if ((char)CheckAttack() != '\0' && DAT_07d78094 == '\0') {
+        if ((char)CheckAttack() != '\0' && MouseOnWindowFlag == '\0') {
             GL_DrawTexture(4, cx, cy, 24.0f, 24.0f, 0.0f, 0.0f, 1.0f, 1.0f, '\x01', '\x01');
         } else {
             draw_arrow();
@@ -106,27 +106,27 @@ void __cdecl Cursor_Render(void) {
         return;
     }
     // Repair active (modo taladro del smith)
-    if (DAT_07eaa134 == 1) {
+    if (RepairEnableFlag == 1) {
         GL_DrawTexture(7, cx, cy, 24.0f, 24.0f, 0.0f, 0.0f, 1.0f, 1.0f,
-                     DAT_07eaa134, DAT_07eaa134);
+                     RepairEnableFlag, RepairEnableFlag);
         return;
     }
-    if (DAT_07eaa134 == 2) {
-        float10 fv = fsin((float10)(long long)WorldTime * (float10)_DAT_00552914);
+    if (RepairEnableFlag == 2) {
+        float10 fv = fsin((float10)(long long)WorldTime * (float10)AnimSpeedB);
         if (fv <= (float10)FloatZero) {
-            GL_DrawRotatedRect(7, (float)(int)DAT_083a427c + _DAT_00552660,
-                            (float)(int)DAT_083a4278 + _DAT_005529fc,
+            GL_DrawRotatedRect(7, (float)(int)MouseX + 5.0f,
+                            (float)(int)MouseY + 18.0f,
                          24.0f, 24.0f, 0x42340000);
         } else {
-            GL_DrawRotatedRect(7, (float)(int)DAT_083a427c + _DAT_00552488,
-                            (float)(int)DAT_083a4278 + _DAT_00552488,
+            GL_DrawRotatedRect(7, (float)(int)MouseX + 10.0f,
+                            (float)(int)MouseY + 10.0f,
                          24.0f, 24.0f, 0);
         }
         return;
     }
     // Sin LMB → arrow. Con LMB → move (3) / DontMove (10).
-    if (DAT_083a42c4 == 0) { draw_arrow(); return; }
-    if (DAT_07e11d64 != 0)
+    if (MouseLButton == 0) { draw_arrow(); return; }
+    if (DontMoveFlag != 0)
         GL_DrawTexture(10, cx, cy, 24.0f, 24.0f, 0.0f, 0.0f, 1.0f, 1.0f, '\x01', '\x01');
     else
         GL_DrawTexture(3,  cx, cy, 24.0f, 24.0f, 0.0f, 0.0f, 1.0f, 1.0f, '\x01', '\x01');

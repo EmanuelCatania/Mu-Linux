@@ -30,15 +30,15 @@ void __cdecl OpenWorld(void) {
     RenderFxSnapshots_Reset();
     // Limpiar TODOS los pools de char-select que sobreviven al world load (si no,
     // los tick-functions iteran slots con punteros basura).
-    memset(DAT_07abf5f0, 0, sizeof(DAT_07abf5f0));   // particle pool (3000×0x70)
-    memset(DAT_07c5ab3c, 0, sizeof(DAT_07c5ab3c));   // skill effect pool (200×0x70)
-    memset(DAT_07b11670, 0, sizeof(DAT_07b11670));   // effect pool (124×0x1bc)
-    memset(DAT_07b27150, 0, sizeof(DAT_07b27150));   // joint pool (200×0x9d8)
+    memset(SpritePoolBase, 0, sizeof(SpritePoolBase));   // particle pool (3000×0x70)
+    memset(SkillEffectPool, 0, sizeof(SkillEffectPool));   // skill effect pool (200×0x70)
+    memset(EffectPoolBase, 0, sizeof(EffectPoolBase));   // effect pool (124×0x1bc)
+    memset(JointPoolBase, 0, sizeof(JointPoolBase));   // joint pool (200×0x9d8)
     memset(g_PlayerRenderPool, 0, sizeof(g_PlayerRenderPool)); // planos: 100×0x1bc
-    memset(DAT_07c80128, 0, sizeof(DAT_07c80128));   // spark pool (100×0x70)
+    memset(SparkEffectPool, 0, sizeof(SparkEffectPool));   // spark pool (100×0x70)
     memset(g_PointerPool, 0, sizeof(g_PointerPool)); // pointers: 100×0x70
-    memset(DAT_083a2e90, 0, sizeof(DAT_083a2e90));   // boids + partículas ambientales (10×0x1bc)
-    memset(DAT_07e016f8, 0, sizeof(DAT_07e016f8));   // tooltip pool (26×0x254)
+    memset(FishObjectPool, 0, sizeof(FishObjectPool));   // boids + partículas ambientales (10×0x1bc)
+    memset(ChatBubblePool, 0, sizeof(ChatBubblePool));   // tooltip pool (26×0x254)
 
     OpenWorldModels();             // OpenWorldModels
 
@@ -66,11 +66,11 @@ void __cdecl OpenWorld(void) {
     crt_sprintf(local_40, "Data/%s/EncTerrain%d.obj", world_name, iVar2);
     OpenObjectsEnc(local_40);     // OpenObjectsEnc
 
-    uVar1 = DAT_0055a7c4;
-    if (DAT_083a410c != '\0') DAT_0055a7c4 = 0;
+    uVar1 = g_tex_ext_mode;
+    if (InGameModeFlag != '\0') g_tex_ext_mode = 0;
 
     // Desviación: los archivos reales son OZ* (encriptados), no .bmp/.jpg/.tga, y
-    // OpenJPG sólo cambia la extensión si DAT_0055a7c4 != 0 (in-game vale 0): se
+    // OpenJPG sólo cambia la extensión si g_tex_ext_mode != 0 (in-game vale 0): se
     // usan las extensiones reales.
     crt_sprintf(local_40, "%s/TerrainHeight.OZB", world_name); CreateTerrain(local_40);
     crt_sprintf(local_40, "%s/TerrainLight.OZJ",  world_name); OpenTerrainLight(local_40);
@@ -101,7 +101,7 @@ void __cdecl OpenWorld(void) {
     crt_sprintf(local_40, "World1/rain02.OZT"); OpenTGA(local_40, 0x67, 0x2600, 0x2900, 0, '\0');
     crt_sprintf(local_40, "World10/rain03.OZT"); OpenTGA(local_40, 0x68, 0x2600, 0x2900, 0, '\0');
 
-    if (DAT_083a410c != '\0') DAT_0055a7c4 = uVar1;
+    if (InGameModeFlag != '\0') g_tex_ext_mode = uVar1;
 }
 
 // IDA: OpenFont (0x0050F690)
@@ -112,6 +112,6 @@ void __cdecl OpenFont(void) {
     OpenTGA("Interface/FontInput.tga", 0, 0x2600, 0x2900, 0, '\x01');
     OpenTGA("Interface/FontTest.tga",  1, 0x2600, 0x2900, 0, '\x01');
     Font_CreateTextDib(((DWORD)(uintptr_t)gWindow.GetHdc()));
-    Font_CreateRenderer(DAT_055c9ff8, static_cast<int>(lpData_055ca044), ((DWORD)(uintptr_t)gWindow.GetHdc()));
+    Font_CreateRenderer(UiRenderTextObj, static_cast<int>(TextOutMode), ((DWORD)(uintptr_t)gWindow.GetHdc()));
 }
 // Scene resource load/unload routines are implemented in src/Scene/Scene_Resources.cpp.

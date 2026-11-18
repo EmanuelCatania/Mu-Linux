@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <type_traits>
 
-// IDA: BMD, 0xBC bytes; array Models (DAT_05828d58), un modelo por tipo.
+// IDA: BMD, 0xBC bytes; array Models (ModelsBase), un modelo por tipo.
 //
 // Los nombres siguen a la clase BMD de MU 5.2 (ZzzBMD.h). Anclajes verificados:
 // BMD::Open (0x004423E0) escribe 0x20..0x38; BMD::Init (0x00442E00) pone

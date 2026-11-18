@@ -6,7 +6,7 @@
 //   CSQuest_CheckActCondition (IDA: FUN_00401650)
 //   CSQuest_ShowDialogText (IDA: FUN_004017E0)
 //   CSQuest_clearQuest (slot-list navigation forward)
-//   FUN_00401af0 (slot-list navigation back)
+//   CSQuest_ClickDialogAnswers (slot-list navigation back)
 //   ... and related slot scroll/select helpers.
 //
 // Manejan el scroll del panel de char-select / lista de clases y la elección de slot.
@@ -188,7 +188,7 @@ uint __fastcall CSQuest_CheckRequestCondition(void *pThis, short *param_1, char 
                     do {
                         if ((*(reinterpret_cast<char*>(puVar12) - 3) == cVar1) ||
                             (*(reinterpret_cast<char*>(puVar12) - 3) == -1)) {
-                            ushort uVar3 = *(ushort *)((BYTE *)DAT_07cf1ff4 + 0xe);
+                            ushort uVar3 = *(ushort *)((BYTE *)CharacterAttributePtr + 0xe);
                             if (*puVar12 != 0 && uVar3 < *puVar12) {
                                 *(short *)(quest + 0x1c880) = param_1[iVar8 * 8 + 0xaa];
                                 *(quest + 0x1c882) = 5;
@@ -204,7 +204,7 @@ uint __fastcall CSQuest_CheckRequestCondition(void *pThis, short *param_1, char 
                                 if (param_2 == '\0') {
                                     *(int *)(quest + 0x1c884) = *(int *)(puVar12 + 2);
                                 } else {
-                                    int iVar5 = ((int *)DAT_07cf1ffc)[0x152];
+                                    int iVar5 = ((int *)CharacterMachinePtr)[0x152];
                                     int iVar6 = *(int *)(puVar12 + 2);
                                     *(int *)(quest + 0x1c884) = iVar6;
                                     if (iVar5 < iVar6) {
@@ -295,10 +295,10 @@ void __cdecl Vec3_Cross(float *param_1, float *param_2, float *param_3)
 // (0x4FA5F0) cuando el contador llega a 0.
 void ClearActionObject(void)
 {
-    _DAT_0055a7bc = -1.0f;  // 0xbf800000 in IEEE 754
-    DAT_0055a7b0  = 0xffffffff;
-    DAT_0055a7b4  = 0xffffffff;
-    DAT_0055a7b8  = 0xffffffff;
+    ViewportHeightF = -1.0f;  // 0xbf800000 in IEEE 754
+    ActionObjCollapseType  = 0xffffffff;
+    ActionObjWorldId  = 0xffffffff;
+    ActionObjFrameCount  = 0xffffffff;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -418,7 +418,7 @@ void __cdecl Characters_SetActionAll(int Action)
 
 // Characters_FreeAllBMDBuffers @ 0x0045AD60 — Characters_FreeAllBMDBuffers
 // Libera los buffers de heap de BMD por entidad (puntero en entity+0x114) de todo el array,
-// y después libera el buffer BMD extra compartido (DAT_07abf164).
+// y después libera el buffer BMD extra compartido (CharExtraBmdBuffer).
 // Characters_FreeAllBMDBuffers (IDA-activated)
 void Characters_FreeAllBMDBuffers()
 {
@@ -434,10 +434,10 @@ void Characters_FreeAllBMDBuffers()
       *v1 = 0;
     }
   }
-  if ( DAT_07abf164 )
+  if ( CharExtraBmdBuffer )
   {
-    delete__(DAT_07abf164);
-    DAT_07abf164 = 0;
+    delete__(CharExtraBmdBuffer);
+    CharExtraBmdBuffer = 0;
   }
 }
 
@@ -560,7 +560,7 @@ int __fastcall CWsctlc_FDWriteSend(uintptr_t param_1)
         const int sent = send(*(SOCKET*)(param_1 + 8), buffer, pending, 0);
         if (sent == -1 && Platform::GetSocket().LastError() == Platform::SocketWouldBlock) return 1;
         if (sent <= 0) { CWsctlc_Close(param_1); return 0; }
-        if (*(int*)(param_1 + 0x4014) != 0) FUN_0043de60();
+        if (*(int*)(param_1 + 0x4014) != 0) Net_FlushQueue();
         pending -= sent;
         // Conserva sólo la cola no enviada, incluso si el siguiente send bloquea.
         if (pending > 0) memmove(buffer, buffer + sent, pending);
@@ -656,7 +656,7 @@ int __fastcall CWsctlc_nRecv(void *context)
         if (*(int *)(param_1 + 0x4010) < (int)uLen) break;
 
         CPacketQueue_PushPacket(reinterpret_cast<uintptr_t>(param_1), pPkt, uLen);
-        if (*(int *)(param_1 + 0x4014) != 0) FUN_0043de60();
+        if (*(int *)(param_1 + 0x4014) != 0) Net_FlushQueue();
         iOff += uLen;
         int rem = *(int *)(param_1 + 0x4010) - uLen;
         *(int *)(param_1 + 0x4010) = rem;
@@ -763,7 +763,7 @@ void __cdecl Effect_PhysicsTick(std::uintptr_t Object)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // FloatingLabel_Add @ 0x004793F0 — FloatingLabel_Add
-// Agrega al pool una etiqueta flotante de daño/curación (base DAT_07c82cd0, stride 0x70,
+// Agrega al pool una etiqueta flotante de daño/curación (base LegacyPointerPoolBase, stride 0x70,
 // hasta el límite del pool en 0x7c8588f). Elige el slot con la "edad" más chica
 // value. Special range 0x4b5–0x4d8 gets a randomised lifetime (50+rand%32).
 // param_1 = label text or ID, param_2 = world position (float[3]),
@@ -826,8 +826,8 @@ int __cdecl FloatingLabel_Add(intptr_t a1, DWORD *a2, int a3, DWORD *a4, int a5)
 // cada string de nombre en SkillAttribute[index*300 + 4].
 void __cdecl SkillAttribute_LoadNames(const char *param_1)
 {
-    DAT_07d7806c = (FILE *)Platform::GetFileSystem().Open(param_1, (const char *)DAT_005580ac);
-    if (DAT_07d7806c == NULL) return;
+    BmdFileHandle = (FILE *)Platform::GetFileSystem().Open(param_1, (const char *)FopenModeRb);
+    if (BmdFileHandle == NULL) return;
 
     int iVar2;
     while ((iVar2 = GetToken()) != 2) {
@@ -863,7 +863,7 @@ void __cdecl LoadGlobalTextBin(const char *param_1)
 void __cdecl SkillAttribute_SaveBin(const char *param_1)
 {
     return;  // AUTO-SKIP: absolute end-bound loop (Ghidra artifact — pool not populated in our build).
-    FILE *pFile = Platform::GetFileSystem().Open(param_1, (const char *)&DAT_005597d4);
+    FILE *pFile = Platform::GetFileSystem().Open(param_1, (const char *)&FopenModeWb);
     BYTE *Buffer = (BYTE *)operator_new(300);
 
     char *pcVar3 = reinterpret_cast<char *>(&SkillAttribute) + 4;
@@ -892,14 +892,14 @@ void __cdecl SkillAttribute_SaveBin(const char *param_1)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Terrain_SpawnAmbientObjects @ 0x004F7060 — Terrain_SpawnAmbientObjects
-// Itera la tabla de atributos del terreno (base DAT_081cb2ed, stride 8) y
+// Itera la tabla de atributos del terreno (base LegacyTerrainObjTable, stride 8) y
 // spawns ambient world objects (type 8) at non-zero flag positions.
 void Terrain_SpawnAmbientObjects(void)
 {
     // IDA: base 0x081CB2ED, bound 0x081CB60D → (0x320)/8 = 100 iteraciones. El
     // bound es un contador: la dirección absoluta del binario no sirve en nuestro
     // build.
-    BYTE *pbVar1 = (BYTE *)&DAT_081cb2ed;
+    BYTE *pbVar1 = (BYTE *)&LegacyTerrainObjTable;
     for (int i = 0; i < 100; i++, pbVar1 += 8) {
         if (pbVar1[-5] != 0) {
             float scale = (float)((double)pbVar1[1] * 1.4117647);
@@ -924,9 +924,9 @@ int __cdecl Terrain_WaterWaveUpdate(int a1)
   int v7; // eax
   char *v8; // [esp+14h] [ebp+4h]
 
-  v1 = (char *)&DAT_0814b2e0 + 0x40000 * a1;
+  v1 = (char *)&GrassWindWaveBuffer + 0x40000 * a1;
   v2 = 257;
-  v8 = (char *)&DAT_0814b2e0 + 0x40000 * (a1 ^ 1);
+  v8 = (char *)&GrassWindWaveBuffer + 0x40000 * (a1 ^ 1);
   do
   {
     result = v2 + 254;
@@ -963,7 +963,7 @@ int __cdecl Terrain_WaterWaveUpdate(int a1)
 // Tests whether a 3D point (param_1,param_2,param_3) lies inside the polygon
 // formado por param_4 vértices (los punteros están en el array param_5..param_8).
 // param_9 elige el plano de proyección (1=YZ, 2=XZ, 4=XY y las variantes en sentido horario).
-// Umbral param_10: si es > _DAT_00552580 (0.0f), param_9 se corre 3 bits a la izquierda.
+// Umbral param_10: si es > FloatZeroB (0.0f), param_9 se corre 3 bits a la izquierda.
 // Devuelve 1 si está adentro, 0 si está afuera.
 // Collision_PointInPolygon (IDA-activated)
 int __cdecl Collision_PointInPolygon(float a1, float a2, float a3, int a4, const float* a5, const float* a6, const float* a7, const float* a8, int a9, float a10)
@@ -1136,11 +1136,11 @@ int __cdecl Collision_PointInPolygon(float a1, float a2, float a3, int a4, const
 }
 
 
-// FUN_005130f0 @ 0x005130F0 — AABB_IntersectOBB
+// AABB_IntersectOBB @ 0x005130F0 — AABB_IntersectOBB
 // Separating-axis test between an OBB (param_4..param_15) and an AABB defined
 // by two corner vectors (param_2, param_3) projected onto axis param_1.
 // Devuelve 1 si se superponen, 0 si están separados.
-int __cdecl FUN_005130f0(float *param_1, float *param_2, float *param_3,
+int __cdecl AABB_IntersectOBB(float *param_1, float *param_2, float *param_3,
                           float param_4,  float param_5,  float param_6,
                           float param_7,  float param_8,  float param_9,
                           float param_10, float param_11, float param_12,
@@ -1157,9 +1157,9 @@ int __cdecl FUN_005130f0(float *param_1, float *param_2, float *param_3,
     float fV7 = param_15 * param_1[2] + param_13 * *param_1 + param_14 * param_1[1];
 
     float fOMin = fV3, fOMax = fV3;
-    if (fV5 <= _DAT_00552580) fOMin += fV5; else fOMax = fV3 + fV5;
-    if (fV6 <= _DAT_00552580) fOMin += fV6; else fOMax += fV6;
-    if (fV7 <= _DAT_00552580) fOMin += fV7; else fOMax += fV7;
+    if (fV5 <= FloatZeroB) fOMin += fV5; else fOMax = fV3 + fV5;
+    if (fV6 <= FloatZeroB) fOMin += fV6; else fOMax += fV6;
+    if (fV7 <= FloatZeroB) fOMin += fV7; else fOMax += fV7;
 
     if (fMin >= fOMax) return 0;
     if (fOMin >= fMax) return 0;
@@ -1169,13 +1169,15 @@ int __cdecl FUN_005130f0(float *param_1, float *param_2, float *param_3,
 // ─────────────────────────────────────────────────────────────────────────────
 
 // IDA: FUN_00401010 @ 0x00401010 — calls quest table init
-void Quest_InitializeStaticState(void) { Quest_FullInit((void *)&DAT_00567500); }
+void Quest_InitializeStaticState(void) { Quest_FullInit((void *)&QuestTableBase); }
 
 // Los wrappers de atexit registraban callbacks en direcciones literales del
 // binario (0x004XXXXX), que en nuestro build no son código: quedan neutralizados.
 
-// FUN_00401020 @ 0x00401020 (12 bytes)
-void FUN_00401020(void) {}
+// Quest_RegisterStaticDtor @ 0x00401020 (12 bytes) - IDA: Fn_00401020
+// `crt_atexit(&dtor de QuestTableBase @0x567500)`; neutralizado en este build
+// (no replicamos la tabla de inicializadores dinamicos del CRT).
+void Quest_RegisterStaticDtor(void) {}
 
 // BuxConvert_1 @ 0x00401120 (IDA: BuxConvert_1; name from 5.2).
 // 3-byte repeating XOR key at bBuxCode.
@@ -1197,32 +1199,32 @@ void __fastcall CSQuest_ShowDialogText(int param_1)
     const DIALOG_SCRIPT *dlg = &g_DialogScript[param_1];
 
     g_iCurrentDialogScript = param_1;
-    DAT_083a4324 = SeparateTextIntoLines(
+    MessageBoxLineCount = SeparateTextIntoLines(
         dlg->m_lpszText,
-        (char *)&DAT_083a44c4, 7, 0x26);
+        (char *)&MessageBoxCustomBuf, 7, 0x26);
 
     // Zero the name display buffer (0x5f DWORD-slots = 0x17c bytes)
-    int *puVar8 = (int *)DAT_083a4348;
+    int *puVar8 = (int *)DialogAnswerBuffer;
     for (int i = 0x5f; i != 0; i--)
         *puVar8++ = 0;
 
     int iVar3 = 0;
-    DAT_083a7c0c = 0;
+    DialogAnswerCountA = 0;
 
     int charCount = dlg->m_iNumAnswer;
     if (charCount > 10) charCount = 10;   // la tabla tiene 10 slots de respuesta
     if (charCount > 0) {
-        char *pbVar6 = (char *)DAT_083a4348;
+        char *pbVar6 = (char *)DialogAnswerBuffer;
         int iVar7 = 0;
         do {
             iVar3 = iVar7 + 1;
-            Platform::TextFormat((LPSTR)local_48, s__d___s_005580b0, iVar3,
+            Platform::TextFormat((LPSTR)local_48, Fmt_IntSpStr, iVar3,
                       dlg->m_lpszAnswer[iVar7]);
             int iVar2 = SeparateTextIntoLines(local_48, pbVar6, 1, 0x26);
             if (iVar2 < 0) {
-                ((char *)DAT_083a4348)[(iVar2 + iVar7) * 0x26] = 0;
+                ((char *)DialogAnswerBuffer)[(iVar2 + iVar7) * 0x26] = 0;
             }
-            DAT_083a7c0c = DAT_083a7c0c + 1;
+            DialogAnswerCountA = DialogAnswerCountA + 1;
             pbVar6 += 0x26;
             iVar7 = iVar3;
         } while (iVar3 < charCount);
@@ -1231,12 +1233,12 @@ void __fastcall CSQuest_ShowDialogText(int param_1)
     if (charCount == 0) {
         // Sin respuestas: el binario ofrece la de cerrar, GlobalText[609]
         // (disasm 0x4018B9: `push offset GlobalText+2C9Ah`, y 0x2C9AC/300 = 609).
-        Platform::TextFormat((LPSTR)local_48, s__d___s_005580b0, iVar3 + 1, GlobalText[609]);
-        // Copy string to DAT_083a4348
+        Platform::TextFormat((LPSTR)local_48, Fmt_IntSpStr, iVar3 + 1, GlobalText[609]);
+        // Copy string to DialogAnswerBuffer
         uint uVar4 = (uint)strlen(local_48) + 1;
-        DAT_083a7c0c = 1;
+        DialogAnswerCountA = 1;
         char *pbVar6 = local_48;
-        char *pbVar9 = (char *)DAT_083a4348;
+        char *pbVar9 = (char *)DialogAnswerBuffer;
         for (uint u5 = uVar4 >> 2; u5 != 0; u5--)
         { *(int *)pbVar9 = *(int *)pbVar6; pbVar6 += 4; pbVar9 += 4; }
         for (uint u4 = uVar4 & 3; u4 != 0; u4--)
@@ -1248,28 +1250,28 @@ void __fastcall CSQuest_ShowDialogText(int param_1)
 
 // Declaraciones adelantadas de los helpers definidos más abajo en este archivo
 void __fastcall CSQuest_clearQuest(void*);
-void __fastcall FUN_00401af0(void*);
+void __fastcall CSQuest_ClickDialogAnswers(void*);
 void __fastcall Cloth_Integrate(int*, float);
 
 // Packet_ParseType2 @ 0x00402F40 — Packet_ParseType2 (char-select click handler type 2)
-// Variante más simple: actualiza el flag de hover, llama a FUN_00401af0 para procesar el click en el personaje,
+// Variante más simple: actualiza el flag de hover, llama a CSQuest_ClickDialogAnswers para procesar el click en el personaje,
 // y después chequea un hotspot secundario para el envío de keepalive / reintento.
 // El tipo de retorno es undefined4, según la declaración de functions.h.
 unsigned int __cdecl Packet_ParseType2(void *param_1) {
     if (Ui::QuestBounds(gWindow.GetRightShift()).Contains((int)MouseX, (int)MouseY))
-        DAT_07d78094 = 1;
-    FUN_00401af0(param_1);
+        MouseOnWindowFlag = 1;
+    CSQuest_ClickDialogAnswers(param_1);
     if (Ui::QuestClose(gWindow.GetRightShift()).Contains((int)MouseX, (int)MouseY) &&
         (IsClickPushed())) {
-        DAT_083a4124 = '\0';
-        DAT_07e11d28 = 0;
-        DAT_00559bec = 6;
+        MouseLButtonPush = '\0';
+        MoveDebounceCounter = 0;
+        MouseUpdateTimeMax = 6;
         CSQuest_clearQuest(param_1);
     }
     return 1;
 }
 
-// FUN_00401af0 @ 0x00401AF0 — CSQuest: click sobre las respuestas del dialogo
+// CSQuest_ClickDialogAnswers @ 0x00401AF0 — CSQuest: click sobre las respuestas del dialogo
 // (NO es char-select): hit-test sobre las lineas de respuesta del panel de
 // quest, y despacho por m_iReturnForAnswer del dialogo activo.
 //   1 = aceptar la quest  -> CheckRequestCondition(bLastCheck=1); si falla,
@@ -1301,7 +1303,7 @@ static void Quest_SendState(void *pThis)
     gNetwork.Send(pkt, 5);
 }
 
-void __fastcall FUN_00401af0(void *param_1)
+void __fastcall CSQuest_ClickDialogAnswers(void *param_1)
 {
     BYTE* quest = static_cast<BYTE*>(param_1);
     // Compute Y-base of char list
@@ -1310,28 +1312,28 @@ void __fastcall FUN_00401af0(void *param_1)
         *(char *)(quest + 0x1c87f) == '\x01') {
         yBase = 0xfa;
     } else {
-        yBase = ((7 - ((int)DAT_083a7c0c + (int)DAT_083a4324)) * 0x12) / 2
-                + 0x42 + (int)DAT_083a4324 * 0x12;
+        yBase = ((7 - ((int)DialogAnswerCountA + (int)MessageBoxLineCount)) * 0x12) / 2
+                + 0x42 + (int)MessageBoxLineCount * 0x12;
     }
 
-    if ((int)DAT_083a4278 < 0)  return;
-    if ((int)DAT_083a7c0c * 0x12 <= (int)DAT_083a4278 - yBase)  return;
+    if ((int)MouseY < 0)  return;
+    if ((int)DialogAnswerCountA * 0x12 <= (int)MouseY - yBase)  return;
 
     int distS = Ui::QuestAnswerCenter(gWindow.GetRightShift()) - (int)MouseX;
     if (distS < 0) distS = -distS;
     if (0x6a < distS)  return;
 
     if (!IsClickPushed())  return;
-    DAT_083a4124 = 0;
+    MouseLButtonPush = 0;
 
-    int slot = ((int)DAT_083a4278 - yBase) / 0x12;
-    DAT_083a42c4 = 0;
-    DAT_07e11d28 = 0;
-    DAT_00559bec = 6;
+    int slot = ((int)MouseY - yBase) / 0x12;
+    MouseLButton = 0;
+    MoveDebounceCounter = 0;
+    MouseUpdateTimeMax = 6;
 
     if (slot < 0) {
-        DAT_083a4124 = 0;
-        DAT_083a42c4 = 0;
+        MouseLButtonPush = 0;
+        MouseLButton = 0;
         return;
     }
 
@@ -1361,14 +1363,14 @@ void __fastcall FUN_00401af0(void *param_1)
         }
         Quest_SendState(param_1);
     } else if (slotType == 2) {
-        DAT_083a4124 = 0;
-        DAT_07e11d28 = 0;
-        DAT_00559bec = 6;
+        MouseLButtonPush = 0;
+        MoveDebounceCounter = 0;
+        MouseUpdateTimeMax = 6;
         CSQuest_clearQuest(param_1);
     } else if (slotType == 3) {
-        DAT_083a4124 = 0;
-        DAT_07e11d28 = 0;
-        DAT_00559bec = 6;
+        MouseLButtonPush = 0;
+        MoveDebounceCounter = 0;
+        MouseUpdateTimeMax = 6;
         Quest_SendState(param_1);
     }
 
@@ -1440,9 +1442,9 @@ void __cdecl Send_ActionRequest(unsigned char param_1, int param_2) {
 // IDA: STRUCT_ENCRYPT (0x0043D1D0)
 void* __cdecl STRUCT_ENCRYPT(void *ctx, void *chardata) { return nullptr; }
 
-// FUN_0043de60 @ 0x0043DE60 — NOP (empty function in original binary).
+// Net_FlushQueue @ 0x0043DE60 — NOP (empty function in original binary).
 // IDA live/raw: nullsub_2 (`retn 8`), not a send-queue drain.
-void FUN_0043de60(void) {}
+void Net_FlushQueue(void) {}
 
 // CPacketQueue_PushPacket @ 0x0043DF90 (38 lines) — Net_EnqueuePacket: copies packet into 300-slot queue
 // Cola en this+0x401c, cada slot = 0x2008 bytes (flag de 4 bytes, largo de 4 bytes, 0x2000 de datos).
@@ -1478,38 +1480,38 @@ void __cdecl CPacketQueue_PushPacket(uintptr_t param_1, const void* param_2, int
 // IDA: Movement_Tick (0x0043E050)
 // Calcula el ángulo (en grados, 0..360) del punto (x1,y1) al (x2,y2).
 // Usa atan2 para el caso general; trata aparte los casos de dx o dy cercanos a cero.
-// Constants: _DAT_00552868 ~ 0.0001 (epsilon), _DAT_00552860 = 57.29578 (180/pi),
-//            _DAT_00552848 = 90.0, _DAT_005524ec = 180.0, _DAT_0055286c = 360.0,
-//            _DAT_00552580 = 0.0, _DAT_00552864 = 270.0
+// Constants: FloatEpsilon ~ 0.0001 (epsilon), RadToDeg = 57.29578 (180/pi),
+//            90.0f = 90.0, AngleDeg180 = 180.0, AngleDeg360 = 360.0,
+//            FloatZeroB = 0.0, AngleDeg270 = 270.0
 float __cdecl CreateAngle(float x1, float y1, float x2, float y2)
 {
     float dx = x2 - x1;
     float dy = y2 - y1;
 
-    if (fabsf(dx) < _DAT_00552868) {
+    if (fabsf(dx) < FloatEpsilon) {
         // Nearly vertical — return 0 or 180
-        if (dy < _DAT_00552580) {
-            return _DAT_00552580; // 0 degrees
+        if (dy < FloatZeroB) {
+            return FloatZeroB; // 0 degrees
         }
-        return _DAT_005524ec; // 180 degrees
+        return AngleDeg180; // 180 degrees
     }
-    if (fabsf(dy) >= _DAT_00552868) {
+    if (fabsf(dy) >= FloatEpsilon) {
         // General case — PORT FIEL 1:1 (0x43E0DA): el IDA usa atan2(dy/dx, 1.0)
         // (= atan del RATIO, rango [-90,90]) y RECONSTRUYE el cuadrante con +180 si
         // dx<0. Antes usábamos atan2f(dy,dx) (dos args, que YA resuelve el cuadrante)
         // Y ADEMÁS sumábamos +180 → doble corrección de 180° cuando dx<0 → el hada
         // (y todo facing hacia la izquierda) apuntaba al revés. dx≠0 aquí (guard arriba).
-        float angle = atan2f(dy / dx, 1.0f) * _DAT_00552860 + _DAT_00552848;
-        if (dx < _DAT_00552580) {
-            angle += _DAT_005524ec; // +180 if dx negative (reconstrucción de cuadrante)
+        float angle = atan2f(dy / dx, 1.0f) * RadToDeg + 90.0f;
+        if (dx < FloatZeroB) {
+            angle += AngleDeg180; // +180 if dx negative (reconstrucción de cuadrante)
         }
         return angle;
     }
     // Nearly horizontal — return 90 or 270
-    if (dx < _DAT_00552580) {
-        return _DAT_00552864; // 270 degrees
+    if (dx < FloatZeroB) {
+        return AngleDeg270; // 270 degrees
     }
-    return _DAT_00552848; // 90 degrees
+    return 90.0f; // 90 degrees
 }
 
 // Angle_Clamp @ 0x0043E120 — Angle_Clamp(current, target, maxDelta)
@@ -1645,7 +1647,7 @@ void __cdecl SetPlayerAttack(CHARACTER* character, int /*type*/, int /*flag*/, i
         if (v5 != -1 || *(unsigned short *)&AsCharacter(c)->Weapon[1].Type != 0xFFFF) {
             // Sword (400-495) — ItemAttribute[v5-399].TwoHand at offset -34
             if (v5 >= 400 && v5 < 496) {
-                if (*((unsigned char*)&((ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068)[v5 - 399] - 34)) {
+                if (*((unsigned char*)&((ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase)[v5 - 399] - 34)) {
                     if (v5 == 431) {
                         SetAction(AsObject(c), 81);
                     } else {
@@ -1673,7 +1675,7 @@ void __cdecl SetPlayerAttack(CHARACTER* character, int /*type*/, int /*flag*/, i
             }
             // Spear (560-591)
             if (v5 >= 560 && v5 < 592) {
-                if (*((unsigned char*)&((ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068)[v5 - 399] - 34)) {
+                if (*((unsigned char*)&((ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase)[v5 - 399] - 34)) {
                     SetAction(AsObject(c), rand() % 2 + 84);
                 } else {
                     SetAction(AsObject(c), rand() % 2 + 35);
@@ -1725,7 +1727,7 @@ void __cdecl SetPlayerAttack(CHARACTER* character, int /*type*/, int /*flag*/, i
         } else if ((v3 >= 536 && v3 < 543) || (v3 >= 544 && v3 < 545) || v3 == 546) {
             SetAction(AsObject(c), 55);
         } else if (v3 != -1 &&
-                   *((unsigned char*)&((ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068)[v3 - 399] - 34)) {
+                   *((unsigned char*)&((ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase)[v3 - 399] - 34)) {
             SetAction(AsObject(c), 51);
         } else {
             SetAction(AsObject(c), 50);
@@ -1757,7 +1759,7 @@ LABEL_85:
                     PlayBuffer(rand() % 2 + 40, AsObject(c), 0);
                 }
                 short modelType = AsCharacter(c)->Object.Type;
-                const BYTE* modelBase = reinterpret_cast<const BYTE*>(DAT_05828d58) + BMD_STRIDE * modelType;
+                const BYTE* modelBase = reinterpret_cast<const BYTE*>(ModelsBase) + BMD_STRIDE * modelType;
                 if (*(const unsigned short*)&((BMD*)(uintptr_t)(modelBase))->Sounds[2] != 0xFFFF) {
                     const BMD* soundModel = AsModel(modelBase);
                     PlayBuffer(soundModel->Sounds[2 + rand() % 2] + 170, AsObject(c), 0);
@@ -1769,7 +1771,7 @@ LABEL_85:
                 PlayBuffer(rand() % 2 + 40, AsObject(c), 0);
             }
             short modelType = AsCharacter(c)->Object.Type;
-            const BYTE* modelBase = reinterpret_cast<const BYTE*>(DAT_05828d58) + BMD_STRIDE * modelType;
+            const BYTE* modelBase = reinterpret_cast<const BYTE*>(ModelsBase) + BMD_STRIDE * modelType;
             if (*(const unsigned short*)&((BMD*)(uintptr_t)(modelBase))->Sounds[2] != 0xFFFF) {
                 const BMD* soundModel = AsModel(modelBase);
                 PlayBuffer(soundModel->Sounds[2 + rand() % 2] + 170, AsObject(c), 0);
@@ -1876,7 +1878,7 @@ void __cdecl SetPlayerShock(CHARACTER* c, int Hit)
         }
         if (etype != 284) {
             // Monster-table sound lookup: Models[etype].Sound[rand()%2]
-            const BYTE* modelsBase = reinterpret_cast<const BYTE*>(DAT_05828d58);
+            const BYTE* modelsBase = reinterpret_cast<const BYTE*>(ModelsBase);
             const short* sndTbl = reinterpret_cast<const short*>(modelsBase + BMD_STRIDE * etype + 174 + BMD_FIELD_SHIFT);
             if ((unsigned short)*sndTbl != 0xFFFF) {
                 int v6 = sndTbl[rand() % 2] + 170;
@@ -1908,7 +1910,7 @@ label_26:
 // Devuelve el índice de slot 0-399, o 400 si no lo encontró.
 int __cdecl FindCharacterIndex(int param_1)
 {
-    char *pcVar2 = (char*)(uintptr_t)DAT_07abf5d0;
+    char *pcVar2 = (char*)(uintptr_t)CharactersClient;
     for (int iVar1 = 0; iVar1 <= 399; iVar1++, pcVar2 += CHARACTER_STRIDE) {
         if (*pcVar2 != '\0' && *(short*)&((CHARACTER*)(uintptr_t)(pcVar2))->Key == (short)param_1)
             return iVar1;
@@ -1930,9 +1932,9 @@ int __cdecl FindCharacterIndex(int param_1)
 // Ported verbatim from IDA reference 0045C8C0_ChangeCharacterExt.c.
 // IDA: ChangeCharacterExt (0x0045C8C0)
 void __cdecl ChangeCharacterExt(int Key, BYTE *Equipment) {
-    // DAT_07abf5d0 guarda la dirección base del array de entidades como entero.
-    // 916 (0x394) = entity stride. Slot at DAT_07abf5d0 + 916*Key.
-    intptr_t c = DAT_07abf5d0 + CHARACTER_STRIDE * Key;
+    // CharactersClient guarda la dirección base del array de entidades como entero.
+    // 916 (0x394) = entity stride. Slot at CharactersClient + 916*Key.
+    intptr_t c = CharactersClient + CHARACTER_STRIDE * Key;
     if (*(WORD *)&AsCharacter(c)->Object.Type != 390) return;
     // 0.97.20: el CharSet sólo lleva vanilla; el único agregado que viaja es
     // el ala custom (más abajo).
@@ -2075,7 +2077,7 @@ void __cdecl ChangeCharacterExt(int Key, BYTE *Equipment) {
     SetCharacterScale(AsCharacter(c));
 }
 
-// FUN_0046c7f0 @ 0x0046C7F0 — Object_SpawnAmbientFX(kind, o, dx, dy, dz)
+// Object_SpawnAmbientFX @ 0x0046C7F0 — Object_SpawnAmbientFX(kind, o, dx, dy, dz)
 // Port FIEL de IDA `sub_46C7F0`. Es el spawner de fuego/humo de los objetos
 // del mundo: lo llama `MoveObjects` (0x4FDC00) para los braseros, la forja del
 // herrero, las chimeneas y los faroles.
@@ -2089,7 +2091,7 @@ void __cdecl ChangeCharacterExt(int Key, BYTE *Equipment) {
 // (`o+28`) — así el efecto sale del punto correcto del modelo (la boca de la
 // chimenea, la punta del farol). Luego se le suma la posición del objeto
 // (`o+16`) y un jitter de ±8 por eje.
-void __cdecl FUN_0046c7f0(int param_1, OBJECT* object, float param_3, float param_4, float param_5) {
+void __cdecl Object_SpawnAmbientFX(int param_1, OBJECT* object, float param_3, float param_4, float param_5) {
     // IDA 0x0046C7F0: a2 es la base del objeto; sus ángulos empiezan en a2+7.
     float *a2 = reinterpret_cast<float*>(object);
     if (!a2) return;
@@ -2125,12 +2127,12 @@ void __cdecl FUN_0046c7f0(int param_1, OBJECT* object, float param_3, float para
 }
 
 // CheckSprites @ 0x00479790 — Effect_UpdateAll
-// Marca todos los slots activos del pool de personajes/efectos (DAT_07c85890, stride 0x1BC)
+// Marca todos los slots activos del pool de personajes/efectos (EffectPoolArray, stride 0x1BC)
 // para el tick de render, poniendo el byte [+0x160] = 1 en cada entrada activa (flag de activo distinto de cero).
 // Se llama una vez por frame antes del loop de render, para que cada slot se procese exactamente una vez.
 void CheckSprites(void)
 {
-    char *pcVar1 = DAT_07c85890;
+    char *pcVar1 = EffectPoolArray;
     for (int i = 0; i < kSpritePoolSize; ++i, pcVar1 += OBJECT_STRIDE) {
         if (*pcVar1 != '\0')
             pcVar1[EntityOffset(0x160)] = '\x01';
@@ -2141,7 +2143,7 @@ void CheckSprites(void)
 void __cdecl BuxConvert_0(void* buffer, int len) {
     BYTE* buf = static_cast<BYTE*>(buffer);
     for (int i = 0; i < len; i++)
-        *(BYTE *)(buf + i) ^= (BYTE)DAT_00559bb4[i % 3];
+        *(BYTE *)(buf + i) ^= (BYTE)BuxConvertXorKeyA[i % 3];
 }
 
 // sub_47DAE0 @ 0x0047DAE0 (618 bytes) — Stats_CalcMagicDmgRange.
@@ -2168,7 +2170,7 @@ const ITEM* __cdecl Stats_CalcMagicDmgRange(BYTE* param_1) {
     // Wings (this+1012) magic damage bonus, durability scaled
     short wingsType = *(short*)(param_1 + 1012);
     if (wingsType != -1) {
-        ITEM_ATTRIBUTE* attr = &((ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068)[wingsType];
+        ITEM_ATTRIBUTE* attr = &((ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase)[wingsType];
         float durP = CalcDurabilityPercent(*(unsigned char*)(param_1 + 1038),
                                            attr->Durability,
                                            *(int*)(param_1 + 1016), 0);
@@ -2186,7 +2188,7 @@ const ITEM* __cdecl Stats_CalcMagicDmgRange(BYTE* param_1) {
         unsigned char dur = AsItem(weaponL)->Durability;
         if (dur != 0) {
             short type = *(short*)weaponL;
-            ITEM_ATTRIBUTE* attr = &((ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068)[type];
+            ITEM_ATTRIBUTE* attr = &((ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase)[type];
             float durP = CalcDurabilityPercent(dur, attr->Durability,
                                                AsItem(weaponL)->Level,
                                                AsItem(weaponL)->Option1);
@@ -2255,7 +2257,7 @@ int __cdecl Stats_CalcAddStrength(short *param_1) {
 int __cdecl CalculateAttackSpeed(BYTE* param_1) {
     // DESVIACION MuEmu F3/E1: fórmula local sólo sin cálculo recibido.
     if (gServerCharacterStats.Apply((void*)param_1)) return 0;
-    const BYTE* charAttr = static_cast<const BYTE*>(DAT_07cf1ff4);
+    const BYTE* charAttr = static_cast<const BYTE*>(CharacterAttributePtr);
     if (!charAttr) return 0;
     int charClass = *(unsigned char*)(charAttr + 11) & 7;
 
@@ -2285,7 +2287,7 @@ int __cdecl CalculateAttackSpeed(BYTE* param_1) {
     BYTE* weaponL = param_1 + 536;  // WeaponL
     BYTE* pants   = param_1 + 876;  // Pants
 
-    // Skip dword_7E91388/pPickedItem hover preview for non-runtime simplicity.
+    // Skip ItemPickedFlag/pPickedItem hover preview for non-runtime simplicity.
 
     bool weaponLValid = false, weaponRValid = false, pantsValid = false;
     if (*(unsigned char*)(weaponL + 26)) {
@@ -2347,7 +2349,7 @@ int __cdecl CalculateAttackSpeed(BYTE* param_1) {
 const ITEM* __cdecl Stats_CalcDefense(BYTE* param_1) {
     // DESVIACION MuEmu F3/E1: fórmula local sólo sin cálculo recibido.
     if (gServerCharacterStats.Apply((void*)param_1)) return 0;
-    const BYTE* charAttr = static_cast<const BYTE*>(DAT_07cf1ff4);
+    const BYTE* charAttr = static_cast<const BYTE*>(CharacterAttributePtr);
     if (!charAttr) return 0;
     int charClass = *(unsigned char*)(charAttr + 11) & 7;
 
@@ -2362,7 +2364,7 @@ const ITEM* __cdecl Stats_CalcDefense(BYTE* param_1) {
     if (v3 != -1) {
         unsigned char dur = *(unsigned char*)(param_1 + 0x276);  // escudo +26: Durability (CharacterMachine, no CHARACTER)
         if (dur != 0) {
-            unsigned char maxDur = ((ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068)[v3].Durability;
+            unsigned char maxDur = ((ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase)[v3].Durability;
             int level = *(int *)(param_1 + 0x260);  // escudo +4: Level
             unsigned char opt = *(unsigned char*)(param_1 + 631);
             float durP = CalcDurabilityPercent(dur, maxDur, level, opt);
@@ -2399,7 +2401,7 @@ const ITEM* __cdecl Stats_CalcDefense(BYTE* param_1) {
 int __cdecl Stats_CalcDefenseRate(BYTE* param_1) {
     // DESVIACION MuEmu F3/E1: fórmula local sólo sin cálculo recibido.
     if (gServerCharacterStats.Apply((void*)param_1)) return 0;
-    const BYTE* charAttr = static_cast<const BYTE*>(DAT_07cf1ff4);
+    const BYTE* charAttr = static_cast<const BYTE*>(CharacterAttributePtr);
     if (!charAttr) return 0;
     int charClass = *(unsigned char*)(charAttr + 11) & 7;
     unsigned short vit = *(unsigned short*)(param_1 + 22);
@@ -2416,7 +2418,7 @@ int __cdecl Stats_CalcDefenseRate(BYTE* param_1) {
         BYTE* slotPtr = param_1 + 68 * i;
         if (*(unsigned char*)(slotPtr + 562)) {  // slot's [+26] = 0x22A; 8*68+0x22 hmm let me recalc
             unsigned int v7 = Item_GetDefenseWithSpecial(0, (short*)(slotPtr + 536));
-            ITEM_ATTRIBUTE* v8 = &((ITEM_ATTRIBUTE*)(uintptr_t)DAT_07d78068)[*(short*)&((CHARACTER*)(uintptr_t)(slotPtr))->BodyPart[2].AnimationFrame];
+            ITEM_ATTRIBUTE* v8 = &((ITEM_ATTRIBUTE*)(uintptr_t)ItemAttributeBase)[*(short*)&((CHARACTER*)(uintptr_t)(slotPtr))->BodyPart[2].AnimationFrame];
             float durP;
             if (i == 7) {
                 durP = CalcDurabilityPercent(*(unsigned char*)(param_1 + 1038),
@@ -2465,14 +2467,14 @@ int __cdecl Stats_CalcDefenseRate(BYTE* param_1) {
 // sub_47E2E0 @ 0x0047E2E0 (46 bytes) — Stats_CalcExtraOption1.
 // Iterates 6 equipment slots (CharacterMachine + 672 .. + 1012, stride 68
 // bytes = tamaño de ITEM). Por cada slot con Option1 (byte +26) seteado, llama a
-// FUN_0047cfe0 (accesor de item +0x14). Guarda el último resultado válido en
+// Item_GetField14 (accesor de item +0x14). Guarda el último resultado válido en
 // CharacterMachine + 80 (this[40] si es puntero WORD).
 int __cdecl Stats_ExtraOptionEquip6(short *param_1) {
     short *slot = param_1 + 336;  // CharacterMachine + 672 (Pendant)
     short last = 0;
     for (int n = 0; n < 6; ++n) {
         if (*((unsigned char*)slot + 26)) {
-            last = FUN_0047cfe0(slot);
+            last = Item_GetField14(slot);
             param_1[40] = last;  // CharacterMachine + 80
         }
         slot += 34;  // +68 bytes (next ITEM)
@@ -2482,16 +2484,16 @@ int __cdecl Stats_ExtraOptionEquip6(short *param_1) {
 
 // sub_47E310 @ 0x0047E310 (63 bytes) — Stats_CalcExtraOption2.
 // Lee el Option1 (byte +26 dentro de ITEM) de los slots de Guantes y Alas. Por cada uno:
-//   Guantes (Option1 en +970, ITEM en +944): this+82 = FUN_0047d000(guantes)
-//   Alas    (Option1 en +1038, ITEM en +1012): this+82 += FUN_0047d000(alas)
+//   Guantes (Option1 en +970, ITEM en +944): this+82 = Item_GetField18(guantes)
+//   Alas    (Option1 en +1038, ITEM en +1012): this+82 += Item_GetField18(alas)
 // Orden: primero los guantes (reemplaza), después las alas (suma).
 int __cdecl Stats_ExtraOptionGlovesWings(BYTE* param_1) {
     short v = 0;
     if (*(unsigned char*)(param_1 + 970)) {
-        *(short*)(param_1 + 82) = FUN_0047d000((short*)(param_1 + 944));
+        *(short*)(param_1 + 82) = Item_GetField18((short*)(param_1 + 944));
     }
     if (*(unsigned char*)(param_1 + 1038)) {
-        v = FUN_0047d000((short*)(param_1 + 1012));
+        v = Item_GetField18((short*)(param_1 + 1012));
         *(short*)(param_1 + 82) += v;
     }
     return (int)(unsigned char)v;
@@ -2504,7 +2506,7 @@ int __cdecl Terrain_QuadEqual(const float* param_1, const float* param_2, int pa
     do {
         float diff = param_1[iVar1] - *p2;
         if (diff < 0.0f) diff = -diff;
-        if (_DAT_005528a8 < diff)
+        if (MsToSeconds < diff)
             return 0;
         iVar1++;
         p2++;
@@ -2536,7 +2538,7 @@ void __cdecl Vec3_Normalize(float *vec) {
 // IDA prueba SEIS ejes y exige que TODOS solapen:
 //     cross(dir, eje0), cross(dir, eje1), cross(dir, eje2), eje0, eje1, eje2
 // con `dir = rayTarget - rayOrigin`.  La proyeccion de cada uno la hace
-// `sub_5130F0` (FUN_005130f0), que ya estaba portada fiel mas arriba.
+// `sub_5130F0` (AABB_IntersectOBB), que ya estaba portada fiel mas arriba.
 bool __cdecl Collision_SegmentToOBB(float *rayOrigin, float *rayTarget, const float *box)
 {
     if (!rayOrigin || !rayTarget || !box) return false;
@@ -2554,7 +2556,7 @@ bool __cdecl Collision_SegmentToOBB(float *rayOrigin, float *rayTarget, const fl
                        (float *)(box + 3), (float *)(box + 6), (float *)(box + 9) };
 
     for (int i = 0; i < 6; ++i) {
-        if (!FUN_005130f0(axes[i], rayOrigin, rayTarget,
+        if (!AABB_IntersectOBB(axes[i], rayOrigin, rayTarget,
                           box[0], box[1], box[2],
                           box[3], box[4], box[5],
                           box[6], box[7], box[8],

@@ -14,7 +14,7 @@
 
 // Effect_SpawnSmokeBurst — Effect_SmokeBurst
 // Spawns 20 particles of type 0x497 (smoke/debris) at param_1 position,
-// offset upward by _DAT_00552878 in Z. If param_2 != 0, also spawns
+// offset upward by 80.0f in Z. If param_2 != 0, also spawns
 // a type 0x4bf (sparkle) particle at the same position.
 // param_1: world position float[3]
 // param_2: flag — non-zero = also emit sparkle
@@ -54,7 +54,7 @@ void __cdecl Effect_SpawnSmokeBurst(float *param_1, char param_2)
   local_24[2] = 1.0f;
   local_c = *param_1;
   local_8 = param_1[1];
-  local_4 = param_1[2] + _DAT_00552878;
+  local_4 = param_1[2] + 80.0f;
   iVar2 = 0x14;  // spawn 20 smoke particles
   do {
     iVar1 = _rand();
@@ -115,7 +115,7 @@ void __cdecl Effect_SpawnSmokeExplosion(undefined4 *param_1, char param_2)
   local_24[2] = 1.0f;
   local_24[6] = (float)*param_1;
   local_8 = param_1[1];
-  local_4 = (float)param_1[2] + _DAT_0055284c;
+  local_4 = (float)param_1[2] + 30.0f;
   iVar2 = 0x14;  // spawn 20 smoke particles
   do {
     iVar1 = _rand();
@@ -171,7 +171,7 @@ void __cdecl Effect_SpawnLightningBurst(intptr_t param_1)
     // Compute world endpoint relative to entity position
     position[0] = *(float *)(param_1 + 0x10) - position[0];
     position[1] = *(float *)(param_1 + 0x14) - position[1];
-    position[2] = (*(float *)(param_1 + 0x18) - position[2]) + _DAT_00552908;
+    position[2] = (*(float *)(param_1 + 0x18) - position[2]) + 120.0f;
     // Spawn lightning joint: type=0x4eb, from entity pos, width 5.0, persistent
     Joint_Create(0x4eb, position, (float *)(param_1 + 0x10), local_48,
                  *(undefined4 *)(param_1 + 4),
@@ -183,7 +183,7 @@ void __cdecl Effect_SpawnLightningBurst(intptr_t param_1)
 
 
 // Effect_SpawnProximityHit — Effect_OnHitProximity
-// Checks if the entity's target (at +0xfc) is within _DAT_005524f0 distance.
+// Checks if the entity's target (at +0xfc) is within GridToWorldScale distance.
 // If within range, spawns hit effects based on entity type (+0x02):
 //   0x00BF: spawns 2 random type 0xC5/0xC6 effects (physical hit variants)
 //   0x00D4: spawns 2 random type 0xD5/0xD6 effects + particle 0x4C4 + sound 0x30
@@ -215,7 +215,7 @@ void __cdecl Effect_SpawnProximityHit(intptr_t param_1)
       (fVar4 = *(float *)(param_1 + 0x10) - *(float *)(pcVar3 + 0x10),
        pfVar1 = (float *)(param_1 + 0x10),
        fVar5 = *(float *)(param_1 + 0x14) - *(float *)(pcVar3 + 0x14),
-       SQRT(fVar4 * fVar4 + fVar5 * fVar5) <= _DAT_005524f0)) {
+       SQRT(fVar4 * fVar4 + fVar5 * fVar5) <= GridToWorldScale)) {
     sVar2 = *(short *)(param_1 + 2);
     *(undefined4 *)(param_1 + 0x60) = 1;  // mark hit flag
     local_c[0] = 1.0f;
@@ -282,7 +282,7 @@ void __cdecl Effect_SpawnProximityHit(intptr_t param_1)
 // Ring_ComputeOrbit — Ring_ComputeOrbit
 // Computes a point on a 3-axis Lissajous orbit curve for ring/trail effects.
 // Uses three independent sin/cos pairs with different frequency scales
-// (_DAT_00552a9c, _DAT_00552aa0, _DAT_00552aa8) to produce smooth 3D orbital motion.
+// (RingOrbitScaleX, RingOrbitScaleY, RingOrbitScaleZ) to produce smooth 3D orbital motion.
 // param_1: phase index (combined with frame counter from HashTable)
 // param_2: output float[3] — computed orbit position
 // param_3: scale / frequency multiplier

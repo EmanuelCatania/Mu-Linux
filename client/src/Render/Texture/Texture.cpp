@@ -10,7 +10,7 @@
 //
 // ── TEXTURE SLOT TABLE ────────────────────────────────────────────────────────
 //
-//   Base: DAT_083a7ca0     stride: 0x38 bytes = 14 dwords per slot
+//   Base: LegacyBitmapTable     stride: 0x38 bytes = 14 dwords per slot
 //   Max:  ~256 slots (IDs 0 .. 0xFF used; HUD reaches 0xF9)
 //
 //   Slot layout (byte offsets within each 0x38-byte entry):
@@ -23,20 +23,20 @@
 //     +0x34  ptr    pixels           malloc'd RGB pixel buffer
 //
 //   Helper addresses for per-slot fields:
-//     DAT_083a7ca0  = slot[0].active
-//     DAT_083a7cc0  = slot[0].width      (float)
-//     DAT_083a7cc4  = slot[0].height     (float)
-//     DAT_083a7cc8  = slot[0].bpp        (byte)
-//     DAT_083a7ccc  = slot[0].gl_handle  (uint)
-//     DAT_083a7cd0  = slot[0].ref_count  (byte)
+//     LegacyBitmapTable  = slot[0].active
+//     BitmapsWidth  = slot[0].width      (float)
+//     BitmapsHeight  = slot[0].height     (float)
+//     BitmapsBpp  = slot[0].bpp        (byte)
+//     BitmapsGlHandle  = slot[0].gl_handle  (uint)
+//     BitmapsRefCount  = slot[0].ref_count  (byte)
 //     DAT_083a7cd4  = slot[0].pixels     (ptr)
 //
-//   Accessed as: (&DAT_083a7ccc)[id * 0xE]  (uint* stride = 4 → 0xE*4 = 0x38)
-//                (&DAT_083a7cc8)[id * 0x38] (byte* stride = 1)
+//   Accessed as: (&BitmapsGlHandle)[id * 0xE]  (uint* stride = 4 → 0xE*4 = 0x38)
+//                (&BitmapsBpp)[id * 0x38] (byte* stride = 1)
 //
 // ── GLOBAL STATE ──────────────────────────────────────────────────────────────
 //
-//   DAT_00561574   int   g_bound_texture_id   last texture bound (avoids redundant calls)
+//   BoundTextureSlotCache   int   g_bound_texture_id   last texture bound (avoids redundant calls)
 //   DAT_00561570   int   g_screen_height      used in Texture_Draw2D for Y-flip
 //   m_dwUsedTextureMemory   int   g_vram_used          running tally of texture memory (bpp*w*h bytes)
 //
@@ -46,14 +46,14 @@
 //
 // ── TEXTURE PATH MODES ────────────────────────────────────────────────────────
 //
-//   DAT_0055a7c4 == 0  →  Standard mode:
-//       Full path = DAT_0055a7a4 (base dir) + param_1 (filename)
+//   g_tex_ext_mode == 0  →  Standard mode:
+//       Full path = Data2PathPrefix (base dir) + param_1 (filename)
 //       SaveImage(id, extension, path, NULL, 0) handles the actual I/O.
 //
-//   DAT_0055a7c4 != 0  →  Extension-swap mode (OZJ ↔ OZT):
+//   g_tex_ext_mode != 0  →  Extension-swap mode (OZJ ↔ OZT):
 //       Strips extension from filename up to the last '.'.
-//       Appends DAT_0055a79c (e.g. ".OZJ") for high-quality textures,
-//       or DAT_00561b70 (e.g. ".OZT") for low-quality / alternate.
+//       Appends DataPathPrefix (e.g. ".OZJ") for high-quality textures,
+//       or TextureExtJpgStr (e.g. ".OZT") for low-quality / alternate.
 //       Used to transparently switch texture quality level at runtime.
 //
 // ── COORDINATE SYSTEM (Texture_Draw2D) ───────────────────────────────────────
@@ -64,7 +64,7 @@
 //
 //   param_10 (scale_wh): if set, w and h are scaled via Screen_ToGLX / Screen_ToGLY
 //   param_11 (scale_xy): if set, x and y are scaled
-//   Scale factor: DAT_0056156c * DAT_0055283c  (set from ChangeDisplaySettings)
+//   Scale factor: DAT_0056156c * ConvertXScaleBits  (set from ChangeDisplaySettings)
 //
 //   glBegin(6) = GL_QUAD_STRIP → draws 4 vertices (BL, BR, TL, TR) with texcoords
 //
@@ -121,15 +121,15 @@ struct TexSlot
 
 #define TexTable ((TexSlot*)ResourceTables::TextureBase())
 
-extern int  g_bound_texture_id;   // DAT_00561574
+extern int  g_bound_texture_id;   // BoundTextureSlotCache
 extern int  g_screen_height;      // DAT_00561570
 extern int  g_vram_used;          // m_dwUsedTextureMemory
-// g_tex_ext_mode is declared via #define in globals.h as DAT_0055a7c4 (char)
-extern char g_tex_base_dir[];     // DAT_0055a7a4  base directory string
-extern char g_tex_ext_hq[];       // DAT_0055a79c  high-quality extension (e.g. ".OZJ")
-extern char g_tex_ext_lq[];       // DAT_00561b70  low-quality extension  (e.g. ".OZT")
+// g_tex_ext_mode is declared via #define in globals.h as g_tex_ext_mode (char)
+extern char g_tex_base_dir[];     // Data2PathPrefix  base directory string
+// Nota: los viejos externs g_tex_ext_hq/g_tex_ext_lq nunca tuvieron definicion;
+// las cadenas de extension reales son TextureExtJpgStr ("OZJ") y TextureExtTgaStr ("OZT").
 extern float g_scale_x;           // DAT_0056156c  screen scale X
-extern float g_scale_y;           // DAT_0055283c  screen scale Y
+extern float g_scale_y;           // ConvertXScaleBits  screen scale Y
 
 
 // ============================================================
@@ -148,7 +148,7 @@ void Texture_BindLocalCached(int id)
     // caller es `Texture_Draw2D`, que a su vez tampoco tiene callers.
     //
     // Peor: mantiene su PROPIO cache (`g_bound_texture_id`) distinto del de
-    // GL_BindTextureSlot (`DAT_00561574`). Si algún día se la vuelve a usar, los dos
+    // GL_BindTextureSlot (`BoundTextureSlotCache`). Si algún día se la vuelve a usar, los dos
     // caches se desincronizan y se omiten binds → textura equivocada.
     //
     // Se conserva porque forma parte del port de este módulo, pero NO
@@ -386,7 +386,7 @@ int Texture_Load(const char* path, int id,
 //   scale_xy   — if non-0: scale x,y via screen→GL coord transform
 //
 // Coordinate transform (Screen_ToGLX / Screen_ToGLY):
-//   screen_x → gl_x:  x * g_scale_x * g_scale_y  (DAT_0056156c * DAT_0055283c)
+//   screen_x → gl_x:  x * g_scale_x * g_scale_y  (DAT_0056156c * ConvertXScaleBits)
 //   screen_y → gl_y:  y * (similar Y scale)
 //
 // GL Y-flip: OpenGL origin is bottom-left.
@@ -685,8 +685,8 @@ void Texture_PumpHD()
 // ── OpenJPG @ 0x00529740 — Texture_Load (OZJ/JPEG) ─────────────────────
 // Loads JPEG or OZJ texture from disk, decompresses with stb_image, uploads to GL.
 // Path mode:
-//   DAT_0055a7c4 == 0 → full_path = g_tex_base_dir + filename
-//   DAT_0055a7c4 != 0 → strip extension, try g_tex_ext_hq then g_tex_ext_lq
+//   g_tex_ext_mode == 0 → full_path = g_tex_base_dir + filename
+//   g_tex_ext_mode != 0 → strip extension, try g_tex_ext_hq then g_tex_ext_lq
 // OZJ files: fseek(f, 24, SEEK_SET) to skip 24-byte Webzen header before JPEG data.
 // Limits: GL_MAX_TEXTURE_SIZE (tex_max_size), rounds to power-of-2 before GL upload.
 int __cdecl OpenJPG(const char* path, int id, int filter, int wrap, int flags, char show_err)
@@ -706,9 +706,9 @@ int __cdecl OpenJPG(const char* path, int id, int filter, int wrap, int flags, c
         nameForPath = path + 5;
     }
 
-    if (DAT_0055a7c4 == '\0') {
+    if (g_tex_ext_mode == '\0') {
         // Standard mode: base dir + filename
-        strcpy(full_path, (const char*)DAT_0055a7a4);
+        strcpy(full_path, (const char*)Data2PathPrefix);
         strcat(full_path, nameForPath);
     } else {
         // Extension-swap mode: strip ext from filename, append OZJ/OZT ext
@@ -721,9 +721,9 @@ int __cdecl OpenJPG(const char* path, int id, int filter, int wrap, int flags, c
         }
         basename[dotPos + 1] = '\0';
         // Build: base_dir + basename + extension
-        strcpy(full_path, (const char*)DAT_0055a79c);
+        strcpy(full_path, (const char*)DataPathPrefix);
         strcat(full_path, basename);
-        strcat(full_path, (const char*)DAT_00561b70);
+        strcat(full_path, (const char*)TextureExtJpgStr);
     }
 
     // --- Open file ---
@@ -812,7 +812,7 @@ int __cdecl OpenJPG(const char* path, int id, int filter, int wrap, int flags, c
 // ── OpenTGA @ 0x00529BD0 — OpenTGA ──────────────────────────────────────
 // Loads a custom TGA variant (32-bpp, 6-byte mini-header) from disk,
 // performs BGR→RGB swap, uploads to GL, and stores metadata in the texture slot
-// table (stride 0x38 bytes / 0xe floats, base DAT_083a7ca0).
+// table (stride 0x38 bytes / 0xe floats, base LegacyBitmapTable).
 //
 // Header layout (at offset hdrOff in the raw file buffer):
 //   +0  short  width
@@ -821,8 +821,8 @@ int __cdecl OpenJPG(const char* path, int id, int filter, int wrap, int flags, c
 //   +5  byte   (unused / flags)
 //   +6  bytes  BGRA pixel data, row 0 = bottom of image
 //
-// hdrOff = 0x0C when DAT_0055a7c4 == 0 (Data2 / pak mode)
-//        = 0x10 when DAT_0055a7c4 != 0 (Data  / plain mode)
+// hdrOff = 0x0C when g_tex_ext_mode == 0 (Data2 / pak mode)
+//        = 0x10 when g_tex_ext_mode != 0 (Data  / plain mode)
 int __cdecl OpenTGA(const char* szFileName, int uiTextureIndex,
                          int uiFilter, int uiWrapMode, int bFullPath, char bCheck)
 {
@@ -845,32 +845,32 @@ int __cdecl OpenTGA(const char* szFileName, int uiTextureIndex,
     // ── Path construction ──────────────────────────────────────────────────────
     if (g_tex_ext_mode == '\0') {
         // Data2 mode: "Data2\" + szFileName  (extension already in szFileName)
-        const char* base = (const char*)DAT_0055a7a4;   // "Data2\"
+        const char* base = (const char*)Data2PathPrefix;   // "Data2\"
         int bl = (int)strlen(base);
         memcpy(local_200, base, bl);
         int fl = (int)strlen(nameForPath) + 1;
         memcpy(local_200 + bl, nameForPath, fl);
     } else {
-        // Data mode: "Data\" + name-without-ext + DAT_00561ba8 (e.g. ".tga")
+        // Data mode: "Data\" + name-without-ext + TextureExtTgaStr (e.g. ".tga")
         int fl = (int)strlen(nameForPath);
         memcpy(local_100, nameForPath, fl + 1);
         // null-terminate at first '.'
         for (int i = 0; i < fl; i++) {
             if (local_100[i] == '.') { local_100[i + 1] = '\0'; break; }
         }
-        const char* base = (const char*)DAT_0055a79c;   // "Data\"
+        const char* base = (const char*)DataPathPrefix;   // "Data\"
         int bl = (int)strlen(base);
         memcpy(local_200, base, bl);
         int sl = (int)strlen(local_100);
         memcpy(local_200 + bl, local_100, sl);
-        const char* ext = (const char*)DAT_00561ba8;      // ".tga"
+        const char* ext = (const char*)TextureExtTgaStr;      // ".tga"
         int el = (int)strlen(ext) + 1;
         memcpy(local_200 + bl + sl, ext, el);
     }
 
     // ── Open file ─────────────────────────────────────────────────────────────
     char hdPath[300];
-    FILE* Stream = (FILE*)Platform::GetFileSystem().Open(Texture_HDAssetPath(local_200, hdPath, sizeof(hdPath)), DAT_005580ac);
+    FILE* Stream = (FILE*)Platform::GetFileSystem().Open(Texture_HDAssetPath(local_200, hdPath, sizeof(hdPath)), FopenModeRb);
     // DIAG: log TGA loads + specifically log slots 0xc/0x10/0x11 (Account textures)
     {
         static int s_tga = 0;
@@ -907,11 +907,11 @@ int __cdecl OpenTGA(const char* szFileName, int uiTextureIndex,
         UnloadImage(uiTextureIndex);
 
         // ── Write slot metadata (stride 0x38 bytes = 0xe floats) ─────────────
-        float* texWidth  = (float*) &DAT_083a7cc0;
-        float* texHeight = (float*) &DAT_083a7cc4;
-        char*  texBpp    = (char*)  &DAT_083a7cc8;
-        UINT*  texGL     = (UINT*)  &DAT_083a7ccc;
-        char*  texRef    = (char*)  &DAT_083a7cd0;
+        float* texWidth  = (float*) &BitmapsWidth;
+        float* texHeight = (float*) &BitmapsHeight;
+        char*  texBpp    = (char*)  &BitmapsBpp;
+        UINT*  texGL     = (UINT*)  &BitmapsGlHandle;
+        char*  texRef    = (char*)  &BitmapsRefCount;
         int    byteStride = uiTextureIndex * TEXTURE_STRIDE;
 
         texBpp  [byteStride] = 4;                        // 4 components: RGBA
@@ -961,10 +961,10 @@ void __cdecl UnloadImage(int param_1)
 {
     ResourceTables::EnsureTextures(std::size_t(param_1)+1);
     int iVar1 = param_1 * TEXTURE_STRIDE;
-    char  *texArr_cc8 = (char*) &DAT_083a7cc8;
-    char  *texArr_cd0 = (char*) &DAT_083a7cd0;
-    DWORD *texArr_ccc = (DWORD*)&DAT_083a7ccc;
-    DWORD *texArr_ca0 = (DWORD*)&DAT_083a7ca0;
+    char  *texArr_cc8 = (char*) &BitmapsBpp;
+    char  *texArr_cd0 = (char*) &BitmapsRefCount;
+    DWORD *texArr_ccc = (DWORD*)&BitmapsGlHandle;
+    DWORD *texArr_ca0 = (DWORD*)&LegacyBitmapTable;
     if (!Bitmaps[param_1].Buffer) return;
     char cVar2 = texArr_cc8[iVar1];
     // __ftol calls were computing width/height — skip since we don't have the floats
@@ -976,7 +976,7 @@ void __cdecl UnloadImage(int param_1)
             unsigned int glHandle = texArr_ccc[param_1 * TEXTURE_STRIDE_DWORDS];
             Gfx::DeleteTexture(glHandle);
             void *pixels = Bitmaps[param_1].Buffer;
-            texArr_ca0[param_1 * TEXTURE_STRIDE_DWORDS] = 0;  // approximated from (&DAT_083a7ca0)[iVar1]
+            texArr_ca0[param_1 * TEXTURE_STRIDE_DWORDS] = 0;  // approximated from (&LegacyBitmapTable)[iVar1]
             operator_delete((unsigned char*)pixels);
             Bitmaps[param_1].Buffer = nullptr;
             (void)cVar2; // used in original for m_dwUsedTextureMemory -= cVar2 * w * h

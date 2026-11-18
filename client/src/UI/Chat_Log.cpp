@@ -12,11 +12,11 @@
 
 // UIChatLogWindow_AddText @ 0x00480620  — full 1:1 port of IDA sub_480620.
 // Two distinct sinks:
-//   (1) Engine vtable dispatch on the chat-listbox object at dword_55C9FF0
+//   (1) Engine vtable dispatch on the chat-listbox object at ChatHistoryWidget
 //       (slot +0x70 = AddText).  This pushes the entry into the doubly-
 //       linked history list owned by ChatListBox.  Now active again because
 //       ChatListBox_Construct properly installs the vtable in WinMain.
-//   (2) Legacy popup ring buffer at DAT_07df9380 (119 slots × 0x118 bytes).
+//   (2) Legacy popup ring buffer at WhisperBubblePool (119 slots × 0x118 bytes).
 //       The original gates this on `(*strID == 0) || (mode in {0,3,4,5})`.
 //       When `mode != 0,3,4,5` AND strID is non-empty, only the listbox sink
 //       is used.
@@ -45,8 +45,8 @@ void __cdecl UIChatLogWindow_AddText(const char* label, const char* msg, int mod
     if (!label) label = "";
 
     // ── 1. Engine vtable dispatch (slot +0x70) ────────────────────────────────
-    if (DAT_055c9ff0 && msg) {
-        DWORD* obj = (DWORD*)DAT_055c9ff0;
+    if (ChatHistoryWidget && msg) {
+        DWORD* obj = (DWORD*)ChatHistoryWidget;
         void** vt = ChatWidget_GetVTable(obj);
         if (vt) {
             typedef void (__fastcall *FnAddText)(DWORD*, int /*edx*/,
@@ -57,7 +57,7 @@ void __cdecl UIChatLogWindow_AddText(const char* label, const char* msg, int mod
     }
 
     // ── 2. Reset the periodic scroll timer ────────────────────────────────────
-    DAT_00559ce4 = 0x96;   // Sound_Countdown2 will next fire 150 frames from now
+    ChatScrollTimer = 0x96;   // Sound_Countdown2 will next fire 150 frames from now
 
     // ── Gate ring write — 1:1 con IDA 0x480620:
     //   escribe cuando `!label || (mode && mode!=3 && mode!=4 && mode!=5)`.
@@ -68,8 +68,8 @@ void __cdecl UIChatLogWindow_AddText(const char* label, const char* msg, int mod
     }
 
     // ── 3. Append to player-chat ring buffer ───────────────────────────────────
-    int   count = DAT_07e11da4;
-    char* base  = DAT_07df9380;
+    int   count = ChatLogCount;
+    char* base  = WhisperBubblePool;
     if (count >= 0x77) {
         // Ring full: shift all entries one slot forward, losing the oldest (slot 0)
         memmove(base, base + 0x118, (0x77 - 1) * 0x118);
@@ -82,11 +82,11 @@ void __cdecl UIChatLogWindow_AddText(const char* label, const char* msg, int mod
     TextEngine::CopyTruncated(slot,        0xB,   label);
     TextEngine::CopyTruncated(slot + 0x0B, 0x101, msg);
     *(int*)(slot + 0x10C) = mode;                  // channel / type dword
-    DAT_07e11da4 = count + 1;
+    ChatLogCount = count + 1;
 
     // ── 4. Auto-advance scroll (follow-bottom) ─────────────────────────────────
-    // UI_RenderChatLogOverlay (chat renderer) reads slots DAT_00559CE0 + 0..5. In the
-    // original binary dword_559CE0 only advances when the user presses Enter
+    // UI_RenderChatLogOverlay (chat renderer) reads slots ChatFirstVisibleSlot + 0..5. In the
+    // original binary ChatFirstVisibleSlot only advances when the user presses Enter
     // to send chat (WndProc LABEL_589, line 2508). But the login scene's
     // 120× UIChatLogWindow_AddText init loop at Game_SceneUpdate fills the ring counter
     // to 119 BEFORE the user ever sends chat — so scroll stays at 0 and the
@@ -94,9 +94,9 @@ void __cdecl UIChatLogWindow_AddText(const char* label, const char* msg, int mod
     // appears on screen. Force-follow the tail so newly added messages are
     // always in the visible 6-line window.
     {
-        int visible = DAT_07e11da4 - 6;
+        int visible = ChatLogCount - 6;
         if (visible < 0) visible = 0;
-        DAT_00559ce0 = visible;
+        ChatFirstVisibleSlot = visible;
     }
 }
 

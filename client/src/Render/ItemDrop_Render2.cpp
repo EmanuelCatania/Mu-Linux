@@ -1,12 +1,12 @@
 // ItemDrop_Render2.cpp — RenderParticles @ 0x00478c00
 // Sprite-pool render loop for decoration/item-drop billboards.
 //
-// Iterates a fixed sprite entity pool starting at (DAT_07abf634 - 0x44) = 0x07abf5f0,
+// Iterates a fixed sprite entity pool starting at (SpriteEntityPoolBase - 0x44) = 0x07abf5f0,
 // stride 0x70 bytes, up to address limit 0x7b116b3 (~300 entries).
 //
 // Pool entry layout (relative to pool base, stride 0x70):
 //   +0x00  char   active           — skip if 0
-//   +0x04  uint   entity_type      — switch key; maps into type table at DAT_083a7cc0
+//   +0x04  uint   entity_type      — switch key; maps into type table at BitmapsWidth
 //   +0x08  uint   anim_state       — animation sub-state (5/7/8 = special cases)
 //   +0x0c  uint   scale_mult       — integer multiplier for world scale
 //   +0x10  float  pos[3]           — world position (x, y, z)
@@ -18,7 +18,7 @@
 //   +0x58  float  anim_speed       — animation speed multiplier (for 0x4f4 type)
 //   +0x68  float  base_frame       — base frame offset (for 0x4f4 type)
 //
-// Type table at DAT_083a7cc0, stride 0x38:
+// Type table at BitmapsWidth, stride 0x38:
 //   +0x00  float  scale_x          — base world-X scale per type
 //   +0x04  float  scale_y          — base world-Y scale per type
 //   +0x08  char   hide_flag        — if == 3: call GL_SetBlendAdditive() (hide anim sprite)
@@ -42,8 +42,8 @@ void RenderParticles(void)
 {
     // DESVIACION (DLL Antilag, ret en 0x00478C00): sin efectos dinámicos.
     if (gUserSettings.GetAntilag(ANTILAG_DYNAMIC_EFFECTS)) return;
-    // Itera el pool DAT_07abf5f0 por índice, acotado a kParticlePoolSize slots.
-    uint  *puVar8  = (uint*)((char*)DAT_07abf5f0 + 0x44);  // +0x44 from slot 0 base
+    // Itera el pool SpritePoolBase por índice, acotado a kParticlePoolSize slots.
+    uint  *puVar8  = (uint*)((char*)SpritePoolBase + 0x44);  // +0x44 from slot 0 base
     uint   local_2c = 0;             // entry index / loop counter
 
     do {
@@ -51,7 +51,7 @@ void RenderParticles(void)
         if ((char)puVar8[-0x11] == '\0') goto next_entry;
 
         {
-            // DESVIACION: bounds-check de entity_type. La tabla en DAT_083a7cc0 tiene
+            // DESVIACION: bounds-check de entity_type. La tabla en BitmapsWidth tiene
             // 0x600 entradas (stride 0x38); un tipo fuera de rango leería memoria inválida.
             uint entityType = puVar8[-0x10];
             if (entityType >= 0x600) goto next_entry;
@@ -59,11 +59,11 @@ void RenderParticles(void)
             int   iVar2  = (int)entityType * TEXTURE_STRIDE;
             // El campo scale (slot+0x0c) es un FLOAT: reinterpretar los bits, no convertir
             // int→float. IDA: Width = Bitmaps[type].Width * *((float*)v1 - 14).
-            float fVar13 = *(float *)((char *)&DAT_083a7cc0 + iVar2) * *(float *)(puVar8 - 0xe);
-            float fVar14 = *(float *)((char *)&DAT_083a7cc4 + iVar2) * *(float *)(puVar8 - 0xe);
+            float fVar13 = *(float *)((char *)&BitmapsWidth + iVar2) * *(float *)(puVar8 - 0xe);
+            float fVar14 = *(float *)((char *)&BitmapsHeight + iVar2) * *(float *)(puVar8 - 0xe);
 
             // hide or show the character anim sprite based on type record flag
-            if (((char *)&DAT_083a7cc8)[iVar2] == '\x03')
+            if (((char *)&BitmapsBpp)[iVar2] == '\x03')
                 GL_SetBlendAdditive();          // EnableAlphaBlend
             else
                 // IDA 00478C00 L66-72:
@@ -85,9 +85,9 @@ void RenderParticles(void)
                 uVar6 = *puVar8 & 0x80000003u;
                 if ((int)uVar6 < 0) uVar6 = (uVar6 - 1u | 0xfffffffcu) + 1u;
                 fVar19 = 1.0f; fVar18 = 0.25f; fVar17 = 0.0f;
-                fVar16 = (float)(int)uVar6 * _DAT_005528dc;
+                fVar16 = (float)(int)uVar6 * SpriteSheetColStep;
                 fVar15 = *(float *)(puVar8 - 10);
-                fVar13 = fVar13 * _DAT_005528dc;
+                fVar13 = fVar13 * SpriteSheetColStep;
                 break;
 
             // ── 0x4ab / 0x4ad: state-dependent column strip ────────────────
@@ -102,17 +102,17 @@ void RenderParticles(void)
                 uVar6 = *puVar8 & 0x80000003u;
                 if ((int)uVar6 < 0) uVar6 = (uVar6 - 1u | 0xfffffffcu) + 1u;
                 fVar19 = 1.0f; fVar18 = 0.25f; fVar17 = 0.0f;
-                fVar16 = (float)(int)uVar6 * _DAT_005528dc;
-                fVar13 = fVar13 * _DAT_005528dc;
+                fVar16 = (float)(int)uVar6 * SpriteSheetColStep;
+                fVar13 = fVar13 * SpriteSheetColStep;
                 break;
 
             // ── 0x4b6: 2-row × 2-col grid strip ───────────────────────────
             case 0x4b6:
                 fVar19 = 0.5f; fVar18 = 0.5f;
                 uVar6 = *puVar8 & 0x80000001u;
-                fVar17 = (float)((int)*puVar8 / 2) * _DAT_00552504;
+                fVar17 = (float)((int)*puVar8 / 2) * HalfScale;
                 if ((int)uVar6 < 0) uVar6 = (uVar6 - 1u | 0xfffffffeu) + 1u;
-                fVar16 = (float)(int)uVar6 * _DAT_00552504;
+                fVar16 = (float)(int)uVar6 * HalfScale;
                 fVar15 = 0.0f;
                 break;
 
@@ -122,13 +122,13 @@ void RenderParticles(void)
                 uint uVar11;
                 uVar6  = *puVar8;
                 uVar11 = uVar6 & 0x80000003u;
-                fVar17 = (float)((int)(uVar6 + ((int)uVar6 >> 0x1f & 3u)) >> 2) * _DAT_005528dc
-                         + _DAT_00552940;
+                fVar17 = (float)((int)(uVar6 + ((int)uVar6 >> 0x1f & 3u)) >> 2) * SpriteSheetColStep
+                         + 0.005f;
                 if ((int)uVar11 < 0) uVar11 = (uVar11 - 1u | 0xfffffffcu) + 1u;
                 fVar15 = (float)(int)uVar11;
                 // shared tail with 0x596
                 fVar19 = 0.24f; fVar18 = 0.24f;
-                fVar16 = fVar15 * _DAT_005528dc + _DAT_00552940;
+                fVar16 = fVar15 * SpriteSheetColStep + 0.005f;
                 fVar15 = 0.0f;
                 break;
             }
@@ -138,9 +138,9 @@ void RenderParticles(void)
                 uVar6 = *puVar8 & 0x80000003u;
                 if ((int)uVar6 < 0) uVar6 = (uVar6 - 1u | 0xfffffffcu) + 1u;
                 fVar19 = 1.0f; fVar18 = 0.25f; fVar17 = 0.0f;
-                fVar16 = (float)(int)uVar6 * _DAT_005528dc;
+                fVar16 = (float)(int)uVar6 * SpriteSheetColStep;
                 fVar15 = *(float *)(puVar8 - 10);
-                fVar13 = fVar13 * _DAT_005528dc;
+                fVar13 = fVar13 * SpriteSheetColStep;
                 break;
 
             // ── 0x4c4: show anim on states 2/5, single-frame otherwise ────
@@ -154,11 +154,11 @@ void RenderParticles(void)
 
             // ── 0x4d9: 3×3 sprite-sheet (row = tick%9/3, col = tick%9%3) ──
             case 0x4d9:
-                fVar17 = (float)(((int)*puVar8 % 9) / 3) * _DAT_005528dc + _DAT_00552940;
+                fVar17 = (float)(((int)*puVar8 % 9) / 3) * SpriteSheetColStep + 0.005f;
                 fVar15 = (float)(((int)*puVar8 % 9) % 3);
                 // shared tail with 0x596
                 fVar19 = 0.24f; fVar18 = 0.24f;
-                fVar16 = fVar15 * _DAT_005528dc + _DAT_00552940;
+                fVar16 = fVar15 * SpriteSheetColStep + 0.005f;
                 fVar15 = 0.0f;
                 break;
 
@@ -187,14 +187,14 @@ void RenderParticles(void)
                             int iVar1 = (iVar4 - 1) % 3;
                             // interpolated world position
                             local_18[iVar10/4 + 3] =
-                                pfVar7[-0xf] - (float)local_3c * pfVar7[0] * _DAT_005524f4;
+                                pfVar7[-0xf] - (float)local_3c * pfVar7[0] * 0.1f;
 
                             int local_30 = (local_38 > 9) ? 10 : local_38;
                             uint local_34 = puVar8[-3];
                             if ((int)local_34 > 9) local_34 = 10;
 
                             local_18[iVar10/4] =
-                                (float)(int)local_34 * _DAT_00552500 *
+                                (float)(int)local_34 * SinFreqWorldTime *
                                 ((float)iVar9 * *(float *)(puVar8 + iVar5 - 7) +
                                  (float)(10 - iVar9) * *(float *)(puVar8 + iVar1 - 7))
                                 * (float)local_30;
@@ -235,7 +235,7 @@ void RenderParticles(void)
                     bool bEven;
                     if ((int)uVar6b < 0) bEven = (uVar6b - 1u | 0xfffffffeu) == 0xffffffffu;
                     else                 bEven = (uVar6b == 0);
-                    float fSpeed = bEven ? _DAT_00552914 : _DAT_00552acc;
+                    float fSpeed = bEven ? AnimSpeedB : AnimSpeedA;
                     // update current_frame = delta * entry_speed * speed + base_frame
                     // (float field: escribir bits float, no truncar a int)
                     *(float *)(puVar8 - 1) = WorldTime * *(float *)(puVar8 + 5) * fSpeed
@@ -251,12 +251,12 @@ void RenderParticles(void)
                 uint uVar11;
                 uVar6  = *puVar8;
                 uVar11 = uVar6 & 0x80000003u;
-                fVar17 = (float)((int)(uVar6 + ((int)uVar6 >> 0x1f & 3u)) >> 2) * _DAT_005528dc
-                         + _DAT_00552940;
+                fVar17 = (float)((int)(uVar6 + ((int)uVar6 >> 0x1f & 3u)) >> 2) * SpriteSheetColStep
+                         + 0.005f;
                 if ((int)uVar11 < 0) uVar11 = (uVar11 - 1u | 0xfffffffcu) + 1u;
                 fVar15 = (float)(int)uVar11;
                 fVar19 = 0.24f; fVar18 = 0.24f;
-                fVar16 = fVar15 * _DAT_005528dc + _DAT_00552940;
+                fVar16 = fVar15 * SpriteSheetColStep + 0.005f;
                 fVar15 = 0.0f;
                 break;
             }
@@ -266,7 +266,7 @@ void RenderParticles(void)
                 fVar15 = *(float *)(puVar8 - 1);
                 fVar19 = 0.99f; fVar18 = 0.99f;
                 fVar17 = 0.11f; fVar16 = 0.11f;
-                fVar14 = fVar14 * _DAT_005528b8;
+                fVar14 = fVar14 * 0.3f;
                 fVar13 = fVar13 * *(float *)(puVar8 + 1);
                 break;
 

@@ -32,11 +32,11 @@ void ToggleFpsCounter() {
 // IDA: RenderDebugWindow @ 0x004C14E0 — FPS_TickReset.
 // Selects the UI font into the DC, resets text color to white (0xFFFFFFFF)
 // and background to black (0xFF000000). On each 1-second interval resets
-// the FPS counter (DAT_07E11DCC = 0) and updates the timestamp.
+// the FPS counter (TotalPacketSize = 0) and updates the timestamp.
 // IDA: RenderDebugWindow
 void __cdecl UI_UpdateFpsCounter(void) {
     gFont.SelectFont(gFont.GetTextDC(), (HGDIOBJ)gFont.GetFont(FONT_NORMAL));
-    DAT_00559c78 = 0xffffffff;
+    m_dwTextColor = 0xffffffff;
     SetBackgroundTextColor = 0xff000000;
     // DESVIACION: F12 muestra/oculta el contador bajo los avisos superiores
     // del lado izquierdo. El dibujo no consulta teclas ni avanza SIM.
@@ -62,8 +62,8 @@ void __cdecl UI_UpdateFpsCounter(void) {
     if(Benchmark::Active()){char bench[128];Platform::TextFormatSecure(bench,"%s",Benchmark::Status());RenderText(4,88,bench,(int)(620*gWindow.GetWidth()/640),1,nullptr);}
 #endif
     DWORD DVar1 = Platform::GetTimer().MultimediaTicks();
-    if (999 < DVar1 - (DWORD)_DAT_07e016f0) {
-        _DAT_07e016f0 = Platform::GetTimer().MultimediaTicks();
+    if (999 < DVar1 - (DWORD)LastFpsTickMs) {
+        LastFpsTickMs = Platform::GetTimer().MultimediaTicks();
         TotalPacketSize = 0;
     }
 }

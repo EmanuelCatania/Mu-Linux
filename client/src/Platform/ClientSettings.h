@@ -103,7 +103,7 @@ public:
         // "ID" value — 11-byte username buffer -> settings.username (m_ID)
         // Ghidra @ 0x0041e272: RegQueryValueExA(hKey, lpValueName_00559450, NULL, NULL,
         //                       (LPBYTE)0x055c9ba0, &DStack_330=0xb)
-        // Usado luego por MoveLogInScene para prefilear DAT_07db8710 (InputText[0]=username).
+        // Usado luego por MoveLogInScene para prefilear InputTextBuffers (InputText[0]=username).
         DWORD dwSize = 11;
         RegQueryValueExA(hKey, "ID", NULL, NULL, (LPBYTE)settings.username, &dwSize);
 

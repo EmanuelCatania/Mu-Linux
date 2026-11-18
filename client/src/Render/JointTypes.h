@@ -3,7 +3,7 @@
 #include "Entity/EntityTypes.h"
 #include <cstddef>
 
-// IDA: JOINT, 0x9D8 bytes; pool de 500 en 0x07B27150 (DAT_07b27150).
+// IDA: JOINT, 0x9D8 bytes; pool de 500 en 0x07B27150 (JointPoolBase).
 //
 // Los nombres siguen al struct JOINT de MU 5.2 (_struct.h). El 0.97k no tiene
 // TexType, RenderType/RenderFace, HeadAngle ni byOnlyOneRender, y Skill es un

@@ -73,10 +73,10 @@ void Sound_Update3DPositions(void)
     float rotMatrix[12];
     eulerAngles[0] = 0.0f;
     eulerAngles[1] = 0.0f;
-    eulerAngles[2] = Ff(DAT_083a42c0);      // player yaw (CameraAngle[2] bits)
+    eulerAngles[2] = Ff(LegacyCameraAngle2);      // player yaw (CameraAngle[2] bits)
     Matrix_BuildFromEuler(eulerAngles, rotMatrix);
 
-    const float unitScale = _DAT_005524bc;  // world→DS3D unit conversion
+    const float unitScale = 0.004f;  // world→DS3D unit conversion
 
     for (int slot = 0; slot < 420; ++slot) {
         if (!Enable3DSound[slot])          continue;
@@ -86,11 +86,11 @@ void Sound_Update3DPositions(void)
             const OBJECT* entityPtr = Object3DSound[slot][ch];
             if (entityPtr == 0) continue;
 
-            // Player world pos (DAT_07abf5d8) minus entity world pos.
+            // Player world pos (Hero) minus entity world pos.
             float offset[3];
-            offset[0] = *(float*)(DAT_07abf5d8 + 0x10) - entityPtr->Position[0];
-            offset[1] = *(float*)(DAT_07abf5d8 + 0x14) - entityPtr->Position[1];
-            offset[2] = *(float*)(DAT_07abf5d8 + 0x18) - entityPtr->Position[2];
+            offset[0] = *(float*)(Hero + 0x10) - entityPtr->Position[0];
+            offset[1] = *(float*)(Hero + 0x14) - entityPtr->Position[1];
+            offset[2] = *(float*)(Hero + 0x18) - entityPtr->Position[2];
 
             // Rotate into listener space.
             Vector_Rotate(offset, rotMatrix, offset);
@@ -118,7 +118,7 @@ void __cdecl Sound_StopBuffer(int Buffer) { if (g_EnableSound && Buffer >= 0) Pl
 // IDA signature is __thiscall(this); function.h decl is __stdcall(void).
 // No live callers in our build (vtable dispatch via CErrorReport disabled),
 // El logger activo del cliente es debug.log.
-void __stdcall FUN_00405340(void) {
+void __stdcall CErrorReport_RotateLog(void) {
     // No-op — CErrorReport vtable not yet active.
 }
 
@@ -139,13 +139,13 @@ void __fastcall CErrorReport_WriteLogBegin(DWORD This) {
 }
 
 // CErrorReport::WriteCurrentTime @ 0x004055A0 (IDA: FUN_004055A0).
-// Logs current local date/time via CErrorReport_Write (debug log sink at DAT_055C9BF0).
-// If param_1 != 0, logs an additional data block from DAT_00558128.
+// Logs current local date/time via CErrorReport_Write (debug log sink at ErrorReportCtx).
+// If param_1 != 0, logs an additional data block from DebugLogDataBlock.
 void CErrorReport_WriteCurrentTime(int param_1) {
     const auto local_10 = Platform::GetTimer().LocalTime();
-    CErrorReport_Write(&DAT_055c9bf0, "%4d %02d %02d %02d %02d"); // date+time format
+    CErrorReport_Write(&ErrorReportCtx, "%4d %02d %02d %02d %02d"); // date+time format
     if (param_1 != 0) {
-        CErrorReport_Write(&DAT_055c9bf0, DAT_00558128);
+        CErrorReport_Write(&ErrorReportCtx, DebugLogDataBlock);
     }
 }
 

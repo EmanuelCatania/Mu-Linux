@@ -3,7 +3,7 @@
 //
 // Trail_RenderAll — renders all active beam/trail effects (weapon trails, magic beams, etc.)
 //
-// Trail table: starts at DAT_07c608b4, stride 0xbc (int-words) = 0x2f0 = 752 bytes per slot.
+// Trail table: starts at JointRenderPool, stride 0xbc (int-words) = 0x2f0 = 752 bytes per slot.
 // Array ends at 0x7C72E74.
 //
 // Each slot layout (relative to piVar2, which points at field +0):
@@ -44,7 +44,7 @@ void __cdecl FUN_0046c3e0_DISABLED(void)
     int  *piVar4;
     int   local_8;
 
-    piVar2 = (int*)&DAT_07c608b4;
+    piVar2 = (int*)&JointRenderPool;
     do {
         if ((char)piVar2[-3] != '\0') {
             iVar3 = piVar2[-2];  // segment count
@@ -71,7 +71,7 @@ void __cdecl FUN_0046c3e0_DISABLED(void)
                         BufferedDraw::Begin(BufferedDraw::Primitive::TriangleFan);  // GL_QUAD_STRIP
 
                         // Compute per-segment fade alpha
-                        fVar1 = _DAT_0055256c;  // default: 1.0
+                        fVar1 = 1.0f;  // default: 1.0
                         if (*(short *)(*piVar2 + 0x1be) == 0) {
                             // Fade from full to zero along trail length
                             fVar1 = (float)(piVar2[1] - local_8) / (float)piVar2[1];
@@ -88,7 +88,7 @@ void __cdecl FUN_0046c3e0_DISABLED(void)
                         BufferedDraw::Vertex3fv((float *)piVar4);
 
                         // Fade for next vertex pair
-                        fVar1 = _DAT_0055256c;
+                        fVar1 = 1.0f;
                         if (*(short *)(*piVar2 + 0x1be) == 0) {
                             fVar1 = (float)((piVar2[1] - local_8) - 1) / (float)piVar2[1];
                         }
@@ -112,7 +112,7 @@ void __cdecl FUN_0046c3e0_DISABLED(void)
         }
         piVar2 = piVar2 + 0xbc;  // stride: 0x2f0 = 752 bytes
         // IDA: `while ((int)v0 < (int)&unk_7C72E74)` es una direccion absoluta del
-        // binario.  Base unk_7C608B4 = g_RenderPool_07c608a8 + 0x0C;
+        // binario.  Base JointRenderPool = g_RenderPool + 0x0C;
         // (0x7C72E74 - 0x7C608B4) / 0x2F0 = 100, que es el tamano real del pool.
         if (++nSlotTR >= 100) break;
     } while (true);
