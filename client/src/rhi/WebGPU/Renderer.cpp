@@ -1739,21 +1739,30 @@ fn worldWater(position: vec4f) -> vec4f {
     let n = normalize(vec3f(-g.x, -g.y, 1.0));
     let cosv = max(dot(n, -dir), 0.0);
     let fresnel = 0.02 + 0.98 * pow(1.0 - cosv, 5.0);
-    // Refracción: el agua original del mapa (su textura y su luz), corrida por
-    // las olas. Si el corrimiento cae fuera del agua se usa el píxel propio.
+    // Lo que se toma del agua original es su luz y su color, no su dibujo: la
+    // textura se repite por tile y, aunque se desenfoque un poco, se ve la
+    // cuadrícula. Se promedia un anillo del tamaño de medio tile alrededor,
+    // sólo con los puntos que también son agua (si no, la orilla tiñe).
     let size = vec2f(textureDimensions(scene));
     let dims = vec2f(textureDimensions(depth));
-    let shifted = clamp(position.xy + g * 0.06 * u.viewport.w, vec2f(0.0), dims - 1.0);
-    let ds = textureLoad(depth, vec2i(shifted), 0);
-    var at = position.xy;
-    if (ds < 1.0) {
-        let q = worldAtPixel(shifted, ds);
-        if (waterAt(q.xy) > 0.7 && abs(q.z - p.z) < 20.0) { at = shifted; }
+    let tileEdge = toPixel(p + vec3f(100.0, 0.0, 0.0));
+    let tilePx = select(40.0, length(tileEdge.xy - position.xy), tileEdge.z > 0.0);
+    let radius = clamp(tilePx * 0.6, 4.0, 90.0);
+    var sum = textureSampleLevel(scene, linearSampler, position.xy / size, 0.0).rgb;
+    var weight = 1.0;
+    for (var k = 0; k < 12; k++) {
+        let a = f32(k) * 0.5235988 + 0.26;
+        let ring = select(1.0, 0.55, k % 2 == 1);
+        let q = clamp(position.xy + vec2f(cos(a), sin(a)) * radius * ring, vec2f(0.0), dims - 1.0);
+        let dq = textureLoad(depth, vec2i(q), 0);
+        if (dq >= 1.0) { continue; }
+        let wq = worldAtPixel(q, dq);
+        if (waterAt(wq.xy) < 0.5 || abs(wq.z - p.z) > 25.0) { continue; }
+        sum += textureSampleLevel(scene, linearSampler, q / size, 0.0).rgb;
+        weight += 1.0;
     }
-    // Desenfocada: la textura del agua original se repite por tile y, nítida,
-    // deja ver la cuadrícula.
-    let original = sceneAt(at, 2.0 + 0.004 * u.viewport.w);
-    // clarity: cuánto del agua original se ve; el resto, el color del cuerpo
+    let original = sum / weight;
+    // clarity: cuánto del color original se ve; el resto, el color del cuerpo
     // de agua (con la luz del original, para que la noche siga oscura).
     let light = max(dot(original, vec3f(0.30, 0.55, 0.15)), 0.0);
     let body = mix(u.tint.rgb * (0.4 + 1.6 * light), original, u.tint.w);
