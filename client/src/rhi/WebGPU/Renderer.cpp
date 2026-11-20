@@ -1698,11 +1698,19 @@ R"WGSL(
 // agua) y encima la capa 2 (G: si es agua) mezclada con el alfa de cada
 // vértice (B, interpolado). Así coincide con el agua original, también en las
 // paredes que el mapa pinta con agua (debajo de los puentes).
+// R lleva los dos bits del tile: base (1) y capa 2 (2), en pasos de 85.
 fn waterAt(xy: vec2f) -> f32 {
     let g = xy / 100.0;
-    let t = textureLoad(waterMask, clamp(vec2i(floor(g)), vec2i(0), vec2i(255)), 0);
+    let bits = u32(round(textureLoad(waterMask, clamp(vec2i(floor(g)), vec2i(0), vec2i(255)), 0).r * 3.0));
     let a = textureSampleLevel(waterMask, linearSampler, (g + 0.5) / 256.0, 0.0).b;
-    return mix(t.r, t.g, a);
+    return mix(f32(bits & 1u), f32((bits >> 1u) & 1u), a);
+}
+// La orilla por tiles queda en escalones. G marca los vértices que tocan un
+// tile con agua; interpolado, su línea de 0.5 pasa por el medio de los tiles
+// vecinos y redondea los escalones. Sólo se usa en lo plano (el agua no sube
+// por las barrancas).
+fn shoreAt(xy: vec2f) -> f32 {
+    return smoothstep(0.40, 0.62, textureSampleLevel(waterMask, linearSampler, (xy / 100.0 + 0.5) / 256.0, 0.0).g);
 }
 // 0..1: cuánto de plano es el suelo en este píxel. El agua del mapa es plana;
 // la máscara, al interpolar entre vértices, se mete en la barranca de la orilla
@@ -1725,51 +1733,39 @@ fn worldWater(position: vec4f) -> vec4f {
     if (d >= 1.0) { discard; }
     let p = worldAt(position, d);
     let m = waterAt(p.xy);
-    if (m < 0.02) { discard; }
     // En las paredes pintadas con agua (bajo los puentes) va sólo el color del
     // agua, sin olas, cielo ni sol: eso es de la superficie.
     let flat = flatAt(position.xy, p);
-    let coverage = m;
+    let coverage = max(m, shoreAt(p.xy) * flat);
+    if (coverage < 0.01) { discard; }
     let cam = u.camera.xyz;
     let t = u.params.y;
     let dir = normalize(p - cam);
     let dist = length(p - cam);
-    let detail = 1.0 - smoothstep(1200.0, 3500.0, dist);
-    let g = slope(p.xy, t, detail) * u.sky.w * flat;
+    // Las ondas largas son ocho sumas de senos: de lejos, cuando se apagan las
+    // cortas, quedan franjas paralelas regulares. Se tuercen un poco (el punto
+    // se desplaza con un campo lento) y de lejos se aplanan, así no se ven.
+    let warp = vec2f(sin(p.y * 0.0041 + t * 0.11) + sin(p.x * 0.0029 - t * 0.07) + 0.6 * sin((p.x + p.y) * 0.011 + t * 0.2),
+                     cos(p.x * 0.0037 - t * 0.09) + cos(p.y * 0.0023 + t * 0.05) + 0.6 * cos((p.x - p.y) * 0.013 - t * 0.17)) * 160.0;
+    let detail = max(1.0 - smoothstep(1200.0, 3500.0, dist), 0.35);
+    let far = smoothstep(1500.0, 4000.0, dist);
+    let g = slope(p.xy + warp, t, detail) * u.sky.w * flat * (1.0 - 0.6 * far);
     let n = normalize(vec3f(-g.x, -g.y, 1.0));
     let cosv = max(dot(n, -dir), 0.0);
     let fresnel = 0.02 + 0.98 * pow(1.0 - cosv, 5.0);
-    // Lo que se toma del agua original es su luz y su color, no su dibujo: la
-    // textura se repite por tile y, aunque se desenfoque un poco, se ve la
-    // cuadrícula. Se promedia un anillo del tamaño de medio tile alrededor,
-    // sólo con los puntos que también son agua (si no, la orilla tiñe).
-    let size = vec2f(textureDimensions(scene));
-    let dims = vec2f(textureDimensions(depth));
-    let tileEdge = toPixel(p + vec3f(100.0, 0.0, 0.0));
-    let tilePx = select(40.0, length(tileEdge.xy - position.xy), tileEdge.z > 0.0);
-    let radius = clamp(tilePx * 0.6, 4.0, 90.0);
-    var sum = textureSampleLevel(scene, linearSampler, position.xy / size, 0.0).rgb;
-    var weight = 1.0;
-    for (var k = 0; k < 12; k++) {
-        let a = f32(k) * 0.5235988 + 0.26;
-        let ring = select(1.0, 0.55, k % 2 == 1);
-        let q = clamp(position.xy + vec2f(cos(a), sin(a)) * radius * ring, vec2f(0.0), dims - 1.0);
-        let dq = textureLoad(depth, vec2i(q), 0);
-        if (dq >= 1.0) { continue; }
-        let wq = worldAtPixel(q, dq);
-        if (waterAt(wq.xy) < 0.5 || abs(wq.z - p.z) > 25.0) { continue; }
-        sum += textureSampleLevel(scene, linearSampler, q / size, 0.0).rgb;
-        weight += 1.0;
-    }
-    let original = sum / weight;
-    // clarity: cuánto del color original se ve; el resto, el color del cuerpo
-    // de agua (con la luz del original, para que la noche siga oscura).
-    let light = max(dot(original, vec3f(0.30, 0.55, 0.15)), 0.0);
-    let body = mix(u.tint.rgb * (0.4 + 1.6 * light), original, u.tint.w);
+    // Del agua original no se toma nada de la imagen: su textura se repite
+    // por tile y cualquier muestra (aunque se promedie) deja ver la cuadrícula.
+    // La luz del lugar (sombras, día y noche, los fuegos) sale de la luz del
+    // terreno por vértice (A de la máscara), que es suave; el color, del perfil.
+    let vertexLight = textureSampleLevel(waterMask, linearSampler, (p.xy / 100.0 + 0.5) / 256.0, 0.0).a * 2.0;
+    let light = vertexLight * 0.3;
+    let body = u.tint.rgb * (0.25 + 1.1 * vertexLight);
     // Cielo: más claro hacia el horizonte del reflejo.
     let r = reflect(dir, n);
     let sky = u.sky.rgb * (0.75 + 0.25 * (1.0 - clamp(r.z, 0.0, 1.0)));
-    var color = mix(body, sky, clamp(fresnel * 1.2 + 0.04, 0.0, 0.8) * flat);
+    // Con la cámara del juego el agua se ve casi siempre en ángulo rasante: con
+    // todo el Fresnel cada cresta refleja el cielo y quedan franjas. Se modera.
+    var color = mix(body, sky, clamp(fresnel * 0.7 + 0.04, 0.0, 0.45) * flat);
     // Sol: dirección fija del mapa (u.sun), brillo en las crestas.
     let toSun = normalize(u.sun.xyz);
     let s = max(dot(r, toSun), 0.0);
@@ -1801,7 +1797,7 @@ fn worldWater(position: vec4f) -> vec4f {
         color += lc * (core * sparkle * 1.2 + glow) * profile * 0.6 * flat;
     }
     // Espuma en la orilla: donde la máscara baja, ondas que van y vienen.
-    let edge = (1.0 - smoothstep(0.45, 0.90, m)) * flat;
+    let edge = (1.0 - smoothstep(0.45, 0.90, coverage)) * flat;
     let ripple = 0.5 + 0.5 * sin(dot(p.xy, vec2f(0.045, 0.037)) + t * 1.6 + g.x * 25.0);
     color = mix(color, vec3f(0.85, 0.88, 0.90) * (0.5 + light), edge * ripple * 0.35);
     return vec4f(color, coverage);

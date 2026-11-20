@@ -312,7 +312,7 @@ void WorldWater(const unsigned char* mask, float time, const WaterLook& look) {
         l[4] = w.color[0]; l[5] = w.color[1]; l[6] = w.color[2]; l[7] = 0.0f;
     }
     float* tail = params + 12 + MaxWaterLights * 8 + MaxWaterShips * 4;
-    tail[0] = look.tint[0]; tail[1] = look.tint[1]; tail[2] = look.tint[2]; tail[3] = look.clarity;
+    tail[0] = look.tint[0]; tail[1] = look.tint[1]; tail[2] = look.tint[2]; tail[3] = 0.0f;
     tail[4] = look.sky[0]; tail[5] = look.sky[1]; tail[6] = look.sky[2]; tail[7] = look.waves;
     GfxDevice::Water(params);
 }

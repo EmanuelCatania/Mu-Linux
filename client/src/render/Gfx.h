@@ -143,12 +143,11 @@ float WaterSwell(float x, float y, float time, float* slopeX, float* slopeY);
 void ToggleWater();
 bool WaterEnabled();
 // Agua de los mapas: se llama justo después de dibujar el terreno. mask dice
-// dónde hay agua (256x256 RGBA; ver WaterProfiles); el
-// pase le pone olas, cielo y sol encima del agua original, que sigue viéndose
-// según clarity. Se sube al dispositivo sólo cuando cambia.
+// dónde hay agua y cuánta luz tiene (256x256 RGBA; ver WaterProfiles); el
+// pase dibuja encima el agua nueva con olas, cielo y sol. Se sube al
+// dispositivo sólo cuando cambia.
 struct WaterLook {
     float tint[3];   // color del cuerpo de agua
-    float clarity;   // 0..1: cuánto se ve la textura original del mapa
     float sky[3];    // color que refleja
     float waves;     // fuerza de las olas (1 = las del login)
     float sun[3];    // dirección hacia el sol, en el mundo
