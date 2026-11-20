@@ -142,6 +142,7 @@
     <ClInclude Include="src\game\entity\EntityView.h" />
     <ClInclude Include="src\game\entity\EntityName.h" />
     <ClInclude Include="src\render\WorldEffects.h" />
+    <ClInclude Include="src\render\WaterProfiles.h" />
     <ClInclude Include="src\render\MaterialVisuals.h" />
     <ClInclude Include="src\render\LooseWingVisuals.h" />
     <ClInclude Include="src\render\EquipmentVisuals.h" />
@@ -366,6 +367,7 @@
       <ObjectFileName>$(IntDir)rhi_GL_%(Filename).obj</ObjectFileName>
     </ClCompile>
     <ClCompile Include="src\render\WorldEffects.cpp" />
+    <ClCompile Include="src\render\WaterProfiles.cpp" />
     <ClCompile Include="src\render\MaterialVisuals.cpp" />
     <ClCompile Include="src\render\LooseWingVisuals.cpp" />
     <ClCompile Include="src\render\EquipmentVisuals.cpp" />

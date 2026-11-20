@@ -467,7 +467,14 @@ struct State {
         float lightCount[4]; // [0] = cantidad de faroles
         float lights[16][4]; // por farol: posición, color
         float ships[4][4];   // por barco: proa (x, y), rumbo (x, y)
+        // Agua de los mapas (params.w = 1): color del cuerpo + cuánto se ve la
+        // textura original, color del cielo + fuerza de las olas.
+        float tint[4];
+        float sky[4];
     } water{};
+    // Máscara de agua del mapa: 256x256, un texel por vértice del terreno.
+    WGPUTexture waterMask = nullptr;
+    WGPUTextureView waterMaskView = nullptr;
     int waterViewport[4]{};
     WGPUShaderModule waterModule = nullptr;
     WGPUBindGroupLayout waterLayout = nullptr;
@@ -1063,6 +1070,8 @@ void ReleaseObjects() {
     if (g.waterSceneView) wgpuTextureViewRelease(g.waterSceneView);
     if (g.waterScene) wgpuTextureRelease(g.waterScene);
     if (g.waterSampler) wgpuSamplerRelease(g.waterSampler);
+    if (g.waterMaskView) wgpuTextureViewRelease(g.waterMaskView);
+    if (g.waterMask) wgpuTextureRelease(g.waterMask);
     if (g.shadowGroup) wgpuBindGroupRelease(g.shadowGroup);
     if (g.casterGroup) wgpuBindGroupRelease(g.casterGroup);
     if (g.shadowBuffer) wgpuBufferRelease(g.shadowBuffer);
@@ -1517,11 +1526,12 @@ void EncodeAtmosphere(WGPUCommandEncoder encoder, unsigned width, unsigned heigh
 // contra un cielo de atardecer y el brillo del sol. Sin geometría nueva.
 const char* const WaterShader = R"WGSL(
 struct Water { inverseViewProj: mat4x4f, viewProj: mat4x4f, camera: vec4f, params: vec4f, sun: vec4f, viewport: vec4f,
-               lightCount: vec4f, lights: array<vec4f, 16>, ships: array<vec4f, 4> };
+               lightCount: vec4f, lights: array<vec4f, 16>, ships: array<vec4f, 4>, tint: vec4f, sky: vec4f };
 @group(0) @binding(0) var depth: DEPTH_TYPE;
 @group(0) @binding(1) var<uniform> u: Water;
 @group(0) @binding(2) var scene: texture_2d<f32>;
 @group(0) @binding(3) var linearSampler: sampler;
+@group(0) @binding(4) var waterMask: texture_2d<f32>;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
     let p = vec2f(select(-1.0, 3.0, i == 1u), select(-1.0, 3.0, i == 2u));
     return vec4f(p, 0.0, 1.0);
@@ -1680,7 +1690,89 @@ fn kelvin(p: vec2f, t: f32) -> vec3f {
     }
     return vec3f(g, foam);
 }
+)WGSL"
+// Tercera parte del shader (límite de 16 KB por literal de MSVC).
+R"WGSL(
+// Cuánta agua hay en (x, y) del mundo, con la misma regla que el terreno:
+// cada tile se pinta entero con la textura de su vértice (x, y) (R: si es
+// agua) y encima la capa 2 (G: si es agua) mezclada con el alfa de cada
+// vértice (B, interpolado). Así coincide con el agua original, también en las
+// paredes que el mapa pinta con agua (debajo de los puentes).
+fn waterAt(xy: vec2f) -> f32 {
+    let g = xy / 100.0;
+    let t = textureLoad(waterMask, clamp(vec2i(floor(g)), vec2i(0), vec2i(255)), 0);
+    let a = textureSampleLevel(waterMask, linearSampler, (g + 0.5) / 256.0, 0.0).b;
+    return mix(t.r, t.g, a);
+}
+// 0..1: cuánto de plano es el suelo en este píxel. El agua del mapa es plana;
+// la máscara, al interpolar entre vértices, se mete en la barranca de la orilla
+// y ahí no tiene que haber agua. La normal sale de los píxeles vecinos (sin
+// derivadas: después de un discard no se pueden usar).
+fn flatAt(px: vec2f, p: vec3f) -> f32 {
+    let dims = vec2f(textureDimensions(depth));
+    let qx = clamp(px + vec2f(2.0, 0.0), vec2f(0.0), dims - 1.0);
+    let qy = clamp(px + vec2f(0.0, 2.0), vec2f(0.0), dims - 1.0);
+    let dx = textureLoad(depth, vec2i(qx), 0);
+    let dy = textureLoad(depth, vec2i(qy), 0);
+    if (dx >= 1.0 || dy >= 1.0) { return 0.0; }
+    let n = cross(worldAtPixel(qx, dx) - p, worldAtPixel(qy, dy) - p);
+    let len = length(n);
+    if (len < 1e-4) { return 0.0; }
+    return smoothstep(0.90, 0.98, abs(n.z) / len);
+}
+fn worldWater(position: vec4f) -> vec4f {
+    let d = textureLoad(depth, vec2i(position.xy), 0);
+    if (d >= 1.0) { discard; }
+    let p = worldAt(position, d);
+    let m = waterAt(p.xy);
+    if (m < 0.02) { discard; }
+    // En las paredes pintadas con agua (bajo los puentes) va sólo el color del
+    // agua, sin olas, cielo ni sol: eso es de la superficie.
+    let flat = flatAt(position.xy, p);
+    let coverage = m;
+    let cam = u.camera.xyz;
+    let t = u.params.y;
+    let dir = normalize(p - cam);
+    let dist = length(p - cam);
+    let detail = 1.0 - smoothstep(1200.0, 3500.0, dist);
+    let g = slope(p.xy, t, detail) * u.sky.w * flat;
+    let n = normalize(vec3f(-g.x, -g.y, 1.0));
+    let cosv = max(dot(n, -dir), 0.0);
+    let fresnel = 0.02 + 0.98 * pow(1.0 - cosv, 5.0);
+    // Refracción: el agua original del mapa (su textura y su luz), corrida por
+    // las olas. Si el corrimiento cae fuera del agua se usa el píxel propio.
+    let size = vec2f(textureDimensions(scene));
+    let dims = vec2f(textureDimensions(depth));
+    let shifted = clamp(position.xy + g * 0.06 * u.viewport.w, vec2f(0.0), dims - 1.0);
+    let ds = textureLoad(depth, vec2i(shifted), 0);
+    var at = position.xy;
+    if (ds < 1.0) {
+        let q = worldAtPixel(shifted, ds);
+        if (waterAt(q.xy) > 0.7 && abs(q.z - p.z) < 20.0) { at = shifted; }
+    }
+    // Desenfocada: la textura del agua original se repite por tile y, nítida,
+    // deja ver la cuadrícula.
+    let original = sceneAt(at, 2.0 + 0.004 * u.viewport.w);
+    // clarity: cuánto del agua original se ve; el resto, el color del cuerpo
+    // de agua (con la luz del original, para que la noche siga oscura).
+    let light = max(dot(original, vec3f(0.30, 0.55, 0.15)), 0.0);
+    let body = mix(u.tint.rgb * (0.4 + 1.6 * light), original, u.tint.w);
+    // Cielo: más claro hacia el horizonte del reflejo.
+    let r = reflect(dir, n);
+    let sky = u.sky.rgb * (0.75 + 0.25 * (1.0 - clamp(r.z, 0.0, 1.0)));
+    var color = mix(body, sky, clamp(fresnel * 1.2 + 0.04, 0.0, 0.8) * flat);
+    // Sol: dirección fija del mapa (u.sun), brillo en las crestas.
+    let toSun = normalize(u.sun.xyz);
+    let s = max(dot(r, toSun), 0.0);
+    color += vec3f(1.0, 0.92, 0.78) * (pow(s, 180.0) * 1.2 + pow(s, 40.0) * 0.12) * (0.5 + light) * flat;
+    // Espuma en la orilla: donde la máscara baja, ondas que van y vienen.
+    let edge = (1.0 - smoothstep(0.45, 0.90, m)) * flat;
+    let ripple = 0.5 + 0.5 * sin(dot(p.xy, vec2f(0.045, 0.037)) + t * 1.6 + g.x * 25.0);
+    color = mix(color, vec3f(0.85, 0.88, 0.90) * (0.5 + light), edge * ripple * 0.35);
+    return vec4f(color, coverage);
+}
 @fragment fn fs(@builtin(position) position: vec4f) -> @location(0) vec4f {
+    if (u.params.w > 0.5) { return worldWater(position); }
     let cam = u.camera.xyz;
     let far = worldAt(position, 1.0);
     let dir = normalize(far - cam);
@@ -1844,8 +1936,9 @@ bool EnsureWater() {
     WGPUShaderModuleDescriptor md = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
     md.nextInChain = &wgsl.chain;
     g.waterModule = wgpuDeviceCreateShaderModule(GetDevice(), &md);
-    WGPUBindGroupLayoutEntry entries[4] = {WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT, WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
-                                           WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT, WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT};
+    WGPUBindGroupLayoutEntry entries[5] = {WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT, WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
+                                           WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT, WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
+                                           WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT};
     entries[0].binding = 0;
     entries[0].visibility = WGPUShaderStage_Fragment;
     entries[0].texture.sampleType = WGPUTextureSampleType_Depth;
@@ -1855,6 +1948,10 @@ bool EnsureWater() {
     entries[1].visibility = WGPUShaderStage_Fragment;
     entries[1].buffer.type = WGPUBufferBindingType_Uniform;
     entries[1].buffer.minBindingSize = sizeof(State::Water);
+    entries[4].binding = 4;
+    entries[4].visibility = WGPUShaderStage_Fragment;
+    entries[4].texture.sampleType = WGPUTextureSampleType_Float;
+    entries[4].texture.viewDimension = WGPUTextureViewDimension_2D;
     entries[2].binding = 2;
     entries[2].visibility = WGPUShaderStage_Fragment;
     entries[2].texture.sampleType = WGPUTextureSampleType_Float;
@@ -1863,7 +1960,7 @@ bool EnsureWater() {
     entries[3].visibility = WGPUShaderStage_Fragment;
     entries[3].sampler.type = WGPUSamplerBindingType_Filtering;
     WGPUBindGroupLayoutDescriptor ld = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
-    ld.entryCount = 4; ld.entries = entries;
+    ld.entryCount = 5; ld.entries = entries;
     if (!g.waterSampler) {
         WGPUSamplerDescriptor sd = WGPU_SAMPLER_DESCRIPTOR_INIT;
         sd.magFilter = WGPUFilterMode_Linear;
@@ -1898,6 +1995,27 @@ bool EnsureWater() {
     g.waterFormat = format; g.waterSamples = samples;
     return g.waterPipeline && g.waterBuffer;
 }
+// Máscara de agua del mapa (256x256 RGBA; ver WaterProfiles). nullptr deja
+// una de 1x1 vacía, para el login y antes de cargar un mapa.
+void UploadWaterMask(const unsigned char* mask) {
+    const int side = mask ? 256 : 1;
+    if (g.waterMask && int(wgpuTextureGetWidth(g.waterMask)) != side) {
+        wgpuTextureViewRelease(g.waterMaskView); wgpuTextureRelease(g.waterMask);
+        g.waterMaskView = nullptr; g.waterMask = nullptr;
+    }
+    if (!g.waterMask) {
+        WGPUTextureDescriptor td = WGPU_TEXTURE_DESCRIPTOR_INIT;
+        td.size = {uint32_t(side), uint32_t(side), 1};
+        td.format = WGPUTextureFormat_RGBA8Unorm;
+        td.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+        g.waterMask = wgpuDeviceCreateTexture(GetDevice(), &td);
+        if (!g.waterMask) return;
+        g.waterMaskView = wgpuTextureCreateView(g.waterMask, nullptr);
+    }
+    std::vector<uint8_t> rgba(size_t(side) * side * 4, 0);
+    if (mask) std::memcpy(rgba.data(), mask, rgba.size());
+    Write(g.waterMask, 0, 0, side, side, rgba);
+}
 void EncodeWater(WGPUCommandEncoder encoder, unsigned width, unsigned height) {
     if (!g.depthView || !EnsureWater()) return;
     const int* v = g.waterViewport;
@@ -1925,20 +2043,24 @@ void EncodeWater(WGPUCommandEncoder encoder, unsigned width, unsigned height) {
         g.waterSceneWidth = width; g.waterSceneHeight = height; g.waterSceneFormat = format;
     }
     if (!g.waterSceneView) return;
+    // Sin máscara (el login, o antes de cargar un mapa) va una de 1x1 vacía.
+    if (!g.waterMaskView) UploadWaterMask(nullptr);
+    if (!g.waterMaskView) return;
     {
         WGPUTexelCopyTextureInfo from = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT, to = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
         from.texture = FrameTexture(); to.texture = g.waterScene;
         const WGPUExtent3D size{width, height, 1};
         wgpuCommandEncoderCopyTextureToTexture(encoder, &from, &to, &size);
     }
-    WGPUBindGroupEntry entries[4] = {WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT,
-                                     WGPU_BIND_GROUP_ENTRY_INIT};
+    WGPUBindGroupEntry entries[5] = {WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT,
+                                     WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT};
     entries[0].binding = 0; entries[0].textureView = g.depthView;
     entries[1].binding = 1; entries[1].buffer = g.waterBuffer; entries[1].size = sizeof(State::Water);
     entries[2].binding = 2; entries[2].textureView = g.waterSceneView;
     entries[3].binding = 3; entries[3].sampler = g.waterSampler;
+    entries[4].binding = 4; entries[4].textureView = g.waterMaskView;
     WGPUBindGroupDescriptor bd = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
-    bd.layout = g.waterLayout; bd.entryCount = 4; bd.entries = entries;
+    bd.layout = g.waterLayout; bd.entryCount = 5; bd.entries = entries;
     WGPUBindGroup group = wgpuDeviceCreateBindGroup(GetDevice(), &bd);
     WGPURenderPassColorAttachment color = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
     ColorTarget(color);
@@ -2345,10 +2467,13 @@ void Water(const float* params) {
     std::memcpy(g.water.lights, params + 12, sizeof(g.water.lights));
     g.water.lightCount[1] = params[9];
     std::memcpy(g.water.ships, params + 12 + 64, sizeof(g.water.ships));
+    g.water.params[3] = params[6];
+    std::memcpy(g.water.tint, params + 12 + 64 + 16, 8 * sizeof(float));
     std::memcpy(g.waterViewport, RenderState::Get().viewport, sizeof(g.waterViewport));
     g.passes.emplace_back();
     g.passes.back().water = true;
 }
+void WaterMask(const unsigned char* mask) { if (g.ready) ::WebGPU::UploadWaterMask(mask); }
 void ShadowCasting(bool enabled) { g.shadowCasting = enabled; }
 // El posproceso abre una pasada: al codificarla se aplica antes de sus dibujos.
 void PostProcess(bool antialias, float sharpen) {

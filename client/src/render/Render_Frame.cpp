@@ -208,6 +208,8 @@
 #include "stdafx.h"
 #include "ui/ChatListBox.h"
 #include "render/Gfx.h"
+#include "render/WaterProfiles.h"
+#include <cmath>
 #include "render/RenderProfile.h"
 #include "render/BufferedDraw.h"
 #include "platform/ITimer.h"
@@ -567,6 +569,15 @@ void Render_Scene3D(void)
     { RenderProfile::Scope measured(RenderProfile::Pass::Terrain);
     if (worldId != 10) {
         RenderTerrain('\0');                      // RenderTerrain(EditFlag=0) — tile mesh
+    }
+    // DESVIACION: agua mejorada (WebGPU). Va justo después del terreno: así
+    // la profundidad del cuadro es sólo el suelo, y lo que se dibuja después
+    // (objetos, personajes) queda encima del agua.
+    if (Gfx::WaterEnabled()) {
+        static unsigned char waterMask[256 * 256 * 4];
+        Gfx::WaterLook look;
+        if (WaterProfiles::Current(worldId, waterMask, look))
+            Gfx::WorldWater(waterMask, (float)(std::fmod((double)WorldTime, 3600000.0) / 1000.0), look);
     }
     }
     { RenderProfile::Scope measured(RenderProfile::Pass::Objects);

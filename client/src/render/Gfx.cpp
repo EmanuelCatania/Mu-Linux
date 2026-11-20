@@ -248,9 +248,28 @@ void Water(float level, float time, const float sun[3], float backdropY) {
     BufferedDraw::Flush();
     // [0..7] parámetros, [8] cantidad de luces, [12..] las luces.
     // [9] cantidad de barcos, [12 + 64..] los barcos.
-    float params[12 + MaxWaterLights * 8 + MaxWaterShips * 4] = {level, time, sun[0], sun[1], sun[2], backdropY, 0.0f, 0.0f, (float)count, (float)ships};
+    float params[12 + MaxWaterLights * 8 + MaxWaterShips * 4 + 8] = {level, time, sun[0], sun[1], sun[2], backdropY, 0.0f, 0.0f, (float)count, (float)ships};
     for (int i = 0; i < count * 8; ++i) params[12 + i] = waterLights[i];
     for (int i = 0; i < ships * 4; ++i) params[12 + MaxWaterLights * 8 + i] = waterShips[i];
+    GfxDevice::Water(params);
+}
+namespace { unsigned char waterMask[256 * 256 * 4]; bool waterMaskSent = false; }
+void WorldWater(const unsigned char* mask, float time, const WaterLook& look) {
+    waterLightCount = 0;
+    waterShipCount = 0;
+    if (!WaterEnabled() || !mask) return;
+    BufferedDraw::Flush();
+    if (!waterMaskSent || std::memcmp(waterMask, mask, sizeof(waterMask)) != 0) {
+        std::memcpy(waterMask, mask, sizeof(waterMask));
+        GfxDevice::WaterMask(waterMask);
+        waterMaskSent = true;
+    }
+    // Mismo arreglo que Water(); [6] = 1 elige el agua de los mapas y lo que
+    // sigue a los barcos lleva el color del agua y del cielo.
+    float params[12 + MaxWaterLights * 8 + MaxWaterShips * 4 + 8] = {0.0f, time, look.sun[0], look.sun[1], look.sun[2], 0.0f, 1.0f};
+    float* tail = params + 12 + MaxWaterLights * 8 + MaxWaterShips * 4;
+    tail[0] = look.tint[0]; tail[1] = look.tint[1]; tail[2] = look.tint[2]; tail[3] = look.clarity;
+    tail[4] = look.sky[0]; tail[5] = look.sky[1]; tail[6] = look.sky[2]; tail[7] = look.waves;
     GfxDevice::Water(params);
 }
 void SetShadowCasting(bool enabled) {
