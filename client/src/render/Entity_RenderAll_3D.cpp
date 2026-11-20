@@ -80,6 +80,35 @@
 #include "stdafx.h"
 #include "render/Entity_RenderAll_3D.h"
 #include "game/entity/ObjectPose.h"
+#include "render/WaterProfiles.h"
+#include <cstring>
+
+// DESVIACION (agua mejorada): lo que nada en un cauce hondo (Tamachan en el
+// foso de Lorencia) está a la altura del agua vieja, muy por debajo de la
+// superficie nueva. Se dibuja antes del agua, con el lomo a flor de agua, así
+// el agua lo cubre como a algo que nada. Entity_RenderAll_3D lo saltea.
+static unsigned char swimmerDrawn[400];
+
+void Entity_RenderSwimmers(void)
+{
+    std::memset(swimmerDrawn, 0, sizeof(swimmerDrawn));
+    if (SceneFlag != 5) return;
+    ObjectPose_BeginBatch();
+    for (int slot = 0; slot < 400; ++slot) {
+        char* entity = (char*)(CharactersClient + slot * CHARACTER_STRIDE);
+        if (entity == Hero || *entity == '\0' || FieldAs(entity, AsObject(entity)->Visible) == '\0') continue;
+        float* position = AsObject(entity)->Position;
+        const float surface = WaterProfiles::DeepSurfaceAt(position[0], position[1]);
+        if (surface < position[2] + 30.0f) continue;
+        const float saved = position[2];
+        position[2] = surface - 40.0f;
+        void* hover = ((slot == SelectedCharacter) || (slot == SelectedNpc)) ? (void*)0x1 : nullptr;
+        RenderCharacter((undefined4*)entity, (undefined4*)entity, (undefined4*)hover);
+        position[2] = saved;
+        swimmerDrawn[slot] = 1;
+    }
+    ObjectPose_EndBatch();
+}
 
 
 // IDA: Entity_RenderAll_3D (0x0045AB00)
@@ -121,6 +150,8 @@ void Entity_RenderAll_3D(void)
             // borde de selección). El IDA pasa `(slot == SelectedCharacter || SelectedNpc)`
             // y el Hero está EXCLUIDO de esos: va 0.
             RenderCharacter((undefined4 *)pcVar1, (undefined4 *)pcVar1, (undefined4 *)0);
+        } else if (swimmerDrawn[iVar2]) {
+            DAT_07abf5d4 = DAT_07abf5d4 + 1;
         } else if ((*pcVar1 != '\0') && (FieldAs(pcVar1, AsObject(pcVar1)->Visible) != '\0')) {
             DAT_07abf5d4 = DAT_07abf5d4 + 1;
             // is_local_player = (slot == SelectedCharacter || slot == SelectedNpc)
@@ -133,4 +164,5 @@ void Entity_RenderAll_3D(void)
         iVar2++;
     } while (iVar3 < 400 * CHARACTER_STRIDE);   // 0x59740 = 400 entities × 0x394
     ObjectPose_EndBatch();
+    std::memset(swimmerDrawn, 0, sizeof(swimmerDrawn));
 }

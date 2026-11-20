@@ -1699,18 +1699,30 @@ R"WGSL(
 // vértice (B, interpolado). Así coincide con el agua original, también en las
 // paredes que el mapa pinta con agua (debajo de los puentes).
 // R lleva los dos bits del tile: base (1) y capa 2 (2), en pasos de 85.
+// R: bits del tile en pasos de 36 (1 = agua, 2 = agua en la capa 2,
+// 4 = cauce hondo).
+fn tileBits(xy: vec2f) -> u32 {
+    let t = textureLoad(waterMask, clamp(vec2i(floor(xy / 100.0)), vec2i(0), vec2i(255)), 0).r;
+    return u32(round(t * 255.0 / 36.0));
+}
+// Cuánta agua pinta el mapa en (x, y): la base del tile y la capa 2 mezcladas
+// con el alfa de cada vértice (B), igual que el terreno. Sale con la orilla
+// fundida que pintó el mapa.
 fn waterAt(xy: vec2f) -> f32 {
-    let g = xy / 100.0;
-    let bits = u32(round(textureLoad(waterMask, clamp(vec2i(floor(g)), vec2i(0), vec2i(255)), 0).r * 3.0));
-    let a = textureSampleLevel(waterMask, linearSampler, (g + 0.5) / 256.0, 0.0).b;
+    let bits = tileBits(xy);
+    let a = textureSampleLevel(waterMask, linearSampler, (xy / 100.0 + 0.5) / 256.0, 0.0).b;
     return mix(f32(bits & 1u), f32((bits >> 1u) & 1u), a);
 }
-// La orilla por tiles queda en escalones. G marca los vértices que tocan un
-// tile con agua; interpolado, su línea de 0.5 pasa por el medio de los tiles
-// vecinos y redondea los escalones. Sólo se usa en lo plano (el agua no sube
-// por las barrancas).
-fn shoreAt(xy: vec2f) -> f32 {
-    return smoothstep(0.40, 0.62, textureSampleLevel(waterMask, linearSampler, (xy / 100.0 + 0.5) / 256.0, 0.0).g);
+)WGSL"
+// Quinta parte del shader (límite de 16 KB por literal de MSVC).
+R"WGSL(
+// Altura de la superficie del agua en (x, y) (G: z/2 + 20; 0 = sin agua, que
+// da un plano muy hundido). Interpolada entre vértices.
+fn levelAt(xy: vec2f) -> f32 {
+    let g = textureSampleLevel(waterMask, linearSampler, (xy / 100.0 + 0.5) / 256.0, 0.0).g;
+    // + 8: el plano queda por encima de los tiles de agua aunque el nivel se
+    // guarde redondeado de a 2.
+    return (g * 255.0 - 20.0) * 2.0 + 8.0;
 }
 // 0..1: cuánto de plano es el suelo en este píxel. El agua del mapa es plana;
 // la máscara, al interpolar entre vértices, se mete en la barranca de la orilla
@@ -1728,19 +1740,64 @@ fn flatAt(px: vec2f, p: vec3f) -> f32 {
     if (len < 1e-4) { return 0.0; }
     return smoothstep(0.90, 0.98, abs(n.z) / len);
 }
+)WGSL"
+// Cuarta parte del shader (límite de 16 KB por literal de MSVC).
+R"WGSL(
 fn worldWater(position: vec4f) -> vec4f {
     let d = textureLoad(depth, vec2i(position.xy), 0);
     if (d >= 1.0) { discard; }
-    let p = worldAt(position, d);
-    let m = waterAt(p.xy);
-    // En las paredes pintadas con agua (bajo los puentes) va sólo el color del
-    // agua, sin olas, cielo ni sol: eso es de la superficie.
-    let flat = flatAt(position.xy, p);
-    let coverage = max(m, shoreAt(p.xy) * flat);
-    if (coverage < 0.01) { discard; }
+    let ground = worldAt(position, d);
     let cam = u.camera.xyz;
     let t = u.params.y;
-    let dir = normalize(p - cam);
+    // El agua es un plano a la altura de su zona (como el mar del login): el
+    // rayo de la cámara se corta con él y hay agua si el suelo queda debajo.
+    // Así la orilla es la línea donde el plano corta el terreno (no los bordes
+    // de los tiles) y un fondo en pendiente queda tapado por una superficie
+    // plana. El nivel depende de dónde cae el rayo: se ajusta dos veces.
+    let ray = normalize(ground - cam);
+    var level = levelAt(ground.xy);
+    var p = ground;
+    var onPlane = false;
+    if (ray.z < -0.001) {
+        var tt = (level - cam.z) / ray.z;
+        level = levelAt((cam + ray * tt).xy);
+        tt = (level - cam.z) / ray.z;
+        if (tt > 0.0 && tt < length(ground - cam) && level > ground.z) {
+            onPlane = true;
+            p = cam + ray * tt;
+        }
+    }
+    // Lo que el mapa pinta con agua y queda por encima del plano (las paredes
+    // bajo los puentes, el borde de un estanque) va con el color del agua, sin
+    // olas: en las paredes siempre, en lo casi plano se apaga al subir.
+    let m = waterAt(ground.xy);
+    let flatGround = flatAt(position.xy, ground);
+    var coverage = 0.0;
+    var flat = 0.0;
+    var wall = false;
+    if (onPlane) {
+        // Se funde con la orilla donde el agua es poco profunda.
+        // El plano va 8 por encima del agua del mapa. Sobre agua pintada se
+        // cubre enseguida; sobre suelo seco (arena, pasto al nivel del agua)
+        // sólo si está bien por debajo, si no se desborda sobre la orilla.
+        // En un cauce hondo el agua cubre todo lo que queda debajo (barrancas,
+        // el pie de las murallas). En lo plano (arroyos, charcos) sólo donde el
+        // mapa pone agua, con la orilla redondeada: si no, cualquier pozo del
+        // suelo junto al arroyo se volvía un charco.
+        let depthBelow = level - ground.z;
+        if ((tileBits(ground.xy) & 4u) != 0u) {
+            coverage = select(smoothstep(8.0, 16.0, depthBelow), smoothstep(0.0, 4.0, depthBelow), waterAt(ground.xy) > 0.5);
+        } else {
+            coverage = waterAt(ground.xy) * smoothstep(0.0, 4.0, depthBelow);
+        }
+        flat = 1.0;
+    }
+    // Fuera del plano no se pinta nada: el pase va después de los objetos, y
+    // lo que queda por encima del agua (barrancas, murallas, el puente) es lo
+    // que es. Los tiles de agua que el mapa pinta en seco los cambia de
+    // textura el terreno (WaterProfiles::WallTexture).
+    if (coverage < 0.01) { discard; }
+    let dir = ray;
     let dist = length(p - cam);
     // Las ondas largas son ocho sumas de senos: de lejos, cuando se apagan las
     // cortas, quedan franjas paralelas regulares. Se tuercen un poco (el punto
@@ -1759,7 +1816,26 @@ fn worldWater(position: vec4f) -> vec4f {
     // terreno por vértice (A de la máscara), que es suave; el color, del perfil.
     let vertexLight = textureSampleLevel(waterMask, linearSampler, (p.xy / 100.0 + 0.5) / 256.0, 0.0).a * 2.0;
     let light = vertexLight * 0.3;
-    let body = u.tint.rgb * (0.25 + 1.1 * vertexLight);
+    // Las paredes pintadas con agua (bajo los puentes) están en sombra: más
+    // oscuras que la superficie, si no quedan como una franja clara.
+    let deep = u.tint.rgb * (0.25 + 1.1 * vertexLight) * select(1.0, 0.5, wall);
+    // Sobre el cauce (el terreno se hunde al dibujarlo) se ve el fondo a
+    // través del agua, corrido por las olas, y se pierde con la profundidad.
+    var body = deep;
+    if (onPlane) {
+        let depthW = level - ground.z;
+        let size = vec2f(textureDimensions(scene));
+        let dims = vec2f(textureDimensions(depth));
+        var at = position.xy;
+        let sh = clamp(position.xy + g * 0.05 * u.viewport.w * clamp(depthW / 60.0, 0.0, 1.0), vec2f(0.0), dims - 1.0);
+        let dsh = textureLoad(depth, vec2i(sh), 0);
+        if (dsh < 1.0) {
+            let q = worldAtPixel(sh, dsh);
+            if (levelAt(q.xy) > q.z) { at = sh; }
+        }
+        let bed = textureSampleLevel(scene, linearSampler, at / size, 0.0).rgb;
+        body = mix(deep, bed, exp(-depthW * 0.018));
+    }
     // Cielo: más claro hacia el horizonte del reflejo.
     let r = reflect(dir, n);
     let sky = u.sky.rgb * (0.75 + 0.25 * (1.0 - clamp(r.z, 0.0, 1.0)));
@@ -1797,11 +1873,14 @@ fn worldWater(position: vec4f) -> vec4f {
         color += lc * (core * sparkle * 1.2 + glow) * profile * 0.6 * flat;
     }
     // Espuma en la orilla: donde la máscara baja, ondas que van y vienen.
-    let edge = (1.0 - smoothstep(0.45, 0.90, coverage)) * flat;
+    let edge = (1.0 - smoothstep(2.0, 14.0, level - ground.z)) * flat;
     let ripple = 0.5 + 0.5 * sin(dot(p.xy, vec2f(0.045, 0.037)) + t * 1.6 + g.x * 25.0);
     color = mix(color, vec3f(0.85, 0.88, 0.90) * (0.5 + light), edge * ripple * 0.35);
     return vec4f(color, coverage);
 }
+)WGSL"
+// Sexta parte del shader (límite de 16 KB por literal de MSVC).
+R"WGSL(
 @fragment fn fs(@builtin(position) position: vec4f) -> @location(0) vec4f {
     if (u.params.w > 0.5) { return worldWater(position); }
     let cam = u.camera.xyz;

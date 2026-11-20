@@ -209,6 +209,7 @@
 #include "ui/ChatListBox.h"
 #include "render/Gfx.h"
 #include "render/WaterProfiles.h"
+#include "render/Entity_RenderAll_3D.h"
 #include <cmath>
 #include "render/RenderProfile.h"
 #include "render/BufferedDraw.h"
@@ -570,18 +571,22 @@ void Render_Scene3D(void)
     if (worldId != 10) {
         RenderTerrain('\0');                      // RenderTerrain(EditFlag=0) — tile mesh
     }
-    // DESVIACION: agua mejorada (WebGPU). Va justo después del terreno: así
-    // la profundidad del cuadro es sólo el suelo, y lo que se dibuja después
-    // (objetos, personajes) queda encima del agua.
+    }
+    { RenderProfile::Scope measured(RenderProfile::Pass::Objects);
+    Terrain_Render();                              // Terrain_Render — UNCONDICIONAL en IDA (object walker)
+    // DESVIACION: agua mejorada (WebGPU). Va después del terreno y de los
+    // objetos del mapa: lo que de ellos queda por debajo de la superficie (el
+    // pie de las murallas, los pilares del puente) queda bajo el agua. Los
+    // personajes y los efectos se dibujan después, encima.
     if (Gfx::WaterEnabled()) {
+        Entity_RenderSwimmers();
         static unsigned char waterMask[256 * 256 * 4];
         Gfx::WaterLook look;
         if (WaterProfiles::Current(worldId, waterMask, look))
             Gfx::WorldWater(waterMask, (float)(std::fmod((double)WorldTime, 3600000.0) / 1000.0), look);
+    } else {
+        WaterProfiles::DisableCarve();
     }
-    }
-    { RenderProfile::Scope measured(RenderProfile::Pass::Objects);
-    Terrain_Render();                              // Terrain_Render — UNCONDICIONAL en IDA (object walker)
     // Particle_Render (FUN_0046BE40) — IDA Game_RenderTick:113. Itera el effect
     // pool y renderiza partículas (gate sparks, magic glow, etc).
     }
