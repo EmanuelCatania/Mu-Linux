@@ -248,7 +248,7 @@ void Water(float level, float time, const float sun[3], float backdropY) {
     BufferedDraw::Flush();
     // [0..7] parámetros, [8] cantidad de luces, [12..] las luces.
     // [9] cantidad de barcos, [12 + 64..] los barcos.
-    float params[12 + MaxWaterLights * 8 + MaxWaterShips * 4 + 8] = {level, time, sun[0], sun[1], sun[2], backdropY, 0.0f, 0.0f, (float)count, (float)ships};
+    float params[12 + MaxWaterLights * 8 + MaxWaterShips * 4 + 12] = {level, time, sun[0], sun[1], sun[2], backdropY, 0.0f, 0.0f, (float)count, (float)ships};
     for (int i = 0; i < count * 8; ++i) params[12 + i] = waterLights[i];
     for (int i = 0; i < ships * 4; ++i) params[12 + MaxWaterLights * 8 + i] = waterShips[i];
     GfxDevice::Water(params);
@@ -257,12 +257,12 @@ namespace {
 unsigned char waterMask[256 * 256 * 4]; bool waterMaskSent = false;
 // Fuegos del mundo: posición, color y el WorldWater en que se registró por
 // última vez (la hora de ese cuadro, en segundos).
-struct WorldLight { float position[3], color[3], stamp; };
+struct WorldLight { float position[3], color[3], stamp; bool ripple; };
 WorldLight worldLights[MaxWaterLights];
 int worldLightCount = 0;
 float worldWaterNow = 0.0f;
 }
-void WorldWaterLight(const float position[3], const float color[3]) {
+void WorldWaterLight(const float position[3], const float color[3], bool ripple) {
     // La misma luz vuelve en cada tick (y las llamas con un poco de temblor):
     // si ya está, se refresca.
     int slot = -1;
@@ -283,8 +283,9 @@ void WorldWaterLight(const float position[3], const float color[3]) {
     std::memcpy(l.position, position, sizeof(l.position));
     std::memcpy(l.color, color, sizeof(l.color));
     l.stamp = worldWaterNow;
+    l.ripple = ripple;
 }
-void WorldWater(const unsigned char* mask, float time, const WaterLook& look) {
+void WorldWater(const unsigned char* mask, float time, const WaterLook& look, const float focus[2]) {
     waterLightCount = 0;
     waterShipCount = 0;
     if (!WaterEnabled() || !mask) return;
@@ -304,16 +305,18 @@ void WorldWater(const unsigned char* mask, float time, const WaterLook& look) {
         if (age >= 0.0f && age < 0.3f) worldLights[lights++] = worldLights[i];
     }
     worldLightCount = lights;
-    float params[12 + MaxWaterLights * 8 + MaxWaterShips * 4 + 8] = {0.0f, time, look.sun[0], look.sun[1], look.sun[2], 0.0f, 1.0f, 0.0f, (float)lights};
+    float params[12 + MaxWaterLights * 8 + MaxWaterShips * 4 + 12] = {0.0f, time, look.sun[0], look.sun[1], look.sun[2], 0.0f, 1.0f, 0.0f, (float)lights};
     for (int i = 0; i < lights; ++i) {
         float* l = params + 12 + i * 8;
         const WorldLight& w = worldLights[i];
         l[0] = w.position[0]; l[1] = w.position[1]; l[2] = w.position[2]; l[3] = 1.0f;
-        l[4] = w.color[0]; l[5] = w.color[1]; l[6] = w.color[2]; l[7] = 0.0f;
+        l[4] = w.color[0]; l[5] = w.color[1]; l[6] = w.color[2]; l[7] = w.ripple ? 2.0f : 0.0f;
     }
     float* tail = params + 12 + MaxWaterLights * 8 + MaxWaterShips * 4;
     tail[0] = look.tint[0]; tail[1] = look.tint[1]; tail[2] = look.tint[2]; tail[3] = 0.0f;
     tail[4] = look.sky[0]; tail[5] = look.sky[1]; tail[6] = look.sky[2]; tail[7] = look.waves;
+    // Centro de la simulación de ondas (el héroe).
+    tail[8] = focus[0]; tail[9] = focus[1];
     GfxDevice::Water(params);
 }
 void SetShadowCasting(bool enabled) {

@@ -173,6 +173,7 @@ static void Tamachan_Move(char *o, int life)
         float dy = *(float *)(o + 20) - *(float *)&((OBJECT*)(uintptr_t)(o))->StartPosition[1];
         *(int *)(o + 96) = 10;
         float dist = (float)sqrt(dy * dy + dx * dx);
+        const float before[2] = {*(float *)(o + 16), *(float *)(o + 20)};
         MoveHumming((float *)(o + 16), (float *)(o + 28), (float*)&AsObject(o)->StartPosition[0], 3000.0f / dist);
         *(float *)(o + 28) = -10.0f;
         *(float *)(o + 32) = 0.0f;
@@ -204,6 +205,11 @@ static void Tamachan_Move(char *o, int life)
         }
         if (!(rand() % 3)) {
             float pos[3] = { *(float *)(o + 16), *(float *)(o + 20), *(float *)(o + 24) + 11.0f };
+            // DESVIACION: las ondas salen de la cola (detrás según hacia dónde
+            // avanza), no del centro del cuerpo.
+            const float mx = pos[0] - before[0], my = pos[1] - before[1];
+            const float ml = (float)sqrt(mx * mx + my * my);
+            if (ml > 0.01f) { pos[0] -= mx / ml * 50.0f; pos[1] -= my / ml * 50.0f; }
             Particle_Spawn(103, pos, (float *)(o + 28), (float *)(o + 232), 1, 2.0f, 0);
         }
         PlayBuffer(11, 0, 0);

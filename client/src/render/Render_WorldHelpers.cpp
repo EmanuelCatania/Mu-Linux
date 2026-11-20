@@ -9,6 +9,8 @@
 // infer behaviour.
 
 #include "stdafx.h"
+#include "render/Entity_RenderAll_3D.h"
+#include "render/EffectIds.h"
 #include "render/ResourceTables.h"
 #include "assets/model/ModelTypes.h"
 #include "game/entity/EntityName.h"
@@ -964,6 +966,10 @@ void __cdecl EffectPool_RenderAll(void)
             ItemDrop_RenderGroundWeapon((intptr_t)(v0 - 10));
             continue;
         }
+
+        // DESVIACION (agua mejorada): Tamachan en un cauce ya se dibujó antes
+        // del agua (Entity_RenderTamachan).
+        if (type == MODEL_TAMA && Water_TamachanLift((const char*)(v0 - 10)) > 0.0f) continue;
 
         // Types 182, 185, 260-263, 268, 190-268, 568: standard entity render.
         if (type == 182 || type == 185 || type == 568 ||

@@ -152,11 +152,14 @@ struct WaterLook {
     float waves;     // fuerza de las olas (1 = las del login)
     float sun[3];    // dirección hacia el sol, en el mundo
 };
-void WorldWater(const unsigned char* mask, float time, const WaterLook& look);
-// Fuego del mundo que el agua de los mapas refleja (hasta 16, los más nuevos).
+// focus: el centro del área donde el agua simula ondas (el héroe).
+void WorldWater(const unsigned char* mask, float time, const WaterLook& look, const float focus[2]);
+// Fuego del mundo que el agua de los mapas refleja (hasta 16, los más nuevos);
+// con ripple, en cambio, algo que toca el agua: empuja la superficie (las ondas
+// las simula el agua) con fuerza color[0] en un radio color[1].
 // Lo registra la simulación, que no corre en cada cuadro: cada luz dura 0.3 s
 // desde la última vez que se registró, así no titila entre ticks.
-void WorldWaterLight(const float position[3], const float color[3]);
+void WorldWaterLight(const float position[3], const float color[3], bool ripple = false);
 
 // Niebla
 void SetFogMode(FogMode mode);

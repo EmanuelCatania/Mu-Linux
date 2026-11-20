@@ -78,16 +78,62 @@
 //                   Actualiza el estado de renderizado de la entidad (animación, posición, etc.)
 
 #include "stdafx.h"
+#include "render/Gfx.h"
+#include "render/EffectIds.h"
+#include "render/EffectPools.h"
 #include "render/Entity_RenderAll_3D.h"
 #include "game/entity/ObjectPose.h"
 #include "render/WaterProfiles.h"
 #include <cstring>
+#include <cmath>
 
 // DESVIACION (agua mejorada): lo que nada en un cauce hondo (Tamachan en el
 // foso de Lorencia) está a la altura del agua vieja, muy por debajo de la
 // superficie nueva. Se dibuja antes del agua, con el lomo a flor de agua, así
 // el agua lo cubre como a algo que nada. Entity_RenderAll_3D lo saltea.
 static unsigned char swimmerDrawn[400];
+
+// Tamachan (efecto MODEL_TAMA) flota entre 5 y 40 sobre el agua del mapa
+// (Tamachan_Move); con el agua nueva, el agua del mapa queda en el fondo del
+// cauce. Se dibuja corrido a la superficie nueva, hundido lo justo para que
+// flotando asome el lomo y al saltar salga entero, y antes del agua para que
+// ésta lo cubra. Devuelve cuánto hay que subirlo, o 0 si no está en un cauce.
+float Water_TamachanLift(const char* effect)
+{
+    if (!Gfx::WaterEnabled()) return 0.0f;
+    const OBJECT* o = (const OBJECT*)effect;
+    const float surface = WaterProfiles::DeepSurfaceAt(o->Position[0], o->Position[1]);
+    if (surface < -1.0e8f) return 0.0f;
+    // +60: el punto de aparición, a la altura del agua del mapa. -8: el plano va
+    // 8 por encima del agua; -2: apenas hundido, flota.
+    const float base = *(const float*)(effect + 60);
+    const float lift = (surface - 8.0f) - base - 2.0f;
+    return lift > 0.0f ? lift : 0.0f;
+}
+
+void Entity_RenderTamachan(void)
+{
+    if (!Gfx::WaterEnabled()) return;
+    for (int i = 0; i < kEffectPoolSize; ++i) {
+        char* o = (char*)&Effects[i];
+        if (!*o || AsObject(o)->Type != MODEL_TAMA) continue;
+        const float lift = Water_TamachanLift(o);
+        if (lift <= 0.0f) continue;
+        float* position = AsObject(o)->Position;
+        if (!Frustum_TestSphere(position, 400.0f)) continue;
+        const float saved = position[2];
+        position[2] += lift;
+        Entity_PrepareRender((unsigned char*)o, 0, 0, 0);
+        // Desplaza agua según cuánto está hundido: flotando (5 sobre el agua
+        // del mapa) entero, saltando (40) nada. Las ondas salen del cambio.
+        const float surface = WaterProfiles::DeepSurfaceAt(position[0], position[1]);
+        float sunk = (surface + 30.0f - position[2]) / 35.0f;
+        sunk = sunk < 0.0f ? 0.0f : (sunk > 1.0f ? 1.0f : sunk);
+        const float body[3] = {10.0f * sunk, 60.0f, 0.0f};
+        Gfx::WorldWaterLight(position, body, true);
+        position[2] = saved;
+    }
+}
 
 void Entity_RenderSwimmers(void)
 {
@@ -101,7 +147,10 @@ void Entity_RenderSwimmers(void)
         const float surface = WaterProfiles::DeepSurfaceAt(position[0], position[1]);
         if (surface < position[2] + 30.0f) continue;
         const float saved = position[2];
-        position[2] = surface - 40.0f;
+        // Hundido hasta que sólo asome el lomo (un 25 % de su alto).
+        float height = AsObject(entity)->BoundingBoxMax[2];
+        if (height < 20.0f || height > 400.0f) height = 80.0f;
+        position[2] = surface - height * 0.75f;
         void* hover = ((slot == SelectedCharacter) || (slot == SelectedNpc)) ? (void*)0x1 : nullptr;
         RenderCharacter((undefined4*)entity, (undefined4*)entity, (undefined4*)hover);
         position[2] = saved;

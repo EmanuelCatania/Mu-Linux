@@ -580,10 +580,14 @@ void Render_Scene3D(void)
     // personajes y los efectos se dibujan después, encima.
     if (Gfx::WaterEnabled()) {
         Entity_RenderSwimmers();
+        Entity_RenderTamachan();
         static unsigned char waterMask[256 * 256 * 4];
         Gfx::WaterLook look;
         if (WaterProfiles::Current(worldId, waterMask, look))
-            Gfx::WorldWater(waterMask, (float)(std::fmod((double)WorldTime, 3600000.0) / 1000.0), look);
+        {
+            const float focus[2] = {Hero ? AsObject(Hero)->Position[0] : 0.0f, Hero ? AsObject(Hero)->Position[1] : 0.0f};
+            Gfx::WorldWater(waterMask, (float)(std::fmod((double)WorldTime, 3600000.0) / 1000.0), look, focus);
+        }
     } else {
         WaterProfiles::DisableCarve();
     }
