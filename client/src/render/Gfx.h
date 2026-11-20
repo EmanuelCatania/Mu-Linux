@@ -124,6 +124,24 @@ void SetShadowCasting(bool enabled);
 void SetDepthFog(bool enabled);
 bool DepthFog();
 void Atmosphere(int mode, const float color[3], float density, float start);
+// DESVIACION (prueba): mar con olas, Fresnel y brillo del sol sobre el plano
+// z = level, en una pasada que se aplica antes de lo que se dibuje después.
+// Sólo WebGPU; con GL o la opción apagada no hace nada. sun = posición en el
+// mundo; time en segundos. backdropY = y de la pared pintada del horizonte: el
+// agua se funde con el cielo al acercarse a ella en vez de cortar.
+void Water(float level, float time, const float sun[3], float backdropY);
+// Luz puntual que el próximo Water() refleja sobre el agua; hasta 8 por
+// cuadro. compact = false: columna estirada por las olas (faroles); true:
+// charco de luz redondo en el agua justo debajo, que no se dibuja si hay
+// cubierta en medio (el hada).
+void WaterLight(const float position[3], const float color[3], bool compact = false);
+// Barco que el próximo Water() acompaña con olas de proa en V; hasta 4.
+void WaterShip(const float bow[2], const float heading[2]);
+// Altura (y pendiente, si se pide) del mar de fondo en (x, y): la misma onda
+// larga que dibuja el agua, para que los barcos se mezan con ella.
+float WaterSwell(float x, float y, float time, float* slopeX, float* slopeY);
+void ToggleWater();
+bool WaterEnabled();
 
 // Niebla
 void SetFogMode(FogMode mode);

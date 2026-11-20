@@ -8,6 +8,7 @@
 #include "render/RenderProfile.h"
 #include "render/RenderState.h"
 #include "render/TerrainDraw.h"
+#include <cmath>
 #include <cstring>
 #include <unordered_map>
 
@@ -196,6 +197,61 @@ void BeginShadowScene(const float focus[3]) {
 void Atmosphere(int mode, const float color[3], float density, float start) {
     if (!shadowScene) return;
     GfxDevice::Atmosphere(DepthFog() ? mode : 0, color, density, start);
+}
+namespace {
+bool water = true;
+// Luces que se reflejan en el próximo Water(): posición y color, 8 floats c/u.
+constexpr int MaxWaterLights = 8;
+float waterLights[MaxWaterLights * 8];
+int waterLightCount = 0;
+// Barcos que levantan olas de proa: proa (x, y) y rumbo (x, y).
+constexpr int MaxWaterShips = 4;
+float waterShips[MaxWaterShips * 4];
+int waterShipCount = 0;
+}
+void ToggleWater() { water = !water; }
+bool WaterEnabled() { return water && GfxDevice::SupportsShadowMaps(); }
+void WaterLight(const float position[3], const float color[3], bool compact) {
+    if (waterLightCount >= MaxWaterLights) return;
+    // Los efectos pueden pasar dos veces por cuadro (tick y dibujo).
+    for (int i = 0; i < waterLightCount; ++i) {
+        const float* o = waterLights + i * 8;
+        if (std::fabs(o[0] - position[0]) < 1.0f && std::fabs(o[1] - position[1]) < 1.0f && std::fabs(o[2] - position[2]) < 1.0f) return;
+    }
+    float* l = waterLights + waterLightCount++ * 8;
+    l[0] = position[0]; l[1] = position[1]; l[2] = position[2]; l[3] = 1.0f;
+    l[4] = color[0]; l[5] = color[1]; l[6] = color[2]; l[7] = compact ? 1.0f : 0.0f;
+}
+void WaterShip(const float bow[2], const float heading[2]) {
+    if (waterShipCount >= MaxWaterShips) return;
+    float* s = waterShips + waterShipCount++ * 4;
+    s[0] = bow[0]; s[1] = bow[1]; s[2] = heading[0]; s[3] = heading[1];
+}
+float WaterSwell(float x, float y, float time, float* slopeX, float* slopeY) {
+    // Igual que la primera onda de slope() en el shader del agua (WebGPU).
+    const float dl = std::sqrt(0.35f * 0.35f + 0.94f * 0.94f);
+    const float dx = 0.35f / dl, dy = 0.94f / dl;
+    const float k = 6.2831853f / 900.0f;
+    const float omega = std::sqrt(300.0f * k);
+    const float maxSlope = 0.035f;
+    const float phase = k * (dx * x + dy * y) - omega * time;
+    if (slopeX) *slopeX = dx * maxSlope * std::cos(phase);
+    if (slopeY) *slopeY = dy * maxSlope * std::cos(phase);
+    return maxSlope / k * std::sin(phase);
+}
+void Water(float level, float time, const float sun[3], float backdropY) {
+    const int count = waterLightCount;
+    waterLightCount = 0;
+    const int ships = waterShipCount;
+    waterShipCount = 0;
+    if (!WaterEnabled()) return;
+    BufferedDraw::Flush();
+    // [0..7] parámetros, [8] cantidad de luces, [12..] las luces.
+    // [9] cantidad de barcos, [12 + 64..] los barcos.
+    float params[12 + MaxWaterLights * 8 + MaxWaterShips * 4] = {level, time, sun[0], sun[1], sun[2], backdropY, 0.0f, 0.0f, (float)count, (float)ships};
+    for (int i = 0; i < count * 8; ++i) params[12 + i] = waterLights[i];
+    for (int i = 0; i < ships * 4; ++i) params[12 + MaxWaterLights * 8 + i] = waterShips[i];
+    GfxDevice::Water(params);
 }
 void SetShadowCasting(bool enabled) {
     if (!shadowScene) return;

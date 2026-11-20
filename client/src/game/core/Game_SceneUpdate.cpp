@@ -29,6 +29,8 @@
 
 #include "stdafx.h"
 #include <algorithm>
+#include <cmath>
+#include "render/Gfx.h"
 #include "platform/ITimer.h"
 #include "platform/ISocket.h"
 #include "net/Reconnect.h"
@@ -57,6 +59,21 @@ static void LoginScene_ApplySafeObjectAnim()
         char* obj = (char*)g_LoginSceneObjects[i];
         if (!obj || *obj == '\0')
             continue;
+
+        // DESVIACION (prueba del mar, sólo con el agua nueva): los dos barcos
+        // del fondo se mecen con el mar de fondo que dibuja el agua: suben con
+        // la cresta y cabecean y escoran con su pendiente. El de adelante no:
+        // sobre su cubierta están los personajes y la cámara.
+        if ((i == 1 || i == 3) && Gfx::WaterEnabled()) {
+            const float t = (float)(std::fmod((double)WorldTime, 3600000.0) / 1000.0);
+            OBJECT* ship = AsObject(obj);
+            float sx = 0.0f, sy = 0.0f;
+            const float h = Gfx::WaterSwell(ship->Position[0], ship->Position[1], t, &sx, &sy);
+            ship->Position[2] = h * 1.2f;
+            // Rumbo +y: la pendiente en y lo cabecea, la de x lo escora.
+            ship->Angle[0] = std::atan(sy) * 57.29578f * 0.9f;
+            ship->Angle[1] = std::atan(sx) * 57.29578f * 4.0f;
+        }
 
         // Match the original order more closely: Alpha(o) runs before the
         // animation tick and can early-out nearly invisible objects.

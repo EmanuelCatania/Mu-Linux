@@ -5,6 +5,7 @@
 #include "render/MaterialVisuals.h"
 #include "render/Entity_Render_3D.h"
 #include "render/WorldEffects.h"
+#include "render/Gfx.h"
 #include "render/EquipmentVisuals.h"
 #include "game/entity/ObjectPose.h"
 #include "scenes/ObjectRegistry.h"
@@ -101,5 +102,11 @@ void WorldEffects_Draw(const OBJECT* entity) {
                 for (int axis=0;axis<3;++axis) position[axis]=RenderBlend(previous.position[axis],sprite.position[axis],RenderInterpolation_Alpha());
         }
         CreateSprite(sprite.type,position,sprite.scale,(float *)sprite.light,sprite.owner,sprite.rotation,sprite.mode);
+        // DESVIACION (prueba del mar): los faroles de los barcos del login
+        // (sprite 0x47e del tipo 0x3c) se reflejan en el agua nueva.
+        if (SceneFlag==2 && frame.type==0x3c && sprite.type==0x47e && Gfx::WaterEnabled()) {
+            static const float lamp[3]={1.0f,0.55f,0.22f};
+            Gfx::WaterLight(position,lamp);
+        }
     }
 }

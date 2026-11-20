@@ -364,6 +364,7 @@ struct Pass {
     int postViewport[4]{};
     bool Post() const { return antialias || sharpen > 0.0f; }
     bool atmosphere = false;   // niebla por profundidad antes de los dibujos de la pasada
+    bool water = false;        // mar (prueba) antes de los dibujos de la pasada
     float color[4]{};
     std::vector<Draw> draws;
 };
@@ -455,6 +456,32 @@ struct State {
     WGPUBuffer atmosphereBuffer = nullptr;
     WGPUTextureFormat atmosphereFormat = WGPUTextureFormat_Undefined;
     uint32_t atmosphereSamples = 0;
+    // Mar (prueba): plano con olas reconstruido por píxel desde la profundidad.
+    struct Water {
+        float inverseViewProj[16];
+        float viewProj[16];  // para proyectar los rayos del reflejo a pantalla
+        float camera[4];
+        float params[4];     // altura del plano, tiempo en segundos, y desde la que empieza el fondo
+        float sun[4];        // posición del sol en el mundo
+        float viewport[4];
+        float lightCount[4]; // [0] = cantidad de faroles
+        float lights[16][4]; // por farol: posición, color
+        float ships[4][4];   // por barco: proa (x, y), rumbo (x, y)
+    } water{};
+    int waterViewport[4]{};
+    WGPUShaderModule waterModule = nullptr;
+    WGPUBindGroupLayout waterLayout = nullptr;
+    WGPUPipelineLayout waterPipelineLayout = nullptr;
+    WGPURenderPipeline waterPipeline = nullptr;
+    WGPUBuffer waterBuffer = nullptr;
+    // Copia del cuadro antes del agua: de ahí salen los reflejos.
+    WGPUTexture waterScene = nullptr;
+    WGPUTextureView waterSceneView = nullptr;
+    WGPUSampler waterSampler = nullptr;
+    unsigned waterSceneWidth = 0, waterSceneHeight = 0;
+    WGPUTextureFormat waterSceneFormat = WGPUTextureFormat_Undefined;
+    WGPUTextureFormat waterFormat = WGPUTextureFormat_Undefined;
+    uint32_t waterSamples = 0;
 } g;
 
 uint32_t Samples() { return Gfx::Multisample() > 1 ? 4u : 1u; }   // WebGPU garantiza 1 y 4
@@ -1028,6 +1055,14 @@ void ReleaseObjects() {
     if (g.atmosphereLayout) wgpuBindGroupLayoutRelease(g.atmosphereLayout);
     if (g.atmosphereModule) wgpuShaderModuleRelease(g.atmosphereModule);
     if (g.atmosphereBuffer) wgpuBufferRelease(g.atmosphereBuffer);
+    if (g.waterPipeline) wgpuRenderPipelineRelease(g.waterPipeline);
+    if (g.waterPipelineLayout) wgpuPipelineLayoutRelease(g.waterPipelineLayout);
+    if (g.waterLayout) wgpuBindGroupLayoutRelease(g.waterLayout);
+    if (g.waterModule) wgpuShaderModuleRelease(g.waterModule);
+    if (g.waterBuffer) wgpuBufferRelease(g.waterBuffer);
+    if (g.waterSceneView) wgpuTextureViewRelease(g.waterSceneView);
+    if (g.waterScene) wgpuTextureRelease(g.waterScene);
+    if (g.waterSampler) wgpuSamplerRelease(g.waterSampler);
     if (g.shadowGroup) wgpuBindGroupRelease(g.shadowGroup);
     if (g.casterGroup) wgpuBindGroupRelease(g.casterGroup);
     if (g.shadowBuffer) wgpuBufferRelease(g.shadowBuffer);
@@ -1475,6 +1510,453 @@ void EncodeAtmosphere(WGPUCommandEncoder encoder, unsigned width, unsigned heigh
     g.retiredGroups.push_back(group);
 }
 
+// ── Mar (prueba) ────────────────────────────────────────────────────────────
+// Por píxel corta el rayo de la cámara contra el plano z = altura y lo dibuja
+// sólo donde el plano queda delante de lo ya dibujado (la profundidad de la
+// escena). Olas: suma de ondas direccionales (normales analíticas), Fresnel
+// contra un cielo de atardecer y el brillo del sol. Sin geometría nueva.
+const char* const WaterShader = R"WGSL(
+struct Water { inverseViewProj: mat4x4f, viewProj: mat4x4f, camera: vec4f, params: vec4f, sun: vec4f, viewport: vec4f,
+               lightCount: vec4f, lights: array<vec4f, 16>, ships: array<vec4f, 4> };
+@group(0) @binding(0) var depth: DEPTH_TYPE;
+@group(0) @binding(1) var<uniform> u: Water;
+@group(0) @binding(2) var scene: texture_2d<f32>;
+@group(0) @binding(3) var linearSampler: sampler;
+@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+    let p = vec2f(select(-1.0, 3.0, i == 1u), select(-1.0, 3.0, i == 2u));
+    return vec4f(p, 0.0, 1.0);
+}
+fn worldAtPixel(s: vec2f, d: f32) -> vec3f {
+    let ndc = vec2f((s.x - u.viewport.x) / u.viewport.z * 2.0 - 1.0,
+                    1.0 - (s.y - u.viewport.y) / u.viewport.w * 2.0);
+    let w = u.inverseViewProj * vec4f(ndc, d * 2.0 - 1.0, 1.0);
+    return w.xyz / w.w;
+}
+fn worldAt(position: vec4f, d: f32) -> vec3f { return worldAtPixel(position.xy, d); }
+// Punto del mundo -> píxel del cuadro (x, y); z < 0 si queda detrás de la cámara.
+fn toPixel(q: vec3f) -> vec3f {
+    let c = u.viewProj * vec4f(q, 1.0);
+    if (c.w <= 0.0) { return vec3f(-1.0, -1.0, -1.0); }
+    let n = c.xy / c.w;
+    return vec3f(u.viewport.x + (n.x * 0.5 + 0.5) * u.viewport.z,
+                 u.viewport.y + (0.5 - n.y * 0.5) * u.viewport.w, 1.0);
+}
+// Sombra de lo dibujado (cascos, velas, jarcia) sobre el agua: se avanza desde
+// el punto del agua hacia el sol y se mira si algo de la profundidad del
+// cuadro queda delante, a poca distancia del rayo. Sólo ve oclusores que están
+// en pantalla, que en esta escena son todos.
+)WGSL"
+// MSVC limita cada literal a 16 KB: el shader va en dos partes.
+R"WGSL(
+// 1 si debajo de la luz hay algo sólido antes del agua (la cubierta de un
+// barco): baja por la vertical y ve si algún punto queda dentro de lo dibujado.
+fn overHull(lp: vec3f, level: f32) -> f32 {
+    let cam = u.camera.xyz; let dims = vec2f(textureDimensions(depth));
+    for (var k = 0; k < 12; k++) {
+        let q = vec3f(lp.xy, mix(lp.z, level + 30.0, (f32(k) + 0.5) / 12.0));
+        let s = toPixel(q);
+        if (s.z < 0.0 || s.x < 0.0 || s.y < 0.0 || s.x >= dims.x || s.y >= dims.y) { continue; }
+        let ds = textureLoad(depth, vec2i(s.xy), 0); if (ds >= 1.0) { continue; }
+        let gap = length(q - cam) - length(worldAtPixel(s.xy, ds) - cam);
+        if (gap > 5.0 && gap < 400.0) { return 1.0; }
+    }
+    return 0.0;
+}
+fn sunShadow(p: vec3f, toSun: vec3f, jitter: f32) -> f32 {
+    let cam = u.camera.xyz;
+    let dims = vec2f(textureDimensions(depth));
+    var shade = 0.0;
+    for (var k = 0; k < 32; k++) {
+        let f = (f32(k) + jitter) / 32.0;
+        let dist = 8.0 + f * f * 900.0;
+        let q = p + toSun * dist;
+        let s = toPixel(q);
+        if (s.z < 0.0 || s.x < 0.0 || s.y < 0.0 || s.x >= dims.x || s.y >= dims.y) { break; }
+        let ds = textureLoad(depth, vec2i(s.xy), 0);
+        if (ds >= 1.0) { continue; }
+        let dq = length(q - cam);
+        let dsc = length(worldAtPixel(s.xy, ds) - cam);
+        // Delante del rayo pero cerca de él: lo que está mucho más cerca de la
+        // cámara (el barco propio, la soga) no tapa este sol.
+        let gap = dq - dsc;
+        let thick = 30.0 + dist * 0.12;
+        // Penumbra: la sombra se aclara cuanto más lejos está lo que la proyecta.
+        let soft = 1.0 - 0.7 * smoothstep(150.0, 900.0, dist);
+        shade = max(shade, smoothstep(1.0, 12.0, gap) * (1.0 - smoothstep(thick, thick * 1.6, gap)) * soft);
+        if (shade > 0.99) { break; }
+    }
+    return shade;
+}
+// Color de la copia del cuadro con un desenfoque de 5 muestras (radio en px).
+fn sceneAt(px: vec2f, blur: f32) -> vec3f {
+    let size = vec2f(textureDimensions(scene));
+    var c = vec3f(0.0);
+    c += textureSampleLevel(scene, linearSampler, px / size, 0.0).rgb;
+    c += textureSampleLevel(scene, linearSampler, (px + vec2f(blur, 0.0)) / size, 0.0).rgb;
+    c += textureSampleLevel(scene, linearSampler, (px - vec2f(blur, 0.0)) / size, 0.0).rgb;
+    c += textureSampleLevel(scene, linearSampler, (px + vec2f(0.0, blur)) / size, 0.0).rgb;
+    c += textureSampleLevel(scene, linearSampler, (px - vec2f(0.0, blur)) / size, 0.0).rgb;
+    return c * 0.2;
+}
+// Reflejo continuo: el rayo reflejado se lleva hasta la pared pintada del
+// fondo (params.z) y se lee lo que se ve en esa dirección en la copia del
+// cuadro: el cielo pintado, y los barcos y el sol que lo tapan. Exacto para el
+// fondo y aproximado para los barcos, pero sin búsqueda de choques, así que no
+// deja bordes ni manchas. a = cuánto vale (se apaga si cae fuera del cuadro).
+fn reflection(h: vec3f, r: vec3f) -> vec4f {
+    let reach = max((u.params.z - h.y) / max(r.y, 0.05), 50.0);
+    let px = toPixel(h + r * reach);
+    if (px.z < 0.0) { return vec4f(0.0); }
+    let size = vec2f(textureDimensions(scene));
+    let lo = max(u.viewport.xy, vec2f(0.0)) + 2.0;
+    let hi = min(u.viewport.xy + u.viewport.zw, size) - 2.0;
+    let c = clamp(px.xy, lo, hi);
+    let outside = length(px.xy - c);
+    let blur = 2.5 + reach * 0.006;
+    return vec4f(sceneAt(c, blur), 1.0 - smoothstep(0.0, 80.0, outside));
+}
+// Pendiente (dh/dx, dh/dy) de la suma de ondas. xy = dirección, z = longitud
+// de onda en unidades del mundo, w = pendiente máxima de la onda.
+fn slope(p: vec2f, t: f32, detail: f32) -> vec2f {
+    var waves = array<vec4f, 8>(
+        // Mar de fondo: larga y lenta; la misma que mece a los barcos (en el
+        // cliente, Gfx::WaterSwell). Si se cambia acá hay que cambiarla allá.
+        vec4f( 0.35,  0.94, 900.0, 0.035),
+        vec4f( 0.80,  0.60, 210.0, 0.060),
+        vec4f(-0.45,  0.89, 130.0, 0.055),
+        vec4f( 0.96, -0.28,  80.0, 0.050),
+        vec4f(-0.88, -0.47,  47.0, 0.045),
+        vec4f( 0.21,  0.98,  29.0, 0.040),
+        vec4f( 0.62, -0.78,  17.0, 0.035),
+        vec4f(-0.30,  0.95,  10.0, 0.030));
+    var g = vec2f(0.0);
+    for (var i = 0; i < 8; i++) {
+        let w = waves[i];
+        let d = normalize(w.xy);
+        let k = 6.2831853 / w.z;
+        let omega = sqrt(300.0 * k);
+        // Las ondas cortas se apagan con la distancia (si no, titilan).
+        let fade = select(1.0, detail, w.z < 60.0);
+        g += d * (w.w * fade * cos(k * dot(d, p) - omega * t));
+    }
+    return g;
+}
+// Olas de proa (patrón de Kelvin): de la proa de cada barco salen dos brazos
+// en V a ~19.5 grados del rumbo, con crestas cortas inclinadas, y por dentro
+// olas transversales más largas. Devuelve la pendiente (xy) y la espuma (z) de
+// las crestas cerca de la proa.
+fn kelvin(p: vec2f, t: f32) -> vec3f {
+    var g = vec2f(0.0);
+    var foam = 0.0;
+    let count = i32(u.lightCount.y);
+    for (var i = 0; i < 4; i++) {
+        if (i >= count) { break; }
+        let s = u.ships[i];
+        let fwd = s.zw;
+        let side = vec2f(-fwd.y, fwd.x);
+        let rel = p - s.xy;
+        let a = -dot(rel, fwd);              // distancia detrás de la proa
+        if (a <= 0.0 || a > 2200.0) { continue; }
+        let b = dot(rel, side);
+        let sb = select(-1.0, 1.0, b >= 0.0);
+        let ab = abs(b);
+        // Brazos divergentes.
+        let arm = ab - 0.354 * a;
+        let sig = 10.0 + 0.045 * a;
+        // Las crestas no son líneas largas: son tramos cortos escalonados a lo
+        // largo del brazo, que aparecen y se apagan.
+        let segs = 0.5 + 0.5 * sin(a * 0.021 + ab * 0.013 + sb * 1.3 - t * 0.7);
+        let env = exp(-arm * arm / (2.0 * sig * sig)) * exp(-a / 900.0) * smoothstep(0.0, 80.0, a) * (0.35 + 0.65 * segs);
+        let kd = 6.2831853 / 42.0;
+        let ph = kd * (0.57 * a + 0.82 * ab) - 2.4 * t;
+        let gd = 0.10 * env * cos(ph);
+        // Ejes locales: a crece hacia atrás (-fwd) y b hacia el costado.
+        g += gd * (0.57 * -fwd + 0.82 * sb * side);
+        foam += env * smoothstep(0.6, 1.0, sin(ph)) * exp(-a / 260.0);
+        // Transversales, dentro de la V.
+        let inside = smoothstep(0.0, 60.0, -arm);
+        let kt = 6.2831853 / 110.0;
+        g += -fwd * (0.022 * inside * exp(-a / 700.0) * cos(kt * a - 1.6 * t));
+    }
+    return vec3f(g, foam);
+}
+@fragment fn fs(@builtin(position) position: vec4f) -> @location(0) vec4f {
+    let cam = u.camera.xyz;
+    let far = worldAt(position, 1.0);
+    let dir = normalize(far - cam);
+    if (dir.z > -0.0005) { discard; }
+    let t = (u.params.x - cam.z) / dir.z;
+    if (t <= 0.0) { discard; }
+    let d = textureLoad(depth, vec2i(position.xy), 0);
+    // Lo ya dibujado delante del plano (cascos, la pared del fondo) tapa el
+    // agua. La transición contra el fondo la hace la bruma, más abajo.
+    if (d < 1.0 && length(worldAt(position, d) - cam) < t) { discard; }
+    let hit = cam + dir * t;
+    let detail = 1.0 - smoothstep(350.0, 1000.0, t);
+    let wake3 = kelvin(hit.xy, u.params.y);
+    let g = slope(hit.xy, u.params.y, detail) + wake3.xy;
+    let n = normalize(vec3f(-g.x, -g.y, 1.0));
+    let v = -dir;
+    let cosv = max(dot(n, v), 0.0);
+    let fresnel = 0.02 + 0.98 * pow(1.0 - cosv, 5.0);
+    let r = reflect(dir, n);
+    let toSun = normalize(u.sun.xyz - hit);
+    // Cielo de atardecer: horizonte cálido, cenit oscuro, más claro hacia el sol.
+    let up = clamp(r.z, 0.0, 1.0);
+    let towardSun = pow(max(dot(normalize(r.xy + vec2f(1e-5)), normalize(toSun.xy + vec2f(1e-5))), 0.0), 6.0);
+    let horizon = mix(vec3f(0.55, 0.28, 0.24), vec3f(1.0, 0.62, 0.36), towardSun);
+    let sky = mix(horizon, vec3f(0.10, 0.08, 0.20), sqrt(up));
+    let deep = vec3f(0.035, 0.040, 0.055);
+    // Reflejo de lo que hay sobre el agua (barcos, sol, el cielo pintado), con
+    // la normal suavizada: con la de las olas el reflejo titila.
+    let nr = normalize(vec3f(-g.x * 0.3, -g.y * 0.3, 1.0));
+    let mirror = reflection(hit, reflect(dir, nr));
+    // Algo más espejado que el Fresnel físico: el mar quieto del atardecer.
+    let mirrorWeight = clamp(fresnel * 1.3 + 0.08, 0.0, 1.0);
+    var color = mix(deep, mix(sky, mirror.rgb, mirror.a), mirrorWeight);
+    // Bruma de atardecer: al acercarse a la pared pintada (el "horizonte" de la
+    // escena) el agua se funde con el color del cielo justo encima, así no
+    // queda una línea entre el mar y el fondo. Más cálida hacia el sol.
+    let viewSun = pow(max(dot(normalize(dir.xy + vec2f(1e-5)), normalize(toSun.xy + vec2f(1e-5))), 0.0), 8.0);
+    let hazeColor = mix(vec3f(0.20, 0.13, 0.12), vec3f(0.72, 0.36, 0.14), viewSun);
+    // La mezcla con el fondo se mide en píxeles por debajo de donde el agua
+    // toca la pared: en distancia del mundo, a lo lejos se comprime en pocos
+    // píxeles y queda una franja con corte.
+    let shore = toPixel(vec3f(hit.x, u.params.z, u.params.x));
+    let below = (position.y - shore.y) / u.viewport.w;
+    let haze = select(0.0, 1.0 - smoothstep(0.0, 0.12, below), shore.z > 0.0);
+    // El brillo del sol sigue visible a través de la bruma, algo atenuado.
+    // Camino del sol: una franja continua (normal suavizada) y encima los
+    // destellos de las olas, más suaves.
+    let s = max(dot(r, toSun), 0.0);
+    let sPath = max(dot(reflect(dir, nr), toSun), 0.0);
+    let glint = vec3f(1.0, 0.72, 0.45) * (pow(sPath, 60.0) * 0.45 + pow(s, 150.0) * 0.8 + pow(s, 25.0) * 0.15);
+    // Contra el fondo el agua se funde con el mar pintado original que tiene
+    // debajo (sigue en la copia del cuadro): así el horizonte no deja línea.
+    let sceneSize = vec2f(textureDimensions(scene));
+    let original = textureSampleLevel(scene, linearSampler, position.xy / sceneSize, 0.0).rgb;
+    // El mar pintado es azul; se lleva al tono del agua nueva para no dejar
+    // una franja de otro color.
+    let originalLum = dot(original, vec3f(0.30, 0.55, 0.15));
+    let back = mix(hazeColor, mix(color, vec3f(originalLum) * vec3f(1.15, 1.0, 0.9), 0.5), 0.75);
+    color = mix(color, back, haze);
+    // Estela de los barcos: es la parte clara del mar pintado original. Se toma
+    // de la copia, movida por las olas y desaturada, en lugar de redibujarla
+    // encima con su azul saturado.
+    let wobble = position.xy + g * 40.0;
+    let wake = textureSampleLevel(scene, linearSampler, wobble / sceneSize, 0.0).rgb;
+    let wakeLum = dot(wake, vec3f(0.30, 0.55, 0.15));
+    // El mar pintado ronda 0.10 de luminancia y la estela llega a ~0.25.
+    let foam = smoothstep(0.11, 0.24, wakeLum) * (1.0 - haze);
+    let foamColor = mix(wake, vec3f(wakeLum) * vec3f(0.92, 0.97, 1.0), 0.5) * 1.6;
+    // Sombra de los barcos: tapa el brillo del sol y oscurece un poco el agua
+    // y la espuma. El ruido por píxel en el inicio del rayo evita escalones.
+    let jitter = fract(52.982918 * fract(dot(position.xy, vec2f(0.06711056, 0.00583715))));
+    // El sol pintado está casi en el horizonte: con su altura real las sombras
+    // cruzarían todo el mar. Se proyectan como con el sol a ~28 grados.
+    let shadowDir = normalize(vec3f(normalize(toSun.xy + vec2f(1e-5)) * 0.88, 0.47));
+    let shade = sunShadow(hit + vec3f(0.0, 0.0, 1.0), shadowDir, jitter) * (1.0 - haze);
+    // Espuma en las crestas de las olas de proa.
+    color = mix(color, vec3f(0.55, 0.60, 0.64), clamp(wake3.z, 0.0, 1.0) * 0.45 * (1.0 - haze));
+    color = mix(color, foamColor, foam * 0.85 * (1.0 - 0.35 * shade)) * (1.0 - 0.3 * shade)
+          + glint * (1.0 - 0.5 * haze) * (1.0 - shade);
+    // Faroles de los barcos: el reflejo nace en el agua justo debajo del farol
+    // (top) y se estira hacia su punto espejado (mir), como en el agua real con
+    // ondas. Desde esta cámara cae debajo de cada barco. Tiembla y titila.
+    let lampCount = i32(u.lightCount.x);
+    for (var i = 0; i < 8; i++) {
+        if (i >= lampCount) { break; }
+        let lp = u.lights[i * 2].xyz;
+        let lc = u.lights[i * 2 + 1].rgb;
+        let top = toPixel(vec3f(lp.xy, u.params.x));
+        let mir = toPixel(vec3f(lp.xy, 2.0 * u.params.x - lp.z));
+        if (top.z < 0.0 || mir.z < 0.0) { continue; }
+        // Luz compacta (el hada): sin columna, un charco de luz redondo en el
+        // agua justo debajo, que tiembla con las olas. El punto espejado de
+        // algo que vuela tan alto cae fuera del cuadro del login.
+        if (u.lights[i * 2 + 1].w > 0.5) {
+            if (overHull(lp, u.params.x) > 0.5) { continue; }
+            let r = 0.010 * u.viewport.w;
+            let d = (position.xy + g * 0.015 * u.viewport.w - top.xy) * vec2f(1.0, 2.2);
+            let d2 = dot(d, d) / (r * r);
+            let wa = 0.5 + 0.5 * sin(hit.y * 0.55 + g.y * 90.0 + u.params.y * 3.1);
+            let wb = 0.5 + 0.5 * sin(hit.x * 0.80 + g.x * 70.0 - u.params.y * 2.2);
+            let spot = exp(-d2) * (0.4 + 0.9 * pow(wa * wb, 1.5)) + exp(-d2 * 0.12) * 0.10;
+            color += lc * spot * 0.6 * (1.0 - haze);
+            continue;
+        }
+        let span = max(mir.y - top.y, 8.0);
+        let along = (position.y - top.y) / span;
+        let cx = mix(top.x, mir.x, clamp(along, 0.0, 1.0));
+        let width = 0.004 * u.viewport.w * (0.8 + 1.5 * clamp(along, 0.0, 1.0));
+        let dx = position.x + g.x * 0.015 * u.viewport.w - cx;
+        let profile = smoothstep(0.0, 0.04, along) * (1.0 - smoothstep(0.25, 0.8, along));
+        // La columna no es una línea lisa: son destellos sueltos donde la ola
+        // inclina hacia la cámara, densos cerca del farol y ralos en la punta.
+        let ph = f32(i) * 1.7;
+        let wa = 0.5 + 0.5 * sin(hit.y * 0.55 + g.y * 90.0 + u.params.y * 3.1 + ph);
+        let wb = 0.5 + 0.5 * sin(hit.x * 0.80 + g.x * 70.0 - u.params.y * 2.2 + ph * 2.3);
+        let sparkle = pow(wa * wb, mix(1.5, 4.0, clamp(along, 0.0, 1.0)));
+        let core = exp(-dx * dx / (width * width));
+        let glow = exp(-dx * dx / (4.0 * width * width)) * 0.12;
+        color += lc * (core * sparkle * 1.4 + glow) * profile * 0.55 * (1.0 - haze);
+    }
+    // Espuma en la línea de flotación: si cerca en pantalla hay un casco que
+    // toca el agua (su punto está a poca distancia de este, a la altura del
+    // agua), se aclara con un patrón que sigue a las olas.
+    var nearHull = 1.0e9;
+    for (var k = 0; k < 8; k++) {
+        let a = f32(k) * 0.7853982;
+        let o = vec2f(cos(a), sin(a)) * select(6.0, 14.0, k % 2 == 1);
+        let sp = position.xy + o;
+        let ds = textureLoad(depth, vec2i(sp), 0);
+        if (ds < 1.0) {
+            // Cuenta sólo si en ese píxel lo dibujado tapa al agua (el mar
+            // pintado de abajo no) y está cerca de la línea de flotación.
+            let ph = worldAtPixel(sp, ds);
+            let dn = normalize(worldAtPixel(sp, 1.0) - cam);
+            let tn = (u.params.x - cam.z) / min(dn.z, -0.0005);
+            if (ph.z < u.params.x + 25.0 && length(ph - cam) < tn - 1.0) {
+                nearHull = min(nearHull, length(ph.xy - hit.xy));
+            }
+        }
+    }
+    let ripple = 0.6 + 0.4 * sin(dot(hit.xy, vec2f(0.21, 0.17)) + u.params.y * 2.3 + g.x * 30.0);
+    let hullFoam = (1.0 - smoothstep(6.0, 45.0, nearHull)) * ripple * (1.0 - haze);
+    color = mix(color, vec3f(0.62, 0.66, 0.68), hullFoam * 0.7);
+    return vec4f(color, 1.0);
+}
+)WGSL";
+bool EnsureWater() {
+    const WGPUTextureFormat format = SurfaceFormat();
+    const uint32_t samples = Samples();
+    if (g.waterPipeline && g.waterFormat == format && g.waterSamples == samples) return true;
+    if (g.waterPipeline) wgpuRenderPipelineRelease(g.waterPipeline);
+    if (g.waterPipelineLayout) wgpuPipelineLayoutRelease(g.waterPipelineLayout);
+    if (g.waterLayout) wgpuBindGroupLayoutRelease(g.waterLayout);
+    if (g.waterModule) wgpuShaderModuleRelease(g.waterModule);
+    g.waterPipeline = nullptr;
+    std::string code = WaterShader;
+    const char* type = samples > 1 ? "texture_depth_multisampled_2d" : "texture_depth_2d";
+    code.replace(code.find("DEPTH_TYPE"), 10, type);
+    WGPUShaderSourceWGSL wgsl = WGPU_SHADER_SOURCE_WGSL_INIT;
+    wgsl.code = WGPUStringView{code.c_str(), code.size()};
+    WGPUShaderModuleDescriptor md = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
+    md.nextInChain = &wgsl.chain;
+    g.waterModule = wgpuDeviceCreateShaderModule(GetDevice(), &md);
+    WGPUBindGroupLayoutEntry entries[4] = {WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT, WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT,
+                                           WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT, WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT};
+    entries[0].binding = 0;
+    entries[0].visibility = WGPUShaderStage_Fragment;
+    entries[0].texture.sampleType = WGPUTextureSampleType_Depth;
+    entries[0].texture.viewDimension = WGPUTextureViewDimension_2D;
+    entries[0].texture.multisampled = samples > 1;
+    entries[1].binding = 1;
+    entries[1].visibility = WGPUShaderStage_Fragment;
+    entries[1].buffer.type = WGPUBufferBindingType_Uniform;
+    entries[1].buffer.minBindingSize = sizeof(State::Water);
+    entries[2].binding = 2;
+    entries[2].visibility = WGPUShaderStage_Fragment;
+    entries[2].texture.sampleType = WGPUTextureSampleType_Float;
+    entries[2].texture.viewDimension = WGPUTextureViewDimension_2D;
+    entries[3].binding = 3;
+    entries[3].visibility = WGPUShaderStage_Fragment;
+    entries[3].sampler.type = WGPUSamplerBindingType_Filtering;
+    WGPUBindGroupLayoutDescriptor ld = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
+    ld.entryCount = 4; ld.entries = entries;
+    if (!g.waterSampler) {
+        WGPUSamplerDescriptor sd = WGPU_SAMPLER_DESCRIPTOR_INIT;
+        sd.magFilter = WGPUFilterMode_Linear;
+        sd.minFilter = WGPUFilterMode_Linear;
+        g.waterSampler = wgpuDeviceCreateSampler(GetDevice(), &sd);
+    }
+    g.waterLayout = wgpuDeviceCreateBindGroupLayout(GetDevice(), &ld);
+    WGPUPipelineLayoutDescriptor pd = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
+    pd.bindGroupLayoutCount = 1; pd.bindGroupLayouts = &g.waterLayout;
+    g.waterPipelineLayout = wgpuDeviceCreatePipelineLayout(GetDevice(), &pd);
+    if (!g.waterBuffer) g.waterBuffer = CreateBuffer(sizeof(State::Water), WGPUBufferUsage_Uniform);
+    WGPUBlendState blend{};
+    blend.color = {WGPUBlendOperation_Add, WGPUBlendFactor_SrcAlpha, WGPUBlendFactor_OneMinusSrcAlpha};
+    blend.alpha = {WGPUBlendOperation_Add, WGPUBlendFactor_Zero, WGPUBlendFactor_One};
+    WGPUColorTargetState target = WGPU_COLOR_TARGET_STATE_INIT;
+    target.format = format;
+    target.blend = &blend;
+    target.writeMask = WGPUColorWriteMask_All;
+    WGPUFragmentState fragment = WGPU_FRAGMENT_STATE_INIT;
+    fragment.module = g.waterModule;
+    fragment.entryPoint = View("fs");
+    fragment.targetCount = 1;
+    fragment.targets = &target;
+    WGPURenderPipelineDescriptor d = WGPU_RENDER_PIPELINE_DESCRIPTOR_INIT;
+    d.layout = g.waterPipelineLayout;
+    d.multisample.count = samples;
+    d.vertex.module = g.waterModule;
+    d.vertex.entryPoint = View("vs");
+    d.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+    d.fragment = &fragment;
+    g.waterPipeline = wgpuDeviceCreateRenderPipeline(GetDevice(), &d);
+    g.waterFormat = format; g.waterSamples = samples;
+    return g.waterPipeline && g.waterBuffer;
+}
+void EncodeWater(WGPUCommandEncoder encoder, unsigned width, unsigned height) {
+    if (!g.depthView || !EnsureWater()) return;
+    const int* v = g.waterViewport;
+    const float x = float(std::max(0, v[0]));
+    const float w = std::min(float(v[2]), float(width) - x);
+    const float top = float(int(height) - v[1] - v[3]);
+    const float y = std::max(0.0f, top);
+    const float h = std::min(float(v[3]) - (y - top), float(height) - y);
+    if (w <= 0 || h <= 0) return;
+    g.water.viewport[0] = float(v[0]); g.water.viewport[1] = top;
+    g.water.viewport[2] = float(v[2]); g.water.viewport[3] = float(v[3]);
+    wgpuQueueWriteBuffer(GetQueue(), g.waterBuffer, 0, &g.water, sizeof(g.water));
+    // Copia de lo dibujado hasta ahora (ya resuelto si hay MSAA): los rayos del
+    // reflejo la leen, y el agua se dibuja encima del original.
+    const WGPUTextureFormat format = SurfaceFormat();
+    if (!g.waterScene || g.waterSceneWidth != width || g.waterSceneHeight != height || g.waterSceneFormat != format) {
+        if (g.waterSceneView) wgpuTextureViewRelease(g.waterSceneView);
+        if (g.waterScene) wgpuTextureRelease(g.waterScene);
+        WGPUTextureDescriptor td = WGPU_TEXTURE_DESCRIPTOR_INIT;
+        td.size = {width, height, 1};
+        td.format = format;
+        td.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+        g.waterScene = wgpuDeviceCreateTexture(GetDevice(), &td);
+        g.waterSceneView = wgpuTextureCreateView(g.waterScene, nullptr);
+        g.waterSceneWidth = width; g.waterSceneHeight = height; g.waterSceneFormat = format;
+    }
+    if (!g.waterSceneView) return;
+    {
+        WGPUTexelCopyTextureInfo from = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT, to = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
+        from.texture = FrameTexture(); to.texture = g.waterScene;
+        const WGPUExtent3D size{width, height, 1};
+        wgpuCommandEncoderCopyTextureToTexture(encoder, &from, &to, &size);
+    }
+    WGPUBindGroupEntry entries[4] = {WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT,
+                                     WGPU_BIND_GROUP_ENTRY_INIT};
+    entries[0].binding = 0; entries[0].textureView = g.depthView;
+    entries[1].binding = 1; entries[1].buffer = g.waterBuffer; entries[1].size = sizeof(State::Water);
+    entries[2].binding = 2; entries[2].textureView = g.waterSceneView;
+    entries[3].binding = 3; entries[3].sampler = g.waterSampler;
+    WGPUBindGroupDescriptor bd = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
+    bd.layout = g.waterLayout; bd.entryCount = 4; bd.entries = entries;
+    WGPUBindGroup group = wgpuDeviceCreateBindGroup(GetDevice(), &bd);
+    WGPURenderPassColorAttachment color = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+    ColorTarget(color);
+    color.loadOp = WGPULoadOp_Load;
+    color.storeOp = WGPUStoreOp_Store;
+    WGPURenderPassDescriptor rp = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
+    rp.colorAttachmentCount = 1;
+    rp.colorAttachments = &color;
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &rp);
+    wgpuRenderPassEncoderSetViewport(pass, x, y, w, h, 0, 1);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, group, 0, nullptr);
+    wgpuRenderPassEncoderSetPipeline(pass, g.waterPipeline);
+    wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
+    wgpuRenderPassEncoderEnd(pass);
+    wgpuRenderPassEncoderRelease(pass);
+    g.retiredGroups.push_back(group);
+}
+
 // Pase de sombras: los dibujos marcados como proyectores, vistos desde la luz.
 void EncodeShadows(WGPUCommandEncoder encoder) {
     WGPURenderPassDepthStencilAttachment depth = WGPU_RENDER_PASS_DEPTH_STENCIL_ATTACHMENT_INIT;
@@ -1638,6 +2120,7 @@ void EncodePasses() {
     if (g.shadowFrame && g.uniformGroup) EncodeShadows(encoder);
     for (const auto& pass : g.passes) {
         if (pass.atmosphere) EncodeAtmosphere(encoder, width, height);
+        if (pass.water) EncodeWater(encoder, width, height);
         if (pass.Post()) EncodePost(encoder, pass, width, height);
         WGPURenderPassColorAttachment color = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
         ColorTarget(color);
@@ -1843,6 +2326,28 @@ void Atmosphere(int mode, const float* color, float density, float start) {
     g.atmosphere.params[1] = density;
     g.atmosphere.params[2] = start;
     if (color) std::memcpy(g.atmosphere.color, color, 3 * sizeof(float));
+}
+// Mar (prueba): toma la cámara activa y abre una pasada que lo dibuja antes de
+// lo que siga. params = altura, tiempo, sol (x, y, z).
+void Water(const float* params) {
+    if (!g.ready || !params) return;
+    float inverseView[16], viewProj[16];
+    if (!ShadowLight::Invert(RenderState::Top(Gfx::Matrix::ModelView), inverseView)) return;
+    ShadowLight::Multiply(RenderState::Top(Gfx::Matrix::Projection), RenderState::Top(Gfx::Matrix::ModelView), viewProj);
+    if (!ShadowLight::Invert(viewProj, g.water.inverseViewProj)) return;
+    std::memcpy(g.water.viewProj, viewProj, sizeof(viewProj));
+    std::memcpy(g.water.camera, &inverseView[12], 3 * sizeof(float));
+    g.water.params[0] = params[0];
+    g.water.params[1] = params[1];
+    g.water.params[2] = params[5];
+    std::memcpy(g.water.sun, params + 2, 3 * sizeof(float));
+    g.water.lightCount[0] = params[8];
+    std::memcpy(g.water.lights, params + 12, sizeof(g.water.lights));
+    g.water.lightCount[1] = params[9];
+    std::memcpy(g.water.ships, params + 12 + 64, sizeof(g.water.ships));
+    std::memcpy(g.waterViewport, RenderState::Get().viewport, sizeof(g.waterViewport));
+    g.passes.emplace_back();
+    g.passes.back().water = true;
 }
 void ShadowCasting(bool enabled) { g.shadowCasting = enabled; }
 // El posproceso abre una pasada: al codificarla se aplica antes de sus dibujos.

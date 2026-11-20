@@ -6,6 +6,7 @@
 #include "render/Materials.h"
 #include "render/BMDDevice.h"
 #include "render/MeshDraw.h"
+#include "render/Gfx.h"
 #include "platform/IInput.h"
 #include "platform/ITimer.h"
 #include "platform/Text.h"
@@ -26,6 +27,8 @@ void ToggleFpsCounter() {
     }
     else if((Platform::GetInput().KeyState(VK_CONTROL)&0x8000)&&(Platform::GetInput().KeyState(VK_SHIFT)&0x8000)) { Materials::Toggle();showFps=true; }
     else if(Platform::GetInput().KeyState(VK_SHIFT)&0x8000) { RenderProfile::Toggle();showFps=true; }
+    // DESVIACION (prueba): Ctrl+F12 alterna el mar de WebGPU en el login.
+    else if(Platform::GetInput().KeyState(VK_CONTROL)&0x8000) Gfx::ToggleWater();
     else showFps=!showFps;
 }
 
