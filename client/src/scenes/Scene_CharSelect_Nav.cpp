@@ -12,6 +12,7 @@
 // Manejan el scroll del panel de char-select / lista de clases y la elección de slot.
 
 #include "stdafx.h"
+#include "render/Gfx.h"
 #include "assets/model/ModelTypes.h"
 #include "game/core/RenderFxSnapshots.h"
 #include "platform/Text.h"
@@ -2013,6 +2014,12 @@ void __cdecl WorldObject_EmitFireSmoke(int param_1, OBJECT* object, float param_
     out[0] += a2[4];             // o+16 = Position[0]
     out[1] += a2[5];
     out[2] += a2[6];
+    // DESVIACION (agua mejorada): las llamas se reflejan en el agua de los
+    // mapas; va la posición sin el temblor, que el reflejo pone por su cuenta.
+    if (param_1 == 0 && Gfx::WaterEnabled()) {
+        static const float flame[3] = {1.0f, 0.55f, 0.22f};
+        Gfx::WorldWaterLight(out, flame);
+    }
     out[0] += (float)(rand() % 16 - 8);
     out[1] += (float)(rand() % 16 - 8);
     out[2] += (float)(rand() % 16 - 8);

@@ -130,7 +130,7 @@ void Atmosphere(int mode, const float color[3], float density, float start);
 // mundo; time en segundos. backdropY = y de la pared pintada del horizonte: el
 // agua se funde con el cielo al acercarse a ella en vez de cortar.
 void Water(float level, float time, const float sun[3], float backdropY);
-// Luz puntual que el próximo Water() refleja sobre el agua; hasta 8 por
+// Luz puntual que el próximo Water() refleja sobre el agua; hasta 16 por
 // cuadro. compact = false: columna estirada por las olas (faroles); true:
 // charco de luz redondo en el agua justo debajo, que no se dibuja si hay
 // cubierta en medio (el hada).
@@ -154,6 +154,10 @@ struct WaterLook {
     float sun[3];    // dirección hacia el sol, en el mundo
 };
 void WorldWater(const unsigned char* mask, float time, const WaterLook& look);
+// Fuego del mundo que el agua de los mapas refleja (hasta 16, los más nuevos).
+// Lo registra la simulación, que no corre en cada cuadro: cada luz dura 0.3 s
+// desde la última vez que se registró, así no titila entre ticks.
+void WorldWaterLight(const float position[3], const float color[3]);
 
 // Niebla
 void SetFogMode(FogMode mode);

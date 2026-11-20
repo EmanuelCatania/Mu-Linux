@@ -201,7 +201,7 @@ void Atmosphere(int mode, const float color[3], float density, float start) {
 namespace {
 bool water = true;
 // Luces que se reflejan en el próximo Water(): posición y color, 8 floats c/u.
-constexpr int MaxWaterLights = 8;
+constexpr int MaxWaterLights = 16;
 float waterLights[MaxWaterLights * 8];
 int waterLightCount = 0;
 // Barcos que levantan olas de proa: proa (x, y) y rumbo (x, y).
@@ -253,7 +253,37 @@ void Water(float level, float time, const float sun[3], float backdropY) {
     for (int i = 0; i < ships * 4; ++i) params[12 + MaxWaterLights * 8 + i] = waterShips[i];
     GfxDevice::Water(params);
 }
-namespace { unsigned char waterMask[256 * 256 * 4]; bool waterMaskSent = false; }
+namespace {
+unsigned char waterMask[256 * 256 * 4]; bool waterMaskSent = false;
+// Fuegos del mundo: posición, color y el WorldWater en que se registró por
+// última vez (la hora de ese cuadro, en segundos).
+struct WorldLight { float position[3], color[3], stamp; };
+WorldLight worldLights[MaxWaterLights];
+int worldLightCount = 0;
+float worldWaterNow = 0.0f;
+}
+void WorldWaterLight(const float position[3], const float color[3]) {
+    // La misma luz vuelve en cada tick (y las llamas con un poco de temblor):
+    // si ya está, se refresca.
+    int slot = -1;
+    for (int i = 0; i < worldLightCount; ++i) {
+        const float* o = worldLights[i].position;
+        if (std::fabs(o[0] - position[0]) < 20.0f && std::fabs(o[1] - position[1]) < 20.0f &&
+            std::fabs(o[2] - position[2]) < 20.0f) { slot = i; break; }
+    }
+    if (slot < 0) {
+        if (worldLightCount < MaxWaterLights) slot = worldLightCount++;
+        else {
+            slot = 0;
+            for (int i = 1; i < worldLightCount; ++i)
+                if (worldLights[i].stamp < worldLights[slot].stamp) slot = i;
+        }
+    }
+    WorldLight& l = worldLights[slot];
+    std::memcpy(l.position, position, sizeof(l.position));
+    std::memcpy(l.color, color, sizeof(l.color));
+    l.stamp = worldWaterNow;
+}
 void WorldWater(const unsigned char* mask, float time, const WaterLook& look) {
     waterLightCount = 0;
     waterShipCount = 0;
@@ -266,7 +296,21 @@ void WorldWater(const unsigned char* mask, float time, const WaterLook& look) {
     }
     // Mismo arreglo que Water(); [6] = 1 elige el agua de los mapas y lo que
     // sigue a los barcos lleva el color del agua y del cielo.
-    float params[12 + MaxWaterLights * 8 + MaxWaterShips * 4 + 8] = {0.0f, time, look.sun[0], look.sun[1], look.sun[2], 0.0f, 1.0f};
+    // Las luces que no se refrescaron en 0.3 s se van (time vuelve a 0 cada hora).
+    worldWaterNow = time;
+    int lights = 0;
+    for (int i = 0; i < worldLightCount; ++i) {
+        const float age = time - worldLights[i].stamp;
+        if (age >= 0.0f && age < 0.3f) worldLights[lights++] = worldLights[i];
+    }
+    worldLightCount = lights;
+    float params[12 + MaxWaterLights * 8 + MaxWaterShips * 4 + 8] = {0.0f, time, look.sun[0], look.sun[1], look.sun[2], 0.0f, 1.0f, 0.0f, (float)lights};
+    for (int i = 0; i < lights; ++i) {
+        float* l = params + 12 + i * 8;
+        const WorldLight& w = worldLights[i];
+        l[0] = w.position[0]; l[1] = w.position[1]; l[2] = w.position[2]; l[3] = 1.0f;
+        l[4] = w.color[0]; l[5] = w.color[1]; l[6] = w.color[2]; l[7] = 0.0f;
+    }
     float* tail = params + 12 + MaxWaterLights * 8 + MaxWaterShips * 4;
     tail[0] = look.tint[0]; tail[1] = look.tint[1]; tail[2] = look.tint[2]; tail[3] = look.clarity;
     tail[4] = look.sky[0]; tail[5] = look.sky[1]; tail[6] = look.sky[2]; tail[7] = look.waves;

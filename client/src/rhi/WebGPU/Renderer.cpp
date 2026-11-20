@@ -465,7 +465,7 @@ struct State {
         float sun[4];        // posición del sol en el mundo
         float viewport[4];
         float lightCount[4]; // [0] = cantidad de faroles
-        float lights[16][4]; // por farol: posición, color
+        float lights[32][4]; // por luz (hasta 16): posición, color
         float ships[4][4];   // por barco: proa (x, y), rumbo (x, y)
         // Agua de los mapas (params.w = 1): color del cuerpo + cuánto se ve la
         // textura original, color del cielo + fuerza de las olas.
@@ -1526,7 +1526,7 @@ void EncodeAtmosphere(WGPUCommandEncoder encoder, unsigned width, unsigned heigh
 // contra un cielo de atardecer y el brillo del sol. Sin geometría nueva.
 const char* const WaterShader = R"WGSL(
 struct Water { inverseViewProj: mat4x4f, viewProj: mat4x4f, camera: vec4f, params: vec4f, sun: vec4f, viewport: vec4f,
-               lightCount: vec4f, lights: array<vec4f, 16>, ships: array<vec4f, 4>, tint: vec4f, sky: vec4f };
+               lightCount: vec4f, lights: array<vec4f, 32>, ships: array<vec4f, 4>, tint: vec4f, sky: vec4f };
 @group(0) @binding(0) var depth: DEPTH_TYPE;
 @group(0) @binding(1) var<uniform> u: Water;
 @group(0) @binding(2) var scene: texture_2d<f32>;
@@ -1765,6 +1765,32 @@ fn worldWater(position: vec4f) -> vec4f {
     let toSun = normalize(u.sun.xyz);
     let s = max(dot(r, toSun), 0.0);
     color += vec3f(1.0, 0.92, 0.78) * (pow(s, 180.0) * 1.2 + pow(s, 40.0) * 0.12) * (0.5 + light) * flat;
+    // Fuegos del mapa reflejados: como los faroles del login, una columna de
+    // destellos que nace en el agua bajo la llama (top) y se estira hacia su
+    // punto espejado (mir). El nivel del agua es el de este píxel.
+    let lampCount = i32(u.lightCount.x);
+    for (var i = 0; i < 16; i++) {
+        if (i >= lampCount) { break; }
+        let lp = u.lights[i * 2].xyz;
+        let lc = u.lights[i * 2 + 1].rgb;
+        if (lp.z <= p.z) { continue; }
+        let top = toPixel(vec3f(lp.xy, p.z));
+        let mir = toPixel(vec3f(lp.xy, 2.0 * p.z - lp.z));
+        if (top.z < 0.0 || mir.z < 0.0) { continue; }
+        let span = max(mir.y - top.y, 8.0);
+        let along = (position.y - top.y) / span;
+        let cx = mix(top.x, mir.x, clamp(along, 0.0, 1.0));
+        let width = 0.005 * u.viewport.w * (0.8 + 1.5 * clamp(along, 0.0, 1.0));
+        let dx = position.x + g.x * 0.015 * u.viewport.w - cx;
+        let profile = smoothstep(-0.05, 0.05, along) * (1.0 - smoothstep(0.35, 1.0, along));
+        let ph = f32(i) * 1.7;
+        let wa = 0.5 + 0.5 * sin(p.y * 0.55 + g.y * 90.0 + t * 3.1 + ph);
+        let wb = 0.5 + 0.5 * sin(p.x * 0.80 + g.x * 70.0 - t * 2.2 + ph * 2.3);
+        let sparkle = pow(wa * wb, mix(1.5, 4.0, clamp(along, 0.0, 1.0)));
+        let core = exp(-dx * dx / (width * width));
+        let glow = exp(-dx * dx / (4.0 * width * width)) * 0.15;
+        color += lc * (core * sparkle * 1.2 + glow) * profile * 0.6 * flat;
+    }
     // Espuma en la orilla: donde la máscara baja, ondas que van y vienen.
     let edge = (1.0 - smoothstep(0.45, 0.90, m)) * flat;
     let ripple = 0.5 + 0.5 * sin(dot(p.xy, vec2f(0.045, 0.037)) + t * 1.6 + g.x * 25.0);
@@ -1856,7 +1882,7 @@ fn worldWater(position: vec4f) -> vec4f {
     // (top) y se estira hacia su punto espejado (mir), como en el agua real con
     // ondas. Desde esta cámara cae debajo de cada barco. Tiembla y titila.
     let lampCount = i32(u.lightCount.x);
-    for (var i = 0; i < 8; i++) {
+    for (var i = 0; i < 16; i++) {
         if (i >= lampCount) { break; }
         let lp = u.lights[i * 2].xyz;
         let lc = u.lights[i * 2 + 1].rgb;
@@ -2466,9 +2492,9 @@ void Water(const float* params) {
     g.water.lightCount[0] = params[8];
     std::memcpy(g.water.lights, params + 12, sizeof(g.water.lights));
     g.water.lightCount[1] = params[9];
-    std::memcpy(g.water.ships, params + 12 + 64, sizeof(g.water.ships));
+    std::memcpy(g.water.ships, params + 12 + 128, sizeof(g.water.ships));
     g.water.params[3] = params[6];
-    std::memcpy(g.water.tint, params + 12 + 64 + 16, 8 * sizeof(float));
+    std::memcpy(g.water.tint, params + 12 + 128 + 16, 8 * sizeof(float));
     std::memcpy(g.waterViewport, RenderState::Get().viewport, sizeof(g.waterViewport));
     g.passes.emplace_back();
     g.passes.back().water = true;
