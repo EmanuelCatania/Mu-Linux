@@ -164,6 +164,44 @@ void WorldWater(const unsigned char* mask, float time, const WaterLook& look, co
 // desde la última vez que se registró, así no titila entre ticks.
 void WorldWaterLight(const float position[3], const float color[3], bool ripple = false);
 
+// DESVIACION (iluminación mejorada, sólo WebGPU). La escena de sombras se abre
+// también sin sombras ni niebla cuando SetSceneEffects(true): las luces, las
+// cáusticas y el cielo leen su vista.
+bool SceneEffectsSupported();
+void SetSceneEffects(bool wanted);
+// Luz puntual del mundo para la iluminación por píxel (la registran los mismos
+// AddTerrainLight del 0.97k). Como las ticks no corren en cada cuadro, cada luz
+// dura 0.25 s desde la última vez y su color se suaviza entre registros (así
+// el parpadeo de las llamas no salta).
+void DynamicLight(const float position[3], const float color[3], float radius);
+// Dentro de la escena, una vez por cuadro: luces por píxel (dynamicLights) con
+// su intensidad, alcance y la luz base; cáusticas bajo el agua; y cuánto y qué
+// tan suave se ve la sombra del sol.
+struct SceneLight {
+    bool dynamicLights = false;
+    float gain = 0.0f, base = 1.0f, radius = 1.0f;
+    float caustics = 0.0f;
+    float sunShadow = 1.0f, shadowSoftness = 1.0f;
+    float time = 0.0f;           // segundos
+    float focus[3] = {};         // las luces más cercanas a esto, si son muchas
+};
+void Lighting(const SceneLight& light);
+// Cielo detrás de la escena (donde no se dibujó nada), dentro de la escena.
+struct SkyLook {
+    float horizon[3], zenith[3], sunColor[3], sunDirection[3];
+    float clouds, rain, time;
+};
+void Sky(const SkyLook& sky);
+// Efectos sobre la imagen 3D, antes del PostProcess del cuadro.
+struct PostLook {
+    float underwater = 0.0f;     // 1 = bajo el agua
+    float tint[3] = {1.0f, 1.0f, 1.0f};
+    float wobble = 0.0f, aberration = 0.0f, rays = 0.0f, vignette = 0.0f;
+    float bloom = 0.0f, bloomThreshold = 0.7f;
+    float time = 0.0f;
+};
+void PostEffects(const PostLook& look);
+
 // Niebla
 void SetFogMode(FogMode mode);
 void FogStart(float value);

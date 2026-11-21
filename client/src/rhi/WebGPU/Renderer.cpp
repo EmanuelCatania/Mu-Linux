@@ -41,7 +41,7 @@ struct Uniforms {
     flags: vec4i,     // textured, texEnv, alphaFunction, fog
     params: vec4f,    // alphaReference, fogStart, fogEnd, fogDensity
     fogColor: vec4f,
-    extra: vec4i,     // bicúbico, recibe sombra
+    extra: vec4i,     // bicúbico, recibe sombra, recibe luz (iluminación mejorada)
 };
 // Datos por dibujo en tablas: cada dibujo lleva su índice en instance_index
 // (firstInstance) a drawTable, que da su fila de uniforms y de skin. El grupo 0
@@ -52,7 +52,10 @@ var<private> u: Uniforms;
 @group(1) @binding(0) var tex: texture_2d<f32>;
 @group(1) @binding(1) var smp: sampler;
 // Sombras proyectadas: params = activa, intensidad, tamaño del texel, sesgo.
-struct Shadow { lightViewProj: mat4x4f, inverseView: mat4x4f, params: vec4f };
+// Iluminación mejorada: lighting = luces, intensidad, luz base; fx =
+// cáusticas, tiempo; lights = por luz posición + alcance, color.
+struct Shadow { lightViewProj: mat4x4f, inverseView: mat4x4f, params: vec4f,
+                lighting: vec4f, fx: vec4f, lights: array<vec4f, 128> };
 @group(2) @binding(0) var<uniform> shadow: Shadow;
 @group(2) @binding(1) var shadowMap: texture_depth_2d;
 @group(2) @binding(2) var shadowSampler: sampler_comparison;
@@ -63,6 +66,7 @@ struct VertexOut {
     @location(2) fogDistance: f32,
     @location(3) world: vec3f,
     @location(4) @interpolate(flat) slot: u32,   // fila de uniformTable
+    @location(5) normal: vec3f,                  // en el mundo; 0 = sacarla de la superficie
 };
 // Posición en el mundo: la cámara de la escena deshace la vista del dibujo.
 fn worldOf(position: vec4f) -> vec3f {
@@ -80,6 +84,7 @@ fn worldOf(position: vec4f) -> vec3f {
     out.uv = u.textureMatrix * uv;
     out.fogDistance = abs((u.modelView * position).z);
     out.world = worldOf(position);
+    out.normal = vec3f(0.0);
     return out;
 }
 // Mallas residentes: posición y normal en el espacio del hueso; la paleta
@@ -136,6 +141,7 @@ fn skinPosition(p0: vec3f, b: i32) -> vec3f {
     out.uv = u.textureMatrix * (uv + vec4f(skin.uvOffset.xy, 0.0, 0.0));
     out.fogDistance = abs((u.modelView * position).z);
     out.world = worldOf(position);
+    out.normal = (shadow.inverseView * (u.modelView * vec4f(rotateBone(normal.xyz, i32(normal.w)), 0.0))).xyz;
     return out;
 }
 // Pase de sombras: los mismos dibujos vistos desde la luz, sólo profundidad.
@@ -220,8 +226,54 @@ fn catmullRom(uv: vec2f, size: vec2f) -> vec4f {
     }
     return clamp(r, vec4f(0.0), vec4f(1.0));
 }
+// Cáusticas: el reflejo de la luz que pasa por las olas, sobre el fondo. El
+// patrón se repite cada 1 en uv (sin costura).
+fn caustic(uv: vec2f, time: f32) -> f32 {
+    let tau = 6.28318;
+    let p = (fract(uv) * tau) - 250.0;
+    var i = p;
+    var c = 1.0;
+    for (var n = 0; n < 4; n++) {
+        let t = time * (1.0 - 3.5 / f32(n + 1));
+        i = p + vec2f(cos(t - i.x) + sin(t + i.y), sin(t - i.y) + cos(t + i.x));
+        c += 1.0 / length(vec2f(p.x / (sin(i.x + t) / 0.005), p.y / (cos(i.y + t) / 0.005)));
+    }
+    c = 1.17 - pow(c / 4.0, 1.4);
+    return clamp(pow(abs(c), 8.0), 0.0, 1.5);
+}
+// Luces puntuales del mundo y cáusticas sobre lo que recibe luz. albedo es el
+// color de la textura; normal, la de la malla o la de la superficie.
+fn sceneLight(c: vec3f, albedo: vec3f, world: vec3f, normal: vec3f) -> vec3f {
+    let camera = shadow.inverseView[3].xyz;
+    var n = normal;
+    if (dot(n, camera - world) < 0.0) { n = -n; }
+    var add = vec3f(0.0);
+    let count = i32(shadow.lighting.x);
+    for (var i = 0; i < count; i++) {
+        let l = shadow.lights[i * 2];
+        let d = l.xyz - world;
+        let r = l.w;
+        let dist2 = dot(d, d);
+        if (dist2 >= r * r) { continue; }
+        let x = dist2 / (r * r);
+        let falloff = (1.0 - x) * (1.0 - x);
+        // Luz envolvente: los lados que no miran a la luz no quedan negros.
+        let facing = dot(n, d * inverseSqrt(max(dist2, 1.0))) * 0.6 + 0.4;
+        add += shadow.lights[i * 2 + 1].rgb * falloff * max(facing, 0.0);
+    }
+    var result = c * shadow.lighting.z + albedo * add * shadow.lighting.y;
+    if (shadow.fx.x > 0.0) {
+        // Más fuerte en lo que mira para arriba; dos escalas que se mueven distinto.
+        let up = clamp(n.z, 0.0, 1.0);
+        let k = caustic(world.xy / 520.0, shadow.fx.y * 0.6) * 0.6 + caustic(world.xy / 310.0 + 0.37, shadow.fx.y * 0.45) * 0.4;
+        result += albedo * vec3f(0.55, 0.85, 1.0) * k * up * shadow.fx.x;
+    }
+    return result;
+}
 @fragment fn fs(in: VertexOut) -> @location(0) vec4f {
     u = uniformTable[in.slot];
+    // Normal de la superficie desde las derivadas (control uniforme: va antes de todo).
+    let faceNormal = cross(dpdx(in.world), dpdy(in.world));
     // textureProj: divide por q. Se muestrea siempre (control uniforme).
     let uv = in.uv.xy / in.uv.w;
     var t = textureSample(tex, smp, uv);
@@ -257,6 +309,14 @@ fn catmullRom(uv: vec2f, size: vec2f) -> vec4f {
     if (u.extra.y != 0 && shadow.params.x > 0.5) {
         c = vec4f(c.rgb * shadowFactor(in.world), c.a);
     }
+    // DESVIACION: iluminación mejorada (luces por píxel, cáusticas).
+    if (u.extra.z != 0 && (shadow.lighting.x > 0.5 || shadow.fx.x > 0.0 || shadow.lighting.z != 1.0)) {
+        var n = in.normal;
+        if (dot(n, n) < 1e-6) { n = faceNormal; }
+        n = n * inverseSqrt(max(dot(n, n), 1e-12));
+        let albedo = select(c.rgb, t.rgb, u.flags.x != 0);
+        c = vec4f(sceneLight(c.rgb, albedo, in.world, n), c.a);
+    }
     let fog = u.flags.w;
     if (fog != 0) {
         let d = in.fogDistance;
@@ -288,8 +348,12 @@ struct Skin {
 struct ShadowUniform {
     float lightViewProj[16], inverseView[16];
     float params[4];   // activa, intensidad, tamaño del texel, sesgo
+    float lighting[4]; // iluminación mejorada: luces, intensidad, luz base
+    float fx[4];       // cáusticas, tiempo
+    float lights[128][4];   // por luz: posición + alcance, color
 };
 constexpr uint32_t ShadowSize = ShadowLight::Size;
+constexpr uint64_t PostUniformSize = 80;   // struct Post del shader del posproceso
 constexpr uint64_t UniformStride = 256;
 static_assert(sizeof(Skin) <= UniformStride, "Skin no entra en su tramo");
 static_assert(sizeof(Uniforms) <= UniformStride, "Uniforms no entra en su tramo");
@@ -361,8 +425,14 @@ struct Pass {
     // Posproceso sobre postViewport antes de la pasada: FXAA y nitidez (> 0).
     bool antialias = false;
     float sharpen = 0.0f;
+    // Efectos de cámara (Gfx::PostEffects): [0] bajo el agua, [1] tiempo,
+    // [2] ondulación, [3] aberración, [4..6] tinte, [7] viñeteado, [8] rayos,
+    // [9] bloom, [10] umbral del bloom.
+    float fx[12]{};
     int postViewport[4]{};
-    bool Post() const { return antialias || sharpen > 0.0f; }
+    bool Underwater() const { return fx[0] > 0.0f; }
+    bool Bloom() const { return fx[9] > 0.0f; }
+    bool Post() const { return antialias || sharpen > 0.0f || Underwater() || Bloom(); }
     bool atmosphere = false;   // niebla por profundidad antes de los dibujos de la pasada
     bool water = false;        // mar (prueba) antes de los dibujos de la pasada
     float color[4]{};
@@ -405,7 +475,7 @@ struct State {
     int32_t paletteBase = 0;
     uint64_t matrixRevision = ~0ull, materialRevision = ~0ull;
     uint32_t lastUniform = 0;
-    bool lastReceiver = false;
+    int lastReceiver = 0;   // bit 0: recibe sombra, bit 1: recibe luz
     uint64_t frame = 1;
     // Recursos que siguen en uso por el cuadro grabado y se liberan al enviarlo.
     std::vector<WGPUTexture> retiredTextures;
@@ -424,6 +494,19 @@ struct State {
     WGPUTexture postTexture = nullptr;
     WGPUTextureView postView = nullptr;
     WGPUBuffer postUniform = nullptr;
+    WGPURenderPipeline underwaterPipeline = nullptr;
+    // Bloom: dos texturas a un cuarto de la resolución.
+    WGPUShaderModule bloomModule = nullptr;
+    WGPUPipelineLayout bloomPipelineLayout = nullptr;
+    WGPURenderPipeline bloomExtract = nullptr, bloomBlurH = nullptr, bloomBlurV = nullptr, bloomComposite = nullptr;
+    WGPUBuffer bloomUniform = nullptr;
+    WGPUTexture bloomTexture[2] = {};
+    WGPUTextureView bloomView[2] = {};
+    WGPUBindGroup bloomGroup[3] = {};
+    WGPUTextureView bloomSource = nullptr;
+    unsigned bloomWidth = 0, bloomHeight = 0;
+    WGPUTextureFormat bloomFormat = WGPUTextureFormat_Undefined;
+    uint32_t bloomSamples = 0;
     WGPUBindGroup postGroup = nullptr;
     unsigned postWidth = 0, postHeight = 0;
     WGPUTextureFormat postFormat = WGPUTextureFormat_Undefined;
@@ -447,12 +530,16 @@ struct State {
         float color[4];
         float params[4];     // modo, densidad, distancia inicial
         float viewport[4];   // x, y (desde arriba), ancho, alto en píxeles
+        // Cielo (Gfx::Sky): horizonte + activo, cénit + nubes, dirección del
+        // sol + lluvia, color del sol + tiempo.
+        float sky0[4], sky1[4], sun[4], sunColor[4];
     } atmosphere{};
+    float postFx[12]{};      // efectos de cámara del próximo PostProcess
     int atmosphereViewport[4]{};
     WGPUShaderModule atmosphereModule = nullptr;
     WGPUBindGroupLayout atmosphereLayout = nullptr;
     WGPUPipelineLayout atmospherePipelineLayout = nullptr;
-    WGPURenderPipeline atmosphereMultiply = nullptr, atmosphereAdd = nullptr;
+    WGPURenderPipeline atmosphereMultiply = nullptr, atmosphereAdd = nullptr, atmosphereSky = nullptr;
     WGPUBuffer atmosphereBuffer = nullptr;
     WGPUTextureFormat atmosphereFormat = WGPUTextureFormat_Undefined;
     uint32_t atmosphereSamples = 0;
@@ -829,8 +916,11 @@ uint32_t UniformOffset() {
     const auto& state = RenderState::Get();
     const bool additive = state.caps[RenderState::CapIndex(Cap::Blend)] && state.blendDestination == Gfx::Factor::One;
     const bool receiver = g.shadowScene && g.shadowFrame && state.caps[RenderState::CapIndex(Cap::DepthTest)] && !additive;
+    // Recibe luz: lo 3D de la escena que no es aditivo (los efectos ya brillan solos).
+    const bool lit = g.shadowScene && state.caps[RenderState::CapIndex(Cap::DepthTest)] && !additive;
+    const int receives = (receiver ? 1 : 0) | (lit ? 2 : 0);
     if (!g.uniforms.empty() && matrices == g.matrixRevision && material == g.materialRevision &&
-        receiver == g.lastReceiver) return g.lastUniform;
+        receives == g.lastReceiver) return g.lastUniform;
     Uniforms u{};
     std::memcpy(u.mvp, RenderState::ModelViewProjection(), sizeof(u.mvp));
     std::memcpy(u.modelView, RenderState::Top(Gfx::Matrix::ModelView), sizeof(u.modelView));
@@ -846,10 +936,11 @@ uint32_t UniformOffset() {
     const bool bicubic = Gfx::TextureBicubic() && s.caps[RenderState::CapIndex(Cap::DepthTest)];
     u.extra[0] = bicubic ? 1 | (s.textureRepeat[0] ? 2 : 0) | (s.textureRepeat[1] ? 4 : 0) : 0;
     u.extra[1] = receiver ? 1 : 0;
+    u.extra[2] = lit ? 1 : 0;
     const uint32_t offset = uint32_t(g.uniforms.size());
     g.uniforms.resize(g.uniforms.size() + UniformStride);
     std::memcpy(&g.uniforms[offset], &u, sizeof(u));
-    g.matrixRevision = matrices; g.materialRevision = material; g.lastUniform = offset; g.lastReceiver = receiver;
+    g.matrixRevision = matrices; g.materialRevision = material; g.lastUniform = offset; g.lastReceiver = receives;
     return offset;
 }
 
@@ -1076,6 +1167,7 @@ void ReleaseObjects() {
     for (auto& [key, pipeline] : g.casterPipelines) wgpuRenderPipelineRelease(pipeline);
     if (g.atmosphereMultiply) wgpuRenderPipelineRelease(g.atmosphereMultiply);
     if (g.atmosphereAdd) wgpuRenderPipelineRelease(g.atmosphereAdd);
+    if (g.atmosphereSky) wgpuRenderPipelineRelease(g.atmosphereSky);
     if (g.atmospherePipelineLayout) wgpuPipelineLayoutRelease(g.atmospherePipelineLayout);
     if (g.atmosphereLayout) wgpuBindGroupLayoutRelease(g.atmosphereLayout);
     if (g.atmosphereModule) wgpuShaderModuleRelease(g.atmosphereModule);
@@ -1234,7 +1326,9 @@ void ReleaseMeshes() {
 
 namespace {
 const char* const PostShader = R"WGSL(
-struct Post { amount: f32, pad0: f32, pad1: f32, pad2: f32 };
+// amount = nitidez. Efectos de cámara: p0 = bajo el agua, tiempo, ondulación,
+// aberración; p1 = tinte + viñeteado; p2 = rayos; viewport = la imagen 3D.
+struct Post { amount: f32, pad0: f32, pad1: f32, pad2: f32, p0: vec4f, p1: vec4f, p2: vec4f, viewport: vec4f };
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var<uniform> post: Post;
 @group(0) @binding(2) var smp: sampler;
@@ -1262,6 +1356,27 @@ fn at(p: vec2i) -> vec3f {
 }
 fn lum(c: vec3f) -> f32 { return dot(c, vec3f(0.299, 0.587, 0.114)); }
 fn sampleAt(uv: vec2f) -> vec3f { return textureSampleLevel(src, smp, uv, 0.0).rgb; }
+// DESVIACION: bajo el agua (Atlans). La imagen ondula como vista a través del
+// agua, los bordes se separan en colores, el color va hacia el azul verdoso,
+// bajan rayos de luz desde arriba y se oscurecen los bordes.
+@fragment fn fs_underwater(@builtin(position) position: vec4f) -> @location(0) vec4f {
+    let texel = 1.0 / vec2f(textureDimensions(src, 0));
+    let local = (position.xy - post.viewport.xy) / max(post.viewport.zw, vec2f(1.0));
+    let t = post.p0.y;
+    let wobble = vec2f(sin(local.y * 31.0 + t * 1.9) + 0.5 * sin(local.y * 13.0 - t * 1.3),
+                       cos(local.x * 27.0 + t * 1.6) + 0.5 * cos(local.x * 11.0 + t * 1.1)) * post.p0.z * texel;
+    let uv = position.xy * texel + wobble;
+    let dir = local - vec2f(0.5);
+    let ab = dir * post.p0.w * 6.0 * texel;
+    var c = vec3f(sampleAt(uv + ab).r, sampleAt(uv).g, sampleAt(uv - ab).b);
+    c = c * post.p1.rgb;
+    let a = local.x * 0.9 + local.y * 0.45;
+    var ray = pow(sin(a * 23.0 + t * 0.35) * 0.5 + 0.5, 6.0) * 0.6 + pow(sin(a * 9.0 - t * 0.22) * 0.5 + 0.5, 4.0) * 0.4;
+    ray = ray * pow(clamp(1.0 - local.y, 0.0, 1.0), 1.5);
+    c = c + vec3f(0.35, 0.62, 0.82) * ray * post.p2.x * 0.35;
+    c = c * mix(1.0, smoothstep(1.0, 0.25, length(dir * vec2f(1.0, 1.25))), post.p1.w);
+    return vec4f(clamp(c, vec3f(0.0), vec3f(1.0)), 1.0);
+}
 // FXAA (versión de consola de Timothy Lottes).
 @fragment fn fs_fxaa(@builtin(position) position: vec4f) -> @location(0) vec4f {
     let texel = 1.0 / vec2f(textureDimensions(src, 0));
@@ -1319,7 +1434,7 @@ bool EnsurePost(unsigned width, unsigned height) {
         entries[1].binding = 1;
         entries[1].visibility = WGPUShaderStage_Fragment;
         entries[1].buffer.type = WGPUBufferBindingType_Uniform;
-        entries[1].buffer.minBindingSize = 16;
+        entries[1].buffer.minBindingSize = PostUniformSize;
         entries[2].binding = 2;
         entries[2].visibility = WGPUShaderStage_Fragment;
         entries[2].sampler.type = WGPUSamplerBindingType_Filtering;
@@ -1329,7 +1444,7 @@ bool EnsurePost(unsigned width, unsigned height) {
         WGPUPipelineLayoutDescriptor pd = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
         pd.bindGroupLayoutCount = 1; pd.bindGroupLayouts = &g.postLayout;
         g.postPipelineLayout = wgpuDeviceCreatePipelineLayout(GetDevice(), &pd);
-        g.postUniform = CreateBuffer(16, WGPUBufferUsage_Uniform);
+        g.postUniform = CreateBuffer(PostUniformSize, WGPUBufferUsage_Uniform);
         WGPUSamplerDescriptor sd = WGPU_SAMPLER_DESCRIPTOR_INIT;
         sd.magFilter = WGPUFilterMode_Linear;
         sd.minFilter = WGPUFilterMode_Linear;
@@ -1339,8 +1454,10 @@ bool EnsurePost(unsigned width, unsigned height) {
     if (!g.postPipeline || g.postFormat != format) {
         if (g.postPipeline) wgpuRenderPipelineRelease(g.postPipeline);
         if (g.fxaaPipeline) wgpuRenderPipelineRelease(g.fxaaPipeline);
+        if (g.underwaterPipeline) wgpuRenderPipelineRelease(g.underwaterPipeline);
         g.postPipeline = PostPipeline("fs_post", format);
         g.fxaaPipeline = PostPipeline("fs_fxaa", format);
+        g.underwaterPipeline = PostPipeline("fs_underwater", format);
         g.postFormat = format;
         if (g.postGroup) { wgpuBindGroupRelease(g.postGroup); g.postGroup = nullptr; }
         if (g.postView) { wgpuTextureViewRelease(g.postView); g.postView = nullptr; }
@@ -1361,13 +1478,129 @@ bool EnsurePost(unsigned width, unsigned height) {
     if (!g.postGroup) {
         WGPUBindGroupEntry entries[3] = {WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT};
         entries[0].binding = 0; entries[0].textureView = g.postView;
-        entries[1].binding = 1; entries[1].buffer = g.postUniform; entries[1].size = 16;
+        entries[1].binding = 1; entries[1].buffer = g.postUniform; entries[1].size = PostUniformSize;
         entries[2].binding = 2; entries[2].sampler = g.postSampler;
         WGPUBindGroupDescriptor d = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
         d.layout = g.postLayout; d.entryCount = 3; d.entries = entries;
         g.postGroup = wgpuDeviceCreateBindGroup(GetDevice(), &d);
     }
-    return g.postPipeline && g.fxaaPipeline && g.postGroup;
+    return g.postPipeline && g.fxaaPipeline && g.underwaterPipeline && g.postGroup;
+}
+
+// ── Bloom ───────────────────────────────────────────────────────────────────
+// DESVIACION: lo que pasa de cierto brillo se extrae a un cuarto de la
+// resolución, se desenfoca en dos pasadas y se suma a la imagen.
+const char* const BloomShader = R"WGSL(
+struct Bloom { params: vec4f, sizes: vec4f };   // umbral, intensidad; cuarto (ancho, alto), cuadro (ancho, alto)
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var<uniform> b: Bloom;
+@group(0) @binding(2) var smp: sampler;
+@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+    let p = vec2f(select(-1.0, 3.0, i == 1u), select(-1.0, 3.0, i == 2u));
+    return vec4f(p, 0.0, 1.0);
+}
+fn at(uv: vec2f) -> vec3f { return textureSampleLevel(src, smp, uv, 0.0).rgb; }
+@fragment fn fs_extract(@builtin(position) position: vec4f) -> @location(0) vec4f {
+    let uv = position.xy / b.sizes.xy;
+    let o = 1.0 / b.sizes.zw;
+    let c = (at(uv + vec2f(-o.x, -o.y)) + at(uv + vec2f(o.x, -o.y)) + at(uv + vec2f(-o.x, o.y)) + at(uv + vec2f(o.x, o.y))) * 0.25;
+    let l = max(max(c.r, c.g), c.b);
+    let k = max(l - b.params.x, 0.0) / max(1.0 - b.params.x, 1e-3);
+    return vec4f(c * clamp(k, 0.0, 1.0), 1.0);
+}
+fn blur(position: vec4f, axis: vec2f) -> vec4f {
+    let texel = 1.0 / vec2f(textureDimensions(src, 0));
+    let uv = position.xy * texel;
+    var w = array<f32, 5>(0.227, 0.194, 0.122, 0.054, 0.016);
+    var c = at(uv) * w[0];
+    for (var i = 1; i < 5; i++) {
+        let d = axis * texel * f32(i) * 1.5;
+        c += (at(uv + d) + at(uv - d)) * w[i];
+    }
+    return vec4f(c, 1.0);
+}
+@fragment fn fs_blur_h(@builtin(position) position: vec4f) -> @location(0) vec4f { return blur(position, vec2f(1.0, 0.0)); }
+@fragment fn fs_blur_v(@builtin(position) position: vec4f) -> @location(0) vec4f { return blur(position, vec2f(0.0, 1.0)); }
+@fragment fn fs_composite(@builtin(position) position: vec4f) -> @location(0) vec4f {
+    return vec4f(at(position.xy / b.sizes.zw) * b.params.y, 0.0);
+}
+)WGSL";
+
+bool EnsureBloom(unsigned width, unsigned height) {
+    const WGPUTextureFormat format = SurfaceFormat();
+    const uint32_t samples = Samples();
+    if (!g.bloomModule) {
+        WGPUShaderSourceWGSL wgsl = WGPU_SHADER_SOURCE_WGSL_INIT;
+        wgsl.code = View(BloomShader);
+        WGPUShaderModuleDescriptor md = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
+        md.nextInChain = &wgsl.chain;
+        g.bloomModule = wgpuDeviceCreateShaderModule(GetDevice(), &md);
+        g.bloomUniform = CreateBuffer(PostUniformSize, WGPUBufferUsage_Uniform);
+        WGPUPipelineLayoutDescriptor pd = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
+        pd.bindGroupLayoutCount = 1; pd.bindGroupLayouts = &g.postLayout;
+        g.bloomPipelineLayout = wgpuDeviceCreatePipelineLayout(GetDevice(), &pd);
+    }
+    if (!g.bloomModule || !g.bloomUniform || !g.bloomPipelineLayout) return false;
+    auto pipeline = [&](const char* entry, WGPUTextureFormat target, uint32_t count, bool additive) {
+        WGPUBlendState blend{};
+        blend.color = {WGPUBlendOperation_Add, WGPUBlendFactor_One, WGPUBlendFactor_One};
+        blend.alpha = {WGPUBlendOperation_Add, WGPUBlendFactor_Zero, WGPUBlendFactor_One};
+        WGPUColorTargetState t = WGPU_COLOR_TARGET_STATE_INIT;
+        t.format = target;
+        if (additive) t.blend = &blend;
+        WGPUFragmentState fragment = WGPU_FRAGMENT_STATE_INIT;
+        fragment.module = g.bloomModule;
+        fragment.entryPoint = View(entry);
+        fragment.targetCount = 1;
+        fragment.targets = &t;
+        WGPURenderPipelineDescriptor d = WGPU_RENDER_PIPELINE_DESCRIPTOR_INIT;
+        d.layout = g.bloomPipelineLayout;
+        d.multisample.count = count;
+        d.vertex.module = g.bloomModule;
+        d.vertex.entryPoint = View("vs");
+        d.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+        d.fragment = &fragment;
+        return wgpuDeviceCreateRenderPipeline(GetDevice(), &d);
+    };
+    if (!g.bloomExtract) {
+        g.bloomExtract = pipeline("fs_extract", WGPUTextureFormat_RGBA8Unorm, 1, false);
+        g.bloomBlurH = pipeline("fs_blur_h", WGPUTextureFormat_RGBA8Unorm, 1, false);
+        g.bloomBlurV = pipeline("fs_blur_v", WGPUTextureFormat_RGBA8Unorm, 1, false);
+    }
+    if (!g.bloomComposite || g.bloomFormat != format || g.bloomSamples != samples) {
+        if (g.bloomComposite) wgpuRenderPipelineRelease(g.bloomComposite);
+        g.bloomComposite = pipeline("fs_composite", format, samples, true);
+        g.bloomFormat = format; g.bloomSamples = samples;
+    }
+    const unsigned qw = std::max(1u, width / 4), qh = std::max(1u, height / 4);
+    if (!g.bloomTexture[0] || g.bloomWidth != qw || g.bloomHeight != qh || g.bloomSource != g.postView) {
+        for (int i = 0; i < 2; ++i) {
+            if (g.bloomGroup[i]) { wgpuBindGroupRelease(g.bloomGroup[i]); g.bloomGroup[i] = nullptr; }
+            if (g.bloomView[i]) { wgpuTextureViewRelease(g.bloomView[i]); g.bloomView[i] = nullptr; }
+            if (g.bloomTexture[i]) { wgpuTextureRelease(g.bloomTexture[i]); g.bloomTexture[i] = nullptr; }
+            WGPUTextureDescriptor td = WGPU_TEXTURE_DESCRIPTOR_INIT;
+            td.size = {qw, qh, 1};
+            td.format = WGPUTextureFormat_RGBA8Unorm;
+            td.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_RenderAttachment;
+            g.bloomTexture[i] = wgpuDeviceCreateTexture(GetDevice(), &td);
+            g.bloomView[i] = wgpuTextureCreateView(g.bloomTexture[i], nullptr);
+        }
+        if (g.bloomGroup[2]) { wgpuBindGroupRelease(g.bloomGroup[2]); g.bloomGroup[2] = nullptr; }
+        // [0] lee el cuarto A, [1] el B, [2] la copia del cuadro.
+        WGPUTextureView sources[3] = {g.bloomView[0], g.bloomView[1], g.postView};
+        for (int i = 0; i < 3; ++i) {
+            WGPUBindGroupEntry entries[3] = {WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT};
+            entries[0].binding = 0; entries[0].textureView = sources[i];
+            entries[1].binding = 1; entries[1].buffer = g.bloomUniform; entries[1].size = PostUniformSize;
+            entries[2].binding = 2; entries[2].sampler = g.postSampler;
+            WGPUBindGroupDescriptor d = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
+            d.layout = g.postLayout; d.entryCount = 3; d.entries = entries;
+            g.bloomGroup[i] = wgpuDeviceCreateBindGroup(GetDevice(), &d);
+        }
+        g.bloomWidth = qw; g.bloomHeight = qh; g.bloomSource = g.postView;
+    }
+    return g.bloomExtract && g.bloomBlurH && g.bloomBlurV && g.bloomComposite &&
+           g.bloomGroup[0] && g.bloomGroup[1] && g.bloomGroup[2];
 }
 
 // Copia el cuadro y lo redibuja con el filtro dentro del viewport de la pasada.
@@ -1379,13 +1612,52 @@ void EncodePost(WGPUCommandEncoder encoder, const Pass& pass, unsigned width, un
     const float y = std::max(0.0f, top);
     const float h = std::min(float(v[3]) - (y - top), float(height) - y);
     if (w <= 0 || h <= 0 || !EnsurePost(width, height)) return;
-    const float uniform[4] = {pass.sharpen, 0, 0, 0};
+    const float* fx = pass.fx;
+    const float uniform[PostUniformSize / 4] = {
+        pass.sharpen, 0, 0, 0,
+        fx[0], fx[1], fx[2], fx[3],
+        fx[4], fx[5], fx[6], fx[7],
+        fx[8], 0, 0, 0,
+        x, y, w, h,
+    };
     wgpuQueueWriteBuffer(GetQueue(), g.postUniform, 0, uniform, sizeof(uniform));
-    auto run = [&](WGPURenderPipeline pipeline) {
+    auto copyFrame = [&]() {
         WGPUTexelCopyTextureInfo from = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT, to = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
         from.texture = FrameTexture(); to.texture = g.postTexture;
         const WGPUExtent3D size{width, height, 1};
         wgpuCommandEncoderCopyTextureToTexture(encoder, &from, &to, &size);
+    };
+    // Una pasada de pantalla completa sobre target (nullptr = el cuadro).
+    auto fullscreen = [&](WGPURenderPipeline pipeline, WGPUBindGroup group, WGPUTextureView target,
+                          float vx, float vy, float vw, float vh) {
+        WGPURenderPassColorAttachment color = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+        if (target) { color.view = target; color.loadOp = WGPULoadOp_Clear; }
+        else { ColorTarget(color); color.loadOp = WGPULoadOp_Load; }
+        color.storeOp = WGPUStoreOp_Store;
+        WGPURenderPassDescriptor rp = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
+        rp.colorAttachmentCount = 1;
+        rp.colorAttachments = &color;
+        WGPURenderPassEncoder p = wgpuCommandEncoderBeginRenderPass(encoder, &rp);
+        wgpuRenderPassEncoderSetViewport(p, vx, vy, vw, vh, 0, 1);
+        wgpuRenderPassEncoderSetPipeline(p, pipeline);
+        wgpuRenderPassEncoderSetBindGroup(p, 0, group, 0, nullptr);
+        wgpuRenderPassEncoderDraw(p, 3, 1, 0, 0);
+        wgpuRenderPassEncoderEnd(p);
+        wgpuRenderPassEncoderRelease(p);
+    };
+    if (pass.Underwater()) { copyFrame(); fullscreen(g.underwaterPipeline, g.postGroup, nullptr, x, y, w, h); }
+    if (pass.Bloom() && EnsureBloom(width, height)) {
+        copyFrame();
+        const float bloom[8] = {fx[10], fx[9], 0, 0, float(g.bloomWidth), float(g.bloomHeight), float(width), float(height)};
+        wgpuQueueWriteBuffer(GetQueue(), g.bloomUniform, 0, bloom, sizeof(bloom));
+        const float qw = float(g.bloomWidth), qh = float(g.bloomHeight);
+        fullscreen(g.bloomExtract, g.bloomGroup[2], g.bloomView[0], 0, 0, qw, qh);
+        fullscreen(g.bloomBlurH, g.bloomGroup[0], g.bloomView[1], 0, 0, qw, qh);
+        fullscreen(g.bloomBlurV, g.bloomGroup[1], g.bloomView[0], 0, 0, qw, qh);
+        fullscreen(g.bloomComposite, g.bloomGroup[0], nullptr, x, y, w, h);
+    }
+    auto run = [&](WGPURenderPipeline pipeline) {
+        copyFrame();
         WGPURenderPassColorAttachment color = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
         ColorTarget(color);
         color.loadOp = WGPULoadOp_Load;
@@ -1410,7 +1682,8 @@ void EncodePost(WGPUCommandEncoder encoder, const Pass& pass, unsigned width, un
 // niebla en dos pasadas (multiplicar por la transmitancia y sumar el color),
 // sin copiar la imagen.
 const char* const AtmosphereShader = R"WGSL(
-struct Atmosphere { inverseViewProj: mat4x4f, camera: vec4f, color: vec4f, params: vec4f, viewport: vec4f };
+struct Atmosphere { inverseViewProj: mat4x4f, camera: vec4f, color: vec4f, params: vec4f, viewport: vec4f,
+                    sky0: vec4f, sky1: vec4f, sun: vec4f, sunColor: vec4f };
 @group(0) @binding(0) var depth: DEPTH_TYPE;
 @group(0) @binding(1) var<uniform> a: Atmosphere;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -1420,7 +1693,10 @@ struct Atmosphere { inverseViewProj: mat4x4f, camera: vec4f, color: vec4f, param
 // Transmitancia por canal: 1 = sin niebla.
 fn transmittance(position: vec4f) -> vec3f {
     let d = textureLoad(depth, vec2i(position.xy), 0);
-    if (d >= 1.0) { return vec3f(0.0); }   // fondo: todo niebla
+    if (d >= 1.0) {
+        // Fondo: todo niebla, salvo que haya cielo (la niebla ya va hacia él).
+        return select(vec3f(0.0), vec3f(1.0), a.sky0.w > 0.5);
+    }
     let ndc = vec2f((position.x - a.viewport.x) / a.viewport.z * 2.0 - 1.0,
                     1.0 - (position.y - a.viewport.y) / a.viewport.w * 2.0);
     var w = a.inverseViewProj * vec4f(ndc, d * 2.0 - 1.0, 1.0);
@@ -1445,6 +1721,45 @@ fn transmittance(position: vec4f) -> vec3f {
 @fragment fn fs_add(@builtin(position) position: vec4f) -> @location(0) vec4f {
     return vec4f(a.color.rgb * (vec3f(1.0) - transmittance(position)), 0.0);
 }
+// DESVIACION: cielo procedural donde no se dibujó nada (profundidad 1):
+// degradé del horizonte al cénit, el sol y nubes que se mueven.
+fn hash2(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
+fn noise2(p: vec2f) -> f32 {
+    let i = floor(p); let f = fract(p);
+    let w = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash2(i), hash2(i + vec2f(1.0, 0.0)), w.x), mix(hash2(i + vec2f(0.0, 1.0)), hash2(i + vec2f(1.0, 1.0)), w.x), w.y);
+}
+fn fbm(p0: vec2f) -> f32 {
+    var p = p0; var v = 0.0; var amp = 0.5;
+    for (var i = 0; i < 5; i++) { v += noise2(p) * amp; p = p * 2.03 + vec2f(1.7, 9.2); amp *= 0.5; }
+    return v;
+}
+@fragment fn fs_sky(@builtin(position) position: vec4f) -> @location(0) vec4f {
+    let d = textureLoad(depth, vec2i(position.xy), 0);
+    if (d < 1.0) { discard; }
+    let ndc = vec2f((position.x - a.viewport.x) / a.viewport.z * 2.0 - 1.0,
+                    1.0 - (position.y - a.viewport.y) / a.viewport.w * 2.0);
+    let w = a.inverseViewProj * vec4f(ndc, 1.0, 1.0);
+    let dir = normalize(w.xyz / w.w - a.camera.xyz);
+    let up = dir.z;   // z para arriba en el mundo del 0.97k
+    var sky = mix(a.sky0.rgb, a.sky1.rgb, smoothstep(-0.05, 0.55, up));
+    // Bajo el horizonte (el borde del mapa): más oscuro, hacia el horizonte.
+    sky = mix(sky, a.sky0.rgb * 0.6, smoothstep(0.0, -0.4, up));
+    let sunDir = normalize(a.sun.xyz);
+    let s = max(dot(dir, sunDir), 0.0);
+    let clouds = a.sky1.w;
+    let rain = a.sun.w;
+    // Nubes proyectadas sobre un techo: más chicas cerca del horizonte.
+    if (up > 0.0) {
+        let uv = dir.xy / (up + 0.12) * 1.6 + vec2f(a.sunColor.w * 0.012, a.sunColor.w * 0.004);
+        let n = fbm(uv);
+        let cover = smoothstep(1.0 - clouds * 0.9 - 0.15, 1.05 - clouds * 0.6, n) * smoothstep(0.0, 0.18, up);
+        let cloudColor = mix(vec3f(1.0, 0.98, 0.95) * mix(a.sky0.rgb, vec3f(1.0), 0.6), a.sky1.rgb * 0.7, rain);
+        sky = mix(sky, cloudColor * (0.85 + 0.25 * s), cover * (0.75 + 0.25 * rain));
+    }
+    sky += a.sunColor.rgb * (pow(s, 600.0) * 2.0 + pow(s, 24.0) * 0.35 + pow(s, 4.0) * 0.12) * (1.0 - rain * 0.8);
+    return vec4f(clamp(sky, vec3f(0.0), vec3f(1.0)), 1.0);
+}
 )WGSL";
 bool EnsureAtmosphere() {
     const WGPUTextureFormat format = SurfaceFormat();
@@ -1452,10 +1767,11 @@ bool EnsureAtmosphere() {
     if (g.atmosphereMultiply && g.atmosphereFormat == format && g.atmosphereSamples == samples) return true;
     if (g.atmosphereMultiply) wgpuRenderPipelineRelease(g.atmosphereMultiply);
     if (g.atmosphereAdd) wgpuRenderPipelineRelease(g.atmosphereAdd);
+    if (g.atmosphereSky) wgpuRenderPipelineRelease(g.atmosphereSky);
     if (g.atmospherePipelineLayout) wgpuPipelineLayoutRelease(g.atmospherePipelineLayout);
     if (g.atmosphereLayout) wgpuBindGroupLayoutRelease(g.atmosphereLayout);
     if (g.atmosphereModule) wgpuShaderModuleRelease(g.atmosphereModule);
-    g.atmosphereMultiply = g.atmosphereAdd = nullptr;
+    g.atmosphereMultiply = g.atmosphereAdd = g.atmosphereSky = nullptr;
     std::string code = AtmosphereShader;
     const char* type = samples > 1 ? "texture_depth_multisampled_2d" : "texture_depth_2d";
     code.replace(code.find("DEPTH_TYPE"), 10, type);
@@ -1505,8 +1821,9 @@ bool EnsureAtmosphere() {
     };
     g.atmosphereMultiply = pipeline("fs_multiply", WGPUBlendFactor_Zero, WGPUBlendFactor_Src);
     g.atmosphereAdd = pipeline("fs_add", WGPUBlendFactor_One, WGPUBlendFactor_One);
+    g.atmosphereSky = pipeline("fs_sky", WGPUBlendFactor_One, WGPUBlendFactor_Zero);
     g.atmosphereFormat = format; g.atmosphereSamples = samples;
-    return g.atmosphereMultiply && g.atmosphereAdd && g.atmosphereBuffer;
+    return g.atmosphereMultiply && g.atmosphereAdd && g.atmosphereSky && g.atmosphereBuffer;
 }
 void EncodeAtmosphere(WGPUCommandEncoder encoder, unsigned width, unsigned height) {
     if (!g.depthView || !EnsureAtmosphere()) return;
@@ -1537,10 +1854,16 @@ void EncodeAtmosphere(WGPUCommandEncoder encoder, unsigned width, unsigned heigh
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &rp);
     wgpuRenderPassEncoderSetViewport(pass, x, y, w, h, 0, 1);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, group, 0, nullptr);
-    wgpuRenderPassEncoderSetPipeline(pass, g.atmosphereMultiply);
-    wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
-    wgpuRenderPassEncoderSetPipeline(pass, g.atmosphereAdd);
-    wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
+    if (g.atmosphere.sky0[3] > 0.5f) {
+        wgpuRenderPassEncoderSetPipeline(pass, g.atmosphereSky);
+        wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
+    }
+    if (g.atmosphere.params[0] > 0.5f) {
+        wgpuRenderPassEncoderSetPipeline(pass, g.atmosphereMultiply);
+        wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
+        wgpuRenderPassEncoderSetPipeline(pass, g.atmosphereAdd);
+        wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
+    }
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);
     g.retiredGroups.push_back(group);
@@ -2876,8 +3199,8 @@ void ShadowScene(bool begin, const float* focus, float strength) {
     if (!g.ready) return;
     g.matrixRevision = ~0ull;   // los uniforms siguientes cambian el flag de receptor
     if (!begin) {
-        // Niebla: una pasada nueva que se aplica antes de lo que siga.
-        if (g.shadowScene && g.atmosphere.params[0] > 0.5f) {
+        // Niebla y cielo: una pasada nueva que se aplica antes de lo que siga.
+        if (g.shadowScene && (g.atmosphere.params[0] > 0.5f || g.atmosphere.sky0[3] > 0.5f)) {
             g.passes.emplace_back();
             g.passes.back().atmosphere = true;
         }
@@ -2887,6 +3210,10 @@ void ShadowScene(bool begin, const float* focus, float strength) {
     g.shadowScene = focus != nullptr;
     g.shadowCasting = true;
     g.atmosphere.params[0] = 0.0f;
+    g.atmosphere.sky0[3] = 0.0f;
+    // Sin Lighting() en el cuadro, la luz queda como la del 0.97k.
+    g.shadow.lighting[0] = 0.0f; g.shadow.lighting[1] = 0.0f; g.shadow.lighting[2] = 1.0f;
+    g.shadow.fx[0] = 0.0f;
     if (!g.shadowScene) return;
     if (!ShadowLight::Invert(RenderState::Top(Gfx::Matrix::ModelView), g.shadow.inverseView)) { g.shadowScene = false; return; }
     // Para la niebla: inversa de proyección x vista, cámara y viewport.
@@ -2944,6 +3271,33 @@ void Water(const float* params) {
     g.passes.back().water = true;
 }
 void WaterMask(const unsigned char* mask) { if (g.ready) ::WebGPU::UploadWaterMask(mask); }
+// Ver Gfx::Lighting: [0] luces, [1] intensidad, [2] luz base, [4] cáusticas,
+// [5] tiempo, [8] sombra del sol, [9] suavidad; desde [12], 8 floats por luz.
+void Lighting(const float* params) {
+    if (!g.ready || !g.shadowScene) return;
+    const int count = std::clamp(int(params[0]), 0, 64);
+    g.shadow.lighting[0] = float(count);
+    g.shadow.lighting[1] = params[1];
+    g.shadow.lighting[2] = params[2];
+    g.shadow.fx[0] = params[4];
+    g.shadow.fx[1] = params[5];
+    std::memcpy(g.shadow.lights, params + 12, size_t(count) * 8 * sizeof(float));
+    if (g.shadowFrame) {
+        g.shadow.params[1] *= params[8];
+        g.shadow.params[2] *= params[9];
+    }
+}
+void Sky(const float* params) {
+    if (!g.ready || !g.shadowScene) return;
+    std::memcpy(g.atmosphere.sky0, params, 4 * sizeof(float));
+    std::memcpy(g.atmosphere.sky1, params + 4, 4 * sizeof(float));
+    std::memcpy(g.atmosphere.sun, params + 8, 4 * sizeof(float));
+    std::memcpy(g.atmosphere.sunColor, params + 12, 4 * sizeof(float));
+}
+void PostEffects(const float* params) {
+    if (!g.ready) return;
+    std::memcpy(g.postFx, params, sizeof(g.postFx));
+}
 void ShadowCasting(bool enabled) { g.shadowCasting = enabled; }
 // El posproceso abre una pasada: al codificarla se aplica antes de sus dibujos.
 void PostProcess(bool antialias, float sharpen) {
@@ -2952,6 +3306,8 @@ void PostProcess(bool antialias, float sharpen) {
     auto& pass = g.passes.back();
     pass.antialias = antialias;
     pass.sharpen = sharpen;
+    std::memcpy(pass.fx, g.postFx, sizeof(pass.fx));
+    std::memset(g.postFx, 0, sizeof(g.postFx));
     std::memcpy(pass.postViewport, RenderState::Get().viewport, sizeof(pass.postViewport));
 }
 void ReadPixelsRGB(int x, int y, int width, int height, void* out) {

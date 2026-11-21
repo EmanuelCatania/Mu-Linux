@@ -18,6 +18,7 @@
 #include "platform/IInput.h"
 #include "platform/IFileSystem.h"
 #include "app/config/UserSettings.h"
+#include "render/Gfx.h"
 #include "ui/HealthBar.h"
 #include "ui/MoveList.h"
 #include "ui/EventTimer.h"
@@ -481,6 +482,16 @@ void __cdecl Joint_BoneOffsetApply(BYTE* param_1, int param_2) {
 void __cdecl AddTerrainLight(float xf, float yf, float *Light, int Range, float *Buffer) {
     // DESVIACION (DLL Antilag, ret en 0x004F76C0): sin luces de skills sobre el terreno.
     if (gUserSettings.GetAntilag(ANTILAG_SKILLS)) return;
+    // DESVIACION (iluminación mejorada, WebGPU): las luces que suman (no las
+    // sombras de algunos efectos) van también a la luz por píxel. En el modo
+    // contrastado van sólo ahí: la grilla queda con la luz fija del mapa.
+    const int dynamicLights = Gfx::SceneEffectsSupported() ? gUserSettings.GetDynamicLights() : 0;
+    if (dynamicLights > 0 && Range > 0 && Buffer == &DAT_081cb608[0] &&
+        Light[0] >= 0.0f && Light[1] >= 0.0f && Light[2] >= 0.0f && Light[0] + Light[1] + Light[2] > 0.01f) {
+        const float position[3] = {xf, yf, RequestTerrainHeight(xf, yf) + 90.0f};
+        Gfx::DynamicLight(position, Light, ((float)Range + 0.5f) * 100.0f);
+        if (dynamicLights == 2) return;
+    }
     float cx   = xf * 0.01f;
     float cy   = yf * 0.01f;
     int   icx  = (int)cx;

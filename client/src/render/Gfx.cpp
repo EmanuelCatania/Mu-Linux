@@ -8,6 +8,9 @@
 #include "render/RenderProfile.h"
 #include "render/RenderState.h"
 #include "render/TerrainDraw.h"
+#include "render/RenderBackend.h"
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <unordered_map>
@@ -129,8 +132,11 @@ void ClearColor(float r, float g, float b, float a) { BufferedDraw::Flush();GfxD
 void Clear(unsigned clearMask) { BufferedDraw::Flush();GfxDevice::Clear(clearMask); }
 void Flush() { BufferedDraw::Flush();GfxDevice::Flush(); }
 void ClearErrors() { RenderState::TakeStackError();GfxDevice::ClearErrors(); }
+namespace { bool postEffectsPending = false; }
 void PostProcess(bool antialias, float sharpen) {
-    if (!antialias && sharpen <= 0.0f) return;
+    const bool effects = postEffectsPending;
+    postEffectsPending = false;
+    if (!antialias && sharpen <= 0.0f && !effects) return;
     BufferedDraw::Flush();
     GfxDevice::PostProcess(antialias, sharpen);
 }
@@ -182,13 +188,15 @@ bool TextureBicubic() { return bicubic; }
 namespace { int multisample = 0; }
 void SetMultisample(int samples) { multisample = samples; }
 int Multisample() { return multisample; }
-namespace { bool shadowMaps = false, depthFog = false; float shadowStrength = 0.5f; bool shadowScene = false; }
+namespace { bool shadowMaps = false, depthFog = false; float shadowStrength = 0.5f; bool shadowScene = false; bool sceneEffects = false; }
 void SetShadowMaps(bool enabled, float strength) { shadowMaps = enabled; shadowStrength = strength; }
 bool ShadowMaps() { return shadowMaps && GfxDevice::SupportsShadowMaps(); }
 void SetDepthFog(bool enabled) { depthFog = enabled; }
 bool DepthFog() { return depthFog && GfxDevice::SupportsShadowMaps(); }
+bool SceneEffectsSupported() { return RenderBackend::IsWebGPU() && GfxDevice::SupportsShadowMaps(); }
+void SetSceneEffects(bool wanted) { sceneEffects = wanted; }
 void BeginShadowScene(const float focus[3]) {
-    if ((!ShadowMaps() && !DepthFog()) || shadowScene) return;
+    if ((!ShadowMaps() && !DepthFog() && !(sceneEffects && SceneEffectsSupported())) || shadowScene) return;
     BufferedDraw::Flush();
     shadowScene = true;
     // Sin sombras la escena sólo sirve para la niebla: intensidad 0.
@@ -318,6 +326,104 @@ void WorldWater(const unsigned char* mask, float time, const WaterLook& look, co
     // Centro de la simulación de ondas (el héroe).
     tail[8] = focus[0]; tail[9] = focus[1];
     GfxDevice::Water(params);
+}
+namespace {
+// Luces puntuales registradas por las ticks (ver DynamicLight en Gfx.h).
+constexpr int MaxDynamicLights = 128;   // las que se guardan
+constexpr int MaxSentLights = 64;       // las que van al shader (las más cercanas)
+struct PointLight { float position[3], color[3], radius; double stamp; };
+PointLight pointLights[MaxDynamicLights];
+int pointLightCount = 0;
+double Seconds() {
+    using namespace std::chrono;
+    static const auto start = steady_clock::now();
+    return duration<double>(steady_clock::now() - start).count();
+}
+}
+void DynamicLight(const float position[3], const float color[3], float radius) {
+    if (!SceneEffectsSupported() || radius <= 0.0f) return;
+    const double now = Seconds();
+    // La misma luz vuelve en cada tick (las llamas con temblor): si ya está,
+    // se refresca y el color se acerca al nuevo en vez de saltar.
+    for (int i = 0; i < pointLightCount; ++i) {
+        PointLight& l = pointLights[i];
+        if (std::fabs(l.position[0] - position[0]) < 30.0f && std::fabs(l.position[1] - position[1]) < 30.0f) {
+            const float k = now - l.stamp > 0.25 ? 1.0f : 0.35f;
+            for (int c = 0; c < 3; ++c) {
+                l.position[c] += (position[c] - l.position[c]) * 0.5f;
+                l.color[c] += (color[c] - l.color[c]) * k;
+            }
+            l.radius = radius;
+            l.stamp = now;
+            return;
+        }
+    }
+    int slot = pointLightCount < MaxDynamicLights ? pointLightCount++ : -1;
+    if (slot < 0) {
+        slot = 0;
+        for (int i = 1; i < pointLightCount; ++i)
+            if (pointLights[i].stamp < pointLights[slot].stamp) slot = i;
+    }
+    PointLight& l = pointLights[slot];
+    std::memcpy(l.position, position, sizeof(l.position));
+    std::memcpy(l.color, color, sizeof(l.color));
+    l.radius = radius;
+    l.stamp = now;
+}
+void Lighting(const SceneLight& light) {
+    if (!shadowScene) return;
+    // [0] luces, [1] intensidad, [2] luz base, [4] cáusticas, [5] tiempo,
+    // [8] sombra del sol, [9] suavidad; desde [12], 8 floats por luz.
+    float params[12 + MaxSentLights * 8] = {};
+    params[1] = light.gain; params[2] = light.base;
+    params[4] = light.caustics; params[5] = light.time;
+    params[8] = light.sunShadow; params[9] = light.shadowSoftness;
+    int count = 0;
+    if (light.dynamicLights) {
+        const double now = Seconds();
+        // Se van las que no se refrescaron.
+        for (int i = 0; i < pointLightCount;)
+            if (now - pointLights[i].stamp > 0.25) pointLights[i] = pointLights[--pointLightCount];
+            else ++i;
+        int order[MaxDynamicLights];
+        for (int i = 0; i < pointLightCount; ++i) order[i] = i;
+        auto distance = [&](int i) {
+            const float dx = pointLights[i].position[0] - light.focus[0], dy = pointLights[i].position[1] - light.focus[1];
+            return dx * dx + dy * dy;
+        };
+        if (pointLightCount > MaxSentLights)
+            std::partial_sort(order, order + MaxSentLights, order + pointLightCount,
+                              [&](int a, int b) { return distance(a) < distance(b); });
+        count = std::min(pointLightCount, MaxSentLights);
+        for (int n = 0; n < count; ++n) {
+            const PointLight& l = pointLights[order[n]];
+            float* p = params + 12 + n * 8;
+            p[0] = l.position[0]; p[1] = l.position[1]; p[2] = l.position[2]; p[3] = l.radius * light.radius;
+            p[4] = l.color[0]; p[5] = l.color[1]; p[6] = l.color[2];
+        }
+    }
+    params[0] = (float)count;
+    GfxDevice::Lighting(params);
+}
+void Sky(const SkyLook& sky) {
+    if (!shadowScene) return;
+    const float params[16] = {
+        sky.horizon[0], sky.horizon[1], sky.horizon[2], 1.0f,
+        sky.zenith[0], sky.zenith[1], sky.zenith[2], sky.clouds,
+        sky.sunDirection[0], sky.sunDirection[1], sky.sunDirection[2], sky.rain,
+        sky.sunColor[0], sky.sunColor[1], sky.sunColor[2], sky.time,
+    };
+    GfxDevice::Sky(params);
+}
+void PostEffects(const PostLook& look) {
+    if (!SceneEffectsSupported()) return;
+    const float params[12] = {
+        look.underwater, look.time, look.wobble, look.aberration,
+        look.tint[0], look.tint[1], look.tint[2], look.vignette,
+        look.rays, look.bloom, look.bloomThreshold, 0.0f,
+    };
+    postEffectsPending = look.underwater > 0.0f || look.bloom > 0.0f;
+    GfxDevice::PostEffects(params);
 }
 void SetShadowCasting(bool enabled) {
     if (!shadowScene) return;
