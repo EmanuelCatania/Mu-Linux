@@ -18,6 +18,10 @@ struct Profile {
     // Cauces hondos: el agua sube sobre un fondo tallado. Sin ellos toda el
     // agua del mapa va plana, sobre el agua que pinta el mapa.
     bool deep = true;
+    // Agua pintada en laderas (los arroyos helados de Devias): el plano queda
+    // bajo el suelo y sólo asoma en líneas. Con esto la superficie sube hasta
+    // el suelo en cada vértice de los tiles de agua y los cubre enteros.
+    bool drape = false;
 };
 // Lo que no está en la tabla usa este (el agua verdosa de Lorencia).
 constexpr Gfx::WaterLook DefaultLook{
@@ -35,7 +39,7 @@ const Profile Profiles[] = {
     // Sin terreno: el mapa son nubes.
     {MAP_ICARUS, false, DefaultLook},
     // Nieve: el agua original es gris clara y casi helada; cielo blanco.
-    {MAP_DEVIAS, true, {{0.20f, 0.27f, 0.31f}, {0.78f, 0.82f, 0.86f}, 0.5f, {0.35f, 0.55f, 0.76f}}},
+    {MAP_DEVIAS, true, {{0.20f, 0.27f, 0.31f}, {0.78f, 0.82f, 0.86f}, 0.5f, {0.35f, 0.55f, 0.76f}}, true, true},
     // Arroyos poco hondos de agua azul brillante: siempre plana, así se ve el
     // agua del mapa (con cauce las orillas en escalón quedaban tapadas).
     {MAP_NORIA, true, {{0.05f, 0.13f, 0.27f}, {0.50f, 0.64f, 0.80f}, 0.7f, {0.35f, 0.55f, 0.76f}}, false},
@@ -77,11 +81,13 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
     carveActive = false;
     look = DefaultLook;
     bool allowDeep = true;
+    bool drape = false;
     for (const Profile& p : Profiles) {
         if (p.map != map) continue;
         if (!p.enabled) return false;
         look = p.look;
         allowDeep = p.deep;
+        drape = p.drape;
         break;
     }
     // Sin cauces el agua se redibuja entera: el arroyo del mapa tiene la orilla
@@ -249,6 +255,24 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
                 raised[i] = (v && BackTerrainHeight[i] >= (v - 20) * 2.0f - 5.0f) ? v : 0;
             }
         std::copy(std::begin(raised), std::end(raised), std::begin(vertexLevel));
+        // Laderas pintadas de agua: cada vértice de un tile de agua que quedó
+        // por encima del plano lo sube hasta el suelo. Hasta 60: más alto es
+        // una pared (bajo un puente) y ésa la cambia de textura WallTexture.
+        if (drape)
+            for (int y = 0; y < 256; ++y)
+                for (int x = 0; x < 256; ++x) {
+                    const int i = y * 256 + x;
+                    if (!vertexLevel[i]) continue;
+                    bool wet = false;
+                    for (int ty = y - 1; ty <= y && !wet; ++ty)
+                        for (int tx = x - 1; tx <= x; ++tx)
+                            if (tx >= 0 && ty >= 0 && tx < 255 && ty < 255 && tile[ty * 256 + tx]) { wet = true; break; }
+                    if (!wet) continue;
+                    const float now = (vertexLevel[i] - 20) * 2.0f;
+                    const float ground = BackTerrainHeight[i];
+                    if (ground <= now || ground - now > 60.0f) continue;
+                    vertexLevel[i] = (unsigned char)std::clamp((int)(ground * 0.5f + 0.5f) + 20, 1, 255);
+                }
     }
     for (int y = 0; y < 256; ++y)
         for (int x = 0; x < 256; ++x) {
