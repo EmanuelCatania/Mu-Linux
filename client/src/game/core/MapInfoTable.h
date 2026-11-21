@@ -20,6 +20,17 @@ struct MapLoad {
     bool        repeat = false;   // Jpg: GL_REPEAT en vez de GL_CLAMP
 };
 
+// [map.N.lighting] y [[map.N.lighting.zone]]: pares clave = valor que
+// LightingProfiles aplica sobre su tabla. Una zona vale donde el héroe está
+// sobre uno de sus tiles (mismo formato que indoor_tiles) o dentro de su
+// rectángulo de casillas [x0, y0, x1, y1].
+struct MapLightingZone {
+    int entry = 0;                    // número de la [[tabla]] en el archivo
+    std::bitset<256> tiles;
+    int rect[4] = {-1, -1, -1, -1};
+    std::vector<std::pair<std::string, std::string>> fields;
+};
+
 struct MapInfo {
     std::string name;                 // vacío = GlobalText, como GetMapName
     std::string music;                // archivo en Data/Music; vacío = sin música fija
@@ -37,6 +48,8 @@ struct MapInfo {
     std::vector<std::pair<int, std::string>> objects;
     std::vector<MapLoad> loads;       // [[map.N.load]]
     int         loadFrom = -1;        // usa las cargas de otro mapa (load_from)
+    std::vector<std::pair<std::string, std::string>> lighting;   // [map.N.lighting]
+    std::vector<MapLightingZone> lightingZones;                  // [[map.N.lighting.zone]]
 
     bool IsIndoor(int tile) const { return tile >= 0 && tile < 256 && indoorTiles.test(tile); }
 };
