@@ -1960,7 +1960,7 @@ fn worldWater(position: vec4f) -> vec4f {
     // el mapa (cada mapa con su estilo, como el azul de Noria), movida por las
     // olas. Lo nuevo sólo le suma reflejo, ondas y sol; así no queda una lámina
     // encima ni bordes contra el agua vieja.
-    if (!deepTile) {
+    if (!deepTile && u.tint.w > 0.5) {
         let sceneSize = vec2f(textureDimensions(scene));
         let wob = clamp(position.xy + g * 0.02 * u.viewport.w, vec2f(0.0), sceneSize - 1.0);
         var under = textureSampleLevel(scene, linearSampler, wob / sceneSize, 0.0).rgb;
@@ -1998,7 +1998,7 @@ fn worldWater(position: vec4f) -> vec4f {
     // Con la cámara del juego el agua se ve casi siempre en ángulo rasante: con
     // todo el Fresnel cada cresta refleja el cielo y quedan franjas. Se modera;
     // lo que refleja algo del cuadro pesa un poco más.
-    let weight = clamp(fresnel * 1.1 + 0.10 + mirror.a * 0.25, 0.0, 0.8) * select(select(0.35, 0.6, u.tint.w > 0.5), 1.0, deepTile);
+    let weight = clamp(fresnel * 1.1 + 0.10 + mirror.a * 0.25, 0.0, 0.8) * select(1.0, 0.6, !deepTile && u.tint.w > 0.5);
     var color = mix(body, reflected, weight * flat);
     // Sol: dirección fija del mapa (u.sun), brillo en las crestas.
     let toSun = toSunView;
