@@ -30,8 +30,8 @@ struct Look {
     float shadowSoftness = 1.0f;            // multiplica el ancho del filtrado de la sombra
     // Por modo de luz dinámica: [0] conservador, [1] contrastado.
     float base[2] = {1.0f, 0.80f};          // multiplica la luz del 0.97k
-    float gain[2] = {0.45f, 1.0f};          // intensidad de las luces por píxel
-    float radius[2] = {1.0f, 1.4f};         // multiplica su alcance
+    float gain[2] = {0.8f, 1.6f};           // intensidad de las luces por píxel
+    float radius[2] = {1.15f, 1.5f};        // multiplica su alcance
     float bloom[2] = {0.7f, 1.0f};          // multiplica la intensidad del bloom
     // Bajo el agua (Atlans).
     float underwater = 0.0f;

@@ -340,8 +340,12 @@ double Seconds() {
     return duration<double>(steady_clock::now() - start).count();
 }
 }
-void DynamicLight(const float position[3], const float color[3], float radius) {
+void DynamicLight(const float position[3], const float light[3], float radius) {
     if (!SceneEffectsSupported() || radius <= 0.0f) return;
+    // Algunos efectos suman colores de 2 o más a la grilla para que brille; por
+    // píxel eso quema la imagen.
+    float color[3];
+    for (int c = 0; c < 3; ++c) color[c] = std::min(light[c], 1.2f);
     const double now = Seconds();
     // La misma luz vuelve en cada tick (las llamas con temblor): si ya está,
     // se refresca y el color se acerca al nuevo en vez de saltar.

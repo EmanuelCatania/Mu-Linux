@@ -261,7 +261,10 @@ fn sceneLight(c: vec3f, albedo: vec3f, world: vec3f, normal: vec3f) -> vec3f {
         let facing = dot(n, d * inverseSqrt(max(dist2, 1.0))) * 0.6 + 0.4;
         add += shadow.lights[i * 2 + 1].rgb * falloff * max(facing, 0.0);
     }
-    var result = c * shadow.lighting.z + albedo * add * shadow.lighting.y;
+    // Tope suave: muchas luces juntas (una lluvia de flechas, un skill) no
+    // queman la imagen a blanco.
+    let boost = add * shadow.lighting.y;
+    var result = c * shadow.lighting.z + albedo * boost / (vec3f(1.0) + boost * 0.7);
     if (shadow.fx.x > 0.0) {
         // Más fuerte en lo que mira para arriba; dos escalas que se mueven distinto.
         let up = clamp(n.z, 0.0, 1.0);
@@ -916,8 +919,10 @@ uint32_t UniformOffset() {
     const auto& state = RenderState::Get();
     const bool additive = state.caps[RenderState::CapIndex(Cap::Blend)] && state.blendDestination == Gfx::Factor::One;
     const bool receiver = g.shadowScene && g.shadowFrame && state.caps[RenderState::CapIndex(Cap::DepthTest)] && !additive;
-    // Recibe luz: lo 3D de la escena que no es aditivo (los efectos ya brillan solos).
-    const bool lit = g.shadowScene && state.caps[RenderState::CapIndex(Cap::DepthTest)] && !additive;
+    // Recibe luz: la geometría del mundo (lo que escribe profundidad y no es
+    // aditivo). Los efectos semitransparentes no: son quads que ya brillan
+    // solos, y con luz encima se les ve el borde del quad.
+    const bool lit = g.shadowScene && state.caps[RenderState::CapIndex(Cap::DepthTest)] && state.depthWrite && !additive;
     const int receives = (receiver ? 1 : 0) | (lit ? 2 : 0);
     if (!g.uniforms.empty() && matrices == g.matrixRevision && material == g.materialRevision &&
         receives == g.lastReceiver) return g.lastUniform;

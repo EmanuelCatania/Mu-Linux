@@ -712,7 +712,7 @@ void Render_Scene3D(void)
             post.rays = lightLook.rays;
         }
         post.bloom = gUserSettings.BloomAmount() * lightLook.bloom[lightMode];
-        post.bloomThreshold = underwater ? 0.65f : 0.78f;
+        post.bloomThreshold = 0.78f;
         post.time = effectTime;
         Gfx::PostEffects(post);
     }

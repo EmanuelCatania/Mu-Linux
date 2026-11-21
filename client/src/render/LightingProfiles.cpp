@@ -25,9 +25,9 @@ Look Interior()
     l.sky = 0.0f;
     l.sunShadow = 0.45f;
     l.shadowSoftness = 2.5f;
-    l.base[0] = 1.0f; l.base[1] = 0.70f;
-    l.gain[0] = 0.60f; l.gain[1] = 1.25f;
-    l.radius[0] = 1.1f; l.radius[1] = 1.5f;
+    l.base[0] = 0.92f; l.base[1] = 0.62f;
+    l.gain[0] = 1.2f; l.gain[1] = 2.0f;
+    l.radius[0] = 1.4f; l.radius[1] = 1.8f;
     return l;
 }
 
@@ -75,6 +75,7 @@ Look Default(int map)
         l.caustics = 0.55f;
         l.tint[0] = 0.70f; l.tint[1] = 0.93f; l.tint[2] = 1.06f;
         l.rays = 0.35f;
+        l.bloom[0] = 0.5f; l.bloom[1] = 0.7f;   // el fondo claro con cáusticas pasa el umbral
         return l;
     }
     case MAP_TARKAN: {     // desierto
