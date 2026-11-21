@@ -15,6 +15,9 @@ struct Profile {
     int map;
     bool enabled;
     Gfx::WaterLook look;
+    // Cauces hondos: el agua sube sobre un fondo tallado. Sin ellos toda el
+    // agua del mapa va plana, sobre el agua que pinta el mapa.
+    bool deep = true;
 };
 // Lo que no está en la tabla usa este (el agua verdosa de Lorencia).
 constexpr Gfx::WaterLook DefaultLook{
@@ -33,8 +36,9 @@ const Profile Profiles[] = {
     {MAP_ICARUS, false, DefaultLook},
     // Nieve: el agua original es gris clara y casi helada; cielo blanco.
     {MAP_DEVIAS, true, {{0.20f, 0.27f, 0.31f}, {0.78f, 0.82f, 0.86f}, 0.5f, {0.35f, 0.55f, 0.76f}}},
-    // Agua azul profunda.
-    {MAP_NORIA, true, {{0.05f, 0.13f, 0.27f}, {0.50f, 0.64f, 0.80f}, 0.7f, {0.35f, 0.55f, 0.76f}}},
+    // Arroyos poco hondos de agua azul brillante: siempre plana, así se ve el
+    // agua del mapa (con cauce las orillas en escalón quedaban tapadas).
+    {MAP_NORIA, true, {{0.05f, 0.13f, 0.27f}, {0.50f, 0.64f, 0.80f}, 0.7f, {0.35f, 0.55f, 0.76f}}, false},
 };
 }
 
@@ -72,12 +76,17 @@ void DisableCarve() { carveActive = false; }
 bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
     carveActive = false;
     look = DefaultLook;
+    bool allowDeep = true;
     for (const Profile& p : Profiles) {
         if (p.map != map) continue;
         if (!p.enabled) return false;
         look = p.look;
+        allowDeep = p.deep;
         break;
     }
+    // Sin cauces el agua se redibuja entera: el arroyo del mapa tiene la orilla
+    // en escalones de tile y no hay fondo tallado que la redondee.
+    look.redraw = allowDeep ? 0.0f : 1.0f;
     // Igual que Terrain_RenderFace: el tile (x, y) usa las capas de su vértice
     // (x, y). Si sus cuatro vértices tienen alfa 1 se pinta entero con la capa
     // 2; si no, base = capa 1 y encima la capa 2 con el alfa de cada vértice.
@@ -124,14 +133,11 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
                 const int c = ty * 256 + tx;
                 tileLow[c] = (std::min)((std::min)(BackTerrainHeight[c], BackTerrainHeight[c + 1]),
                                         (std::min)(BackTerrainHeight[c + 256], BackTerrainHeight[c + 257]));
-                const float high = (std::max)((std::max)(BackTerrainHeight[c], BackTerrainHeight[c + 1]),
-                                              (std::max)(BackTerrainHeight[c + 256], BackTerrainHeight[c + 257]));
                 // Lo mínimo: el borde de arriba de los tiles de agua de la
                 // orilla (las paredes de ~140 bajo los puentes no cuentan).
                 // Ya no se sube hasta el borde de arriba del agua pintada: debajo
                 // de los puentes de madera ese borde llega casi al tablón y lo
                 // inundaba. La altura la da el borde caminable (rim).
-                (void)high;
                 tileTop[c] = tileLow[c];
             }
         // Tiles del río: agua, o no caminables a 3 tiles o menos de agua.
@@ -188,7 +194,7 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
                     // Sólo un cauce (orillas más altas que el agua) sube el agua;
                     // en lo plano (charcos a ras del suelo) queda a la altura del
                     // agua del mapa.
-                    if (rim - top > DeepBank) level = top + (rim - top) * FillRatio;
+                    if (allowDeep && rim - top > DeepBank) level = top + (rim - top) * FillRatio;
                 }
                 vertexLevel[i] = (unsigned char)std::clamp((int)(level * 0.5f + 0.5f) + 20, 1, 255);
                 deepVertex[i] = level > top + 1.0f ? 1 : 0;
@@ -258,7 +264,17 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
             // B por vértice: el alfa con que la capa 2 se mezcla sobre la base,
             // igual que el terreno. Con él la orilla sale donde el mapa la pintó
             // fundida (pasto sobre agua) en lugar de en escalones de tile.
-            o[2] = (unsigned char)(alpha(x, y) * 255.0f + 0.5f);
+            if (allowDeep) {
+                o[2] = (unsigned char)(alpha(x, y) * 255.0f + 0.5f);
+            } else {
+                // Redibujada: B = qué parte de los cuatro tiles del vértice es
+                // agua. Interpolado da una orilla redondeada.
+                int wet = 0;
+                for (int ty = y - 1; ty <= y; ++ty)
+                    for (int tx = x - 1; tx <= x; ++tx)
+                        if (tx >= 0 && ty >= 0 && tile[(ty & 255) * 256 + (tx & 255)]) ++wet;
+                o[2] = (unsigned char)(wet * 255 / 4);
+            }
             // Luz del terreno en el vértice (la que ilumina el agua original),
             // en luminancia y a la mitad, para que entre hasta 2.
             const float* l = &DAT_081cb608[size_t(i) * 3];
@@ -280,20 +296,24 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
                 if (mask[size_t(k) * 4 + 1]) surface = (std::max)(surface, (mask[size_t(k) * 4 + 1] - 20) * 2.0f);
             const float high = (std::max)((std::max)(BackTerrainHeight[c], BackTerrainHeight[c + 1]),
                                           (std::max)(BackTerrainHeight[c + 256], BackTerrainHeight[c + 257]));
-            if (high <= surface + 15.0f) continue;
+            // Redibujada: todo tile de agua toma el suelo de alrededor (lo que
+            // se ve a través del agua nueva) y sigue contando como agua.
+            const bool redraw = !allowDeep;
+            if (!redraw && high <= surface + 15.0f) continue;
             int count[256] = {};
             int best = -1;
-            for (int dy = -1; dy <= 1; ++dy)
-                for (int dx = -1; dx <= 1; ++dx) {
-                    const int nx = tx + dx, ny = ty + dy;
-                    if ((dx == 0 && dy == 0) || nx < 0 || ny < 0 || nx > 255 || ny > 255) continue;
-                    const unsigned char t = TerrainMappingLayer1[ny * 256 + nx];
-                    if (t == WaterTile || t == 255) continue;
-                    if (++count[t] > (best < 0 ? 0 : count[best])) best = t;
-                }
+            for (int r = 1; r <= (redraw ? 4 : 1) && best < 0; ++r)
+                for (int dy = -r; dy <= r; ++dy)
+                    for (int dx = -r; dx <= r; ++dx) {
+                        const int nx = tx + dx, ny = ty + dy;
+                        if ((dx == 0 && dy == 0) || nx < 0 || ny < 0 || nx > 255 || ny > 255) continue;
+                        const unsigned char t = TerrainMappingLayer1[ny * 256 + nx];
+                        if (t == WaterTile || t == 255) continue;
+                        if (++count[t] > (best < 0 ? 0 : count[best])) best = t;
+                    }
             if (best < 0) continue;
             wallTexture[c] = (unsigned char)best;
-            mask[size_t(c) * 4] = (unsigned char)(((tile[c] & 2) + (mask[size_t(c) * 4] / 36 & 4)) * 36);
+            if (!redraw) mask[size_t(c) * 4] = (unsigned char)(((tile[c] & 2) + (mask[size_t(c) * 4] / 36 & 4)) * 36);
         }
     // El cauce se rearma sólo al cambiar de mapa (o de alturas).
     float sum = 0.0f;
@@ -329,7 +349,7 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
         }
         for (int i = 0; i < 256 * 256; ++i) {
             const float t = std::clamp(dist[i] / CarveRamp, 0.0f, 1.0f);
-            carve[i] = CarveDepth * t * t * (3.0f - 2.0f * t);
+            carve[i] = allowDeep ? CarveDepth * t * t * (3.0f - 2.0f * t) : 0.0f;
         }
     }
     carveActive = true;

@@ -151,6 +151,9 @@ struct WaterLook {
     float sky[3];    // color que refleja
     float waves;     // fuerza de las olas (1 = las del login)
     float sun[3];    // dirección hacia el sol, en el mundo
+    // 1: el agua plana se redibuja entera (el terreno no pinta la vieja) con
+    // la orilla suave de B; 0: va sobre el agua que pinta el mapa.
+    float redraw = 0.0f;
 };
 // focus: el centro del área donde el agua simula ondas (el héroe).
 void WorldWater(const unsigned char* mask, float time, const WaterLook& look, const float focus[2]);

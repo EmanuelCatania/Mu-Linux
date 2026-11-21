@@ -1861,6 +1861,9 @@ fn worldWater(position: vec4f) -> vec4f {
     // olas: en las paredes siempre, en lo casi plano se apaga al subir.
     let m = waterAt(ground.xy);
     let flatGround = flatAt(position.xy, ground);
+    // Cauce hondo (la superficie sube sobre un fondo tallado) o agua plana
+    // (charcos, arroyos a ras del suelo).
+    let deepTile = (tileBits(ground.xy) & 4u) != 0u;
     var coverage = 0.0;
     var flat = 0.0;
     var wall = false;
@@ -1874,8 +1877,14 @@ fn worldWater(position: vec4f) -> vec4f {
         // mapa pone agua, con la orilla redondeada: si no, cualquier pozo del
         // suelo junto al arroyo se volvía un charco.
         let depthBelow = level - ground.z;
-        if ((tileBits(ground.xy) & 4u) != 0u) {
+        if (deepTile) {
             coverage = select(smoothstep(8.0, 16.0, depthBelow), smoothstep(0.0, 4.0, depthBelow), waterAt(ground.xy) > 0.5);
+        } else if (u.tint.w > 0.5) {
+            // Redibujada: orilla suave por la parte de tiles de agua (B).
+            let wet = textureSampleLevel(waterMask, linearSampler, (ground.xy / 100.0 + 0.5) / 256.0, 0.0).b;
+            // 0.5 es el borde de los tiles de agua; un poco antes, para que un
+            // estanque chico no se achique.
+            coverage = smoothstep(0.15, 0.40, wet) * smoothstep(0.0, 4.0, depthBelow);
         } else {
             coverage = waterAt(ground.xy) * smoothstep(0.0, 4.0, depthBelow);
         }
@@ -1947,6 +1956,23 @@ fn worldWater(position: vec4f) -> vec4f {
         let shallow = bed * vec3f(0.78, 1.0, 0.94) * 1.1;
         body = mix(deep, shallow, exp(-depthW * 0.010));
     }
+    // En el agua plana no hay cauce que mostrar: el cuerpo es el agua que pinta
+    // el mapa (cada mapa con su estilo, como el azul de Noria), movida por las
+    // olas. Lo nuevo sólo le suma reflejo, ondas y sol; así no queda una lámina
+    // encima ni bordes contra el agua vieja.
+    if (!deepTile) {
+        let sceneSize = vec2f(textureDimensions(scene));
+        let wob = clamp(position.xy + g * 0.02 * u.viewport.w, vec2f(0.0), sceneSize - 1.0);
+        var under = textureSampleLevel(scene, linearSampler, wob / sceneSize, 0.0).rgb;
+        if (u.tint.w > 0.5) {
+            // Redibujada: el suelo (sin el agua vieja) a través de agua poco
+            // honda del color del mapa, con cáusticas.
+            under *= 1.0 + q2c(p.xy * 0.018 + g * 6.0, t) * 1.2 * (0.4 + vertexLight);
+            body = mix(u.tint.rgb * (0.6 + 1.6 * vertexLight), under * vec3f(0.70, 0.88, 1.0), 0.45);
+        } else {
+            body = under;
+        }
+    }
     // Cielo: más claro hacia el horizonte del reflejo.
     let r = reflect(dir, n);
     // Reflejo de lo que hay sobre el agua, con la normal suavizada (con la de
@@ -1972,7 +1998,7 @@ fn worldWater(position: vec4f) -> vec4f {
     // Con la cámara del juego el agua se ve casi siempre en ángulo rasante: con
     // todo el Fresnel cada cresta refleja el cielo y quedan franjas. Se modera;
     // lo que refleja algo del cuadro pesa un poco más.
-    let weight = clamp(fresnel * 1.1 + 0.10 + mirror.a * 0.25, 0.0, 0.8);
+    let weight = clamp(fresnel * 1.1 + 0.10 + mirror.a * 0.25, 0.0, 0.8) * select(select(0.35, 0.6, u.tint.w > 0.5), 1.0, deepTile);
     var color = mix(body, reflected, weight * flat);
     // Sol: dirección fija del mapa (u.sun), brillo en las crestas.
     let toSun = toSunView;
