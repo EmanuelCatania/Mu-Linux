@@ -142,6 +142,22 @@ public:
     // DESVIACION: niebla por profundidad ([Window] DepthFog); en caliente.
     bool GetDepthFog() const { return m_DepthFog; }
     void SetDepthFog(bool enabled);
+    // DESVIACION: iluminación mejorada (sólo WebGPU, en caliente; ver
+    // render/LightingProfiles.h). [Window] DynamicLights: 0 apagadas, 1
+    // conservadoras (la luz del 0.97k sigue mandando), 2 contrastadas.
+    int GetDynamicLights() const { return m_DynamicLights; }
+    void SetDynamicLights(int level);
+    // [Window] Bloom: 0 apagado, 1 suave, 2 fuerte.
+    int GetBloom() const { return m_Bloom; }
+    float BloomAmount() const { static const float amount[3] = { 0.0f, 0.35f, 0.65f }; return amount[m_Bloom]; }
+    void SetBloom(int level);
+    // [Window] Sky: cielo en los mapas abiertos, con la cámara 3D (F10).
+    bool GetSky() const { return m_Sky; }
+    void SetSky(bool enabled);
+    // [Window] Underwater: efectos bajo el agua en Atlans. 0 apagados, 1 sin
+    // ondulación de la imagen (a algunos marea), 2 completos.
+    int GetUnderwater() const { return m_Underwater; }
+    void SetUnderwater(int level);
     // DESVIACION: distancia de dibujado ([Window] DrawDistance): con la cámara
     // 3D (F10) multiplica su alcance (y con él el terreno que se dibuja); con
     // la cámara normal no se aplica.
@@ -215,6 +231,10 @@ private:
     bool m_HDTextures = false, m_StartupHDTextures = false;
     int m_Shadows = 0;
     bool m_DepthFog = false;
+    int m_DynamicLights = 1;
+    int m_Bloom = 1;
+    bool m_Sky = true;
+    int m_Underwater = 2;
     int m_DrawDistance = 0;
     int  m_EnableSound = -1;
     int  m_EnableMusic = -1;

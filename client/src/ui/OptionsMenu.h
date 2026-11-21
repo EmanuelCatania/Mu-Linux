@@ -19,7 +19,7 @@ public:
 private:
     enum Page { PAGE_MAIN, PAGE_GENERAL, PAGE_SCREEN, PAGE_FONT, PAGE_COUNT,
                 // Submenús (no figuran en la lista principal).
-                PAGE_ADVANCED, PAGE_GRAPHICS, PAGE_ANTILAG,
+                PAGE_ADVANCED, PAGE_GRAPHICS, PAGE_LIGHTING, PAGE_ANTILAG,
                 PAGE_ANTILAG_WORLD, PAGE_ANTILAG_EFFECTS, PAGE_ANTILAG_INTERFACE };
 
     void RenderMain();
@@ -36,6 +36,8 @@ private:
     bool UpdateAdvanced();
     void RenderGraphics();
     bool UpdateGraphics();
+    void RenderLighting();
+    bool UpdateLighting();
     void RenderFont();
     bool UpdateFont();
     void RenderSelector(float y, const char* text, bool canLeft, bool canRight) const;

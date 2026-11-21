@@ -86,7 +86,15 @@ const char* const English[] = {
     "Increase life gained when killing monsters +%d%% of max life",
     "Increase mana gained when killing monsters +%d%% of max mana",
     "Increase maximum AG +%d%%",
-    "Attack power and magic power increased by %d%%"
+    "Attack power and magic power increased by %d%%",
+    "Lighting",
+    "Dynamic lights: %s",
+    "Soft",
+    "Contrasted",
+    "Bloom: %s",
+    "Sky (F10)",
+    "Underwater: %s",
+    "No wobble"
 };
 constexpr size_t Count = (size_t)ClientTextId::Count;
 static_assert(sizeof(English) / sizeof(English[0]) == Count, "Faltan textos en ingl\xC3\xA9s");
@@ -116,6 +124,14 @@ const char* MenuFallback(ClientTextId id, int language)
         { ClientTextId::Shadows, "Sombras: %s", "Sombras: %s" },
         { ClientTextId::DepthFog, "Niebla de profundidad", "N\xC3\xA9voa de profundidade" },
         { ClientTextId::DrawDistance, "Distancia: %s", "Dist\xC3\xA2ncia: %s" },
+        { ClientTextId::OptionsLighting, "Iluminaci\xC3\xB3n", "Ilumina\xC3\xA7\xC3\xA3o" },
+        { ClientTextId::DynamicLights, "Luces din\xC3\xA1micas: %s", "Luzes din\xC3\xA2micas: %s" },
+        { ClientTextId::LightsConservative, "Suaves", "Suaves" },
+        { ClientTextId::LightsContrast, "Contrastadas", "Contrastadas" },
+        { ClientTextId::Bloom, "Resplandor: %s", "Brilho: %s" },
+        { ClientTextId::Sky, "Cielo (F10)", "C\xC3\xA9u (F10)" },
+        { ClientTextId::Underwater, "Bajo el agua: %s", "Debaixo d'\xC3\xA1gua: %s" },
+        { ClientTextId::UnderwaterNoWobble, "Sin ondulaci\xC3\xB3n", "Sem ondula\xC3\xA7\xC3\xA3o" },
         { ClientTextId::BuffTimeLeft, "Tiempo restante: %s", "Tempo restante: %s" },
         { ClientTextId::BuffCaster, "Lanzado por: %s", "Lan\xC3\xA7" "ado por: %s" },
         { ClientTextId::BuffDamage, "Da\xC3\xB1" "o +%d", "Dano +%d" },

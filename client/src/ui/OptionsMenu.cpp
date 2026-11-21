@@ -254,6 +254,7 @@ void COptionsMenu::Render()
     case PAGE_FONT: RenderFont(); break;
     case PAGE_ADVANCED: RenderAdvanced(); break;
     case PAGE_GRAPHICS: RenderGraphics(); break;
+    case PAGE_LIGHTING: RenderLighting(); break;
     case PAGE_ANTILAG_WORLD:
     case PAGE_ANTILAG_EFFECTS:
     case PAGE_ANTILAG_INTERFACE: RenderAntilagGroup(); break;
@@ -272,6 +273,7 @@ bool COptionsMenu::UpdateMouse()
     case PAGE_FONT: return UpdateFont();
     case PAGE_ADVANCED: return UpdateAdvanced();
     case PAGE_GRAPHICS: return UpdateGraphics();
+    case PAGE_LIGHTING: return UpdateLighting();
     case PAGE_ANTILAG_WORLD:
     case PAGE_ANTILAG_EFFECTS:
     case PAGE_ANTILAG_INTERFACE: return UpdateAntilagGroup();
@@ -559,6 +561,8 @@ void COptionsMenu::RenderAdvanced()
     char text[96];
     Platform::TextFormatSecure(text, "%s >", gClientText.Get(ClientTextId::OptionsGraphics));
     RenderButton((float)RowY(row++), text);
+    Platform::TextFormatSecure(text, "%s >", gClientText.Get(ClientTextId::OptionsLighting));
+    RenderButton((float)RowY(row++), text);
     Platform::TextFormatSecure(text, "%s >", GlobalText[926]);
     RenderButton((float)RowY(row++), text);
     RenderButton((float)RowY(row), GlobalText[925]);
@@ -569,6 +573,7 @@ bool COptionsMenu::UpdateAdvanced()
     int row = 1;
     bool clicked;
     if (UpdateToggle(RowY(row++), clicked)) { if (clicked) m_Page = PAGE_GRAPHICS; return true; }
+    if (UpdateToggle(RowY(row++), clicked)) { if (clicked) m_Page = PAGE_LIGHTING; return true; }
     if (UpdateToggle(RowY(row++), clicked)) { if (clicked) m_Page = PAGE_ANTILAG; return true; }
     if (!UpdateToggle(RowY(row), clicked)) return false;
     if (clicked) m_Page = PAGE_SCREEN;
@@ -731,6 +736,62 @@ bool COptionsMenu::UpdateGraphics()
         return true;
     }
     if (gUserSettings.RestartPending() && UpdateToggle(RowY(row++), clicked)) return true;
+    if (!UpdateToggle(RowY(row), clicked)) return false;
+    if (clicked) m_Page = PAGE_ADVANCED;
+    return true;
+}
+
+// ── Iluminación ─────────────────────────────────────────────────────────────
+// DESVIACION: iluminación mejorada (sólo WebGPU; con GL no hace nada). Todo
+// se aplica en caliente.
+void COptionsMenu::RenderLighting()
+{
+    int row = 0;
+    char text[96];
+    RenderButton((float)RowY(row++), gClientText.Get(ClientTextId::OptionsLighting), true);
+    const char* const lightNames[3] = { "Off", gClientText.Get(ClientTextId::LightsConservative),
+                                        gClientText.Get(ClientTextId::LightsContrast) };
+    const int lights = gUserSettings.GetDynamicLights();
+    Platform::TextFormatSecure(text, gClientText.Get(ClientTextId::DynamicLights), lightNames[lights]);
+    RenderSelector((float)RowY(row++), text, lights > 0, lights < 2);
+    static const char* const bloomNames[3] = { "Off", "1", "2" };
+    const int bloom = gUserSettings.GetBloom();
+    Platform::TextFormatSecure(text, gClientText.Get(ClientTextId::Bloom), bloomNames[bloom]);
+    RenderSelector((float)RowY(row++), text, bloom > 0, bloom < 2);
+    RenderToggle((float)RowY(row++), gClientText.Get(ClientTextId::Sky), gUserSettings.GetSky());
+    const char* const underwaterNames[3] = { "Off", gClientText.Get(ClientTextId::UnderwaterNoWobble), "On" };
+    const int underwater = gUserSettings.GetUnderwater();
+    Platform::TextFormatSecure(text, gClientText.Get(ClientTextId::Underwater), underwaterNames[underwater]);
+    RenderSelector((float)RowY(row++), text, underwater > 0, underwater < 2);
+    RenderButton((float)RowY(row), GlobalText[925]);
+}
+
+bool COptionsMenu::UpdateLighting()
+{
+    int row = 1;
+    bool clicked;
+    const int lights = gUserSettings.GetDynamicLights();
+    const int lightStep = UpdateSelector(RowY(row++), lights > 0, lights < 2);
+    if (lightStep != INT_MIN) {
+        if (lightStep) gUserSettings.SetDynamicLights(lights + (lightStep > 0 ? 1 : -1));
+        return true;
+    }
+    const int bloom = gUserSettings.GetBloom();
+    const int bloomStep = UpdateSelector(RowY(row++), bloom > 0, bloom < 2);
+    if (bloomStep != INT_MIN) {
+        if (bloomStep) gUserSettings.SetBloom(bloom + (bloomStep > 0 ? 1 : -1));
+        return true;
+    }
+    if (UpdateToggle(RowY(row++), clicked)) {
+        if (clicked) gUserSettings.SetSky(!gUserSettings.GetSky());
+        return true;
+    }
+    const int underwater = gUserSettings.GetUnderwater();
+    const int underwaterStep = UpdateSelector(RowY(row++), underwater > 0, underwater < 2);
+    if (underwaterStep != INT_MIN) {
+        if (underwaterStep) gUserSettings.SetUnderwater(underwater + (underwaterStep > 0 ? 1 : -1));
+        return true;
+    }
     if (!UpdateToggle(RowY(row), clicked)) return false;
     if (clicked) m_Page = PAGE_ADVANCED;
     return true;
