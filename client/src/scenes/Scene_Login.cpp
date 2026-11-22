@@ -62,6 +62,7 @@
 #include "platform/ITimer.h"
 #include "scenes/Scene_Login.h"
 #include "scenes/Scene_Login_ServerSelect.h"
+#include <cmath>
 
 
 // Scene_Login @ 0x00521630
@@ -87,7 +88,50 @@ uint Scene_Login(void)
     GL_BeginViewport(0, 0x50, 0x280, 0x140);   // BeginOpengl(0, 80, 640, 320)
 
     // ── 3D background render (orden exacto de IDA) ───────────────────────────
+    // DESVIACION (prueba del mar): el logo MU (0xA2) flota entre la cámara y el
+    // agua; si queda en la copia que lee el reflejo aparece como manchas
+    // blancas en el mar. Se saca de esta pasada y se dibuja después del agua.
+    char* const banner = Gfx::WaterEnabled() ? (char*)g_LoginSceneObjects[7] : nullptr;
+    const char bannerLive = banner ? *banner : 0;
+    if (banner) *banner = 0;
     Terrain_Render();    // Terrain_Render
+    if (banner) *banner = bannerLive;
+    // DESVIACION (prueba, sólo WebGPU, Ctrl+F12 alterna): mar con olas sobre el
+    // pintado de Logo01. Sus dos planos quedan en z -4.5 y -10.7 (el hueso
+    // Box01 invierte z) y los barcos en 0; el sol es el objeto 0xA3. Las
+    // paredes pintadas del horizonte están en y ~1626; los barcos, hasta ~700.
+    {
+        const float sun[3] = {-110.0f, 1600.0f, 50.0f};
+        // Olas de proa de los dos barcos del fondo (las del propio cubrirían
+        // todo el primer plano). Rumbo según Angle[2] (180 = hacia el sol);
+        // la proa queda ~925 unidades del modelo por delante del centro.
+        if (Gfx::WaterEnabled()) {
+            for (int i : {1, 3}) {
+                char* obj = (char*)g_LoginSceneObjects[i];
+                if (!obj || !*obj) continue;
+                const OBJECT* o = AsObject(obj);
+                const float a = o->Angle[2] * 0.017453293f;
+                const float heading[2] = {-std::sin(a), -std::cos(a)};
+                const float bow[2] = {o->Position[0] + heading[0] * 925.0f * o->Scale,
+                                      o->Position[1] + heading[1] * 925.0f * o->Scale};
+                Gfx::WaterShip(bow, heading);
+            }
+            // El hada (CreateBug 0x330, pool Butterfles) también es una luz:
+            // cuando sale volando del barco y queda sobre el mar, el agua de
+            // abajo se ilumina. Si debajo hay cubierta lo descarta el shader.
+            static const float fairyLight[3] = {0.85f, 0.85f, 0.70f};
+            for (int i = 0; i < 10; ++i) {
+                const OBJECT& b = Butterfles[i];
+                if (b.Live && b.Type == 0x330) Gfx::WaterLight(b.Position, fairyLight, true);
+            }
+        }
+        Gfx::Water(-2.0f, (float)(std::fmod((double)WorldTime, 3600000.0) / 1000.0), sun, 1626.0f);
+        // Las estelas de los barcos (0xA1, Logo02) las toma el agua de la copia
+        // del cuadro. El logo, en cambio, se dibuja encima.
+        if (Gfx::WaterEnabled()) {
+            if (banner && bannerLive) Entity_PrepareRender((unsigned char*)banner, 0, 0, '\0');
+        }
+    }
     Entity_RenderAll_3D();
     RenderBugs();    // RenderBugs
     Trail_RenderAll();

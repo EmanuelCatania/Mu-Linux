@@ -22,6 +22,7 @@
 //   DAT_007eaa118..11c — anti-tamper bytes
 
 #include "stdafx.h"
+#include "render/Gfx.h"
 #include "ui/EmoteMenu.h"
 #include "ui/ChatListBox.h"
 #include "net/NetText.h"
@@ -112,6 +113,7 @@ void Game_CharSelectTick(void)
     EarthQuake *= 0.2f;
 
     Terrain_Water();  // world tick
+    Gfx::BeginLightTick();
     Bisect_ChatMode("CST_post_4f95e0");
     CheckInventory  = 0;
     DAT_0055a3e4  = 0xffffffff;

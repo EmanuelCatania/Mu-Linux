@@ -415,4 +415,12 @@ void Atmosphere(int mode, const float* color, float density, float start) {
     fogMode = mode; fogDensity = density; fogStart = start;
     if (color) std::memcpy(fogColor, color, sizeof(fogColor));
 }
+// El agua mejorada sólo existe en WebGPU: con GL queda el mar original.
+void Water(const float*) {}
+void MapObjects(bool) {}
+void WaterMask(const unsigned char*) {}
+// La iluminación mejorada, el cielo y los efectos de cámara sólo existen en WebGPU.
+void Lighting(const float*) {}
+void Sky(const float*) {}
+void PostEffects(const float*) {}
 }

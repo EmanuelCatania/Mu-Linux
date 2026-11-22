@@ -37,12 +37,20 @@ SUITES = {
 
 def build_and_run(root, harness, work, args):
     work.mkdir(parents=True)
+    # Los dobles de la luz por píxel sólo existen si la revisión la declara
+    # (--reference-ref puede ser anterior).
+    gfx = root / "src/render/Gfx.h"
+    declared = gfx.read_text(encoding="utf-8") if gfx.exists() else ""
+    stubs = " ".join(f"{macro}=1" for macro, name in (("REPLAY_SMALL_LIGHT", "struct SmallLightScope"),
+                                                    ("REPLAY_SOURCE_LIGHT", "void SourceLight("))
+                     if name in declared)
     files = " ".join(f'"{(root / s).as_posix()}"' for s in SUITES[args.suite][1])
     (work / "CMakeLists.txt").write_text(f"""cmake_minimum_required(VERSION 3.25)
 project(EffectReplay LANGUAGES CXX)
 add_executable(effect_replay "{harness.as_posix()}" {files})
 target_include_directories(effect_replay PRIVATE "{(root / 'src').as_posix()}")
 target_compile_features(effect_replay PRIVATE cxx_std_17)
+target_compile_definitions(effect_replay PRIVATE {stubs})
 if(MSVC)
   target_compile_definitions(effect_replay PRIVATE WIN32 _WINDOWS _MBCS NDEBUG
       _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS _WINSOCK_DEPRECATED_NO_WARNINGS)

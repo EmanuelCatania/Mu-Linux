@@ -39,6 +39,7 @@
 #include "game/party/Party.h"
 #include "game/entity/EntityName.h"
 #include "render/BufferedDraw.h"
+#include "render/WaterProfiles.h"
 #include "platform/ITimer.h"
 #include "platform/IInput.h"
 #include "globals.h"
@@ -229,6 +230,14 @@ int __cdecl RenderTerrainTile(int iparam_1, int iparam_2, int param_3, int param
     _DAT_07feb27c = *(float*)&DAT_07feb258;
     _DAT_07feb280 = _DAT_07feb274;
     if (param_7 == 0) {
+        // DESVIACION (agua mejorada): con el agua nueva el cauce se hunde al
+        // dibujar, para que el agua tenga fondo. El pick usa las alturas reales.
+        if (const float* carve = WaterProfiles::Carve()) {
+            *(float*)&DAT_07feb260 -= carve[TerrainIndex1];
+            _DAT_07feb26c -= carve[TerrainIndex2];
+            _DAT_07feb278 -= carve[TerrainIndex3];
+            _DAT_07feb284 -= carve[TerrainIndex4];
+        }
         if (((unsigned char)TerrainWall[TerrainIndex1] & 8) != 8)
             RenderTerrainFace(param_1, param_2, param_3, param_4, param_5);   // RenderTerrainFace(xf,yf,xi,yi,lodf)
         return 0;

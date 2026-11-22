@@ -9,6 +9,8 @@
 // infer behaviour.
 
 #include "stdafx.h"
+#include "render/Entity_RenderAll_3D.h"
+#include "render/EffectIds.h"
 #include "render/ResourceTables.h"
 #include "assets/model/ModelTypes.h"
 #include "game/entity/EntityName.h"
@@ -965,6 +967,10 @@ void __cdecl EffectPool_RenderAll(void)
             continue;
         }
 
+        // DESVIACION (agua mejorada): Tamachan en un cauce ya se dibujó antes
+        // del agua (Entity_RenderTamachan).
+        if (type == MODEL_TAMA && Water_TamachanLift((const char*)(v0 - 10)) > 0.0f) continue;
+
         // Types 182, 185, 260-263, 268, 190-268, 568: standard entity render.
         if (type == 182 || type == 185 || type == 568 ||
             (type >= 260 && type <= 263) || type == 268 ||
@@ -1054,6 +1060,39 @@ void __cdecl SkillEffects_RenderAll(void)
     SkillEffect_Render();
 }
 
+// DESVIACION: cuánto hay que estirar el plano lejano para que las esquinas de
+// arriba del cuadro lleguen al suelo. Con pantalla ancha (y el FOV de 50) los
+// rayos de esas esquinas cortan el suelo más allá del alcance fijo y quedaba un
+// triángulo negro. Se mide con el frustum del cuadro anterior: cada rayo va
+// del ápice a su esquina lejana; si corta el suelo en t > 1, el alcance tiene
+// que crecer t veces. Converge en un cuadro (el alcance nuevo es el necesario).
+static float FarPlaneToGround(float groundZ)
+{
+    static float boost = 1.0f;
+    const float apex[3] = { FrustrumVertex, DAT_07eab1b4, DAT_07eab1b8 };
+    const float corner[4][3] = {
+        { DAT_07eab1bc, DAT_07eab1c0, DAT_07eab1c4 },
+        { DAT_07eab1c8, DAT_07eab1cc, DAT_07eab1d0 },
+        { DAT_07eab1d4, DAT_07eab1d8, DAT_07eab1dc },
+        { DAT_07eab1e0, DAT_07eab1e4, DAT_07eab1e8 },
+    };
+    if (apex[2] <= groundZ) return boost;
+    float need = 0.0f;
+    for (const auto& c : corner) {
+        const float dz = c[2] - apex[2];
+        // Un rayo que no baja no llega nunca al suelo (se ve el horizonte).
+        if (dz > -1.0f) continue;
+        const float t = (groundZ - apex[2]) / dz;
+        if (t > need) need = t;
+    }
+    if (need > 0.0f) {
+        boost *= need * 1.05f;
+        if (boost < 1.0f) boost = 1.0f;
+        if (boost > 3.0f) boost = 3.0f;
+    }
+    return boost;
+}
+
 // MoveMainCamera @ 0x00524CB0 — MoveMainCamera  (port 1:1 desde IDA)
 // Setea los parámetros de cámara que consume Camera_SetupFrustum:
 //   CameraFOV = 35.0 (50.0 con la desviación del DLL, ver abajo)
@@ -1093,7 +1132,10 @@ bool __cdecl MoveMainCamera(void) {
         const float normalRange = gCamera3D.GetViewFar();
         // Sólo con la cámara 3D (F10): con la normal, el alcance de siempre.
         const float scale = gCamera3D.IsEnabled() ? gUserSettings.DrawDistanceScale() : 1.0f;
-        CameraViewFar = normalRange * scale;
+        // Con la cámara 3D el borde lejano lo tapa la niebla; con la normal,
+        // el alcance crece lo justo para que las esquinas lleguen al suelo.
+        const float ground = gCamera3D.IsEnabled() ? 1.0f : FarPlaneToGround(*(float*)(Hero + 24) - 150.0f);
+        CameraViewFar = normalRange * scale * ground;
         DrawDistance::Set(*(float*)(Hero + 16), *(float*)(Hero + 20), scale > 1.0f ? normalRange * 1.25f : 0.0f);
         CameraDistance = 1000.0f;                    // CameraDistance
         in1[0] = 0.0f;

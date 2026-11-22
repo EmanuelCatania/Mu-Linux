@@ -76,6 +76,8 @@ set(MU_SOURCES
     src/rhi/GL/ProfileQueries.cpp
     src/rhi/GL/BufferedDraw.cpp
     src/render/WorldEffects.cpp
+    src/render/WaterProfiles.cpp
+    src/render/LightingProfiles.cpp
     src/render/MaterialVisuals.cpp
     src/render/LooseWingVisuals.cpp
     src/render/EquipmentVisuals.cpp
@@ -452,6 +454,8 @@ set(MU_HEADERS
     src/game/entity/EntityView.h
     src/game/entity/EntityName.h
     src/render/WorldEffects.h
+    src/render/WaterProfiles.h
+    src/render/LightingProfiles.h
     src/render/MaterialVisuals.h
     src/render/LooseWingVisuals.h
     src/render/EquipmentVisuals.h

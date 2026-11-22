@@ -8,6 +8,10 @@
 #include "render/RenderProfile.h"
 #include "render/RenderState.h"
 #include "render/TerrainDraw.h"
+#include "render/RenderBackend.h"
+#include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstring>
 #include <unordered_map>
 
@@ -128,8 +132,11 @@ void ClearColor(float r, float g, float b, float a) { BufferedDraw::Flush();GfxD
 void Clear(unsigned clearMask) { BufferedDraw::Flush();GfxDevice::Clear(clearMask); }
 void Flush() { BufferedDraw::Flush();GfxDevice::Flush(); }
 void ClearErrors() { RenderState::TakeStackError();GfxDevice::ClearErrors(); }
+namespace { bool postEffectsPending = false; }
 void PostProcess(bool antialias, float sharpen) {
-    if (!antialias && sharpen <= 0.0f) return;
+    const bool effects = postEffectsPending;
+    postEffectsPending = false;
+    if (!antialias && sharpen <= 0.0f && !effects) return;
     BufferedDraw::Flush();
     GfxDevice::PostProcess(antialias, sharpen);
 }
@@ -181,13 +188,15 @@ bool TextureBicubic() { return bicubic; }
 namespace { int multisample = 0; }
 void SetMultisample(int samples) { multisample = samples; }
 int Multisample() { return multisample; }
-namespace { bool shadowMaps = false, depthFog = false; float shadowStrength = 0.5f; bool shadowScene = false; }
+namespace { bool shadowMaps = false, depthFog = false; float shadowStrength = 0.5f; bool shadowScene = false; bool sceneEffects = false; }
 void SetShadowMaps(bool enabled, float strength) { shadowMaps = enabled; shadowStrength = strength; }
 bool ShadowMaps() { return shadowMaps && GfxDevice::SupportsShadowMaps(); }
 void SetDepthFog(bool enabled) { depthFog = enabled; }
 bool DepthFog() { return depthFog && GfxDevice::SupportsShadowMaps(); }
+bool SceneEffectsSupported() { return RenderBackend::IsWebGPU() && GfxDevice::SupportsShadowMaps(); }
+void SetSceneEffects(bool wanted) { sceneEffects = wanted; }
 void BeginShadowScene(const float focus[3]) {
-    if ((!ShadowMaps() && !DepthFog()) || shadowScene) return;
+    if ((!ShadowMaps() && !DepthFog() && !(sceneEffects && SceneEffectsSupported())) || shadowScene) return;
     BufferedDraw::Flush();
     shadowScene = true;
     // Sin sombras la escena sólo sirve para la niebla: intensidad 0.
@@ -197,10 +206,281 @@ void Atmosphere(int mode, const float color[3], float density, float start) {
     if (!shadowScene) return;
     GfxDevice::Atmosphere(DepthFog() ? mode : 0, color, density, start);
 }
+namespace {
+bool water = true;
+// Luces que se reflejan en el próximo Water(): posición y color, 8 floats c/u.
+constexpr int MaxWaterLights = 16;
+float waterLights[MaxWaterLights * 8];
+int waterLightCount = 0;
+// Barcos que levantan olas de proa: proa (x, y) y rumbo (x, y).
+constexpr int MaxWaterShips = 4;
+float waterShips[MaxWaterShips * 4];
+int waterShipCount = 0;
+}
+void ToggleWater() { water = !water; }
+void SetWater(bool enabled) { water = enabled; }
+bool WaterEnabled() { return water && GfxDevice::SupportsShadowMaps(); }
+void WaterLight(const float position[3], const float color[3], bool compact) {
+    if (waterLightCount >= MaxWaterLights) return;
+    // Los efectos pueden pasar dos veces por cuadro (tick y dibujo).
+    for (int i = 0; i < waterLightCount; ++i) {
+        const float* o = waterLights + i * 8;
+        if (std::fabs(o[0] - position[0]) < 1.0f && std::fabs(o[1] - position[1]) < 1.0f && std::fabs(o[2] - position[2]) < 1.0f) return;
+    }
+    float* l = waterLights + waterLightCount++ * 8;
+    l[0] = position[0]; l[1] = position[1]; l[2] = position[2]; l[3] = 1.0f;
+    l[4] = color[0]; l[5] = color[1]; l[6] = color[2]; l[7] = compact ? 1.0f : 0.0f;
+}
+void WaterShip(const float bow[2], const float heading[2]) {
+    if (waterShipCount >= MaxWaterShips) return;
+    float* s = waterShips + waterShipCount++ * 4;
+    s[0] = bow[0]; s[1] = bow[1]; s[2] = heading[0]; s[3] = heading[1];
+}
+float WaterSwell(float x, float y, float time, float* slopeX, float* slopeY) {
+    // Igual que la primera onda de slope() en el shader del agua (WebGPU).
+    const float dl = std::sqrt(0.35f * 0.35f + 0.94f * 0.94f);
+    const float dx = 0.35f / dl, dy = 0.94f / dl;
+    const float k = 6.2831853f / 900.0f;
+    const float omega = std::sqrt(300.0f * k);
+    const float maxSlope = 0.035f;
+    const float phase = k * (dx * x + dy * y) - omega * time;
+    if (slopeX) *slopeX = dx * maxSlope * std::cos(phase);
+    if (slopeY) *slopeY = dy * maxSlope * std::cos(phase);
+    return maxSlope / k * std::sin(phase);
+}
+void Water(float level, float time, const float sun[3], float backdropY) {
+    const int count = waterLightCount;
+    waterLightCount = 0;
+    const int ships = waterShipCount;
+    waterShipCount = 0;
+    if (!WaterEnabled()) return;
+    BufferedDraw::Flush();
+    // [0..7] parámetros, [8] cantidad de luces, [12..] las luces.
+    // [9] cantidad de barcos, [12 + 64..] los barcos.
+    float params[12 + MaxWaterLights * 8 + MaxWaterShips * 4 + 12] = {level, time, sun[0], sun[1], sun[2], backdropY, 0.0f, 0.0f, (float)count, (float)ships};
+    for (int i = 0; i < count * 8; ++i) params[12 + i] = waterLights[i];
+    for (int i = 0; i < ships * 4; ++i) params[12 + MaxWaterLights * 8 + i] = waterShips[i];
+    GfxDevice::Water(params);
+}
+namespace {
+unsigned char waterMask[256 * 256 * 4]; bool waterMaskSent = false;
+// Fuegos del mundo: posición, color y el WorldWater en que se registró por
+// última vez (la hora de ese cuadro, en segundos).
+struct WorldLight { float position[3], color[3], stamp; bool ripple; };
+WorldLight worldLights[MaxWaterLights];
+int worldLightCount = 0;
+float worldWaterNow = 0.0f;
+}
+void WorldWaterLight(const float position[3], const float color[3], bool ripple) {
+    // La misma luz vuelve en cada tick (y las llamas con un poco de temblor):
+    // si ya está, se refresca.
+    int slot = -1;
+    for (int i = 0; i < worldLightCount; ++i) {
+        const float* o = worldLights[i].position;
+        if (std::fabs(o[0] - position[0]) < 20.0f && std::fabs(o[1] - position[1]) < 20.0f &&
+            std::fabs(o[2] - position[2]) < 20.0f) { slot = i; break; }
+    }
+    if (slot < 0) {
+        if (worldLightCount < MaxWaterLights) slot = worldLightCount++;
+        else {
+            slot = 0;
+            for (int i = 1; i < worldLightCount; ++i)
+                if (worldLights[i].stamp < worldLights[slot].stamp) slot = i;
+        }
+    }
+    WorldLight& l = worldLights[slot];
+    std::memcpy(l.position, position, sizeof(l.position));
+    std::memcpy(l.color, color, sizeof(l.color));
+    l.stamp = worldWaterNow;
+    l.ripple = ripple;
+}
+void WorldWater(const unsigned char* mask, float time, const WaterLook& look, const float focus[2]) {
+    waterLightCount = 0;
+    waterShipCount = 0;
+    if (!WaterEnabled() || !mask) return;
+    BufferedDraw::Flush();
+    if (!waterMaskSent || std::memcmp(waterMask, mask, sizeof(waterMask)) != 0) {
+        std::memcpy(waterMask, mask, sizeof(waterMask));
+        GfxDevice::WaterMask(waterMask);
+        waterMaskSent = true;
+    }
+    // Mismo arreglo que Water(); [6] = 1 elige el agua de los mapas y lo que
+    // sigue a los barcos lleva el color del agua y del cielo.
+    // Las luces que no se refrescaron en 0.3 s se van (time vuelve a 0 cada hora).
+    worldWaterNow = time;
+    int lights = 0;
+    for (int i = 0; i < worldLightCount; ++i) {
+        const float age = time - worldLights[i].stamp;
+        if (age >= 0.0f && age < 0.3f) worldLights[lights++] = worldLights[i];
+    }
+    worldLightCount = lights;
+    float params[12 + MaxWaterLights * 8 + MaxWaterShips * 4 + 12] = {0.0f, time, look.sun[0], look.sun[1], look.sun[2], 0.0f, 1.0f, 0.0f, (float)lights};
+    for (int i = 0; i < lights; ++i) {
+        float* l = params + 12 + i * 8;
+        const WorldLight& w = worldLights[i];
+        l[0] = w.position[0]; l[1] = w.position[1]; l[2] = w.position[2]; l[3] = 1.0f;
+        l[4] = w.color[0]; l[5] = w.color[1]; l[6] = w.color[2]; l[7] = w.ripple ? 2.0f : 0.0f;
+    }
+    float* tail = params + 12 + MaxWaterLights * 8 + MaxWaterShips * 4;
+    tail[0] = look.tint[0]; tail[1] = look.tint[1]; tail[2] = look.tint[2]; tail[3] = look.redraw;
+    tail[4] = look.sky[0]; tail[5] = look.sky[1]; tail[6] = look.sky[2]; tail[7] = look.waves;
+    // Centro de la simulación de ondas (el héroe).
+    tail[8] = focus[0]; tail[9] = focus[1];
+    GfxDevice::Water(params);
+}
+namespace {
+// Luces puntuales registradas por las ticks (ver DynamicLight en Gfx.h).
+constexpr int MaxDynamicLights = 128;   // las que se guardan
+constexpr int MaxSentLights = 64;       // las que van al shader (las más cercanas)
+struct PointLight {
+    float position[3], color[3], radius;
+    double stamp; unsigned tick; bool small;
+    const void* source; LightKind kind;     // dueño (SourceLight); nullptr: se la reconoce por posición
+};
+int smallLightScopes = 0;
+PointLight pointLights[MaxDynamicLights];
+int pointLightCount = 0;
+unsigned lightTick = 0;
+double Seconds() {
+    using namespace std::chrono;
+    static const auto start = steady_clock::now();
+    return duration<double>(steady_clock::now() - start).count();
+}
+}
+SmallLightScope::SmallLightScope() { ++smallLightScopes; }
+SmallLightScope::~SmallLightScope() { --smallLightScopes; }
+namespace {
+void RegisterLight(const void* source, LightKind kind, const float position[3], const float light[3], float radius) {
+    if (!SceneEffectsSupported() || radius <= 0.0f) return;
+    // Algunos efectos suman colores de 2 o más a la grilla para que brille; por
+    // píxel eso quema la imagen. Se baja entero y no canal por canal: cortado
+    // por canal, el azul de Energy Ball (0.8, 1.6, 4) quedaba casi blanco.
+    const bool small = smallLightScopes > 0;
+    const float limit = small ? 1.0f : 1.2f;
+    const float peak = std::max(light[0], std::max(light[1], light[2]));
+    const float scale = peak > limit ? limit / peak : 1.0f;
+    float color[3];
+    for (int c = 0; c < 3; ++c) color[c] = light[c] * scale;
+    const double now = Seconds();
+    // La misma luz vuelve en cada tick (las llamas con temblor): si ya está,
+    // se refresca y el color se acerca al nuevo en vez de saltar.
+    for (int i = 0; i < pointLightCount; ++i) {
+        PointLight& l = pointLights[i];
+        if (l.source != source) continue;
+        if (source ? l.kind == kind
+                   : std::fabs(l.position[0] - position[0]) < 30.0f && std::fabs(l.position[1] - position[1]) < 30.0f) {
+            const float k = now - l.stamp > 0.25 ? 1.0f : 0.35f;
+            const float follow = source ? 1.0f : 0.5f;
+            for (int c = 0; c < 3; ++c) {
+                l.position[c] += (position[c] - l.position[c]) * follow;
+                l.color[c] += (color[c] - l.color[c]) * k;
+            }
+            l.radius = radius;
+            l.stamp = now;
+            l.tick = lightTick;
+            l.small = small;
+            return;
+        }
+    }
+    int slot = pointLightCount < MaxDynamicLights ? pointLightCount++ : -1;
+    if (slot < 0) {
+        slot = 0;
+        for (int i = 1; i < pointLightCount; ++i)
+            if (pointLights[i].stamp < pointLights[slot].stamp) slot = i;
+    }
+    PointLight& l = pointLights[slot];
+    std::memcpy(l.position, position, sizeof(l.position));
+    std::memcpy(l.color, color, sizeof(l.color));
+    l.radius = radius;
+    l.stamp = now;
+    l.tick = lightTick;
+    l.small = small;
+    l.source = source;
+    l.kind = kind;
+}
+}
+void DynamicLight(const float position[3], const float light[3], float radius) {
+    RegisterLight(nullptr, LightKind::BuffAura, position, light, radius);
+}
+void SourceLight(const void* source, LightKind kind, const float position[3], const float light[3], float radius) {
+    if (source) RegisterLight(source, kind, position, light, radius);
+}
+void BeginLightTick() {
+    ++lightTick;
+    // Las del tick anterior quedan sólo para suavizar a las que vuelven en el
+    // mismo lugar; no se dibujan.
+    for (int i = 0; i < pointLightCount;)
+        if (lightTick - pointLights[i].tick > 1) pointLights[i] = pointLights[--pointLightCount];
+        else ++i;
+}
+void Lighting(const SceneLight& light) {
+    if (!shadowScene) return;
+    // [0] luces, [1] intensidad, [2] luz base, [4] cáusticas, [5] tiempo,
+    // [8] sombra del sol, [9] suavidad; desde [12], 8 floats por luz.
+    float params[12 + MaxSentLights * 8] = {};
+    params[1] = light.gain; params[2] = light.base;
+    params[4] = light.caustics; params[5] = light.time;
+    params[8] = light.sunShadow; params[9] = light.shadowSoftness;
+    int count = 0;
+    if (light.dynamicLights) {
+        const double now = Seconds();
+        // Se van las que quedaron de cuando dejó de haber ticks.
+        for (int i = 0; i < pointLightCount;)
+            if (now - pointLights[i].stamp > 0.25) pointLights[i] = pointLights[--pointLightCount];
+            else ++i;
+        int order[MaxDynamicLights];
+        // Sólo las del último tick: con las anteriores, una luz que avanza más
+        // de lo que se reconoce como la misma (Power Wave, 60 por tick) dejaba
+        // una fila de siete encendidas y quemaba la imagen a blanco.
+        int live = 0;
+        for (int i = 0; i < pointLightCount; ++i)
+            if (pointLights[i].tick == lightTick) order[live++] = i;
+        auto distance = [&](int i) {
+            const float dx = pointLights[i].position[0] - light.focus[0], dy = pointLights[i].position[1] - light.focus[1];
+            return dx * dx + dy * dy;
+        };
+        if (live > MaxSentLights)
+            std::partial_sort(order, order + MaxSentLights, order + live,
+                              [&](int a, int b) { return distance(a) < distance(b); });
+        count = std::min(live, MaxSentLights);
+        for (int n = 0; n < count; ++n) {
+            const PointLight& l = pointLights[order[n]];
+            float* p = params + 12 + n * 8;
+            p[0] = l.position[0]; p[1] = l.position[1]; p[2] = l.position[2]; p[3] = l.radius * (l.small ? 1.0f : light.radius);
+            p[4] = l.color[0]; p[5] = l.color[1]; p[6] = l.color[2];
+        }
+    }
+    params[0] = (float)count;
+    GfxDevice::Lighting(params);
+}
+void Sky(const SkyLook& sky) {
+    if (!shadowScene) return;
+    const float params[16] = {
+        sky.horizon[0], sky.horizon[1], sky.horizon[2], 1.0f,
+        sky.zenith[0], sky.zenith[1], sky.zenith[2], sky.clouds,
+        sky.sunDirection[0], sky.sunDirection[1], sky.sunDirection[2], sky.rain,
+        sky.sunColor[0], sky.sunColor[1], sky.sunColor[2], sky.time,
+    };
+    GfxDevice::Sky(params);
+}
+void PostEffects(const PostLook& look) {
+    if (!SceneEffectsSupported()) return;
+    const float params[12] = {
+        look.underwater, look.time, look.wobble, look.aberration,
+        look.tint[0], look.tint[1], look.tint[2], look.vignette,
+        look.rays, look.bloom, look.bloomThreshold, 0.0f,
+    };
+    postEffectsPending = look.underwater > 0.0f || look.bloom > 0.0f;
+    GfxDevice::PostEffects(params);
+}
 void SetShadowCasting(bool enabled) {
     if (!shadowScene) return;
     BufferedDraw::Flush();
     GfxDevice::ShadowCasting(enabled);
+}
+void SetMapObjects(bool active) {
+    BufferedDraw::Flush();
+    GfxDevice::MapObjects(active);
 }
 void EndShadowScene() {
     if (!shadowScene) return;

@@ -109,6 +109,11 @@ void CUserSettings::Load(const char* iniPath)
     m_HDTextures = m_StartupHDTextures = ReadRange("Window", "HDTextures", iniPath, 0, 1, 0) != 0;
     m_Shadows = ReadRange("Window", "Shadows", iniPath, 0, 2, 0);
     m_DepthFog = ReadRange("Window", "DepthFog", iniPath, 0, 1, 0) != 0;
+    m_DynamicLights = ReadRange("Window", "DynamicLights", iniPath, 0, 2, 1);
+    m_Bloom = ReadRange("Window", "Bloom", iniPath, 0, 2, 1);
+    m_Sky = ReadRange("Window", "Sky", iniPath, 0, 1, 1) != 0;
+    m_Underwater = ReadRange("Window", "Underwater", iniPath, 0, 2, 2);
+    m_WorldWater = ReadRange("Window", "WorldWater", iniPath, 0, 1, 1) != 0;
     m_DrawDistance = ReadRange("Window", "DrawDistance", iniPath, 0, 3, 0);
     if (m_Resolution < -1 || m_Resolution >= MAX_USER_RESOLUTION) {
         char line[96];
@@ -286,6 +291,40 @@ void CUserSettings::SetDepthFog(bool enabled)
     m_DepthFog = enabled;
     SaveInt("Window", "DepthFog", enabled ? 1 : 0);
     Gfx::SetDepthFog(enabled);
+}
+
+void CUserSettings::SetDynamicLights(int level)
+{
+    if (level < 0 || level > 2) return;
+    m_DynamicLights = level;
+    SaveInt("Window", "DynamicLights", level);
+}
+
+void CUserSettings::SetBloom(int level)
+{
+    if (level < 0 || level > 2) return;
+    m_Bloom = level;
+    SaveInt("Window", "Bloom", level);
+}
+
+void CUserSettings::SetSky(bool enabled)
+{
+    m_Sky = enabled;
+    SaveInt("Window", "Sky", enabled ? 1 : 0);
+}
+
+void CUserSettings::SetUnderwater(int level)
+{
+    if (level < 0 || level > 2) return;
+    m_Underwater = level;
+    SaveInt("Window", "Underwater", level);
+}
+
+void CUserSettings::SetWorldWater(bool enabled)
+{
+    m_WorldWater = enabled;
+    Gfx::SetWater(enabled);
+    SaveInt("Window", "WorldWater", enabled ? 1 : 0);
 }
 
 void CUserSettings::SetDrawDistance(int level)

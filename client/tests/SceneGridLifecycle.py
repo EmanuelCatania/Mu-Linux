@@ -76,6 +76,12 @@ void Reset() {
 }
 '''
 
+# Los pools que DeleteObjects apaga al cambiar de mapa (necesitan OBJECT).
+POOLS = r'''
+static OBJECT Sprites[4], Boids[40];
+static unsigned char DAT_07c80110[112];
+'''
+
 RUN = r'''
 void Run(unsigned cell, unsigned order) {
     Reset(); auto* grid = reinterpret_cast<unsigned char*>(g_ObjectBucketGrid);
@@ -116,7 +122,7 @@ def harness():
     types = ("using WORD=std::uint16_t; using vec3_t=float[3]; using vec34_t=float[3][4];\n"
              "#pragma pack(push,1)\n" + record(types, "OBJECT") +
              "\n#pragma pack(pop)\nOBJECT* AsObject(void* p){return static_cast<OBJECT*>(p);}\n")
-    return PREAMBLE + header + types + "\nnamespace Reference {\n" + reference + RUN + r'''
+    return PREAMBLE + header + types + POOLS + "\nnamespace Reference {\n" + reference + RUN + r'''
 }
 namespace Current {
 SceneObjectCell g_ObjectBucketGrid[256];

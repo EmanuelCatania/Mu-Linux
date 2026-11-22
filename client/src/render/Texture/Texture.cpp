@@ -514,6 +514,30 @@ const char* Texture_HDAssetPath(const char* path, char* out, std::size_t size)
 }
 
 namespace {
+// DESVIACION: RenderTerrainAlphaBitmap dibuja la mancha de Flame (2 tiles) en
+// 7x7 tiles y deja que el clamp resuelva lo que cae fuera de la textura. El
+// GL_CLAMP del original lo mezclaba con el borde negro; con CLAMP_TO_EDGE (el
+// único que hay en core y en WebGPU) se repite el último texel y, como el de
+// Flame01 no es negro, salen franjas cortadas por el piso. Su borde se funde a
+// negro al subirla, la clásica y la HD.
+void FadeDecalBorder(int id, unsigned char* pixels, int width, int height, int pitch, int channels)
+{
+    if (id != BITMAP_FLAME || !pixels || channels < 3 || width < 2 || height < 2) return;
+    const float band = (width < height ? width : height) * 0.1f;
+    const auto fade = [band](int i, int n) {
+        const int d = i < n - 1 - i ? i : n - 1 - i;
+        const float t = d < band ? d / band : 1.0f;
+        return t * t * (3.0f - 2.0f * t);
+    };
+    for (int y = 0; y < height; ++y) {
+        const float row = fade(y, height);
+        for (int x = 0; x < width; ++x) {
+            const float k = row * fade(x, width);
+            unsigned char* pixel = pixels + (size_t(y) * pitch + x) * channels;
+            for (int c = 0; c < 3; ++c) pixel[c] = (unsigned char)(pixel[c] * k + 0.5f);
+        }
+    }
+}
 // Decodifica la imagen HD y arma el lienzo; corre en un hilo aparte.
 struct HDJob {
     int id = 0; unsigned handle = 0; unsigned generation = 0;
@@ -570,6 +594,7 @@ bool BuildHD(HDJob& job)
     job.canvas.assign(size_t(pw * ph * c), 0);
     for (int y = 0; y < hd.height; ++y)
         memcpy(job.canvas.data() + size_t(y) * size_t(pw) * c, hd.pixels + size_t(y) * hd.width * c, size_t(hd.width) * c);
+    FadeDecalBorder(job.id, job.canvas.data(), hd.width, hd.height, int(pw), c);
     job.k = k; job.canvasWidth = int(pw); job.canvasHeight = int(ph);
     return true;
 }
@@ -797,6 +822,7 @@ int __cdecl OpenJPG(const char* path, int id, int filter, int wrap, int flags, c
     // JPEG row N remains row N. Padding stays zero.
     for (int y = 0; y < img_h; ++y)
         memcpy(pixels + y * pow2_w * 3, image.pixels + y * img_w * 3, img_w * 3);
+    FadeDecalBorder(id, pixels, img_w, img_h, pow2_w, 3);
 
     // --- Ref count increment ---
     slot->Ref++;

@@ -147,6 +147,27 @@ MapTable Read()
                 ok = line.entry == 0 && TomlLines::ParseInt(line.key, slot) && slot >= 0 &&
                      TomlLines::ParseString(line.value, name);
                 if (ok) info.objects.emplace_back(slot, name);
+            } else if (part == "lighting") {
+                ok = line.entry == 0;
+                if (ok) info.lighting.emplace_back(line.key, line.value);
+            } else if (part == "lighting.zone") {
+                ok = line.entry > 0;
+                if (ok) {
+                    if (info.lightingZones.empty() || info.lightingZones.back().entry != line.entry) {
+                        info.lightingZones.emplace_back();
+                        info.lightingZones.back().entry = line.entry;
+                    }
+                    MapLightingZone& zone = info.lightingZones.back();
+                    if (line.key == "tiles") {
+                        ok = ParseTiles(line.value, zone.tiles);
+                    } else if (line.key == "rect") {
+                        std::vector<int> rect;
+                        ok = ParseInts(line.value, rect) && rect.size() == 4;
+                        if (ok) for (int i = 0; i < 4; ++i) zone.rect[i] = rect[i];
+                    } else {
+                        zone.fields.emplace_back(line.key, line.value);
+                    }
+                }
             } else if (part == "load") {
                 MapLoad load;
                 // Las claves de una misma [[map.N.load]] se aplican en el orden del archivo.

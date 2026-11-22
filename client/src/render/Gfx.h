@@ -117,6 +117,9 @@ void EndShadowScene();
 // Dentro de la escena, lo dibujado con casting en false recibe sombra pero no
 // la proyecta (p. ej. el pasto). Cada escena empieza con casting en true.
 void SetShadowCasting(bool enabled);
+// Marca los objetos del mapa: donde el agua se redibuja (Noria, Devias) los
+// aditivos, que no escriben profundidad, se dibujan encima de ella.
+void SetMapObjects(bool active);
 // DESVIACION: niebla por profundidad (opción). Con la opción activa la escena
 // se marca aunque no haya sombras. Atmosphere se fija por cuadro, antes de
 // EndShadowScene: mode 0 nada, 1 bruma de distancia, 2 bajo el agua (absorbe
@@ -124,6 +127,102 @@ void SetShadowCasting(bool enabled);
 void SetDepthFog(bool enabled);
 bool DepthFog();
 void Atmosphere(int mode, const float color[3], float density, float start);
+// DESVIACION (prueba): mar con olas, Fresnel y brillo del sol sobre el plano
+// z = level, en una pasada que se aplica antes de lo que se dibuje después.
+// Sólo WebGPU; con GL o la opción apagada no hace nada. sun = posición en el
+// mundo; time en segundos. backdropY = y de la pared pintada del horizonte: el
+// agua se funde con el cielo al acercarse a ella en vez de cortar.
+void Water(float level, float time, const float sun[3], float backdropY);
+// Luz puntual que el próximo Water() refleja sobre el agua; hasta 16 por
+// cuadro. compact = false: columna estirada por las olas (faroles); true:
+// charco de luz redondo en el agua justo debajo, que no se dibuja si hay
+// cubierta en medio (el hada).
+void WaterLight(const float position[3], const float color[3], bool compact = false);
+// Barco que el próximo Water() acompaña con olas de proa en V; hasta 4.
+void WaterShip(const float bow[2], const float heading[2]);
+// Altura (y pendiente, si se pide) del mar de fondo en (x, y): la misma onda
+// larga que dibuja el agua, para que los barcos se mezan con ella.
+float WaterSwell(float x, float y, float time, float* slopeX, float* slopeY);
+void ToggleWater();
+bool WaterEnabled();
+void SetWater(bool enabled);
+// Agua de los mapas: se llama justo después de dibujar el terreno. mask dice
+// dónde hay agua y cuánta luz tiene (256x256 RGBA; ver WaterProfiles); el
+// pase dibuja encima el agua nueva con olas, cielo y sol. Se sube al
+// dispositivo sólo cuando cambia.
+constexpr float WaterRedrawZones = 0.25f;
+constexpr float WaterRedrawAll = 1.0f;
+struct WaterLook {
+    float tint[3];   // color del cuerpo de agua
+    float sky[3];    // color que refleja
+    float waves;     // fuerza de las olas (1 = las del login)
+    float sun[3];    // dirección hacia el sol, en el mundo
+    // WaterRedrawAll: el agua plana se redibuja entera (el terreno no pinta la
+    // vieja) con la orilla suave de B. WaterRedrawZones: sólo los tiles con el
+    // bit 8 de R. 0: va sobre el agua que pinta el mapa.
+    float redraw = 0.0f;
+};
+// focus: el centro del área donde el agua simula ondas (el héroe).
+void WorldWater(const unsigned char* mask, float time, const WaterLook& look, const float focus[2]);
+// Fuego del mundo que el agua de los mapas refleja (hasta 16, los más nuevos);
+// con ripple, en cambio, algo que toca el agua: empuja la superficie (las ondas
+// las simula el agua) con fuerza color[0] en un radio color[1].
+// Lo registra la simulación, que no corre en cada cuadro: cada luz dura 0.3 s
+// desde la última vez que se registró, así no titila entre ticks.
+void WorldWaterLight(const float position[3], const float color[3], bool ripple = false);
+
+// DESVIACION (iluminación mejorada, sólo WebGPU). La escena de sombras se abre
+// también sin sombras ni niebla cuando SetSceneEffects(true): las luces, las
+// cáusticas y el cielo leen su vista.
+bool SceneEffectsSupported();
+void SetSceneEffects(bool wanted);
+// Luz puntual del mundo para la iluminación por píxel (la registran los mismos
+// AddTerrainLight del 0.97k). Como en la grilla, se ven las del último tick
+// (BeginLightTick) hasta que empieza el siguiente; si dejó de haber ticks, se
+// apagan a los 0.25 s. El color se suaviza contra el tick anterior (así el
+// parpadeo de las llamas no salta).
+void DynamicLight(const float position[3], const float color[3], float radius);
+// Luz propia de algo (el aura de un personaje): una por dueño y tipo, sigue su
+// posición exacta y no se mezcla con otras que caigan en el mismo lugar.
+enum class LightKind { BuffAura, BuffBurst };
+void SourceLight(const void* source, LightKind kind, const float position[3], const float color[3], float radius);
+// Las que se registran mientras vive uno de estos son de un skill chico: no las
+// agranda el alcance del modo y su brillo no pasa de 1.
+struct SmallLightScope {
+    SmallLightScope();
+    ~SmallLightScope();
+    SmallLightScope(const SmallLightScope&) = delete;
+    SmallLightScope& operator=(const SmallLightScope&) = delete;
+};
+// Al empezar el tick del mundo, donde Terrain_Water limpia la grilla de luz.
+void BeginLightTick();
+// Dentro de la escena, una vez por cuadro: luces por píxel (dynamicLights) con
+// su intensidad, alcance y la luz base; cáusticas bajo el agua; y cuánto y qué
+// tan suave se ve la sombra del sol.
+struct SceneLight {
+    bool dynamicLights = false;
+    float gain = 0.0f, base = 1.0f, radius = 1.0f;
+    float caustics = 0.0f;
+    float sunShadow = 1.0f, shadowSoftness = 1.0f;
+    float time = 0.0f;           // segundos
+    float focus[3] = {};         // las luces más cercanas a esto, si son muchas
+};
+void Lighting(const SceneLight& light);
+// Cielo detrás de la escena (donde no se dibujó nada), dentro de la escena.
+struct SkyLook {
+    float horizon[3], zenith[3], sunColor[3], sunDirection[3];
+    float clouds, rain, time;
+};
+void Sky(const SkyLook& sky);
+// Efectos sobre la imagen 3D, antes del PostProcess del cuadro.
+struct PostLook {
+    float underwater = 0.0f;     // 1 = bajo el agua
+    float tint[3] = {1.0f, 1.0f, 1.0f};
+    float wobble = 0.0f, aberration = 0.0f, rays = 0.0f, vignette = 0.0f;
+    float bloom = 0.0f, bloomThreshold = 0.7f;
+    float time = 0.0f;
+};
+void PostEffects(const PostLook& look);
 
 // Niebla
 void SetFogMode(FogMode mode);

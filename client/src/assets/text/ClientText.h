@@ -50,6 +50,16 @@ enum class ClientTextId {
     ItemOptionHuntMana,
     ItemOptionMaxAG,
     HelperDamageIncrease,
+    // Iluminación mejorada (opciones de WebGPU).
+    OptionsLighting,
+    DynamicLights,
+    LightsConservative,
+    LightsContrast,
+    Bloom,
+    Sky,
+    Underwater,
+    UnderwaterNoWobble,
+    WorldWater,
     Count
 };
 // Los textos salen del server (F3/F0, tabla 4, Data/Text/<idioma>/Client.txt).

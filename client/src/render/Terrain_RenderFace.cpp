@@ -24,6 +24,7 @@
 //   TerrainIndex1..4
 
 #include "stdafx.h"
+#include "render/WaterProfiles.h"
 #include "render/BufferedDraw.h"
 #include "render/TerrainDraw.h"
 #include "render/Materials.h"
@@ -278,6 +279,14 @@ void __cdecl RenderTerrainFace(float xf, float yf, int xi, int yi, float lodf)
     } else {
         hasL2 = 0;
         tex = (unsigned char)TER_L2[TER_IDX1];
+    }
+    // DESVIACION (agua mejorada): el agua que el mapa pinta en una pared o una
+    // barranca que la superficie nueva no cubre se dibuja con la textura de
+    // los tiles vecinos.
+    if (tex == 5) {
+        if (const unsigned char* wall = WaterProfiles::WallTexture()) {
+            if (wall[TER_IDX1] != 255) { tex = wall[TER_IDX1]; water = 0; }
+        }
     }
     FaceTexture(tex, xf, yf, water, 0);     // FaceTexture
     const bool capture=TerrainDraw::Collecting() && !TER_NODRAW;

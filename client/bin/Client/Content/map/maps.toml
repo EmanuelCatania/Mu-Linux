@@ -27,6 +27,23 @@
 #                    jpg     = ["archivo.jpg", slot, "clamp" | "repeat"]
 #                  El orden importa: en Exile, BossHead y Princess se cargan sobre los slots
 #                  de Meteo7 y Meteo8 después de sus texturas, igual que en el binario.
+#
+# [map.N.lighting]          iluminación mejorada (sólo WebGPU). Pisa los valores de la tabla
+#                           de src/render/LightingProfiles.cpp; lo que falta queda como ahí:
+#   sky                     cielo con la cámara 3D (bool; false en interiores)
+#   horizon, zenith         colores del cielo [r, g, b]
+#   sun_color               color del sol [r, g, b]
+#   clouds, rain            nubes (0 despejado, 1 cubierto) y tormenta (0..1)
+#   sun_shadow              cuánto se ve la sombra del sol (1 = normal)
+#   shadow_softness         ancho del borde de la sombra (1 = normal)
+#   base, gain, radius      por modo de luces dinámicas [suaves, contrastadas]: luz del
+#                           0.97k, intensidad y alcance de las luces por píxel
+#   bloom                   multiplica el resplandor [suaves, contrastadas]
+#   underwater, caustics,   bajo el agua (Atlans): activo, cáusticas, tinte [r, g, b] y
+#   tint, rays              rayos de luz
+# [[map.N.lighting.zone]]   una parte del mapa con otras claves: donde el héroe está sobre
+#                           uno de sus tiles (tiles = [...], como indoor_tiles) o dentro de
+#                           rect = [x0, y0, x1, y1] (casillas). Vale la primera que coincida.
 
 [map.0]   # Lorencia
 music = "Lorencia.mp3"

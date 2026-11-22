@@ -301,7 +301,10 @@ static bool DbgLog_IsError(const char* text)
         lower[n] = (char)((text[n] >= 'A' && text[n] <= 'Z') ? text[n] + 32 : text[n]);
     lower[n] = 0;
     static const char* const kWords[] = { "error", "fail", "no se pud", "invalid", "inv??lid",
-                                          "crash", "corrupt", "not found", "no encontr", "abort" };
+                                          "crash", "corrupt", "not found", "no encontr", "abort",
+                                          // Errores de WebGPU ("validación", "interno", "dispositivo
+                                          // perdido") que no llevan ninguna de las palabras de arriba.
+                                          "[wgpu-" };
     for (const char* word : kWords)
         if (strstr(lower, word)) return true;
     // "fall" (falla, falló, FALLO) pero no "fallback".

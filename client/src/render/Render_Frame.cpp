@@ -208,6 +208,11 @@
 #include "stdafx.h"
 #include "ui/ChatListBox.h"
 #include "render/Gfx.h"
+#include "render/WaterProfiles.h"
+#include "render/LightingProfiles.h"
+#include "render/Entity_RenderAll_3D.h"
+#include <cmath>
+#include <cstring>
 #include "render/RenderProfile.h"
 #include "render/BufferedDraw.h"
 #include "platform/ITimer.h"
@@ -558,9 +563,35 @@ void Render_Scene3D(void)
     int vpHeight = (topView || noInterface || gWindow.IsWide()) ? 0x1e0 : 0x1b0;
     GL_BeginViewport(0, 0, w, vpHeight);
     Camera_BuildMouseRay(MouseX, MouseY, (float*)&DAT_083a4110);
+    // DESVIACION: iluminación mejorada (opciones de Iluminación, WebGPU). El
+    // perfil del mapa sale de LightingProfiles (tabla + maps.toml), según la
+    // zona en que esté el héroe.
+    const float heroX = Hero ? AsObject(Hero)->Position[0] : 0.0f;
+    const float heroY = Hero ? AsObject(Hero)->Position[1] : 0.0f;
+    const LightingProfiles::Look& lightLook =
+        LightingProfiles::Current(worldId, HeroTile, (int)(heroX * 0.01f), (int)(heroY * 0.01f));
+    const float effectTime = (float)(std::fmod((double)WorldTime, 3600000.0) / 1000.0);
+    const int dynamicLights = gUserSettings.GetDynamicLights();
+    const int lightMode = dynamicLights == 2 ? 1 : 0;
+    const bool underwater = gUserSettings.GetUnderwater() > 0 && lightLook.underwater > 0.5f;
+    const bool sky = gUserSettings.GetSky() && gCamera3D.IsEnabled() && lightLook.sky > 0.5f;
+    Gfx::SetSceneEffects(dynamicLights > 0 || underwater || sky);
     // DESVIACION: sombras proyectadas (opción). Lo que se dibuja hasta
     // EndShadowScene proyecta y recibe sombra; centradas en el héroe.
     Gfx::BeginShadowScene(camPos);
+    {
+        Gfx::SceneLight light;
+        light.dynamicLights = dynamicLights > 0;
+        light.gain = dynamicLights > 0 ? lightLook.gain[lightMode] : 0.0f;
+        light.base = dynamicLights > 0 ? lightLook.base[lightMode] : 1.0f;
+        light.radius = lightLook.radius[lightMode];
+        light.caustics = underwater ? lightLook.caustics : 0.0f;
+        light.sunShadow = lightLook.sunShadow;
+        light.shadowSoftness = lightLook.shadowSoftness;
+        light.time = effectTime;
+        light.focus[0] = heroX; light.focus[1] = heroY;
+        Gfx::Lighting(light);
+    }
 
     // ── 6. 3D render passes ──────────────────────────────────────────────────
     // RenderTerrain dibuja la malla de tiles del terreno.
@@ -570,7 +601,26 @@ void Render_Scene3D(void)
     }
     }
     { RenderProfile::Scope measured(RenderProfile::Pass::Objects);
+    Gfx::SetMapObjects(true);
     Terrain_Render();                              // Terrain_Render — UNCONDICIONAL en IDA (object walker)
+    Gfx::SetMapObjects(false);
+    // DESVIACION: agua mejorada (WebGPU). Va después del terreno y de los
+    // objetos del mapa: lo que de ellos queda por debajo de la superficie (el
+    // pie de las murallas, los pilares del puente) queda bajo el agua. Los
+    // personajes y los efectos se dibujan después, encima.
+    if (Gfx::WaterEnabled()) {
+        Entity_RenderSwimmers();
+        Entity_RenderTamachan();
+        static unsigned char waterMask[256 * 256 * 4];
+        Gfx::WaterLook look;
+        if (WaterProfiles::Current(worldId, waterMask, look))
+        {
+            const float focus[2] = {Hero ? AsObject(Hero)->Position[0] : 0.0f, Hero ? AsObject(Hero)->Position[1] : 0.0f};
+            Gfx::WorldWater(waterMask, (float)(std::fmod((double)WorldTime, 3600000.0) / 1000.0), look, focus);
+        }
+    } else {
+        WaterProfiles::DisableCarve();
+    }
     // Particle_Render (FUN_0046BE40) — IDA Game_RenderTick:113. Itera el effect
     // pool y renderiza partículas (gate sparks, magic glow, etc).
     }
@@ -614,11 +664,25 @@ void Render_Scene3D(void)
             // Azul (el que menos se absorbe, x1.2) al 10 % en el borde.
             Gfx::Atmosphere(2, water, 1.9f / (end - 300.0f), 300.0f);
         } else {
-            // El color de fondo del mapa (la niebla del server no está activa acá).
-            const float background[3] = {cr, cg, cb};
+            // El color de fondo del mapa (la niebla del server no está activa acá);
+            // con cielo, el del horizonte, así el terreno lejano se funde con él.
+            float background[3] = {cr, cg, cb};
+            if (sky) std::memcpy(background, lightLook.horizon, sizeof(background));
             // exp(-x^2): x = 2 (2 %) en el borde.
             Gfx::Atmosphere(1, background, 2.0f / (end - start), start);
         }
+    }
+    if (sky) {
+        Gfx::SkyLook skyLook;
+        std::memcpy(skyLook.horizon, lightLook.horizon, sizeof(skyLook.horizon));
+        std::memcpy(skyLook.zenith, lightLook.zenith, sizeof(skyLook.zenith));
+        std::memcpy(skyLook.sunColor, lightLook.sunColor, sizeof(skyLook.sunColor));
+        // La dirección de la sombra (ShadowLight): la luz viaja hacia (-0.5, 0, -1).
+        skyLook.sunDirection[0] = 0.447f; skyLook.sunDirection[1] = 0.0f; skyLook.sunDirection[2] = 0.894f;
+        skyLook.clouds = lightLook.clouds;
+        skyLook.rain = lightLook.rain;
+        skyLook.time = effectTime;
+        Gfx::Sky(skyLook);
     }
     Gfx::EndShadowScene();                       // los sprites no usan la vista de la cámara
 
@@ -638,7 +702,23 @@ void Render_Scene3D(void)
     }
     // Los targets se publican en Simulation_PrepareStep, fuera del dibujo.
 
-    // DESVIACION: antialiasing y nitidez opcionales sobre la imagen 3D, antes del HUD.
+    // DESVIACION: efectos de cámara (bajo el agua en Atlans, bloom), y después
+    // antialiasing y nitidez opcionales sobre la imagen 3D, antes del HUD.
+    {
+        Gfx::PostLook post;
+        if (underwater) {
+            post.underwater = 1.0f;
+            std::memcpy(post.tint, lightLook.tint, sizeof(post.tint));
+            post.wobble = gUserSettings.GetUnderwater() == 2 ? 2.0f : 0.0f;
+            post.aberration = gUserSettings.GetUnderwater() == 2 ? 0.8f : 0.3f;
+            post.vignette = 0.55f;
+            post.rays = lightLook.rays;
+        }
+        post.bloom = gUserSettings.BloomAmount() * lightLook.bloom[lightMode];
+        post.bloomThreshold = 0.78f;
+        post.time = effectTime;
+        Gfx::PostEffects(post);
+    }
     Gfx::PostProcess(gUserSettings.GetAntialiasing(), gUserSettings.SharpnessAmount());
 
     // ── 7. 2D HUD ─────────────────────────────────────────────────────────────

@@ -63,6 +63,8 @@
 //   TERRAIN_INDEX (terrain helper)
 
 #include "stdafx.h"
+#include "render/Gfx.h"
+#include "app/config/UserSettings.h"
 #include "render/ResourceTables.h"
 #include "scenes/ObjectRegistry.h"
 #include "platform/Text.h"
@@ -173,6 +175,7 @@ static void Tamachan_Move(char *o, int life)
         float dy = *(float *)(o + 20) - *(float *)&((OBJECT*)(uintptr_t)(o))->StartPosition[1];
         *(int *)(o + 96) = 10;
         float dist = (float)sqrt(dy * dy + dx * dx);
+        const float before[2] = {*(float *)(o + 16), *(float *)(o + 20)};
         MoveHumming((float *)(o + 16), (float *)(o + 28), (float*)&AsObject(o)->StartPosition[0], 3000.0f / dist);
         *(float *)(o + 28) = -10.0f;
         *(float *)(o + 32) = 0.0f;
@@ -204,6 +207,11 @@ static void Tamachan_Move(char *o, int life)
         }
         if (!(rand() % 3)) {
             float pos[3] = { *(float *)(o + 16), *(float *)(o + 20), *(float *)(o + 24) + 11.0f };
+            // DESVIACION: las ondas salen de la cola (detrás según hacia dónde
+            // avanza), no del centro del cuerpo.
+            const float mx = pos[0] - before[0], my = pos[1] - before[1];
+            const float ml = (float)sqrt(mx * mx + my * my);
+            if (ml > 0.01f) { pos[0] -= mx / ml * 50.0f; pos[1] -= my / ml * 50.0f; }
             Particle_Spawn(103, pos, (float *)(o + 28), (float *)(o + 232), 1, 2.0f, 0);
         }
         PlayBuffer(11, 0, 0);
@@ -230,6 +238,16 @@ newLife:
 // el de abajo devuelven CaseExit: Next es seguir, Break salir del switch.
 
 enum class CaseExit { Break, Return, Next };
+
+// DESVIACION (iluminación mejorada): luz de efectos que en el 0.97k no llaman
+// a AddTerrainLight (Greater Life). Sólo por píxel: la grilla queda igual.
+static void EffectGlow(const void* source, Gfx::LightKind kind, const float at[3], float r, float g, float b, float radius)
+{
+  if (gUserSettings.GetAntilag(ANTILAG_SKILLS) || gUserSettings.GetDynamicLights() <= 0) return;
+  const float position[3] = { at[0], at[1], RequestTerrainHeight(at[0], at[1]) + 90.0f };
+  const float color[3] = { r, g, b };
+  Gfx::SourceLight(source, kind, position, color, radius);
+}
 
 // IDA: MoveEffect (0x00466AD0), case MODEL_TAMA.
 static bool MoveEffect_Tama(float *& param_1, const intptr_t& __cnt)
@@ -1940,6 +1958,15 @@ static bool MoveEffect_Type1264(float *& param_1)
   if ((0 < AsObject(param_1)->SubType) && (AsObject(param_1)->SubType != 4)) {
     Effect_SpawnLightningBurst((intptr_t)param_1);
   }
+  // Explosión de Greater Life (vida 60): la misma curva y color que su mancha
+  // del piso en Particle_RenderAll.  Los dos que crea el casteo son una luz.
+  if (AsObject(param_1)->Type == BITMAP_MAGIC + 1 && AsObject(param_1)->SubType == 4) {
+    const int life = AsObject(param_1)->LifeTime;
+    const float glow = life < 5 ? (float)life * 0.2f : sinf((float)(60 - life) * 0.05f) + 0.5f;
+    if (glow > 0.0f)
+      EffectGlow((const void*)(intptr_t)AsObject(param_1)->Owner, Gfx::LightKind::BuffBurst,
+                 AsObject(param_1)->Position, glow, glow * 0.6f, glow * 0.15f, 350.0f);
+  }
   return false;
 }
 
@@ -2199,7 +2226,11 @@ static bool MoveEffect_Energy(float *& param_1, const intptr_t& __cnt, float& fV
   local_368 = fVar13 * 0.2f;
   local_364 = fVar13 * 0.4f;
   local_360 = fVar13;
-  AddTerrainLight(*pfVar10,AsObject(param_1)->Position[1], (float*)&local_368,2, (float*)DAT_081cb608);
+  {
+    // DESVIACION (iluminación mejorada): su luz por píxel es la de un skill chico.
+    const Gfx::SmallLightScope smallLight;
+    AddTerrainLight(*pfVar10,AsObject(param_1)->Position[1], (float*)&local_368,2, (float*)DAT_081cb608);
+  }
   Effect_SpawnProximityHit((intptr_t)param_1);
   return false;
 }
@@ -2526,6 +2557,8 @@ void MoveEffect(float *param_1, int param_2)
                 }
                 else {
                   *(float *)&AsObject(param_1)->LifeTime = 1.4013e-44;
+                  // El efecto queda donde se creó; el aura va con el dueño.
+                  EffectGlow(pcVar11, Gfx::LightKind::BuffAura, AsObject(pcVar11)->Position, 0.65f, 0.42f, 0.12f, 250.0f);
                 }
                 local_368 = 1.0;
                 local_364 = 0.5;

@@ -170,4 +170,22 @@
 83	"Aumenta o AG máximo +%d%%"
 //HelperDamageIncrease
 84	"Poder de ataque e poder mágico aumentados em %d%%"
+//OptionsLighting
+85	"Iluminação"
+//DynamicLights
+86	"Luzes dinâmicas: %s"
+//LightsConservative
+87	"Suaves"
+//LightsContrast
+88	"Contrastadas"
+//Bloom
+89	"Brilho: %s"
+//Sky
+90	"Céu (F10)"
+//Underwater
+91	"Debaixo d'água: %s"
+//UnderwaterNoWobble
+92	"Sem ondulação"
+//WorldWater
+93	"Água melhorada"
 end
