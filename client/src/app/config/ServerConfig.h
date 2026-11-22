@@ -41,7 +41,9 @@ constexpr char           ClientVersion[]     = "0.97.40";
 // Clave pública de identidad del server (Fase 5, C3), en hex de 64 dígitos. Es la
 // que el GameServer escribe en su log al arrancar ("[ServerIdentity] Clave
 // publica: ..."). Vacía: el cliente fija la del primer contacto y la guarda en
-// User/Cache/<server>/server.pub (ver net/ServerTrust.h).
+// User/Cache/<server>/server.pub, que se puede editar.  Con clave, ésa es la
+// raíz y ningún archivo la pisa; si está mal escrita no se conecta a ningún
+// server (ver net/ServerTrust.h).
 constexpr char           ServerPublicKey[]   = "";
 
 } // namespace ServerConfig

@@ -2,36 +2,23 @@
 #include "net/ServerTrust.h"
 #include "app/config/ServerConfig.h"
 #include "platform/IFileSystem.h"
+#include "platform/UserPath.h"
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <system_error>
 
-// La clave fijada de cada server: lectura y escritura.  La decisión y la
+// Lo que se guarda de cada server: la cadena de rotaciones (con clave
+// compilada) o la clave del primer contacto (sin ella).  La decisión y la
 // verificación de firmas están en ServerTrustCore.cpp.
+
+extern "C" void DbgLogPublic(const char* msg);
 
 namespace ServerTrust {
 
 namespace {
 
 std::string s_Dir;
-
-bool FromHex(const char* text, std::uint8_t* out, std::size_t size)
-{
-    if (!text || std::strlen(text) < size * 2) return false;
-    for (std::size_t n = 0; n < size; ++n) {
-        int value = 0;
-        for (int d = 0; d < 2; ++d) {
-            const char c = text[n * 2 + d];
-            int digit;
-            if (c >= '0' && c <= '9') digit = c - '0';
-            else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
-            else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
-            else return false;
-            value = value * 16 + digit;
-        }
-        out[n] = (std::uint8_t)value;
-    }
-    return true;
-}
 
 std::string PinFile() { return s_Dir + "/server.pub"; }
 
@@ -42,11 +29,10 @@ bool ReadPin(std::uint8_t out[KeySize])
             char text[KeySize * 2 + 1] = {};
             const std::size_t got = fread(text, 1, KeySize * 2, f);
             fclose(f);
-            if (got == KeySize * 2 && FromHex(text, out, KeySize)) return true;
+            if (got == KeySize * 2 && ParseKey(text, out)) return true;
         }
     }
-    // Sin archivo propio vale la clave compilada, si el build trae una.
-    return FromHex(ServerConfig::ServerPublicKey, out, KeySize);
+    return false;
 }
 
 void WritePin(const std::uint8_t key[KeySize])
@@ -65,6 +51,47 @@ void WritePin(const std::uint8_t key[KeySize])
     fclose(f);
 }
 
+// User/Cache/server-<primeros 16 dígitos de la raíz>.chain
+std::string ChainFile(const std::uint8_t root[KeySize])
+{
+    std::string path = std::string(Platform::UserDir()) + "Cache/server-";
+    static const char digits[] = "0123456789abcdef";
+    for (std::size_t n = 0; n < 8; ++n) {
+        path += digits[root[n] >> 4];
+        path += digits[root[n] & 15];
+    }
+    return path + ".chain";
+}
+
+std::string ReadChain(const std::string& path)
+{
+    std::string text;
+    if (FILE* f = Platform::GetFileSystem().Open(path.c_str(), "rb")) {
+        char part[1024];
+        std::size_t got;
+        while (text.size() < 0x10000 && (got = fread(part, 1, sizeof(part), f)) > 0) text.append(part, got);
+        fclose(f);
+    }
+    return text;
+}
+
+// Temporal y reemplazo: una cadena cortada deja afuera al cliente en la
+// rotación siguiente.
+void WriteChain(const std::string& path, const std::string& text)
+{
+    Platform::GetFileSystem().EnsureDirectory((std::string(Platform::UserDir()) + "Cache").c_str());
+    const std::string temp = path + ".tmp";
+    FILE* f = Platform::GetFileSystem().Open(temp.c_str(), "wb");
+    bool ok = f != nullptr;
+    if (f) {
+        ok = fwrite(text.data(), 1, text.size(), f) == text.size();
+        ok = fclose(f) == 0 && ok;
+    }
+    std::error_code error;
+    if (ok) std::filesystem::rename(temp, path, error);
+    if (!ok || error) DbgLogPublic("ServerTrust: no se pudo guardar la rotación de la clave del server");
+}
+
 } // namespace
 
 void SetServer(const std::string& cacheDir) { s_Dir = cacheDir; }
@@ -73,6 +100,20 @@ Result Check(const std::uint8_t publicKey[KeySize],
              const std::uint8_t* previousKey,
              const std::uint8_t* rotationSignature)
 {
+    const char* const compiled = ServerConfig::ServerPublicKey;
+    if (*compiled) {
+        std::uint8_t root[KeySize];
+        if (!ParseKey(compiled, root)) {
+            // Mal escrita no es lo mismo que vacía: no se vuelve al primer contacto.
+            DbgLogPublic("ServerTrust: ServerPublicKey tiene que tener 64 dígitos hex, no se confía en ningún server");
+            return Result::Mismatch;
+        }
+        const std::string path = ChainFile(root);
+        std::string chain = ReadChain(path);
+        const Result result = DecideFromRoot(root, chain, publicKey, previousKey, rotationSignature);
+        if (result == Result::Rotated) WriteChain(path, chain);
+        return result;
+    }
     std::uint8_t pinned[KeySize] = {};
     const bool hasPinned = ReadPin(pinned);
     const Result result = Decide(hasPinned, pinned, publicKey, previousKey, rotationSignature);
