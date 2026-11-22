@@ -18,6 +18,51 @@ Mu Online 0.97k server and client in a single repository. The server (Mu-Linux, 
 
 Client and server share the version numbers and ship together in each Release. Up to 0.97.40 the client lived in [Mu-97k-Client-Source](https://github.com/EmanuelCatania/Mu-97k-Client-Source), where its earlier Releases remain.
 
+## What's new in 0.97.46
+
+- **Security: server identity.** Four client flaws present since 0.97.45 are
+  fixed, so you should hand out the new client:
+  - an edited `server.pub` in `User/Cache` replaced the key compiled in
+    `ServerPublicKey`;
+  - a fake refusal before the handshake left the connection unencrypted, with
+    the account and password readable, with or without a compiled key;
+  - with a compiled key, the ConnectServer could answer unencrypted;
+  - on a clean install, first contact did not save the key.
+
+  Build the client with your server's key in `ServerPublicKey`: without it, a
+  proxy set up by the player can impersonate the server. See
+  [Server identity](docs/identidad-del-server.md).
+- **Item tooltip from the server.** Item options (`ItemOption.txt`) and wing and
+  helper percentages (`GameServerInfo - Character.dat`) come in the catalog.
+  Luck no longer shows `+0%`, and reflect, 2nd level wings, life and mana on
+  kill and the Dinorant show what the server applies (#203).
+- **Improved water and lighting (WebGPU):** login sea with waves and
+  reflections, map water with ripples and reflections, per-pixel lights, bloom,
+  sky with the 3D camera and underwater effects in Atlans. Per-map profiles are
+  in `Content/map/maps.toml`, and everything can be turned off in
+  *Advanced > Lighting*.
+- Fixes, also with OpenGL: after a map change, Atlans fish and Devias rocks were
+  left floating; Mana Shield width; Flame strips and the Hellfire outline.
+  Lights last one tick, as in 0.97k.
+
+**Compatibility:** the protocol does not change (version 13). A 0.97.45 client
+can join a 0.97.46 server (without the new tooltips) and a 0.97.46 client a
+0.97.45 server (with the 0.97k values). The security fixes are in the client.
+
+### Upgrading from 0.97.45
+
+The database does not change.
+
+1. **Images:** `pull` as in 0.97.45, or the images tagged `0.97.46`.
+2. **Volumes (optional):** copy `Data/Text/*/Client.txt` from this version
+   (texts 81 to 93: tooltips and lighting options). Without them the client
+   uses its built-in texts.
+3. **Client:** build it with `ServerPublicKey`, the key the GameServer writes to
+   its log on start (`[ServerIdentity] Clave publica`).
+
+**Pterodactyl:** select `0.97.46` in `MU_RELEASE_TAG` and replace the binaries
+as in 0.97.45.
+
 ## What's new in 0.97.45 — Phase 5, first part
 
 This version brings the first half of Phase 5: content shared between client

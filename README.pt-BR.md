@@ -18,6 +18,51 @@ Servidor e cliente do Mu Online 0.97k num único repositório. O servidor (Mu-Li
 
 Cliente e servidor compartilham a numeração e saem juntos em cada Release. Até a 0.97.40 o cliente ficava em [Mu-97k-Client-Source](https://github.com/EmanuelCatania/Mu-97k-Client-Source), onde continuam os Releases anteriores.
 
+## Novidades da 0.97.46
+
+- **Segurança: identidade do servidor.** São corrigidas quatro falhas do cliente
+  que vinham da 0.97.45, então convém distribuir o cliente novo:
+  - um `server.pub` editado em `User/Cache` substituía a chave compilada em
+    `ServerPublicKey`;
+  - uma recusa falsa antes do handshake deixava a conexão sem cifrar, com a
+    conta e a senha legíveis, com ou sem chave compilada;
+  - com chave compilada, o ConnectServer podia responder sem cifrar;
+  - numa instalação limpa, o primeiro contato não guardava a chave.
+
+  Compile o cliente com a chave do seu servidor em `ServerPublicKey`: sem ela,
+  um proxy montado pelo próprio jogador pode se passar pelo servidor. Veja
+  [Identidade do servidor](docs/identidad-del-server.md).
+- **Tooltip de itens a partir do servidor.** As opções dos itens
+  (`ItemOption.txt`) e as porcentagens de asas e helpers
+  (`GameServerInfo - Character.dat`) chegam no catálogo. A Sorte já não mostra
+  `+0%`, e o reflexo, as asas de 2.º nível, a vida e a mana ao matar e o
+  Dinorant mostram o que o servidor aplica (#203).
+- **Água e iluminação melhoradas (WebGPU):** mar do login com ondas e reflexos,
+  água dos mapas com ondulações e reflexos, luzes por pixel, brilho, céu com a
+  câmera 3D e efeitos debaixo d'água em Atlans. Os perfis por mapa estão em
+  `Content/map/maps.toml` e tudo se desliga em *Avançado > Iluminação*.
+- Correções, também com OpenGL: ao trocar de mapa ficavam peixes de Atlans e
+  pedras flutuando em Devias; a largura do Mana Shield; faixas do Flame e o
+  contorno do Hellfire. As luzes duram um tick, como na 0.97k.
+
+**Compatibilidade:** o protocolo não muda (versão 13). Um cliente 0.97.45 entra
+num servidor 0.97.46 (sem os tooltips novos) e um cliente 0.97.46 num servidor
+0.97.45 (com os valores da 0.97k). As correções de segurança estão no cliente.
+
+### Como atualizar a partir da 0.97.45
+
+O banco de dados não muda.
+
+1. **Imagens:** `pull` como na 0.97.45, ou as imagens com tag `0.97.46`.
+2. **Volumes (opcional):** copie `Data/Text/*/Client.txt` desta versão (textos
+   81 a 93: tooltips e opções de iluminação). Sem eles, o cliente usa seus
+   textos embutidos.
+3. **Cliente:** compile-o com `ServerPublicKey`, a chave que o GameServer
+   escreve no log ao iniciar (`[ServerIdentity] Clave publica`).
+
+**Pterodactyl:** selecione `0.97.46` em `MU_RELEASE_TAG` e substitua os
+binários como na 0.97.45.
+
 ## Novidades da 0.97.45 — Fase 5, primeira parte
 
 Esta versão traz a primeira metade da Fase 5: conteúdo compartilhado entre

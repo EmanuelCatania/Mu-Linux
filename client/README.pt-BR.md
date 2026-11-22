@@ -36,6 +36,23 @@ baú, trade, chat, party, guild, combate, skills, efeitos, eventos, som e músic
 | Linux x64 | OpenGL 3.3 e WebGPU (Vulkan) | Completo; é o build publicado |
 | Windows x86, Linux x86 | OpenGL 3.3 | Base histórica: compila, mas não é testada nem recebe WebGPU |
 
+### Novidades da 0.97.46
+
+- **Identidade do servidor.** Com `ServerPublicKey` compilada, essa chave é a
+  raiz: um `server.pub` editado já não a substitui e as rotações são verificadas
+  por assinatura (`User/Cache/server-<chave>.chain`). Uma recusa falsa antes do
+  handshake já não deixa a conexão sem cifrar, com chave compilada o
+  ConnectServer precisa ser cifrado, e numa instalação limpa o primeiro contato
+  guarda a chave. Veja [Identidade do servidor](../docs/identidad-del-server.md).
+- **Tooltip de itens** com as opções e porcentagens que o servidor manda; sem
+  elas ficam os valores da 0.97k.
+- **Água e iluminação melhoradas** com WebGPU, que se desligam em
+  *Avançado > Iluminação*. Perfis por mapa em `Content/map/maps.toml`.
+- Correções de efeitos ao trocar de mapa, Mana Shield, Flame e Hellfire.
+
+**Compatibilidade: cliente 0.97.46 ↔ [servidor 0.97.46](../README.pt-BR.md).**
+O protocolo não muda: também entra num servidor 0.97.45.
+
 ### Novidades da 0.97.45 — Fase 5, primeira parte
 
 - **Conteúdo por entidade.** `Data/` vira `Content/` (uma pasta por item,
@@ -115,7 +132,7 @@ servidor 0.97.40, e vice-versa.
 - **Uma placa de vídeo com OpenGL 3.3**, com o driver instalado. O WebGPU
   precisa também de DirectX 12, DirectX 11 ou Vulkan; se o dispositivo não
   puder ser criado, o cliente segue com OpenGL.
-- **Um servidor 0.97.45.** O port é validado contra
+- **Um servidor 0.97.45 ou posterior.** O port é validado contra
   [MuEmu - Linux](../README.pt-BR.md) (season
   0.97k), que é a fonte autoritativa para o formato dos pacotes. Cada Release do
   cliente indica com qual versão do servidor funciona. Servidores 0.97k sem as
