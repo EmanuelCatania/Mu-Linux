@@ -332,9 +332,10 @@ namespace {
 // Luces puntuales registradas por las ticks (ver DynamicLight en Gfx.h).
 constexpr int MaxDynamicLights = 128;   // las que se guardan
 constexpr int MaxSentLights = 64;       // las que van al shader (las más cercanas)
-struct PointLight { float position[3], color[3], radius; double stamp; };
+struct PointLight { float position[3], color[3], radius; double stamp; unsigned tick; };
 PointLight pointLights[MaxDynamicLights];
 int pointLightCount = 0;
+unsigned lightTick = 0;
 double Seconds() {
     using namespace std::chrono;
     static const auto start = steady_clock::now();
@@ -360,6 +361,7 @@ void DynamicLight(const float position[3], const float light[3], float radius) {
             }
             l.radius = radius;
             l.stamp = now;
+            l.tick = lightTick;
             return;
         }
     }
@@ -374,6 +376,15 @@ void DynamicLight(const float position[3], const float light[3], float radius) {
     std::memcpy(l.color, color, sizeof(l.color));
     l.radius = radius;
     l.stamp = now;
+    l.tick = lightTick;
+}
+void BeginLightTick() {
+    ++lightTick;
+    // Las del tick anterior quedan sólo para suavizar a las que vuelven en el
+    // mismo lugar; no se dibujan.
+    for (int i = 0; i < pointLightCount;)
+        if (lightTick - pointLights[i].tick > 1) pointLights[i] = pointLights[--pointLightCount];
+        else ++i;
 }
 void Lighting(const SceneLight& light) {
     if (!shadowScene) return;
@@ -386,20 +397,25 @@ void Lighting(const SceneLight& light) {
     int count = 0;
     if (light.dynamicLights) {
         const double now = Seconds();
-        // Se van las que no se refrescaron.
+        // Se van las que quedaron de cuando dejó de haber ticks.
         for (int i = 0; i < pointLightCount;)
             if (now - pointLights[i].stamp > 0.25) pointLights[i] = pointLights[--pointLightCount];
             else ++i;
         int order[MaxDynamicLights];
-        for (int i = 0; i < pointLightCount; ++i) order[i] = i;
+        // Sólo las del último tick: con las anteriores, una luz que avanza más
+        // de lo que se reconoce como la misma (Power Wave, 60 por tick) dejaba
+        // una fila de siete encendidas y quemaba la imagen a blanco.
+        int live = 0;
+        for (int i = 0; i < pointLightCount; ++i)
+            if (pointLights[i].tick == lightTick) order[live++] = i;
         auto distance = [&](int i) {
             const float dx = pointLights[i].position[0] - light.focus[0], dy = pointLights[i].position[1] - light.focus[1];
             return dx * dx + dy * dy;
         };
-        if (pointLightCount > MaxSentLights)
-            std::partial_sort(order, order + MaxSentLights, order + pointLightCount,
+        if (live > MaxSentLights)
+            std::partial_sort(order, order + MaxSentLights, order + live,
                               [&](int a, int b) { return distance(a) < distance(b); });
-        count = std::min(pointLightCount, MaxSentLights);
+        count = std::min(live, MaxSentLights);
         for (int n = 0; n < count; ++n) {
             const PointLight& l = pointLights[order[n]];
             float* p = params + 12 + n * 8;

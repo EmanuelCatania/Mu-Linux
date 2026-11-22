@@ -177,10 +177,13 @@ void WorldWaterLight(const float position[3], const float color[3], bool ripple 
 bool SceneEffectsSupported();
 void SetSceneEffects(bool wanted);
 // Luz puntual del mundo para la iluminación por píxel (la registran los mismos
-// AddTerrainLight del 0.97k). Como las ticks no corren en cada cuadro, cada luz
-// dura 0.25 s desde la última vez y su color se suaviza entre registros (así
-// el parpadeo de las llamas no salta).
+// AddTerrainLight del 0.97k). Como en la grilla, se ven las del último tick
+// (BeginLightTick) hasta que empieza el siguiente; si dejó de haber ticks, se
+// apagan a los 0.25 s. El color se suaviza contra el tick anterior (así el
+// parpadeo de las llamas no salta).
 void DynamicLight(const float position[3], const float color[3], float radius);
+// Al empezar el tick del mundo, donde Terrain_Water limpia la grilla de luz.
+void BeginLightTick();
 // Dentro de la escena, una vez por cuadro: luces por píxel (dynamicLights) con
 // su intensidad, alcance y la luz base; cáusticas bajo el agua; y cuánto y qué
 // tan suave se ve la sombra del sol.
