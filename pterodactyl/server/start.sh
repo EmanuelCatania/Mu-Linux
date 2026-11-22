@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "MU Linux server 0.97.45 | Cliente compatible: https://github.com/EmanuelCatania/Mu-Linux/releases/tag/0.97.45"
+echo "MU Linux server 0.97.46 | Cliente compatible: https://github.com/EmanuelCatania/Mu-Linux/releases/tag/0.97.46"
 
 DB_HOST=${DB_HOST:-mysql}
 DB_PORT=${DB_PORT:-3306}
