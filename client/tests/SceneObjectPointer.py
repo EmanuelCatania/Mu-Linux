@@ -135,6 +135,11 @@ void Hash(const void* memory, std::size_t size) {
 }
 void Event(unsigned kind) { ++events; Hash(&kind, sizeof(kind)); }
 template<class Owner> void PlayBuffer(int id, Owner, int) { Event(1000 + id); }
+// Agua mejorada apagada: el tick tiene que dar lo mismo que sin ella.
+namespace Gfx {
+bool WaterEnabled() { return false; }
+void WorldWaterLight(const float*, const float*, bool = false) { std::abort(); }
+}
 void AddTerrainLight(float x, float y, float* light, int range, float*) {
     Event(1); Hash(&x, 4); Hash(&y, 4); Hash(light, 12); Hash(&range, 4);
 }

@@ -24,6 +24,11 @@ int ownerCalls, alphaCalls;
 std::vector<Sprite> observed;
 bool RenderInterpolation_OwnerContinuous(const void* object) { Require(object==activeObject); ++ownerCalls; return continuousFlag; }
 float RenderInterpolation_Alpha() { ++alphaCalls; return alphaValue; }
+// Agua mejorada apagada: los sprites tienen que dar lo mismo que sin ella.
+namespace Gfx {
+bool WaterEnabled() { return false; }
+void WaterLight(const float*, const float*, bool = false) { Require(false); }
+}
 int CreateSprite(unsigned short type,float* position,float scale,float* light,int owner,float rotation,int mode) {
     Sprite value; value.type=type; value.scale=scale; value.owner=owner; value.rotation=rotation; value.mode=mode;
     std::memcpy(value.position,position,12); std::memcpy(value.light,light,12); observed.push_back(value); return 0;

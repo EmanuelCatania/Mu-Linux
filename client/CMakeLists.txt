@@ -454,6 +454,8 @@ set(MU_HEADERS
     src/game/entity/EntityView.h
     src/game/entity/EntityName.h
     src/render/WorldEffects.h
+    src/render/WaterProfiles.h
+    src/render/LightingProfiles.h
     src/render/MaterialVisuals.h
     src/render/LooseWingVisuals.h
     src/render/EquipmentVisuals.h
