@@ -320,10 +320,16 @@ void __cdecl OpenTexture(int Model, const char* SubFolder, int Type, char Check)
             int extChar = (dotPos + 1 < nameLen) ? tolower((unsigned char)Name[dotPos + 1]) : 'j';
             int slot = (int)TextureCurrent;  // TextureCurrent
             ResourceTables::EnsureTextures(std::size_t(slot)+1);
+            // DESVIACION: magic_a01 (los cuadrados del piso de Hellfire, UV
+            // 0.0005..0.9995, sin scroll) tiene un lado negro y el opuesto en
+            // 255. Con MSAA o filtro suave la muestra del borde se pasa de 0 y,
+            // repitiendo, traía el lado brillante: una línea de 1 px alrededor
+            // de cada cuadrado.
+            const int wrap = Platform::TextCompareIgnoreCaseN(Name, "magic_a01.", 10) == 0 ? 0x2900 : 0x2901;
             if (extChar == 't')
-                OpenTGA(local_40, slot, 0x2600, 0x2901, 0, Check);   // OpenTGA
+                OpenTGA(local_40, slot, 0x2600, wrap, 0, Check);   // OpenTGA
             else
-                OpenJPG(local_40, slot, Type,   0x2901, 0, Check);   // OpenJPG/OZJ
+                OpenJPG(local_40, slot, Type,   wrap, 0, Check);   // OpenJPG/OZJ
 
             // Store filename into the Bitmaps slot (first 32 bytes)
             char* slotBase = &g_BitmapsRaw[slot * TEXTURE_STRIDE];
