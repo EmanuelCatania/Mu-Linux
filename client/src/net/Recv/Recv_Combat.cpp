@@ -51,10 +51,14 @@ void ApplyPersistentSkillEffect97k(BYTE* entity, WORD effect, BYTE state)
             *(WORD*)(entity + 2) != 325) {
             PlayBuffer(103, 0, 0);
             DeleteJoint(266, (intptr_t)entity, 0);
+            // DESVIACION: IDA InsertBuffPhysicalEffect (0x0043BDE0) los crea con
+            // ancho 50 y el casteo (MoveCharacter, skill 16) con 20. Por acá pasan
+            // el 0x07 y el viewport, así que al cambiar de mapa el escudo volvía
+            // 2,5 veces más grueso. Se usa el ancho del casteo en los dos caminos.
             for (int i = 0; i < 5; ++i) {
                 Joint_Create(266, (float*)(entity + 16), (float*)(entity + 16),
                               (float*)(entity + 28), 0,
-                              (intptr_t)entity, 50.0f, -1, 0);
+                              (intptr_t)entity, 20.0f, -1, 0);
             }
         }
         // DESVIACION: IDA crea estos joints solo al castear; se recrean para

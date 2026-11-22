@@ -827,7 +827,7 @@ static inline void mc_AngleVectorOffset(float *origin7, float ax, float ay, floa
 
 // `DeleteJoint` real (0x0046FE00): el skill 16 spawnea 5 joints 266 con
 // Scale 20 y ANTES hace `DeleteJoint(266, Owner, 0)` para sacar los que ya
-// hubiera — p.ej. los de Scale 50 que deja `InsertBuffPhysicalEffect`
+// hubiera — p.ej. los que deja `InsertBuffPhysicalEffect`
 // (0x43BDE0, el camino de viewport cuando la entidad aparece con el buff ya
 // activo).  Si esto fuera un no-op convivirían los dos grupos (arcos dobles).
 extern "C" void __cdecl DeleteJoint(int Type, intptr_t Target, int SubType);
