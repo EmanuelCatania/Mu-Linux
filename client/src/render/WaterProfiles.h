@@ -9,8 +9,8 @@
 namespace WaterProfiles {
 // Llena la máscara (256x256 RGBA: por tile R = base agua (1) | capa 2 agua (2)
 // | cauce hondo (4), en pasos de 36; por vértice G = nivel del agua (z/2 + 20,
-// 0 = sin agua), B = alfa de la capa 2, A = luz del terreno) y el aspecto del
-// mapa.
+// 0 = sin agua), B = alfa de la capa 2 (en los mapas sin cauces, cuánta agua
+// pinta el mapa en el vértice), A = luz del terreno) y el aspecto del mapa.
 // false si el mapa no lleva agua mejorada o no tiene agua.
 bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look);
 // Cuánto se hunde cada vértice del terreno al dibujarlo para formar el cauce

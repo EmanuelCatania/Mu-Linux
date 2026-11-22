@@ -401,6 +401,7 @@ struct Draw {
     uint32_t firstVertex, vertexCount;
     bool quads;
     bool caster;   // dentro de la escena de sombras: se dibuja también desde la luz
+    bool overWater;   // objeto del mapa aditivo: Water lo pasa encima del agua redibujada
     uint8_t topology;   // WGPUPrimitiveTopology del dibujo inmediato
     int viewport[4];
     // Malla residente: sus propios buffers (nulos en el dibujo inmediato).
@@ -516,6 +517,7 @@ struct State {
     unsigned errors = 0;
     // Sombras proyectadas: escena en grabación y recursos.
     bool shadowScene = false, shadowFrame = false, shadowCasting = true;
+    bool mapObjects = false;   // ver Gfx::SetMapObjects
     float shadowStrength = 0.5f;
     ShadowUniform shadow{};
     WGPUTexture shadowMap = nullptr;
@@ -969,6 +971,11 @@ bool Caster(const PipelineKey& key) {
            !(key.blend && Gfx::Factor(key.dst) == Gfx::Factor::One) &&
            (topology == WGPUPrimitiveTopology_TriangleList || topology == WGPUPrimitiveTopology_TriangleStrip);
 }
+// Objeto del mapa aditivo: no deja profundidad, el agua no sabe que está ahí.
+bool OverWater(const PipelineKey& key) {
+    return g.mapObjects && key.depthTest && !key.depthWrite && key.blend &&
+           Gfx::Factor(key.dst) == Gfx::Factor::One;
+}
 // La textura ligada si el texturizado está activo; la blanca si no.
 TextureSlot& BoundSlot() {
     const auto& s = RenderState::Get();
@@ -1310,6 +1317,7 @@ bool DrawResidentMesh(const void* key, MeshTopology::Mesh& topology, const Skinn
     const PipelineKey residentKey = StateKey(uint8_t(WGPUPrimitiveTopology_TriangleList | (Resident << 4)));
     draw.pipeline = Pipeline(residentKey);
     draw.caster = Caster(residentKey) && !d.shadow;   // la sombra plana no proyecta
+    draw.overWater = OverWater(residentKey);
     draw.textureGroup = TextureGroup(slot);
     slot.usedFrame = g.frame;
     draw.uniformOffset = UniformOffset();
@@ -2090,6 +2098,20 @@ fn levelAt(xy: vec2f) -> f32 {
     // guarde redondeado de a 2.
     return (g * 255.0 - 20.0) * 2.0 + 8.0;
 }
+// Superficie del agua redibujada: los mismos dos triángulos por tile que el
+// terreno (0-1-2, 0-2-3). Con la bilineal el suelo asomaba en triángulos. Va 5
+// encima y no 8: más alto tapa los nenúfares.
+fn redrawLevelAt(xy: vec2f) -> f32 {
+    let q = clamp(xy / 100.0, vec2f(0.0), vec2f(254.999));
+    let i = vec2i(floor(q));
+    let f = q - floor(q);
+    let a = textureLoad(waterMask, i, 0).g;
+    let b = textureLoad(waterMask, i + vec2i(1, 0), 0).g;
+    let c = textureLoad(waterMask, i + vec2i(1, 1), 0).g;
+    let d = textureLoad(waterMask, i + vec2i(0, 1), 0).g;
+    let g = select(a + (c - d) * f.x + (d - a) * f.y, a + (b - a) * f.x + (c - b) * f.y, f.x >= f.y);
+    return (g * 255.0 - 20.0) * 2.0 + 5.0;
+}
 // 0..1: cuánto de plano es el suelo en este píxel. El agua del mapa es plana;
 // la máscara, al interpolar entre vértices, se mete en la barranca de la orilla
 // y ahí no tiene que haber agua. La normal sale de los píxeles vecinos (sin
@@ -2172,13 +2194,19 @@ fn worldWater(position: vec4f) -> vec4f {
     // de los tiles) y un fondo en pendiente queda tapado por una superficie
     // plana. El nivel depende de dónde cae el rayo: se ajusta dos veces.
     let ray = normalize(ground - cam);
+    // Redibujada: se compara en la vertical del píxel. La superficie sigue la
+    // pendiente y el ajuste por el rayo la pasaba por debajo del suelo.
+    let redrawn = u.tint.w > 0.5;
     var level = levelAt(ground.xy);
+    if (redrawn) { level = redrawLevelAt(ground.xy); }
     var p = ground;
     var onPlane = false;
     if (ray.z < -0.001) {
         var tt = (level - cam.z) / ray.z;
-        level = levelAt((cam + ray * tt).xy);
-        tt = (level - cam.z) / ray.z;
+        if (!redrawn) {
+            level = levelAt((cam + ray * tt).xy);
+            tt = (level - cam.z) / ray.z;
+        }
         if (tt > 0.0 && tt < length(ground - cam) && level > ground.z) {
             onPlane = true;
             p = cam + ray * tt;
@@ -2208,11 +2236,11 @@ fn worldWater(position: vec4f) -> vec4f {
         if (deepTile) {
             coverage = select(smoothstep(8.0, 16.0, depthBelow), smoothstep(0.0, 4.0, depthBelow), waterAt(ground.xy) > 0.5);
         } else if (u.tint.w > 0.5) {
-            // Redibujada: orilla suave por la parte de tiles de agua (B).
+            // Redibujada: orilla suave por el agua que pinta el mapa (B).
             let wet = textureSampleLevel(waterMask, linearSampler, (ground.xy / 100.0 + 0.5) / 256.0, 0.0).b;
-            // 0.5 es el borde de los tiles de agua; un poco antes, para que un
-            // estanque chico no se achique.
-            coverage = smoothstep(0.15, 0.40, wet) * smoothstep(0.0, 4.0, depthBelow);
+            // Corta bajo: un charco de un tile o con pasto encima apenas llega
+            // a 0.25 en sus vértices y desaparecía.
+            coverage = smoothstep(0.12, 0.35, wet) * smoothstep(0.0, 4.0, depthBelow);
         } else {
             coverage = waterAt(ground.xy) * smoothstep(0.0, 4.0, depthBelow);
         }
@@ -3274,6 +3302,18 @@ void Water(const float* params) {
     std::memcpy(g.waterViewport, RenderState::Get().viewport, sizeof(g.waterViewport));
     g.passes.emplace_back();
     g.passes.back().water = true;
+    // Agua redibujada (a ras del suelo): lo aditivo de los objetos del mapa,
+    // como los arcos de Noria, va después del agua. No escribe profundidad y
+    // el agua lo pisaba como si fuera el suelo de atrás.
+    if (g.water.tint[3] <= 0.5f || g.passes.size() < 2) return;
+    auto& before = g.passes[g.passes.size() - 2].draws;
+    auto& after = g.passes.back().draws;
+    size_t kept = 0;
+    for (const auto& draw : before) {
+        if (draw.overWater) after.push_back(draw);
+        else before[kept++] = draw;
+    }
+    before.resize(kept);
 }
 void WaterMask(const unsigned char* mask) { if (g.ready) ::WebGPU::UploadWaterMask(mask); }
 // Ver Gfx::Lighting: [0] luces, [1] intensidad, [2] luz base, [4] cáusticas,
@@ -3304,6 +3344,7 @@ void PostEffects(const float* params) {
     std::memcpy(g.postFx, params, sizeof(g.postFx));
 }
 void ShadowCasting(bool enabled) { g.shadowCasting = enabled; }
+void MapObjects(bool active) { g.mapObjects = active; }
 // El posproceso abre una pasada: al codificarla se aplica antes de sus dibujos.
 void PostProcess(bool antialias, float sharpen) {
     if (!g.ready) return;
@@ -3411,6 +3452,7 @@ void Submit(unsigned mode, const Vertex* vertices, std::size_t count) {
     draw.firstVertex = uint32_t(g.vertices.size());
     draw.quads = quads;
     draw.caster = ::WebGPU::Caster(key);
+    draw.overWater = ::WebGPU::OverWater(key);
     draw.topology = uint8_t(topology);
     std::memcpy(draw.viewport, s.viewport, sizeof(draw.viewport));
     g.vertices.insert(g.vertices.end(), vertices, vertices + count);
@@ -3424,6 +3466,7 @@ void Submit(unsigned mode, const Vertex* vertices, std::size_t count) {
         auto& last = draws.back();
         if (!last.vertexBuffer && last.pipeline == draw.pipeline && last.textureGroup == draw.textureGroup &&
             last.uniformOffset == draw.uniformOffset && last.quads == draw.quads && last.caster == draw.caster &&
+            last.overWater == draw.overWater &&
             last.firstVertex + last.vertexCount == draw.firstVertex &&
             !std::memcmp(last.viewport, draw.viewport, sizeof(draw.viewport))) {
             last.vertexCount += draw.vertexCount;

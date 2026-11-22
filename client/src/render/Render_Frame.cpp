@@ -600,7 +600,9 @@ void Render_Scene3D(void)
     }
     }
     { RenderProfile::Scope measured(RenderProfile::Pass::Objects);
+    Gfx::SetMapObjects(true);
     Terrain_Render();                              // Terrain_Render — UNCONDICIONAL en IDA (object walker)
+    Gfx::SetMapObjects(false);
     // DESVIACION: agua mejorada (WebGPU). Va después del terreno y de los
     // objetos del mapa: lo que de ellos queda por debajo de la superficie (el
     // pie de las murallas, los pilares del puente) queda bajo el agua. Los

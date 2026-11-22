@@ -117,6 +117,9 @@ void EndShadowScene();
 // Dentro de la escena, lo dibujado con casting en false recibe sombra pero no
 // la proyecta (p. ej. el pasto). Cada escena empieza con casting en true.
 void SetShadowCasting(bool enabled);
+// Marca los objetos del mapa: donde el agua se redibuja (Noria) los aditivos,
+// que no escriben profundidad, se dibujan encima de ella.
+void SetMapObjects(bool active);
 // DESVIACION: niebla por profundidad (opción). Con la opción activa la escena
 // se marca aunque no haya sombras. Atmosphere se fija por cuadro, antes de
 // EndShadowScene: mode 0 nada, 1 bruma de distancia, 2 bajo el agua (absorbe

@@ -18,6 +18,7 @@
     X(void, ClearErrors, (), ()) \
     X(void, PostProcess, (bool antialias, float sharpen), (antialias, sharpen))     X(bool, SupportsShadowMaps, (), ())     X(void, ShadowScene, (bool begin, const float* focus, float strength), (begin, focus, strength)) \
     X(void, ShadowCasting, (bool enabled), (enabled)) \
+    X(void, MapObjects, (bool active), (active)) \
     X(void, Atmosphere, (int mode, const float* color, float density, float start), (mode, color, density, start)) \
     X(void, Water, (const float* params), (params))     X(void, WaterMask, (const unsigned char* mask), (mask))     X(void, Lighting, (const float* params), (params))     X(void, Sky, (const float* params), (params))     X(void, PostEffects, (const float* params), (params)) \
     X(void, ReadPixelsRGB, (int x, int y, int width, int height, void* out), (x, y, width, height, out)) \

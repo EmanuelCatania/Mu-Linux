@@ -435,6 +435,10 @@ void SetShadowCasting(bool enabled) {
     BufferedDraw::Flush();
     GfxDevice::ShadowCasting(enabled);
 }
+void SetMapObjects(bool active) {
+    BufferedDraw::Flush();
+    GfxDevice::MapObjects(active);
+}
 void EndShadowScene() {
     if (!shadowScene) return;
     BufferedDraw::Flush();

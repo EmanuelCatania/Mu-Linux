@@ -2,6 +2,7 @@
 #include "render/WaterProfiles.h"
 #include "game/core/MapNumber.h"
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 namespace {
@@ -18,9 +19,10 @@ struct Profile {
     // Cauces hondos: el agua sube sobre un fondo tallado. Sin ellos toda el
     // agua del mapa va plana, sobre el agua que pinta el mapa.
     bool deep = true;
-    // Agua pintada en laderas (los arroyos helados de Devias): el plano queda
-    // bajo el suelo y sólo asoma en líneas. Con esto la superficie sube hasta
-    // el suelo en cada vértice de los tiles de agua y los cubre enteros.
+    // Agua pintada en laderas (los arroyos de Devias y de Noria): el plano
+    // queda bajo el suelo y sólo asoma en líneas o pedazos. Con esto la
+    // superficie sube hasta el suelo en cada vértice de los tiles de agua y los
+    // cubre enteros.
     bool drape = false;
 };
 // Lo que no está en la tabla usa este (el agua verdosa de Lorencia).
@@ -40,9 +42,10 @@ const Profile Profiles[] = {
     {MAP_ICARUS, false, DefaultLook},
     // Nieve: el agua original es gris clara y casi helada; cielo blanco.
     {MAP_DEVIAS, true, {{0.20f, 0.27f, 0.31f}, {0.78f, 0.82f, 0.86f}, 0.5f, {0.35f, 0.55f, 0.76f}}, true, true},
-    // Arroyos poco hondos de agua azul brillante: siempre plana, así se ve el
-    // agua del mapa (con cauce las orillas en escalón quedaban tapadas).
-    {MAP_NORIA, true, {{0.05f, 0.13f, 0.27f}, {0.50f, 0.64f, 0.80f}, 0.7f, {0.35f, 0.55f, 0.76f}}, false},
+    // Arroyos poco hondos de agua azul brillante: sin cauce (las orillas en
+    // escalón quedaban tapadas) y apoyados en el suelo, porque la mayoría baja
+    // por una pendiente y un plano dejaba seco el 30 % del agua del mapa.
+    {MAP_NORIA, true, {{0.05f, 0.13f, 0.27f}, {0.50f, 0.64f, 0.80f}, 0.7f, {0.35f, 0.55f, 0.76f}}, false, true},
 };
 }
 
@@ -258,7 +261,7 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
         // Laderas pintadas de agua: cada vértice de un tile de agua que quedó
         // por encima del plano lo sube hasta el suelo. Hasta 60: más alto es
         // una pared (bajo un puente) y ésa la cambia de textura WallTexture.
-        if (drape)
+        if (drape && allowDeep)
             for (int y = 0; y < 256; ++y)
                 for (int x = 0; x < 256; ++x) {
                     const int i = y * 256 + x;
@@ -272,6 +275,22 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
                     const float ground = BackTerrainHeight[i];
                     if (ground <= now || ground - now > 60.0f) continue;
                     vertexLevel[i] = (unsigned char)std::clamp((int)(ground * 0.5f + 0.5f) + 20, 1, 255);
+                }
+        // Redibujada: no puede asomar suelo dentro de la orilla. La orilla (B,
+        // interpolada) llega un vértice más allá de los tiles de agua, así que
+        // también suben ésos, sin tope y redondeando para arriba: el shader
+        // interpola con los triángulos del terreno y queda siempre encima.
+        if (drape && !allowDeep)
+            for (int y = 0; y < 256; ++y)
+                for (int x = 0; x < 256; ++x) {
+                    bool nearWater = false;
+                    for (int ty = y - 2; ty <= y + 1 && !nearWater; ++ty)
+                        for (int tx = x - 2; tx <= x + 1; ++tx)
+                            if (isWater(tx, ty)) { nearWater = true; break; }
+                    if (!nearWater) continue;
+                    const int i = y * 256 + x;
+                    const int ground = std::clamp((int)std::ceil(BackTerrainHeight[i] * 0.5f) + 20, 1, 255);
+                    vertexLevel[i] = (unsigned char)(std::max)((int)vertexLevel[i], ground);
                 }
     }
     for (int y = 0; y < 256; ++y)
@@ -291,13 +310,20 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
             if (allowDeep) {
                 o[2] = (unsigned char)(alpha(x, y) * 255.0f + 0.5f);
             } else {
-                // Redibujada: B = qué parte de los cuatro tiles del vértice es
-                // agua. Interpolado da una orilla redondeada.
-                int wet = 0;
+                // Redibujada: B = cuánta agua deja ver el mapa en los cuatro
+                // tiles del vértice (la base y la capa 2 mezcladas con su alfa).
+                // Interpolado da una orilla redondeada. No alcanza con contar
+                // tiles: casi todos llevan pasto encima y lo pintado es apenas
+                // el 57 % de su área; el agua se iría al doble del original.
+                const float a = alpha(x, y);
+                float painted = 0.0f;
                 for (int ty = y - 1; ty <= y; ++ty)
-                    for (int tx = x - 1; tx <= x; ++tx)
-                        if (tx >= 0 && ty >= 0 && tile[(ty & 255) * 256 + (tx & 255)]) ++wet;
-                o[2] = (unsigned char)(wet * 255 / 4);
+                    for (int tx = x - 1; tx <= x; ++tx) {
+                        if (tx < 0 || ty < 0) continue;
+                        const int bits = tile[ty * 256 + tx];
+                        painted += (bits & 1) * (1.0f - a) + ((bits >> 1) & 1) * a;
+                    }
+                o[2] = (unsigned char)(painted * 0.25f * 255.0f + 0.5f);
             }
             // Luz del terreno en el vértice (la que ilumina el agua original),
             // en luminancia y a la mitad, para que entre hasta 2.
