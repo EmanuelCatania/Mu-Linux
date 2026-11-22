@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 
 extern "C" {
@@ -50,6 +51,17 @@ std::vector<std::uint8_t> Manifest(const std::vector<std::pair<std::uint8_t, std
         for (int b = 0; b < 8; ++b) m.push_back((std::uint8_t)(s.second >> (8 * b)));
     }
     return m;
+}
+
+std::string Hex(const std::uint8_t* bytes, std::size_t size)
+{
+    static const char digits[] = "0123456789abcdef";
+    std::string out;
+    for (std::size_t n = 0; n < size; ++n) {
+        out += digits[bytes[n] >> 4];
+        out += digits[bytes[n] & 15];
+    }
+    return out;
 }
 
 void Rotation(std::uint8_t out[64], const KeyPair& oldKey, const std::uint8_t newPub[32])
@@ -110,6 +122,52 @@ int main()
 
     // Rotación válida pero para otra clave nueva.
     Require(ServerTrust::Decide(true, server.pub, other.pub, server.pub, rotation) == Result::Mismatch, "la rotación no sirve para otra clave");
+
+    // ── Clave compilada como raíz ───────────────────────────────────────────
+    const KeyPair third = MakeKey(0x44);
+    std::uint8_t second[64];
+    Rotation(second, next, third.pub);
+    const auto fromRoot = [&](std::string& chain, const std::uint8_t* key,
+                              const std::uint8_t* previous = nullptr, const std::uint8_t* proof = nullptr) {
+        return ServerTrust::DecideFromRoot(server.pub, chain, key, previous, proof);
+    };
+
+    std::string chain;
+    Require(fromRoot(chain, server.pub) == Result::Trusted, "raíz: la compilada es de confianza");
+    Require(fromRoot(chain, other.pub) == Result::Mismatch, "raíz: no hay primer contacto");
+    Require(fromRoot(chain, next.pub, server.pub, rotation) == Result::Rotated, "raíz: primera rotación");
+    const std::string oneStep = chain;
+    Require(fromRoot(chain, next.pub) == Result::Trusted, "raíz: la rotada queda de confianza");
+    Require(fromRoot(chain, server.pub) == Result::Mismatch, "raíz: tras rotar, la vieja no vale");
+    Require(fromRoot(chain, third.pub, next.pub, second) == Result::Rotated, "raíz: segunda rotación");
+    Require(fromRoot(chain, third.pub) == Result::Trusted, "raíz: la cadena de dos pasos verifica");
+    const std::string twoSteps = chain;
+
+    // Lo que puede escribir quien edita User/Cache.
+    std::string bare = Hex(other.pub, 32);
+    Require(fromRoot(bare, other.pub) == Result::Mismatch, "cadena: una clave suelta no pisa la raíz");
+    std::string forgedChain = Hex(other.pub, 32) + " " + Hex(forged, 64) + "\n";
+    Require(fromRoot(forgedChain, other.pub) == Result::Mismatch, "cadena: una firma ajena no pisa la raíz");
+    Require(fromRoot(forgedChain, server.pub) == Result::Trusted, "cadena: basura no deja afuera al server real");
+    std::string extended = twoSteps + Hex(other.pub, 32) + " " + Hex(second, 64) + "\n";
+    Require(fromRoot(extended, other.pub) == Result::Mismatch, "cadena: un paso agregado sin firma no vale");
+    Require(fromRoot(extended, third.pub) == Result::Trusted, "cadena: vale hasta el último paso bueno");
+    std::string skipped = twoSteps.substr(oneStep.size());
+    Require(fromRoot(skipped, third.pub) == Result::Mismatch, "cadena: no se puede saltear un paso");
+    std::string cut = twoSteps.substr(0, twoSteps.size() - 1);
+    Require(fromRoot(cut, next.pub) == Result::Trusted, "cadena: una línea cortada se ignora");
+    std::string windows = oneStep.substr(0, oneStep.size() - 1) + "\r\n";
+    Require(fromRoot(windows, next.pub) == Result::Trusted, "cadena: acepta CRLF");
+    std::string repaired = oneStep + "basura\n";
+    Require(fromRoot(repaired, third.pub, next.pub, second) == Result::Rotated && repaired == twoSteps,
+            "cadena: al rotar se reescribe sin la basura");
+
+    std::uint8_t parsed[32];
+    const std::string hex = Hex(server.pub, 32);
+    Require(ServerTrust::ParseKey(hex.c_str(), parsed) && std::memcmp(parsed, server.pub, 32) == 0, "clave: 64 dígitos hex");
+    Require(!ServerTrust::ParseKey(hex.substr(1).c_str(), parsed), "clave: una cortada no vale");
+    Require(!ServerTrust::ParseKey((hex + "0").c_str(), parsed), "clave: una larga no vale");
+    Require(!ServerTrust::ParseKey(("g" + hex.substr(1)).c_str(), parsed), "clave: un dígito inválido no vale");
 
     if (s_Failures == 0) std::printf("ServerTrust: OK\n");
     return s_Failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

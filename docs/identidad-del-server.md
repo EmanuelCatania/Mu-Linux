@@ -33,14 +33,19 @@ La clave **pública** sí se comparte. Sale en el log del GameServer al arrancar
 
 ## Qué hace el cliente con ella
 
-- La primera vez que un cliente entra a tu server guarda la clave pública en
-  `User/Cache/<server>/server.pub`.
+- Si el cliente no trae una clave compilada, la primera vez que entra a tu
+  server guarda la clave pública en `User/Cache/<server>/server.pub`. Ese archivo
+  se puede editar: sirve para notar un cambio de server, no contra un proxy que
+  arme el propio jugador.
 - En cada conexión verifica que el saludo del server venga firmado con esa
   clave, y en cada login que el catálogo también. Si no, muestra un aviso y se
   cierra.
-- Si compilás tu propio cliente podés fijarla de antemano en
-  `client/src/app/config/ServerConfig.h` (`ServerPublicKey`). Así ni siquiera el
-  primer contacto queda sin verificar.
+- Si compilás tu propio cliente **fijala de antemano** en
+  `client/src/app/config/ServerConfig.h` (`ServerPublicKey`). Esa clave es la
+  raíz: no hay primer contacto y ningún archivo del jugador la puede reemplazar.
+  Tiene que ser los 64 dígitos exactos; si está mal escrita el cliente no se
+  conecta a ningún server. Con la clave compilada el cliente tampoco acepta un
+  ConnectServer sin cifrar: tiene que leer la misma `ServerIdentity.key`.
 
 ## Cambiar la clave
 
@@ -56,9 +61,16 @@ touch Data/Keys/ServerIdentity.regenerate
 docker compose restart mu-server
 ```
 
+Un cliente con la clave compilada guarda cada rotación que ve, con su firma, en
+`User/Cache/server-<clave>.chain`. El server sólo publica la última rotación, así
+que quien se perdió una (o instala de cero después de dos) no puede verificar la
+clave nueva: **después de rotar, compilá el cliente con la clave nueva** y
+repartilo antes de volver a rotar.
+
 **Empezar de cero.** Si borrás `ServerIdentity.key`, el server genera otra sin
 relación con la anterior. Los clientes que tenían la vieja la van a rechazar
-hasta que borren su `User/Cache/<server>/server.pub`. Usalo sólo si perdiste la
+hasta que borren su `User/Cache/<server>/server.pub`; si la tenían compilada,
+hace falta repartir un cliente nuevo. Usalo sólo si perdiste la
 clave o creés que alguien más la tiene: en ese caso una rotación no sirve,
 porque quien tenga la clave vieja también podría firmar un reemplazo.
 
