@@ -38,9 +38,17 @@ bool ReadPin(std::uint8_t out[KeySize])
 void WritePin(const std::uint8_t key[KeySize])
 {
     if (s_Dir.empty()) return;
+    // EnsureDirectory crea un solo nivel: en una instalación limpia todavía no
+    // existe User/Cache y la clave no se guardaba.
+    const std::size_t slash = s_Dir.find_last_of('/');
+    if (slash != std::string::npos && slash > 0)
+        Platform::GetFileSystem().EnsureDirectory(s_Dir.substr(0, slash).c_str());
     Platform::GetFileSystem().EnsureDirectory(s_Dir.c_str());
     FILE* f = Platform::GetFileSystem().Open(PinFile().c_str(), "wb");
-    if (!f) return;
+    if (!f) {
+        DbgLogPublic("ServerTrust: no se pudo guardar la clave del server");
+        return;
+    }
     static const char digits[] = "0123456789abcdef";
     char text[KeySize * 2];
     for (std::size_t n = 0; n < KeySize; ++n) {
