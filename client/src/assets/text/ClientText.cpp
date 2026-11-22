@@ -94,7 +94,8 @@ const char* const English[] = {
     "Bloom: %s",
     "Sky (F10)",
     "Underwater: %s",
-    "No wobble"
+    "No wobble",
+    "Improved water"
 };
 constexpr size_t Count = (size_t)ClientTextId::Count;
 static_assert(sizeof(English) / sizeof(English[0]) == Count, "Faltan textos en ingl\xC3\xA9s");
@@ -132,6 +133,7 @@ const char* MenuFallback(ClientTextId id, int language)
         { ClientTextId::Sky, "Cielo (F10)", "C\xC3\xA9u (F10)" },
         { ClientTextId::Underwater, "Bajo el agua: %s", "Debaixo d'\xC3\xA1gua: %s" },
         { ClientTextId::UnderwaterNoWobble, "Sin ondulaci\xC3\xB3n", "Sem ondula\xC3\xA7\xC3\xA3o" },
+        { ClientTextId::WorldWater, "Agua mejorada", "\xC3\x81gua melhorada" },
         { ClientTextId::BuffTimeLeft, "Tiempo restante: %s", "Tempo restante: %s" },
         { ClientTextId::BuffCaster, "Lanzado por: %s", "Lan\xC3\xA7" "ado por: %s" },
         { ClientTextId::BuffDamage, "Da\xC3\xB1" "o +%d", "Dano +%d" },

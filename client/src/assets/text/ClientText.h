@@ -59,6 +59,7 @@ enum class ClientTextId {
     Sky,
     Underwater,
     UnderwaterNoWobble,
+    WorldWater,
     Count
 };
 // Los textos salen del server (F3/F0, tabla 4, Data/Text/<idioma>/Client.txt).

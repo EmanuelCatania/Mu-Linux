@@ -186,4 +186,6 @@
 91	"Bajo el agua: %s"
 //UnderwaterNoWobble
 92	"Sin ondulación"
+//WorldWater
+93	"Agua mejorada"
 end

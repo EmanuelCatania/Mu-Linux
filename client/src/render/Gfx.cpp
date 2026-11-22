@@ -218,6 +218,7 @@ float waterShips[MaxWaterShips * 4];
 int waterShipCount = 0;
 }
 void ToggleWater() { water = !water; }
+void SetWater(bool enabled) { water = enabled; }
 bool WaterEnabled() { return water && GfxDevice::SupportsShadowMaps(); }
 void WaterLight(const float position[3], const float color[3], bool compact) {
     if (waterLightCount >= MaxWaterLights) return;

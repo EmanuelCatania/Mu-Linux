@@ -158,6 +158,10 @@ public:
     // ondulación de la imagen (a algunos marea), 2 completos.
     int GetUnderwater() const { return m_Underwater; }
     void SetUnderwater(int level);
+    // [Window] WorldWater: agua mejorada de los mapas y del login (WebGPU). 0 =
+    // el mar original del 0.97k.
+    bool GetWorldWater() const { return m_WorldWater; }
+    void SetWorldWater(bool enabled);
     // DESVIACION: distancia de dibujado ([Window] DrawDistance): con la cámara
     // 3D (F10) multiplica su alcance (y con él el terreno que se dibuja); con
     // la cámara normal no se aplica.
@@ -235,6 +239,7 @@ private:
     int m_Bloom = 1;
     bool m_Sky = true;
     int m_Underwater = 2;
+    bool m_WorldWater = true;
     int m_DrawDistance = 0;
     int  m_EnableSound = -1;
     int  m_EnableMusic = -1;

@@ -142,6 +142,7 @@ void WaterShip(const float bow[2], const float heading[2]);
 float WaterSwell(float x, float y, float time, float* slopeX, float* slopeY);
 void ToggleWater();
 bool WaterEnabled();
+void SetWater(bool enabled);
 // Agua de los mapas: se llama justo después de dibujar el terreno. mask dice
 // dónde hay agua y cuánta luz tiene (256x256 RGBA; ver WaterProfiles); el
 // pase dibuja encima el agua nueva con olas, cielo y sol. Se sube al

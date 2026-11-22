@@ -186,4 +186,6 @@
 91	"Underwater: %s"
 //UnderwaterNoWobble
 92	"No wobble"
+//WorldWater
+93	"Improved water"
 end

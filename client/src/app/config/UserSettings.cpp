@@ -113,6 +113,7 @@ void CUserSettings::Load(const char* iniPath)
     m_Bloom = ReadRange("Window", "Bloom", iniPath, 0, 2, 1);
     m_Sky = ReadRange("Window", "Sky", iniPath, 0, 1, 1) != 0;
     m_Underwater = ReadRange("Window", "Underwater", iniPath, 0, 2, 2);
+    m_WorldWater = ReadRange("Window", "WorldWater", iniPath, 0, 1, 1) != 0;
     m_DrawDistance = ReadRange("Window", "DrawDistance", iniPath, 0, 3, 0);
     if (m_Resolution < -1 || m_Resolution >= MAX_USER_RESOLUTION) {
         char line[96];
@@ -317,6 +318,13 @@ void CUserSettings::SetUnderwater(int level)
     if (level < 0 || level > 2) return;
     m_Underwater = level;
     SaveInt("Window", "Underwater", level);
+}
+
+void CUserSettings::SetWorldWater(bool enabled)
+{
+    m_WorldWater = enabled;
+    Gfx::SetWater(enabled);
+    SaveInt("Window", "WorldWater", enabled ? 1 : 0);
 }
 
 void CUserSettings::SetDrawDistance(int level)

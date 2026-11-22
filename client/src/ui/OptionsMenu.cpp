@@ -763,6 +763,7 @@ void COptionsMenu::RenderLighting()
     const int underwater = gUserSettings.GetUnderwater();
     Platform::TextFormatSecure(text, gClientText.Get(ClientTextId::Underwater), underwaterNames[underwater]);
     RenderSelector((float)RowY(row++), text, underwater > 0, underwater < 2);
+    RenderToggle((float)RowY(row++), gClientText.Get(ClientTextId::WorldWater), gUserSettings.GetWorldWater());
     RenderButton((float)RowY(row), GlobalText[925]);
 }
 
@@ -790,6 +791,10 @@ bool COptionsMenu::UpdateLighting()
     const int underwaterStep = UpdateSelector(RowY(row++), underwater > 0, underwater < 2);
     if (underwaterStep != INT_MIN) {
         if (underwaterStep) gUserSettings.SetUnderwater(underwater + (underwaterStep > 0 ? 1 : -1));
+        return true;
+    }
+    if (UpdateToggle(RowY(row++), clicked)) {
+        if (clicked) gUserSettings.SetWorldWater(!gUserSettings.GetWorldWater());
         return true;
     }
     if (!UpdateToggle(RowY(row), clicked)) return false;
