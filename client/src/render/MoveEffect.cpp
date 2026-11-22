@@ -63,6 +63,7 @@
 //   TERRAIN_INDEX (terrain helper)
 
 #include "stdafx.h"
+#include "render/Gfx.h"
 #include "render/ResourceTables.h"
 #include "scenes/ObjectRegistry.h"
 #include "platform/Text.h"
@@ -2205,7 +2206,11 @@ static bool MoveEffect_Energy(float *& param_1, const intptr_t& __cnt, float& fV
   local_368 = fVar13 * 0.2f;
   local_364 = fVar13 * 0.4f;
   local_360 = fVar13;
-  AddTerrainLight(*pfVar10,AsObject(param_1)->Position[1], (float*)&local_368,2, (float*)DAT_081cb608);
+  {
+    // DESVIACION (iluminación mejorada): su luz por píxel es la de un skill chico.
+    const Gfx::SmallLightScope smallLight;
+    AddTerrainLight(*pfVar10,AsObject(param_1)->Position[1], (float*)&local_368,2, (float*)DAT_081cb608);
+  }
   Effect_SpawnProximityHit((intptr_t)param_1);
   return false;
 }

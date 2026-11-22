@@ -332,7 +332,8 @@ namespace {
 // Luces puntuales registradas por las ticks (ver DynamicLight en Gfx.h).
 constexpr int MaxDynamicLights = 128;   // las que se guardan
 constexpr int MaxSentLights = 64;       // las que van al shader (las más cercanas)
-struct PointLight { float position[3], color[3], radius; double stamp; unsigned tick; };
+struct PointLight { float position[3], color[3], radius; double stamp; unsigned tick; bool small; };
+int smallLightScopes = 0;
 PointLight pointLights[MaxDynamicLights];
 int pointLightCount = 0;
 unsigned lightTick = 0;
@@ -342,12 +343,19 @@ double Seconds() {
     return duration<double>(steady_clock::now() - start).count();
 }
 }
+SmallLightScope::SmallLightScope() { ++smallLightScopes; }
+SmallLightScope::~SmallLightScope() { --smallLightScopes; }
 void DynamicLight(const float position[3], const float light[3], float radius) {
     if (!SceneEffectsSupported() || radius <= 0.0f) return;
     // Algunos efectos suman colores de 2 o más a la grilla para que brille; por
-    // píxel eso quema la imagen.
+    // píxel eso quema la imagen. Se baja entero y no canal por canal: cortado
+    // por canal, el azul de Energy Ball (0.8, 1.6, 4) quedaba casi blanco.
+    const bool small = smallLightScopes > 0;
+    const float limit = small ? 1.0f : 1.2f;
+    const float peak = std::max(light[0], std::max(light[1], light[2]));
+    const float scale = peak > limit ? limit / peak : 1.0f;
     float color[3];
-    for (int c = 0; c < 3; ++c) color[c] = std::min(light[c], 1.2f);
+    for (int c = 0; c < 3; ++c) color[c] = light[c] * scale;
     const double now = Seconds();
     // La misma luz vuelve en cada tick (las llamas con temblor): si ya está,
     // se refresca y el color se acerca al nuevo en vez de saltar.
@@ -362,6 +370,7 @@ void DynamicLight(const float position[3], const float light[3], float radius) {
             l.radius = radius;
             l.stamp = now;
             l.tick = lightTick;
+            l.small = small;
             return;
         }
     }
@@ -377,6 +386,7 @@ void DynamicLight(const float position[3], const float light[3], float radius) {
     l.radius = radius;
     l.stamp = now;
     l.tick = lightTick;
+    l.small = small;
 }
 void BeginLightTick() {
     ++lightTick;
@@ -419,7 +429,7 @@ void Lighting(const SceneLight& light) {
         for (int n = 0; n < count; ++n) {
             const PointLight& l = pointLights[order[n]];
             float* p = params + 12 + n * 8;
-            p[0] = l.position[0]; p[1] = l.position[1]; p[2] = l.position[2]; p[3] = l.radius * light.radius;
+            p[0] = l.position[0]; p[1] = l.position[1]; p[2] = l.position[2]; p[3] = l.radius * (l.small ? 1.0f : light.radius);
             p[4] = l.color[0]; p[5] = l.color[1]; p[6] = l.color[2];
         }
     }

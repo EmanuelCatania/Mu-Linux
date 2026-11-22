@@ -182,6 +182,14 @@ void SetSceneEffects(bool wanted);
 // apagan a los 0.25 s. El color se suaviza contra el tick anterior (así el
 // parpadeo de las llamas no salta).
 void DynamicLight(const float position[3], const float color[3], float radius);
+// Las que se registran mientras vive uno de estos son de un skill chico: no las
+// agranda el alcance del modo y su brillo no pasa de 1.
+struct SmallLightScope {
+    SmallLightScope();
+    ~SmallLightScope();
+    SmallLightScope(const SmallLightScope&) = delete;
+    SmallLightScope& operator=(const SmallLightScope&) = delete;
+};
 // Al empezar el tick del mundo, donde Terrain_Water limpia la grilla de luz.
 void BeginLightTick();
 // Dentro de la escena, una vez por cuadro: luces por píxel (dynamicLights) con

@@ -163,6 +163,11 @@ void __cdecl AddTerrainLight(float x, float y, float* light, int range, float* b
 {
     Call("AddTerrainLight"); MixF(x); MixF(y); MixV3(light); MixU((unsigned)range); MixP(buffer);
 }
+#ifdef REPLAY_SMALL_LIGHT
+// Sólo afecta a la luz por píxel: los efectos no cambian.
+Gfx::SmallLightScope::SmallLightScope() {}
+Gfx::SmallLightScope::~SmallLightScope() {}
+#endif
 void __cdecl BMD_TransformPosition(void* model, float* bone, float* in, float* out, char flag)
 {
     Call("BMD_TransformPosition"); MixP(model); MixP(bone); MixV3(in); MixU((unsigned char)flag);
