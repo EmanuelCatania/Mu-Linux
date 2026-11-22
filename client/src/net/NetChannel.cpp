@@ -85,11 +85,12 @@ bool TrustServer(const std::uint8_t identity[32], const std::uint8_t* previous, 
 }
 
 // El server rechazó la conexión antes del saludo (lleno, límite por IP): manda
-// un F1:01 en claro y corta.  No está autenticado, pero sólo sirve para mostrar
-// el motivo del rechazo.
+// un F1:01 en claro y corta.  No está autenticado: sólo se aceptan los dos
+// motivos que manda el server (User.cpp, gObjAdd) y la conexión no pasa a claro.
 bool IsPlainRefusal(const unsigned char* raw, int size)
 {
-    return size >= 5 && raw[0] == 0xC1 && raw[1] == size && raw[2] == 0xF1 && raw[3] == 0x01;
+    return size == 5 && raw[0] == 0xC1 && raw[1] == 5 && raw[2] == 0xF1 && raw[3] == 0x01
+        && (raw[4] == 2 /* apagándose */ || raw[4] == 4 /* lleno */);
 }
 
 } // namespace
@@ -150,7 +151,8 @@ bool Receive(const unsigned char* raw, int size)
         DbgLogPublic(line);
         if (why == SecureChannel::Failure::NotThisProtocol && !wasReady) {
             if (IsPlainRefusal(raw, size)) {
-                s_Secure = false;
+                // Se entrega sólo el motivo.  El canal queda en Failed: lo que
+                // se mande o llegue después cierra la conexión.
                 s_Plain.assign(raw, raw + size);
                 return true;
             }
