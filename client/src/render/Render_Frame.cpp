@@ -212,6 +212,7 @@
 #include "render/LightingProfiles.h"
 #include "render/Entity_RenderAll_3D.h"
 #include <cmath>
+#include <cstring>
 #include "render/RenderProfile.h"
 #include "render/BufferedDraw.h"
 #include "platform/ITimer.h"
