@@ -2072,12 +2072,11 @@ R"WGSL(
 // agua) y encima la capa 2 (G: si es agua) mezclada con el alfa de cada
 // vértice (B, interpolado). Así coincide con el agua original, también en las
 // paredes que el mapa pinta con agua (debajo de los puentes).
-// R lleva los dos bits del tile: base (1) y capa 2 (2), en pasos de 85.
-// R: bits del tile en pasos de 36 (1 = agua, 2 = agua en la capa 2,
-// 4 = cauce hondo).
+// R: bits del tile en pasos de 17 (1 = agua, 2 = agua en la capa 2,
+// 4 = cauce hondo, 8 = zona chica redibujada).
 fn tileBits(xy: vec2f) -> u32 {
     let t = textureLoad(waterMask, clamp(vec2i(floor(xy / 100.0)), vec2i(0), vec2i(255)), 0).r;
-    return u32(round(t * 255.0 / 36.0));
+    return u32(round(t * 255.0 / 17.0));
 }
 // Cuánta agua pinta el mapa en (x, y): la base del tile y la capa 2 mezcladas
 // con el alfa de cada vértice (B), igual que el terreno. Sale con la orilla
@@ -2182,6 +2181,9 @@ fn q2c(xy: vec2f, t: f32) -> f32 {
     }
     return clamp(c * 0.6, 0.0, 1.0);
 }
+)WGSL"
+// Séptima parte del shader (límite de 16 KB por literal de MSVC).
+R"WGSL(
 fn worldWater(position: vec4f) -> vec4f {
     let d = textureLoad(depth, vec2i(position.xy), 0);
     if (d >= 1.0) { discard; }
@@ -2196,7 +2198,9 @@ fn worldWater(position: vec4f) -> vec4f {
     let ray = normalize(ground - cam);
     // Redibujada: se compara en la vertical del píxel. La superficie sigue la
     // pendiente y el ajuste por el rayo la pasaba por debajo del suelo.
-    let redrawn = u.tint.w > 0.5;
+    let bits = tileBits(ground.xy);
+    let smallZone = (bits & 8u) != 0u;
+    let redrawn = u.tint.w > 0.5 || smallZone;
     var level = levelAt(ground.xy);
     if (redrawn) { level = redrawLevelAt(ground.xy); }
     var p = ground;
@@ -2219,7 +2223,7 @@ fn worldWater(position: vec4f) -> vec4f {
     let flatGround = flatAt(position.xy, ground);
     // Cauce hondo (la superficie sube sobre un fondo tallado) o agua plana
     // (charcos, arroyos a ras del suelo).
-    let deepTile = (tileBits(ground.xy) & 4u) != 0u;
+    let deepTile = (bits & 4u) != 0u;
     var coverage = 0.0;
     var flat = 0.0;
     var wall = false;
@@ -2233,7 +2237,12 @@ fn worldWater(position: vec4f) -> vec4f {
         // mapa pone agua, con la orilla redondeada: si no, cualquier pozo del
         // suelo junto al arroyo se volvía un charco.
         let depthBelow = level - ground.z;
-        if (deepTile) {
+        if (smallZone) {
+            // Zona chica: el borde viene por vértice (FindSmallZones), no del
+            // corte del plano con los triángulos ni del borde del tile.
+            let wet = textureSampleLevel(waterMask, linearSampler, (ground.xy / 100.0 + 0.5) / 256.0, 0.0).b;
+            coverage = smoothstep(0.20, 0.95, wet) * smoothstep(0.0, 4.0, depthBelow);
+        } else if (deepTile) {
             coverage = select(smoothstep(8.0, 16.0, depthBelow), smoothstep(0.0, 4.0, depthBelow), waterAt(ground.xy) > 0.5);
         } else if (u.tint.w > 0.5) {
             // Redibujada: orilla suave por el agua que pinta el mapa (B).
@@ -2300,7 +2309,9 @@ fn worldWater(position: vec4f) -> vec4f {
         let dsh = textureLoad(depth, vec2i(sh), 0);
         if (dsh < 1.0) {
             let q = worldAtPixel(sh, dsh);
-            if (levelAt(q.xy) > q.z) { at = sh; }
+            var surface = levelAt(q.xy);
+            if (smallZone) { surface = redrawLevelAt(q.xy); }
+            if (surface > q.z) { at = sh; }
         }
         var bed = textureSampleLevel(scene, linearSampler, at / size, 0.0).rgb;
         // Cáusticas: la luz que las olas concentran en el fondo, como redes
@@ -3302,10 +3313,10 @@ void Water(const float* params) {
     std::memcpy(g.waterViewport, RenderState::Get().viewport, sizeof(g.waterViewport));
     g.passes.emplace_back();
     g.passes.back().water = true;
-    // Agua redibujada (a ras del suelo): lo aditivo de los objetos del mapa,
-    // como los arcos de Noria, va después del agua. No escribe profundidad y
-    // el agua lo pisaba como si fuera el suelo de atrás.
-    if (g.water.tint[3] <= 0.5f || g.passes.size() < 2) return;
+    // Agua redibujada (entera o por zonas): lo aditivo de los objetos del mapa,
+    // como los arcos de Noria o los cristales de Devias, va después del agua.
+    // No escribe profundidad y el agua lo pisaba como si fuera el suelo de atrás.
+    if (g.water.tint[3] <= 0.0f || g.passes.size() < 2) return;
     auto& before = g.passes[g.passes.size() - 2].draws;
     auto& after = g.passes.back().draws;
     size_t kept = 0;

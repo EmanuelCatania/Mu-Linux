@@ -117,8 +117,8 @@ void EndShadowScene();
 // Dentro de la escena, lo dibujado con casting en false recibe sombra pero no
 // la proyecta (p. ej. el pasto). Cada escena empieza con casting en true.
 void SetShadowCasting(bool enabled);
-// Marca los objetos del mapa: donde el agua se redibuja (Noria) los aditivos,
-// que no escriben profundidad, se dibujan encima de ella.
+// Marca los objetos del mapa: donde el agua se redibuja (Noria, Devias) los
+// aditivos, que no escriben profundidad, se dibujan encima de ella.
 void SetMapObjects(bool active);
 // DESVIACION: niebla por profundidad (opción). Con la opción activa la escena
 // se marca aunque no haya sombras. Atmosphere se fija por cuadro, antes de
@@ -150,13 +150,16 @@ void SetWater(bool enabled);
 // dónde hay agua y cuánta luz tiene (256x256 RGBA; ver WaterProfiles); el
 // pase dibuja encima el agua nueva con olas, cielo y sol. Se sube al
 // dispositivo sólo cuando cambia.
+constexpr float WaterRedrawZones = 0.25f;
+constexpr float WaterRedrawAll = 1.0f;
 struct WaterLook {
     float tint[3];   // color del cuerpo de agua
     float sky[3];    // color que refleja
     float waves;     // fuerza de las olas (1 = las del login)
     float sun[3];    // dirección hacia el sol, en el mundo
-    // 1: el agua plana se redibuja entera (el terreno no pinta la vieja) con
-    // la orilla suave de B; 0: va sobre el agua que pinta el mapa.
+    // WaterRedrawAll: el agua plana se redibuja entera (el terreno no pinta la
+    // vieja) con la orilla suave de B. WaterRedrawZones: sólo los tiles con el
+    // bit 8 de R. 0: va sobre el agua que pinta el mapa.
     float redraw = 0.0f;
 };
 // focus: el centro del área donde el agua simula ondas (el héroe).

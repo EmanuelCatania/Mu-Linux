@@ -57,9 +57,139 @@ float carve[256 * 256];
 static unsigned char vertexLevel[256 * 256];
 static unsigned char deepVertex[256 * 256];
 unsigned char wallTexture[256 * 256];
+static unsigned char zoneTile[256 * 256];
+static unsigned char zoneVertex[256 * 256];
+static unsigned char zoneWet[256 * 256];
 bool carveActive = false;
 int carveMap = -1;
 float carveSum = 0.0f;
+
+namespace {
+// Los mismos dos triángulos por tile que el terreno (0-1-2, 0-2-3).
+float Triangle(float a, float b, float c, float d, float fx, float fy) {
+    return fx >= fy ? a + (b - a) * fx + (c - b) * fy : a + (c - d) * fx + (d - a) * fy;
+}
+float Smooth(float from, float to, float v) {
+    const float t = std::clamp((v - from) / (to - from), 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+// Zonas chicas de un mapa con cauces (las pozas de Devias): en un cuerpo
+// angosto la orilla es casi todo el cuerpo, y el plano contra los triángulos
+// del suelo lo cortaba en astillas. Se redibujan como el agua de Noria: la
+// superficie sube hasta el suelo y el borde lo da un valor por vértice. Los
+// cuerpos anchos (fosos, lagos) y los arroyos sin cauce quedan como están.
+void FindSmallZones(const unsigned char* tile, bool enabled) {
+    constexpr int N = 256 * 256;
+    constexpr int MaxRadius = 4;        // tiles hasta la orilla desde el centro
+    // El shader lee el borde con smoothstep(ShoreFrom, ShoreTo, B).
+    constexpr float ShoreFrom = 0.20f, ShoreTo = 0.95f;
+    constexpr float StreamGain = 1.2f;  // repone lo que pierde al interpolar
+    std::fill(std::begin(zoneTile), std::end(zoneTile), (unsigned char)0);
+    std::fill(std::begin(zoneVertex), std::end(zoneVertex), (unsigned char)0);
+    std::fill(std::begin(zoneWet), std::end(zoneWet), (unsigned char)0);
+    if (!enabled) return;
+
+    std::vector<unsigned char> deep(N, 0), body(N, 0), seen(N, 0), inside(N, 0);
+    std::vector<int> radius(N, 0), queue;
+    for (int y = 0; y < 255; ++y)
+        for (int x = 0; x < 255; ++x) {
+            const int i = y * 256 + x;
+            deep[i] = deepVertex[i] || deepVertex[i + 1] || deepVertex[i + 256] || deepVertex[i + 257];
+        }
+    for (int i = 0; i < N; ++i) {
+        body[i] = tile[i] || deep[i];
+        if (body[i]) radius[i] = 1 << 20;
+        else queue.push_back(i);
+    }
+    auto around = [](int i, auto&& visit) {
+        for (int y = (i >> 8) - 1; y <= (i >> 8) + 1; ++y)
+            for (int x = (i & 255) - 1; x <= (i & 255) + 1; ++x)
+                if (x >= 0 && y >= 0 && x < 256 && y < 256) visit(y * 256 + x);
+    };
+    for (size_t q = 0; q < queue.size(); ++q) {
+        const int i = queue[q];
+        around(i, [&](int n) {
+            if (radius[n] > radius[i] + 1) { radius[n] = radius[i] + 1; queue.push_back(n); }
+        });
+    }
+    std::vector<int> area;
+    for (int start = 0; start < N; ++start) {
+        if (!body[start] || seen[start]) continue;
+        seen[start] = 1;
+        area.assign(1, start);
+        bool water = false, hollow = false;
+        int widest = 0;
+        for (size_t a = 0; a < area.size(); ++a) {
+            const int i = area[a];
+            water = water || tile[i];
+            hollow = hollow || deep[i];
+            widest = (std::max)(widest, radius[i]);
+            around(i, [&](int n) {
+                if (body[n] && !seen[n]) { seen[n] = 1; area.push_back(n); }
+            });
+        }
+        if (water && hollow && widest <= MaxRadius)
+            for (int i : area) inside[i] = 1;
+    }
+
+    // Cuánto tapa el plano en cada tile hondo (contra el suelo ya hundido).
+    std::vector<float> fill(N, 0.0f);
+    for (int y = 0; y < 255; ++y)
+        for (int x = 0; x < 255; ++x) {
+            const int i = y * 256 + x;
+            if (!inside[i] || !deep[i]) continue;
+            auto plane = [](int k) { return (vertexLevel[k] - 20) * 2.0f + 8.0f; };
+            auto bed = [](int k) { return BackTerrainHeight[k] - carve[k]; };
+            for (int b = 0; b < 4; ++b)
+                for (int a = 0; a < 4; ++a) {
+                    const float fx = (a + 0.5f) / 4.0f, fy = (b + 0.5f) / 4.0f;
+                    const float above = Triangle(plane(i), plane(i + 1), plane(i + 257), plane(i + 256), fx, fy) -
+                                        Triangle(bed(i), bed(i + 1), bed(i + 257), bed(i + 256), fx, fy);
+                    fill[i] += Smooth(0.0f, 16.0f, above) / 16.0f;
+                }
+        }
+    // El borde por vértice: la poza (promedio de sus tiles) o el arroyo que
+    // pinta el mapa. El arroyo va con la inversa del smoothstep del shader,
+    // así sale con su opacidad y sigue fundido, no como una mancha.
+    for (int y = 0; y < 256; ++y)
+        for (int x = 0; x < 256; ++x) {
+            const int i = y * 256 + x;
+            const float a = std::clamp(TerrainMappingAlpha[i], 0.0f, 1.0f);
+            bool touches = false;
+            float pool = 0.0f, painted = 0.0f;
+            for (int ty = y - 1; ty <= y; ++ty)
+                for (int tx = x - 1; tx <= x; ++tx) {
+                    if (tx < 0 || ty < 0) continue;
+                    const int t = ty * 256 + tx;
+                    touches = touches || inside[t];
+                    pool += fill[t] * 0.25f;
+                    painted += ((tile[t] & 1) * (1.0f - a) + ((tile[t] >> 1) & 1) * a) * 0.25f;
+                }
+            if (!touches) continue;
+            float stream = 0.0f;
+            if (painted > 0.0f) {
+                const float v = (std::min)(1.0f, painted * StreamGain);
+                stream = ShoreFrom + (ShoreTo - ShoreFrom) * (0.5f - std::sin(std::asin(1.0f - 2.0f * v) / 3.0f));
+            }
+            zoneWet[i] = (unsigned char)(std::clamp((std::max)(pool, stream), 0.0f, 1.0f) * 255.0f + 0.5f);
+        }
+    // Todo tile adonde llega el borde, y en sus vértices la superficie nunca
+    // debajo del suelo.
+    for (int y = 0; y < 255; ++y)
+        for (int x = 0; x < 255; ++x) {
+            const int i = y * 256 + x;
+            const bool reached = !tile[i] && (zoneWet[i] || zoneWet[i + 1] || zoneWet[i + 256] || zoneWet[i + 257]);
+            if (!inside[i] && !reached) continue;
+            zoneTile[i] = 1;
+            for (int k : {i, i + 1, i + 256, i + 257}) {
+                zoneVertex[k] = 1;
+                const int ground = std::clamp((int)std::ceil(BackTerrainHeight[k] * 0.5f) + 20, 1, 255);
+                vertexLevel[k] = (unsigned char)(std::max)((int)vertexLevel[k], ground);
+            }
+        }
+}
+}
 
 namespace WaterProfiles {
 const float* Carve() { return carveActive ? carve : nullptr; }
@@ -95,7 +225,7 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
     }
     // Sin cauces el agua se redibuja entera: el arroyo del mapa tiene la orilla
     // en escalones de tile y no hay fondo tallado que la redondee.
-    look.redraw = allowDeep ? 0.0f : 1.0f;
+    look.redraw = !allowDeep ? Gfx::WaterRedrawAll : drape ? Gfx::WaterRedrawZones : 0.0f;
     // Igual que Terrain_RenderFace: el tile (x, y) usa las capas de su vértice
     // (x, y). Si sus cuatro vértices tienen alfa 1 se pinta entero con la capa
     // 2; si no, base = capa 1 y encima la capa 2 con el alfa de cada vértice.
@@ -293,78 +423,7 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
                     vertexLevel[i] = (unsigned char)(std::max)((int)vertexLevel[i], ground);
                 }
     }
-    for (int y = 0; y < 256; ++y)
-        for (int x = 0; x < 256; ++x) {
-            const int i = y * 256 + x;
-            unsigned char* o = mask + size_t(i) * 4;
-            // R por tile: bits de agua (1 base, 2 capa 2) + 4 si es cauce hondo
-            // (alguna esquina sube el agua), en pasos de 36.
-            bool tileDeep = false;
-            if (x < 255 && y < 255)
-                tileDeep = deepVertex[i] || deepVertex[i + 1] || deepVertex[i + 256] || deepVertex[i + 257];
-            o[0] = (unsigned char)((tile[i] + (tileDeep ? 4 : 0)) * 36);
-            o[1] = vertexLevel[i];
-            // B por vértice: el alfa con que la capa 2 se mezcla sobre la base,
-            // igual que el terreno. Con él la orilla sale donde el mapa la pintó
-            // fundida (pasto sobre agua) en lugar de en escalones de tile.
-            if (allowDeep) {
-                o[2] = (unsigned char)(alpha(x, y) * 255.0f + 0.5f);
-            } else {
-                // Redibujada: B = cuánta agua deja ver el mapa en los cuatro
-                // tiles del vértice (la base y la capa 2 mezcladas con su alfa).
-                // Interpolado da una orilla redondeada. No alcanza con contar
-                // tiles: casi todos llevan pasto encima y lo pintado es apenas
-                // el 57 % de su área; el agua se iría al doble del original.
-                const float a = alpha(x, y);
-                float painted = 0.0f;
-                for (int ty = y - 1; ty <= y; ++ty)
-                    for (int tx = x - 1; tx <= x; ++tx) {
-                        if (tx < 0 || ty < 0) continue;
-                        const int bits = tile[ty * 256 + tx];
-                        painted += (bits & 1) * (1.0f - a) + ((bits >> 1) & 1) * a;
-                    }
-                o[2] = (unsigned char)(painted * 0.25f * 255.0f + 0.5f);
-            }
-            // Luz del terreno en el vértice (la que ilumina el agua original),
-            // en luminancia y a la mitad, para que entre hasta 2.
-            const float* l = &DAT_081cb608[size_t(i) * 3];
-            const float lum = l[0] * 0.30f + l[1] * 0.55f + l[2] * 0.15f;
-            o[3] = (unsigned char)(std::clamp(lum * 0.5f, 0.0f, 1.0f) * 255.0f + 0.5f);
-        }
     if (!any) return false;
-    // Tiles de agua que quedan por encima de la superficie (paredes bajo los
-    // puentes, barrancas empinadas): se dibujan con la textura más común de sus
-    // vecinos y no se pintan como agua.
-    std::fill(std::begin(wallTexture), std::end(wallTexture), (unsigned char)255);
-    for (int ty = 0; ty < 255; ++ty)
-        for (int tx = 0; tx < 255; ++tx) {
-            const int c = ty * 256 + tx;
-            if (!(tile[c] & 1)) continue;
-            float surface = -1.0e9f;
-            const int corners[4] = {c, c + 1, c + 256, c + 257};
-            for (int k : corners)
-                if (mask[size_t(k) * 4 + 1]) surface = (std::max)(surface, (mask[size_t(k) * 4 + 1] - 20) * 2.0f);
-            const float high = (std::max)((std::max)(BackTerrainHeight[c], BackTerrainHeight[c + 1]),
-                                          (std::max)(BackTerrainHeight[c + 256], BackTerrainHeight[c + 257]));
-            // Redibujada: todo tile de agua toma el suelo de alrededor (lo que
-            // se ve a través del agua nueva) y sigue contando como agua.
-            const bool redraw = !allowDeep;
-            if (!redraw && high <= surface + 15.0f) continue;
-            int count[256] = {};
-            int best = -1;
-            for (int r = 1; r <= (redraw ? 4 : 1) && best < 0; ++r)
-                for (int dy = -r; dy <= r; ++dy)
-                    for (int dx = -r; dx <= r; ++dx) {
-                        const int nx = tx + dx, ny = ty + dy;
-                        if ((dx == 0 && dy == 0) || nx < 0 || ny < 0 || nx > 255 || ny > 255) continue;
-                        const unsigned char t = TerrainMappingLayer1[ny * 256 + nx];
-                        if (t == WaterTile || t == 255) continue;
-                        if (++count[t] > (best < 0 ? 0 : count[best])) best = t;
-                    }
-            if (best < 0) continue;
-            wallTexture[c] = (unsigned char)best;
-            if (!redraw) mask[size_t(c) * 4] = (unsigned char)(((tile[c] & 2) + (mask[size_t(c) * 4] / 36 & 4)) * 36);
-        }
     // El cauce se rearma sólo al cambiar de mapa (o de alturas).
     float sum = 0.0f;
     for (int i = 0; i < 256 * 256; i += 97) sum += BackTerrainHeight[i];
@@ -401,7 +460,82 @@ bool Current(int map, unsigned char mask[256 * 256 * 4], Gfx::WaterLook& look) {
             const float t = std::clamp(dist[i] / CarveRamp, 0.0f, 1.0f);
             carve[i] = allowDeep ? CarveDepth * t * t * (3.0f - 2.0f * t) : 0.0f;
         }
+        FindSmallZones(tile, allowDeep && drape);
     }
+    for (int y = 0; y < 256; ++y)
+        for (int x = 0; x < 256; ++x) {
+            const int i = y * 256 + x;
+            unsigned char* o = mask + size_t(i) * 4;
+            // R por tile: bits de agua (1 base, 2 capa 2) + 4 si es cauce hondo
+            // (alguna esquina sube el agua) + 8 si es zona chica redibujada, en
+            // pasos de 17.
+            bool tileDeep = false;
+            if (x < 255 && y < 255)
+                tileDeep = deepVertex[i] || deepVertex[i + 1] || deepVertex[i + 256] || deepVertex[i + 257];
+            o[0] = (unsigned char)((tile[i] + (tileDeep ? 4 : 0) + (zoneTile[i] ? 8 : 0)) * 17);
+            o[1] = vertexLevel[i];
+            // B por vértice: el alfa con que la capa 2 se mezcla sobre la base,
+            // igual que el terreno. Con él la orilla sale donde el mapa la pintó
+            // fundida (pasto sobre agua) en lugar de en escalones de tile.
+            if (zoneVertex[i]) {
+                o[2] = zoneWet[i];
+            } else if (allowDeep) {
+                o[2] = (unsigned char)(alpha(x, y) * 255.0f + 0.5f);
+            } else {
+                // Redibujada: B = cuánta agua deja ver el mapa en los cuatro
+                // tiles del vértice (la base y la capa 2 mezcladas con su alfa).
+                // Interpolado da una orilla redondeada. No alcanza con contar
+                // tiles: casi todos llevan pasto encima y lo pintado es apenas
+                // el 57 % de su área; el agua se iría al doble del original.
+                const float a = alpha(x, y);
+                float painted = 0.0f;
+                for (int ty = y - 1; ty <= y; ++ty)
+                    for (int tx = x - 1; tx <= x; ++tx) {
+                        if (tx < 0 || ty < 0) continue;
+                        const int bits = tile[ty * 256 + tx];
+                        painted += (bits & 1) * (1.0f - a) + ((bits >> 1) & 1) * a;
+                    }
+                o[2] = (unsigned char)(painted * 0.25f * 255.0f + 0.5f);
+            }
+            // Luz del terreno en el vértice (la que ilumina el agua original),
+            // en luminancia y a la mitad, para que entre hasta 2.
+            const float* l = &DAT_081cb608[size_t(i) * 3];
+            const float lum = l[0] * 0.30f + l[1] * 0.55f + l[2] * 0.15f;
+            o[3] = (unsigned char)(std::clamp(lum * 0.5f, 0.0f, 1.0f) * 255.0f + 0.5f);
+        }
+    // Tiles de agua que quedan por encima de la superficie (paredes bajo los
+    // puentes, barrancas empinadas): se dibujan con la textura más común de sus
+    // vecinos y no se pintan como agua.
+    std::fill(std::begin(wallTexture), std::end(wallTexture), (unsigned char)255);
+    for (int ty = 0; ty < 255; ++ty)
+        for (int tx = 0; tx < 255; ++tx) {
+            const int c = ty * 256 + tx;
+            if (!(tile[c] & 1)) continue;
+            float surface = -1.0e9f;
+            const int corners[4] = {c, c + 1, c + 256, c + 257};
+            for (int k : corners)
+                if (mask[size_t(k) * 4 + 1]) surface = (std::max)(surface, (mask[size_t(k) * 4 + 1] - 20) * 2.0f);
+            const float high = (std::max)((std::max)(BackTerrainHeight[c], BackTerrainHeight[c + 1]),
+                                          (std::max)(BackTerrainHeight[c + 256], BackTerrainHeight[c + 257]));
+            // Redibujada: todo tile de agua toma el suelo de alrededor (lo que
+            // se ve a través del agua nueva) y sigue contando como agua.
+            const bool redraw = !allowDeep || zoneTile[c];
+            if (!redraw && high <= surface + 15.0f) continue;
+            int count[256] = {};
+            int best = -1;
+            for (int r = 1; r <= (redraw ? 4 : 1) && best < 0; ++r)
+                for (int dy = -r; dy <= r; ++dy)
+                    for (int dx = -r; dx <= r; ++dx) {
+                        const int nx = tx + dx, ny = ty + dy;
+                        if ((dx == 0 && dy == 0) || nx < 0 || ny < 0 || nx > 255 || ny > 255) continue;
+                        const unsigned char t = TerrainMappingLayer1[ny * 256 + nx];
+                        if (t == WaterTile || t == 255) continue;
+                        if (++count[t] > (best < 0 ? 0 : count[best])) best = t;
+                    }
+            if (best < 0) continue;
+            wallTexture[c] = (unsigned char)best;
+            if (!redraw) mask[size_t(c) * 4] = (unsigned char)(((tile[c] & 2) + (mask[size_t(c) * 4] / 17 & 4)) * 17);
+        }
     carveActive = true;
     return true;
 }
