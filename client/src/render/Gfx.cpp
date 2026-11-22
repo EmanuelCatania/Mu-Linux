@@ -332,7 +332,11 @@ namespace {
 // Luces puntuales registradas por las ticks (ver DynamicLight en Gfx.h).
 constexpr int MaxDynamicLights = 128;   // las que se guardan
 constexpr int MaxSentLights = 64;       // las que van al shader (las más cercanas)
-struct PointLight { float position[3], color[3], radius; double stamp; unsigned tick; bool small; };
+struct PointLight {
+    float position[3], color[3], radius;
+    double stamp; unsigned tick; bool small;
+    const void* source; LightKind kind;     // dueño (SourceLight); nullptr: se la reconoce por posición
+};
 int smallLightScopes = 0;
 PointLight pointLights[MaxDynamicLights];
 int pointLightCount = 0;
@@ -345,7 +349,8 @@ double Seconds() {
 }
 SmallLightScope::SmallLightScope() { ++smallLightScopes; }
 SmallLightScope::~SmallLightScope() { --smallLightScopes; }
-void DynamicLight(const float position[3], const float light[3], float radius) {
+namespace {
+void RegisterLight(const void* source, LightKind kind, const float position[3], const float light[3], float radius) {
     if (!SceneEffectsSupported() || radius <= 0.0f) return;
     // Algunos efectos suman colores de 2 o más a la grilla para que brille; por
     // píxel eso quema la imagen. Se baja entero y no canal por canal: cortado
@@ -361,10 +366,13 @@ void DynamicLight(const float position[3], const float light[3], float radius) {
     // se refresca y el color se acerca al nuevo en vez de saltar.
     for (int i = 0; i < pointLightCount; ++i) {
         PointLight& l = pointLights[i];
-        if (std::fabs(l.position[0] - position[0]) < 30.0f && std::fabs(l.position[1] - position[1]) < 30.0f) {
+        if (l.source != source) continue;
+        if (source ? l.kind == kind
+                   : std::fabs(l.position[0] - position[0]) < 30.0f && std::fabs(l.position[1] - position[1]) < 30.0f) {
             const float k = now - l.stamp > 0.25 ? 1.0f : 0.35f;
+            const float follow = source ? 1.0f : 0.5f;
             for (int c = 0; c < 3; ++c) {
-                l.position[c] += (position[c] - l.position[c]) * 0.5f;
+                l.position[c] += (position[c] - l.position[c]) * follow;
                 l.color[c] += (color[c] - l.color[c]) * k;
             }
             l.radius = radius;
@@ -387,6 +395,15 @@ void DynamicLight(const float position[3], const float light[3], float radius) {
     l.stamp = now;
     l.tick = lightTick;
     l.small = small;
+    l.source = source;
+    l.kind = kind;
+}
+}
+void DynamicLight(const float position[3], const float light[3], float radius) {
+    RegisterLight(nullptr, LightKind::BuffAura, position, light, radius);
+}
+void SourceLight(const void* source, LightKind kind, const float position[3], const float light[3], float radius) {
+    if (source) RegisterLight(source, kind, position, light, radius);
 }
 void BeginLightTick() {
     ++lightTick;

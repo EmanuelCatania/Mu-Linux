@@ -23,6 +23,9 @@
 #include "render/Particle_Render.h"
 #include "render/ResourceTables.h"
 #include "assets/model/ModelTypes.h"
+#ifdef REPLAY_SOURCE_LIGHT
+#include "app/config/UserSettings.h"
+#endif
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -167,6 +170,12 @@ void __cdecl AddTerrainLight(float x, float y, float* light, int range, float* b
 // Sólo afecta a la luz por píxel: los efectos no cambian.
 Gfx::SmallLightScope::SmallLightScope() {}
 Gfx::SmallLightScope::~SmallLightScope() {}
+#endif
+#ifdef REPLAY_SOURCE_LIGHT
+// La iluminación mejorada va apagada (ver main): los efectos tienen que dar el
+// mismo hash que una revisión sin ella.
+CUserSettings gUserSettings;
+void Gfx::SourceLight(const void*, LightKind, const float*, const float*, float) { Call("SourceLight"); }
 #endif
 void __cdecl BMD_TransformPosition(void* model, float* bone, float* in, float* out, char flag)
 {
@@ -317,6 +326,9 @@ bool RunGuarded(const CaseArgs& a)
 int main()
 {
     Models = reinterpret_cast<std::uintptr_t>(g_models);
+#ifdef REPLAY_SOURCE_LIGHT
+    std::memset(static_cast<void*>(&gUserSettings), 0, sizeof(gUserSettings));
+#endif
     for (std::size_t i = 0; i < sizeof(g_bones) / 4; ++i) reinterpret_cast<float*>(g_bones)[i] = (float)(i % 13) * 0.5f;
     const int maxType = 1400, maxSub = 16, ticks = 6;
     const bool trace = std::getenv("EFFECT_REPLAY_TRACE") != nullptr;

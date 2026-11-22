@@ -182,6 +182,10 @@ void SetSceneEffects(bool wanted);
 // apagan a los 0.25 s. El color se suaviza contra el tick anterior (así el
 // parpadeo de las llamas no salta).
 void DynamicLight(const float position[3], const float color[3], float radius);
+// Luz propia de algo (el aura de un personaje): una por dueño y tipo, sigue su
+// posición exacta y no se mezcla con otras que caigan en el mismo lugar.
+enum class LightKind { BuffAura, BuffBurst };
+void SourceLight(const void* source, LightKind kind, const float position[3], const float color[3], float radius);
 // Las que se registran mientras vive uno de estos son de un skill chico: no las
 // agranda el alcance del modo y su brillo no pasa de 1.
 struct SmallLightScope {

@@ -64,6 +64,7 @@
 
 #include "stdafx.h"
 #include "render/Gfx.h"
+#include "app/config/UserSettings.h"
 #include "render/ResourceTables.h"
 #include "scenes/ObjectRegistry.h"
 #include "platform/Text.h"
@@ -237,6 +238,16 @@ newLife:
 // el de abajo devuelven CaseExit: Next es seguir, Break salir del switch.
 
 enum class CaseExit { Break, Return, Next };
+
+// DESVIACION (iluminación mejorada): luz de efectos que en el 0.97k no llaman
+// a AddTerrainLight (Greater Life). Sólo por píxel: la grilla queda igual.
+static void EffectGlow(const void* source, Gfx::LightKind kind, const float at[3], float r, float g, float b, float radius)
+{
+  if (gUserSettings.GetAntilag(ANTILAG_SKILLS) || gUserSettings.GetDynamicLights() <= 0) return;
+  const float position[3] = { at[0], at[1], RequestTerrainHeight(at[0], at[1]) + 90.0f };
+  const float color[3] = { r, g, b };
+  Gfx::SourceLight(source, kind, position, color, radius);
+}
 
 // IDA: MoveEffect (0x00466AD0), case MODEL_TAMA.
 static bool MoveEffect_Tama(float *& param_1, const intptr_t& __cnt)
@@ -1947,6 +1958,15 @@ static bool MoveEffect_Type1264(float *& param_1)
   if ((0 < AsObject(param_1)->SubType) && (AsObject(param_1)->SubType != 4)) {
     Effect_SpawnLightningBurst((intptr_t)param_1);
   }
+  // Explosión de Greater Life (vida 60): la misma curva y color que su mancha
+  // del piso en Particle_RenderAll.  Los dos que crea el casteo son una luz.
+  if (AsObject(param_1)->Type == BITMAP_MAGIC + 1 && AsObject(param_1)->SubType == 4) {
+    const int life = AsObject(param_1)->LifeTime;
+    const float glow = life < 5 ? (float)life * 0.2f : sinf((float)(60 - life) * 0.05f) + 0.5f;
+    if (glow > 0.0f)
+      EffectGlow((const void*)(intptr_t)AsObject(param_1)->Owner, Gfx::LightKind::BuffBurst,
+                 AsObject(param_1)->Position, glow, glow * 0.6f, glow * 0.15f, 350.0f);
+  }
   return false;
 }
 
@@ -2537,6 +2557,8 @@ void MoveEffect(float *param_1, int param_2)
                 }
                 else {
                   *(float *)&AsObject(param_1)->LifeTime = 1.4013e-44;
+                  // El efecto queda donde se creó; el aura va con el dueño.
+                  EffectGlow(pcVar11, Gfx::LightKind::BuffAura, AsObject(pcVar11)->Position, 0.65f, 0.42f, 0.12f, 250.0f);
                 }
                 local_368 = 1.0;
                 local_364 = 0.5;

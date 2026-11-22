@@ -41,7 +41,8 @@ def build_and_run(root, harness, work, args):
     # (--reference-ref puede ser anterior).
     gfx = root / "src/render/Gfx.h"
     declared = gfx.read_text(encoding="utf-8") if gfx.exists() else ""
-    stubs = " ".join(f"{macro}=1" for macro, name in (("REPLAY_SMALL_LIGHT", "struct SmallLightScope"),)
+    stubs = " ".join(f"{macro}=1" for macro, name in (("REPLAY_SMALL_LIGHT", "struct SmallLightScope"),
+                                                    ("REPLAY_SOURCE_LIGHT", "void SourceLight("))
                      if name in declared)
     files = " ".join(f'"{(root / s).as_posix()}"' for s in SUITES[args.suite][1])
     (work / "CMakeLists.txt").write_text(f"""cmake_minimum_required(VERSION 3.25)
