@@ -4,7 +4,7 @@ import argparse
 import tempfile
 from pathlib import Path
 from SceneObjectPointer import build_and_run, read_source
-from SceneGridLifecycle import PREAMBLE, production
+from SceneGridLifecycle import PREAMBLE, POOLS, production
 from ObjectLayoutContract import record
 
 
@@ -48,6 +48,8 @@ void Reset(){
     std::memset(expectedRegistered,0,sizeof(expectedRegistered));std::memset(expectedFreed,0,sizeof(expectedFreed));
     std::memset(g_ObjectBucketGrid,0,sizeof(g_ObjectBucketGrid));std::memset(expectedGrid,0,sizeof(expectedGrid));
     std::memset(DAT_083a2370,0xa5,sizeof(DAT_083a2370));
+    std::memset(Sprites,0xa5,sizeof(Sprites));std::memset(Boids,0xa5,sizeof(Boids));
+    std::memset(DAT_07c80110,0xa5,sizeof(DAT_07c80110));
     for(unsigned cell=0;cell<256;++cell){
         lists[cell].clear();
         const std::uint32_t reserved=0x12340000+cell;
@@ -77,6 +79,9 @@ int main(){
         unsigned other=(cell+127)%256;position[0]=float((other/16)*1600+400);position[1]=float((other%16)*1600+400);
         ModelInsert(other,7);Require(CreateObject(8,position,angle,1)==Pointer(7));Check();
         ModelUnload();DeleteObjects();Check();for(BYTE b:DAT_083a2370)Require(b==0);
+        for(const OBJECT& o:Sprites)Require(o.Live==0);
+        for(const OBJECT& o:Boids)Require(o.Live==0);
+        for(BYTE b:DAT_07c80110)Require(b==0);
         ++cases;
     }
     std::printf("SceneGridNative: %u ciclos, ptr=%zu OBJECT=%zu, modelo/bytes/eventos OK\n",cases,sizeof(void*),sizeof(OBJECT));
@@ -92,7 +97,7 @@ def harness():
              "\n#pragma pack(pop)\nOBJECT* AsObject(void* p){return static_cast<OBJECT*>(p);}\n")
     cell = read_source("src/scenes/SceneObjectCell.h").replace("#pragma once", "")
     services = PREAMBLE.split("using Snapshot", 1)[0].replace("444", "sizeof(OBJECT)")
-    return types + cell + services + "\nextern SceneObjectCell g_ObjectBucketGrid[256];\n" + production() + MAIN
+    return types + cell + services + POOLS + "\nextern SceneObjectCell g_ObjectBucketGrid[256];\n" + production() + MAIN
 
 
 def main():

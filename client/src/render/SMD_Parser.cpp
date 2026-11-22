@@ -241,6 +241,16 @@ void __cdecl DeleteObjects(void) {
             // vez del bound absoluto del binario.
             memset(DAT_083a2370, 0, sizeof(DAT_083a2370));
     memset(g_OperateObjects, 0, sizeof(g_OperateObjects));
+            // Tambien se portan, acotados con sizeof, tres de esos pools que nadie
+            // mas limpia al cambiar de mapa: los sprites (unk_7C85890), los Boids y
+            // los numeros de daño (unk_7C80110).  Sin el de Boids, al salir de
+            // Atlans quedaban vivos los cardumenes de los slots 5..39 (fuera de
+            // Atlans e Icarus el tick sólo recorre los primeros), sin moverse ni
+            // morir, y RenderBoids los seguia dibujando con el modelo que hubiera
+            // en su slot en el mapa nuevo: peces o rocas flotando en Devias.
+            for (OBJECT& o : Sprites) o.Live = 0;
+            for (OBJECT& o : Boids) o.Live = 0;
+            memset(DAT_07c80110, 0, sizeof(DAT_07c80110));
             return;
         }
     } while (true);
