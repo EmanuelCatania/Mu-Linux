@@ -96,6 +96,8 @@ void WriteChain(const std::string& path, const std::string& text)
 
 void SetServer(const std::string& cacheDir) { s_Dir = cacheDir; }
 
+bool HasCompiledKey() { return *ServerConfig::ServerPublicKey != 0; }
+
 Result Check(const std::uint8_t publicKey[KeySize],
              const std::uint8_t* previousKey,
              const std::uint8_t* rotationSignature)

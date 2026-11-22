@@ -44,7 +44,8 @@ La clave **pública** sí se comparte. Sale en el log del GameServer al arrancar
   `client/src/app/config/ServerConfig.h` (`ServerPublicKey`). Esa clave es la
   raíz: no hay primer contacto y ningún archivo del jugador la puede reemplazar.
   Tiene que ser los 64 dígitos exactos; si está mal escrita el cliente no se
-  conecta a ningún server.
+  conecta a ningún server. Con la clave compilada el cliente tampoco acepta un
+  ConnectServer sin cifrar: tiene que leer la misma `ServerIdentity.key`.
 
 ## Cambiar la clave
 

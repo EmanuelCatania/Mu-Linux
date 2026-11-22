@@ -7,7 +7,7 @@
 //     registros cifrados y autenticados (ver net/SecureChannel.h).
 //   - Con el ConnectServer también, con la misma clave del server.  Si el
 //     ConnectServer no lo habla (uno viejo, o sin la clave todavía) la
-//     conexión sigue en claro: sólo lleva la lista pública de servers.
+//     conexión sigue en claro, salvo que el build traiga la clave compilada.
 //
 // Reemplaza al XOR de byte de MuEmu (MuEmu::EncryptSend / DecryptRecv).  Ese XOR
 // no tenía estado, así que cualquier sitio podía llamar a send() por su cuenta.
@@ -21,8 +21,8 @@ namespace NetChannel {
 
 // Al crear el socket: se olvida el canal de la conexión anterior y se arranca
 // uno nuevo.  allowPlain = true para el ConnectServer: si contesta en claro
-// en vez de con el saludo, la conexión sigue en claro (con el GameServer eso
-// es un error).
+// en vez de con el saludo, la conexión sigue en claro (con el GameServer, o
+// con una clave compilada, eso es un error).
 void OnNewConnection(bool allowPlain);
 
 // true si la conexión actual terminó el saludo del canal cifrado.

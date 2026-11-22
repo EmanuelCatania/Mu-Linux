@@ -41,6 +41,10 @@ Result Check(const std::uint8_t publicKey[KeySize],
              const std::uint8_t* previousKey,
              const std::uint8_t* rotationSignature);
 
+// true si el build trae una clave (bien o mal escrita): entonces no se acepta
+// ninguna conexión en claro.
+bool HasCompiledKey();
+
 // Hex de exactamente KeySize * 2 dígitos.
 bool ParseKey(const char* text, std::uint8_t out[KeySize]);
 

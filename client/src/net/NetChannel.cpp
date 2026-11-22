@@ -98,7 +98,9 @@ bool IsPlainRefusal(const unsigned char* raw, int size)
 void OnNewConnection(bool allowPlain)
 {
     s_Secure = true;
-    s_AllowPlain = allowPlain;
+    // Con clave compilada tampoco el ConnectServer: contestar en claro sería
+    // una forma de hacerse pasar por el server sin tenerla.
+    s_AllowPlain = allowPlain && !ServerTrust::HasCompiledKey();
     s_Channel.Reset();
     s_Plain.clear();
     s_Early.clear();
