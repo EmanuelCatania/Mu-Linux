@@ -37,6 +37,23 @@ music.
 | Linux x64 | OpenGL 3.3 and WebGPU (Vulkan) | Complete; this is the published build |
 | Windows x86, Linux x86 | OpenGL 3.3 | Historical base: it builds, but it is not tested and gets no WebGPU |
 
+### What's new in 0.97.46
+
+- **Server identity.** With `ServerPublicKey` compiled in, that key is the root:
+  an edited `server.pub` no longer replaces it and rotations are verified by
+  signature (`User/Cache/server-<key>.chain`). A fake refusal before the
+  handshake no longer leaves the connection unencrypted, with a compiled key
+  the ConnectServer must be encrypted, and on a clean install first contact
+  saves the key. See [Server identity](../docs/identidad-del-server.md).
+- **Item tooltip** with the options and percentages the server sends; without
+  them the 0.97k values remain.
+- **Improved water and lighting** with WebGPU, which can be turned off in
+  *Advanced > Lighting*. Per-map profiles in `Content/map/maps.toml`.
+- Effect fixes after a map change, Mana Shield, Flame and Hellfire.
+
+**Compatibility: client 0.97.46 ↔ [server 0.97.46](../README.en.md).** The
+protocol does not change: it also joins a 0.97.45 server.
+
 ### What's new in 0.97.45 — Phase 5, first part
 
 - **Content per entity.** `Data/` becomes `Content/` (one folder per item,
@@ -114,7 +131,7 @@ server, and vice versa.
 - **A graphics card with OpenGL 3.3**, with its driver installed. WebGPU also
   needs DirectX 12, DirectX 11 or Vulkan; if the device can't be created, the
   client keeps going with OpenGL.
-- **A 0.97.45 server.** The port is validated against
+- **A 0.97.45 or later server.** The port is validated against
   [MuEmu - Linux](../README.en.md) (season
   0.97k), which is the authoritative source for the packet format. Each client
   Release says which server version it works with. 0.97k servers without the
