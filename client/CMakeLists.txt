@@ -960,3 +960,13 @@ add_executable(mu_panel_anchor_test EXCLUDE_FROM_ALL tests/PanelAnchor.cpp)
 target_include_directories(mu_panel_anchor_test PRIVATE src)
 target_compile_features(mu_panel_anchor_test PRIVATE cxx_std_17)
 add_test(NAME panel_anchor COMMAND mu_panel_anchor_test)
+
+# Fase 5, launcher: núcleo del actualizador y mu-patch (tools/mu-patch).
+set(MU_CLIENT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+add_subdirectory(tools/mu-patch EXCLUDE_FROM_ALL)
+add_executable(mu_update_test EXCLUDE_FROM_ALL tests/Update.cpp)
+target_link_libraries(mu_update_test PRIVATE mu_patch_core)
+if(MSVC)
+    target_compile_options(mu_update_test PRIVATE /utf-8 /EHsc)
+endif()
+add_test(NAME update COMMAND mu_update_test)
