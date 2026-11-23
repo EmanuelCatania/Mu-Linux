@@ -21,6 +21,7 @@ struct PrevSource
 {
 	std::string dir;
 	std::string url;
+	std::string zipDir;   // vacío: los zips están en dir
 };
 
 struct BuildOptions
@@ -40,6 +41,9 @@ struct BuildOptions
 	std::vector<std::string> deleted;
 	std::string baseManifest;           // overlay: para avisar qué archivos de la base pisa
 	std::uint64_t bundleSize = 64ull << 20;
+	// Los zips que se reusan sin url ya están donde se va a servir el manifiesto
+	// nuevo: no se copian a out (publish deja todo en una carpeta).
+	bool reuseInPlace = false;
 	int level = 19;
 	int threads = 0;                    // 0: los núcleos del equipo
 	Log log;

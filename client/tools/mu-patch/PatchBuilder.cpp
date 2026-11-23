@@ -89,6 +89,8 @@ bool LoadManifestDir(const std::string& dir, const std::uint8_t publicKey[kKeySi
 	return true;
 }
 
+const std::string& ZipDir(const PrevSource& p) { return p.zipDir.empty() ? p.dir : p.zipDir; }
+
 // Lee de una versión anterior el contenido de un archivo (para armar deltas).
 bool ReadFromManifest(const std::string& dir, const Manifest& m, const FileEntry& f, std::vector<std::uint8_t>& out)
 {
@@ -426,7 +428,7 @@ bool BuildPatch(const BuildOptions& o, std::string* error)
 				if (e.hash != f.hash || e.size != f.size) continue;
 				const BundleRef& b = pm.bundles[e.bundle];
 				const bool reachable = !b.url.empty() || !prevs[i].first.url.empty() ||
-				                       FileExists(JoinPath(prevs[i].first.dir, b.name));
+				                       FileExists(JoinPath(ZipDir(prevs[i].first), b.name));
 				if (!reachable) continue;
 				f.prev = static_cast<int>(i);
 				f.prevEntry = &e;
@@ -461,7 +463,7 @@ bool BuildPatch(const BuildOptions& o, std::string* error)
 		{
 			BundleRef ref = old;
 			if (ref.url.empty() && !src.first.url.empty()) ref.url = JoinPath(src.first.url, old.name);
-			if (ref.url.empty() && !CopyFileTo(JoinPath(src.first.dir, old.name), JoinPath(o.out, old.name)))
+			if (ref.url.empty() && !o.reuseInPlace && !CopyFileTo(JoinPath(ZipDir(src.first), old.name), JoinPath(o.out, old.name)))
 			{
 				key.Wipe();
 				return Fail(error, "no se puede copiar " + old.name);
@@ -544,10 +546,10 @@ bool BuildPatch(const BuildOptions& o, std::string* error)
 				if (old.platform != e.platform || old.path != e.path || old.hash == e.hash) continue;
 				if (old.size > kMaxDeltaFileSize || !done.insert(FormatDigest(old.hash)).second) continue;
 				std::vector<std::uint8_t> oldData;
-				if (!FileExists(JoinPath(prevs[i].first.dir, pm.bundles[old.bundle].name)) ||
-				    !ReadFromManifest(prevs[i].first.dir, pm, old, oldData))
+				if (!FileExists(JoinPath(ZipDir(prevs[i].first), pm.bundles[old.bundle].name)) ||
+				    !ReadFromManifest(ZipDir(prevs[i].first), pm, old, oldData))
 				{
-					Say(o.log, "sin delta para " + e.path + " desde " + pm.version + ": no está su zip en " + prevs[i].first.dir);
+					Say(o.log, "sin delta para " + e.path + " desde " + pm.version + ": no está su zip en " + ZipDir(prevs[i].first));
 					continue;
 				}
 				if (raw.empty() && !ReadWholeFile(JoinPath(o.in, e.path), raw)) { key.Wipe(); return Fail(error, "no se puede leer " + e.path); }
@@ -690,8 +692,8 @@ bool VerifyPatch(const VerifyOptions& o, std::string* error)
 				for (const FileEntry& e : p.second.files)
 					if (e.hash == d.from) { old = &e; break; }
 				std::vector<std::uint8_t> oldData;
-				if (!old || !FileExists(JoinPath(p.first.dir, p.second.bundles[old->bundle].name)) ||
-				    !ReadFromManifest(p.first.dir, p.second, *old, oldData)) continue;
+				if (!old || !FileExists(JoinPath(ZipDir(p.first), p.second.bundles[old->bundle].name)) ||
+				    !ReadFromManifest(ZipDir(p.first), p.second, *old, oldData)) continue;
 				std::vector<std::uint8_t> rebuilt;
 				if (!DeltaApply(oldData, patch.data(), patch.size(), f.size, rebuilt, error)) return false;
 				if (HashBytes(rebuilt.data(), rebuilt.size()) != f.hash) return Fail(error, f.path + ": el delta no da el archivo nuevo");

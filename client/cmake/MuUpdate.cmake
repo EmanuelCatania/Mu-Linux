@@ -23,6 +23,22 @@ FetchContent_Declare(mu_zstd
     SOURCE_SUBDIR build/cmake)
 FetchContent_MakeAvailable(mu_zstd)
 
+# zlib sólo para Deflate (los zips que arma el admin con cualquier herramienta).
+# Se compilan sus fuentes acá (SOURCE_SUBDIR inexistente), sin su CMake.
+FetchContent_Declare(mu_zlib
+    URL https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz
+    URL_HASH SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
+    SOURCE_SUBDIR mu-sin-cmake)
+FetchContent_MakeAvailable(mu_zlib)
+add_library(mu_zlib STATIC
+    "${mu_zlib_SOURCE_DIR}/adler32.c" "${mu_zlib_SOURCE_DIR}/crc32.c" "${mu_zlib_SOURCE_DIR}/deflate.c"
+    "${mu_zlib_SOURCE_DIR}/inffast.c" "${mu_zlib_SOURCE_DIR}/inflate.c" "${mu_zlib_SOURCE_DIR}/inftrees.c"
+    "${mu_zlib_SOURCE_DIR}/trees.c" "${mu_zlib_SOURCE_DIR}/zutil.c")
+target_include_directories(mu_zlib PUBLIC "${mu_zlib_SOURCE_DIR}")
+if(MSVC)
+    target_compile_definitions(mu_zlib PRIVATE _CRT_SECURE_NO_DEPRECATE _CRT_NONSTDC_NO_DEPRECATE)
+endif()
+
 set(_mu_update_dir "${MU_CLIENT_SOURCE_DIR}/src/update")
 add_library(mu_update_core STATIC
     "${_mu_update_dir}/Json.cpp"
@@ -54,7 +70,7 @@ target_include_directories(mu_update_core PUBLIC "${MU_CLIENT_SOURCE_DIR}/src"
     PRIVATE "${mu_zstd_SOURCE_DIR}/lib")
 target_compile_features(mu_update_core PUBLIC cxx_std_17)
 find_package(Threads REQUIRED)
-target_link_libraries(mu_update_core PUBLIC Threads::Threads PRIVATE libzstd_static)
+target_link_libraries(mu_update_core PUBLIC Threads::Threads PRIVATE libzstd_static mu_zlib)
 if(MSVC)
     target_compile_options(mu_update_core PRIVATE /utf-8)
 endif()

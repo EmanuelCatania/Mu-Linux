@@ -16,7 +16,7 @@ include(MuUpdate)
 
 find_package(Threads REQUIRED)
 
-add_library(mu_patch_core STATIC PatchBuilder.cpp PatchBuilder.h)
+add_library(mu_patch_core STATIC PatchBuilder.cpp PatchBuilder.h Publish.cpp Publish.h)
 target_include_directories(mu_patch_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(mu_patch_core PUBLIC mu_update_core Threads::Threads)
 

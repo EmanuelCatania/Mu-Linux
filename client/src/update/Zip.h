@@ -5,9 +5,8 @@
 // comprimido por separado: el launcher baja con HTTP Range sólo el tramo de un
 // archivo, sin el zip entero.
 //
-// Métodos: 0 (guardado) y 93 (zstd).  Deflate (8) se lista pero todavía no se
-// descomprime: hace falta recién cuando el server acepte zips armados por el
-// admin (paso 5 del diseño), y ahí los rearma en zstd.  Zip64 cuando hace falta.
+// Métodos: 0 (guardado), 8 (Deflate, el de cualquier herramienta: los zips que
+// sube el admin) y 93 (zstd, el que usa mu-patch).  Zip64 cuando hace falta.
 // Los zips cifrados se rechazan.
 
 #include <cstdint>
@@ -77,6 +76,10 @@ private:
 // tamaño y CRC.
 bool ZipExtract(const std::string& zipPath, const ZipEntry& entry, std::vector<std::uint8_t>& out,
                 std::string* error);
+
+// Deflate crudo (para armar zips de prueba o compatibles con cualquier herramienta).
+bool DeflateCompress(const std::uint8_t* data, std::size_t size, int level, std::vector<std::uint8_t>& out,
+                     std::string* error);
 
 // Igual, para datos ya leídos (lo que baja el launcher por Range).
 bool ZipDecode(ZipMethod method, const std::uint8_t* packed, std::size_t packedSize,
