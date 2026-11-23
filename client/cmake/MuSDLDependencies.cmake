@@ -1,18 +1,6 @@
 # Versiones aprobadas; no se busca SDL3/miniaudio instalados en el sistema.
 include(FetchContent)
-set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-set(SDL_STATIC ON CACHE BOOL "" FORCE)
-set(SDL_TESTS OFF CACHE BOOL "" FORCE)
-set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(MU_WAYLAND REQUIRED wayland-client>=1.18 wayland-egl wayland-cursor egl xkbcommon>=0.5.0 libdecor-0)
-    set(SDL_WAYLAND ON CACHE BOOL "" FORCE)
-    set(SDL_X11 ON CACHE BOOL "" FORCE)
-endif()
-FetchContent_Declare(mu_sdl
-    URL https://github.com/libsdl-org/SDL/archive/7f3ae3d57459e59943a4ecfefc8f6277ec6bf540.tar.gz)
-FetchContent_MakeAvailable(mu_sdl)
+include(MuSDL3)
 set(MINIAUDIO_NO_EXTRA_NODES ON CACHE BOOL "" FORCE)
 FetchContent_Declare(mu_miniaudio
     URL https://github.com/mackron/miniaudio/archive/9634bedb5b5a2ca38c1ee7108a9358a4e233f14d.tar.gz)

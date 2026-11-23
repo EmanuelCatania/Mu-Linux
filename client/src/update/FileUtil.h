@@ -33,6 +33,9 @@ bool CopyFileTo(const std::string& from, const std::string& to);
 // Fecha de modificación en las unidades del reloj de archivos del sistema.  Sólo
 // sirve para comparar contra un valor guardado en el mismo equipo.
 bool FileModTime(const std::string& path, std::int64_t& out);
+// Le da permiso de ejecución (los ejecutables de Linux que instala el launcher:
+// escribirlo de nuevo pierde el bit).  En Windows no hace nada.
+bool SetExecutable(const std::string& path);
 // Borra un archivo (true también si no existía).
 bool RemoveFile(const std::string& path);
 // Mueve from encima de to (crea las carpetas que falten).  Si están en volúmenes

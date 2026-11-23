@@ -1,8 +1,9 @@
 name: Launcher
-# Transporte HTTP del actualizador (libcurl) y, más adelante, el launcher SDL3.
+# El launcher (SDL3) y el transporte HTTP del actualizador (libcurl).
 # Se compila solo (client/src/launcher), en Windows con Schannel y en Linux con
 # el OpenSSL de la distribución, y corre sus pruebas contra un server HTTP
 # local.  Las del núcleo sin red (mu_update_test) las corre client.yml.
+# El ejecutable queda como artefacto del run.
 on:
   pull_request:
     paths:
@@ -12,6 +13,9 @@ on:
       - "client/cmake/MuUpdateHttp.cmake"
       - "client/tools/mu-patch/**"
       - "client/tests/UpdateHttp.cpp"
+      - "client/cmake/MuSDL3.cmake"
+      - "client/cmake/MuEmbedFile.cmake"
+      - "client/lib/stb/**"
       - ".github/workflows/launcher.yml"
   push:
     branches: [ "release/*", "main" ]
@@ -21,6 +25,8 @@ on:
       - "client/cmake/MuUpdate.cmake"
       - "client/cmake/MuUpdateHttp.cmake"
       - "client/tests/UpdateHttp.cpp"
+      - "client/cmake/MuSDL3.cmake"
+      - "client/cmake/MuEmbedFile.cmake"
       - ".github/workflows/launcher.yml"
   workflow_dispatch:
 permissions:
@@ -38,9 +44,11 @@ jobs:
         os: [ ubuntu-24.04, windows-2022 ]
     steps:
       - uses: actions/checkout@v5
-      - name: OpenSSL
+      - name: Dependencias de sistema Linux
         if: runner.os == 'Linux'
-        run: dpkg -s libssl-dev > /dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y libssl-dev)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev libx11-dev libx11-xcb-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libegl-dev libasound2-dev libpulse-dev libwayland-dev libxkbcommon-dev libdecor-0-dev wayland-protocols pkg-config
       - name: Compilar
         shell: bash
         run: |
@@ -49,3 +57,10 @@ jobs:
       - name: Pruebas
         shell: bash
         run: ctest --test-dir build/launcher -C Release --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher-${{ runner.os }}
+          path: |
+            build/launcher/launcher
+            build/launcher/Release/launcher.exe
+          if-no-files-found: ignore

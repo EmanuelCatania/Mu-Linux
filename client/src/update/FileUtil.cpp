@@ -152,6 +152,19 @@ bool FileModTime(const std::string& path, std::int64_t& out)
 	return true;
 }
 
+bool SetExecutable(const std::string& path)
+{
+#ifdef _WIN32
+	(void)path;
+	return true;
+#else
+	std::error_code ec;
+	fs::permissions(ToPath(path), fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec,
+	                fs::perm_options::add, ec);
+	return !ec;
+#endif
+}
+
 bool RemoveFile(const std::string& path)
 {
 	std::error_code ec;

@@ -117,6 +117,16 @@ bool BuildPlan(const std::vector<ChannelSource>& sources, const PlanOptions& opt
 	{
 		const FileEntry& f = *c.entry;
 		const std::string& channel = sources[c.source].manifest->channel;
+		if (f.self && !options.includeSelf)
+		{
+			// Igual se anota: el launcher avisa que hay uno nuevo.
+			Digest actual{};
+			if (CheckLocal(options.root, path, f.hash, index, options.fullVerify, &actual) != LocalState::Match)
+				out.selfUpdate = true;
+			else
+				++out.upToDate;
+			continue;
+		}
 		const bool exists = FileExists(JoinPath(options.root, path));
 		if (InstallOnce(path) && exists)
 		{

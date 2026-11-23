@@ -42,6 +42,9 @@ struct PlanOptions
 	// Con el juego abierto: sólo agregar archivos opcionales que faltan.  Nada
 	// que reemplace o borre (en Windows un archivo abierto no se puede pisar).
 	bool gameRunning = false;
+	// false: no planear el launcher (self).  Hasta que el launcher sepa
+	// reemplazarse a sí mismo, un archivo que está corriendo no se pisa.
+	bool includeSelf = true;
 };
 
 struct PlanFile
