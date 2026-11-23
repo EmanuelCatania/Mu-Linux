@@ -8,6 +8,7 @@
 #include "LauncherConfig.h"
 #include "OptionsModel.h"
 #include "PatchBuilder.h"
+#include "SelfUpdate.h"
 #include "UpdateFlow.h"
 
 #include "update/ChannelFetch.h"
@@ -571,6 +572,151 @@ void TestOptions(const std::string& dir)
 	Require(find("LangSelection", t, r) && ed2.Tabs()[t].rows[r].choices.size() == 4, "opciones: idiomas");
 }
 
+// Un ejecutable mínimo de la plataforma donde corre la prueba (mu-patch lo
+// reconoce como windows-x64 o linux-x64): el launcher filtra los de otra.
+std::vector<std::uint8_t> FakePe(unsigned seed)
+{
+	std::vector<std::uint8_t> d(0x200, 0);
+#ifdef _WIN32
+	d[0] = 'M';
+	d[1] = 'Z';
+	d[0x3C] = 0x40;
+	std::memcpy(&d[0x40], "PE\0\0", 4);
+	d[0x44] = 0x64;
+	d[0x45] = 0x86;
+#else
+	d[0] = 0x7F;
+	d[1] = 'E';
+	d[2] = 'L';
+	d[3] = 'F';
+	d[4] = 2;     // 64 bits
+	d[5] = 1;     // little endian
+	d[18] = 62;   // x86-64
+#endif
+	const auto tail = Random(64, seed);
+	d.insert(d.end(), tail.begin(), tail.end());
+	return d;
+}
+
+void TestSelfUpdateMarks(const std::string& dir)
+{
+	const std::string exe = JoinPath(dir, "self/Launcher/launcher.exe");
+	const auto vNew = Random(100, 41), vOld = Random(100, 42);
+	Write(exe, vNew);
+	Write(exe + ".old", vOld);
+	const Launcher::SelfPaths p = Launcher::SelfPathsFor(exe, JoinPath(dir, "self/User/Cache"));
+	Require(Launcher::CheckAtStartup(p) == Launcher::StartupCheck::Normal, "self: sin marca, arranque normal");
+
+	// Arranca bien: confirma y limpia.
+	Require(Launcher::MarkPending(p), "self: marca");
+	Require(Launcher::CheckAtStartup(p) == Launcher::StartupCheck::Confirming, "self: primer arranque del nuevo");
+	Launcher::ConfirmHealthy(p);
+	Require(!FileExists(p.pending) && !FileExists(p.old), "self: confirmado, sin marca ni .old");
+
+	// No arranca: el siguiente inicio vuelve al anterior.
+	Write(exe + ".old", vOld);
+	Require(Launcher::MarkPending(p), "self: marca 2");
+	Require(Launcher::CheckAtStartup(p) == Launcher::StartupCheck::Confirming, "self: el nuevo toma la marca");
+	// ... y se cae antes de confirmar.
+	Require(Launcher::CheckAtStartup(p) == Launcher::StartupCheck::RolledBack, "self: marca tomada, vuelta atrás");
+	std::vector<std::uint8_t> got;
+	Require(ReadWholeFile(exe, got) && got == vOld && ReadWholeFile(p.bad, got) && got == vNew && !FileExists(p.pending),
+	        "self: restaurado el anterior, el nuevo queda como .bad");
+	Require(Launcher::CheckAtStartup(p) == Launcher::StartupCheck::Normal, "self: después de volver, normal");
+}
+
+void TestSelfUpdateFlow(TestServer& server, const std::string& dir, const std::string& www)
+{
+	std::string err;
+	KeyPair k;
+	Require(GenerateKey(k), "clave self");
+	const std::string key = JoinPath(dir, "self.key");
+	Require(SaveKeyFile(key, k), "guardar clave self");
+
+	// Overlay con el launcher nuevo y un archivo del admin.
+	const std::string in = JoinPath(dir, "self-ov-in");
+	const auto newLauncher = FakePe(51), adminFile = Random(5000, 52);
+	Write(JoinPath(in, "Launcher/launcher.exe"), newLauncher);
+	Write(JoinPath(in, "Content/admin/a.bin"), adminFile);
+	MuPatch::BuildOptions o;
+	o.channel = "prueba/overlay";
+	o.version = "1.0.0";
+	o.base = "0.97.50";
+	o.in = in;
+	o.out = JoinPath(www, "self-ov");
+	o.keyPath = key;
+	o.level = 3;
+	o.threads = 2;
+	Require(MuPatch::BuildPatch(o, &err), ("self: build overlay: " + err).c_str());
+
+	const std::string root = JoinPath(dir, "self-client");
+	const auto oldLauncher = FakePe(53);
+	Write(JoinPath(root, "Launcher/launcher.exe"), oldLauncher);
+	Write(JoinPath(root, "main.exe"), Random(100, 54));
+
+	Launcher::Config c;
+	c.overlayUrl = server.Url("/self-ov");
+	c.overlayChannel = "prueba/overlay";
+	c.overlayKey = ToHex(k.publicKey, kKeySize);
+	c.gameExe = "main.exe";
+	c.selfPath = "Launcher/launcher.exe";
+	auto run = [&](const Launcher::Config& cfg) {
+		Launcher::UpdateFlow flow(cfg, root, std::make_unique<Launcher::AnyTransport>(std::make_unique<HttpTransport>()));
+		flow.Start();
+		flow.Wait();
+		return flow.Snapshot();
+	};
+
+	// Primero sólo el launcher, y pide reiniciar.
+	Launcher::Status st = run(c);
+	std::vector<std::uint8_t> got;
+	Require(st.phase == Launcher::Phase::Restart, ("self: el launcher nuevo va primero: " + st.message).c_str());
+	Require(ReadWholeFile(JoinPath(root, "Launcher/launcher.exe"), got) && got == newLauncher &&
+	            ReadWholeFile(JoinPath(root, "Launcher/launcher.exe.old"), got) && got == oldLauncher,
+	        "self: el nuevo en su lugar y el anterior como .old");
+	Require(!FileExists(JoinPath(root, "Content/admin/a.bin")), "self: el resto espera al launcher nuevo");
+	const Launcher::SelfPaths p = Launcher::SelfPathsFor(JoinPath(root, "Launcher/launcher.exe"),
+	                                                     JoinPath(Launcher::UserDirFor(root), "Cache"));
+	Require(FileExists(p.pending), "self: deja la marca para confirmar");
+
+	// El nuevo arranca, confirma y procesa el resto.
+	Require(Launcher::CheckAtStartup(p) == Launcher::StartupCheck::Confirming, "self: el nuevo toma la marca");
+	st = run(c);
+	Require(st.phase == Launcher::Phase::Ready && ReadWholeFile(JoinPath(root, "Content/admin/a.bin"), got) && got == adminFile,
+	        ("self: después del reinicio, el resto: " + st.message).c_str());
+	Launcher::ConfirmHealthy(p);
+	Require(!FileExists(JoinPath(root, "Launcher/launcher.exe.old")), "self: confirmado, se borra el .old");
+
+	// La versión nueva se cae antes de confirmar: el siguiente arranque vuelve a
+	// la anterior y el flujo ya no la reinstala (si no, entraría en un bucle).
+	Write(JoinPath(root, "Launcher/launcher.exe.old"), oldLauncher);
+	Require(Launcher::MarkPending(p) && Launcher::CheckAtStartup(p) == Launcher::StartupCheck::Confirming &&
+	            Launcher::CheckAtStartup(p) == Launcher::StartupCheck::RolledBack, "self: vuelta atrás");
+	Digest blocked{};
+	Require(Launcher::BlockedVersion(p, blocked) && blocked == HashBytes(newLauncher.data(), newLauncher.size()),
+	        "self: anota la versión que no arrancó");
+	st = run(c);
+	Require(st.phase == Launcher::Phase::Ready && ReadWholeFile(JoinPath(root, "Launcher/launcher.exe"), got) && got == oldLauncher,
+	        ("self: no reinstala la versión bloqueada: " + st.message).c_str());
+	bool warned = false;
+	for (const std::string& n : st.notices) warned |= n.find("no arranca") != std::string::npos;
+	Require(warned, "self: avisa que se sigue con la actual");
+
+	// Un launcher fuera de la carpeta del cliente no se actualiza a sí mismo: el
+	// de Launcher/ se instala como un archivo más.
+	const std::string root2 = JoinPath(dir, "self-client2");
+	Write(JoinPath(root2, "main.exe"), Random(100, 55));
+	Launcher::Config c2 = c;
+	c2.selfPath.clear();
+	Launcher::UpdateFlow flow2(c2, root2, std::make_unique<Launcher::AnyTransport>(std::make_unique<HttpTransport>()));
+	flow2.Start();
+	flow2.Wait();
+	st = flow2.Snapshot();
+	Require(st.phase == Launcher::Phase::Ready && FileExists(JoinPath(root2, "Launcher/launcher.exe")) &&
+	            FileExists(JoinPath(root2, "Content/admin/a.bin")), "self: sin selfPath, todo junto y sin reiniciar");
+	k.Wipe();
+}
+
 // Con MU_TEST_ONLINE=1: HTTPS real contra un asset de GitHub (redirige a otro
 // host), para probar el TLS del sistema.  El CI no lo corre.
 void TestOnline()
@@ -615,6 +761,8 @@ int main()
 	TestLauncherConfig(d);
 	TestIniDocument();
 	TestOptions(d);
+	TestSelfUpdateMarks(d);
+	TestSelfUpdateFlow(server, d, root);
 	TestLauncherFlow(server, d, root);
 	server.Stop();
 	TestOnline();

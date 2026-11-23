@@ -12,6 +12,8 @@
 // - Un delta que no da el archivo esperado se reemplaza por el archivo entero.
 // - Si un archivo no se puede reemplazar (en Windows, abierto por el juego) se
 //   anota y se sigue con el resto.
+// - El launcher (self) no se pisa: el que está se renombra a "<ruta>.old" y el
+//   nuevo va a su lugar (ver src/launcher/SelfUpdate.h).
 
 #include "update/InstallIndex.h"
 #include "update/InstallPlan.h"

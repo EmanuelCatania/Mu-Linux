@@ -124,6 +124,22 @@ Para ver la de un ejecutable:
 mu-patch release-of main.exe
 ```
 
+## El launcher en el overlay
+
+El launcher compilado por el operador (`client/src/launcher`) va en la carpeta
+`Launcher/` del overlay: `Launcher/launcher.exe` y, para Linux,
+`Launcher/launcher`. `mu-patch` marca `"self": true` a los ejecutables de esa
+carpeta, y el launcher los trata distinto:
+
+- se instalan antes que todo lo demás; el launcher se reinicia y la versión
+  nueva baja el resto;
+- el que está corriendo no se pisa: queda como `launcher.exe.old` hasta que el
+  nuevo anda unos segundos;
+- si el nuevo no llega a confirmar, el siguiente arranque vuelve al anterior y
+  no reinstala esa versión hasta que se publique otra.
+
+Detalle en `client/src/launcher/SelfUpdate.h`.
+
 ## Pendiente
 
 - Leer zips con Deflate armados a mano por el admin. Hoy se listan pero no se

@@ -122,9 +122,24 @@ PieceResult InstallPiece(Run& run, const PlanFile& pf, std::size_t fileIndex, co
 		return PieceResult::InstallFailed;
 	}
 	std::string err;
+	// El launcher puede estar corriendo: no se pisa, se renombra a ".old"
+	// (Windows lo permite con el archivo abierto) y queda para volver atrás.
+	const std::string old = target + ".old";
+	const bool swapSelf = e.self && FileExists(target);
+	if (swapSelf)
+	{
+		RemoveFile(old);
+		if (!MoveFileOver(target, old, &err))
+		{
+			RemoveFile(tmp);
+			*why = err;
+			return PieceResult::InstallFailed;
+		}
+	}
 	if (!MoveFileOver(tmp, target, &err))
 	{
 		RemoveFile(tmp);
+		if (swapSelf) MoveFileOver(old, target, nullptr);
 		*why = err;
 		return PieceResult::InstallFailed;
 	}

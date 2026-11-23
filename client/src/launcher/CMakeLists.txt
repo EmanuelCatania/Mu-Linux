@@ -66,6 +66,7 @@ add_library(mu_launcher_core STATIC
     IniDocument.cpp IniDocument.h
     LauncherConfig.cpp LauncherConfig.h
     OptionsModel.cpp OptionsModel.h
+    SelfUpdate.cpp SelfUpdate.h
     UpdateFlow.cpp UpdateFlow.h)
 target_include_directories(mu_launcher_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${MU_CLIENT_SOURCE_DIR}/src")
 target_link_libraries(mu_launcher_core PUBLIC mu_update_http)
