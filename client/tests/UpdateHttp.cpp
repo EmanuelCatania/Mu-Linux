@@ -1,9 +1,12 @@
-// Transporte HTTP del actualizador (src/update/HttpTransport) contra un server
+// Transporte HTTP del actualizador (src/update/HttpTransport) y flujo del
+// launcher (src/launcher, sin la ventana) contra un server
 // HTTP mínimo en 127.0.0.1: rangos, redirecciones, un server que ignora el
 // Range, cortes y una instalación de punta a punta que retoma después de un
 // corte.  También el armado y la validación de canales (ChannelFetch) por HTTP.
 
+#include "LauncherConfig.h"
 #include "PatchBuilder.h"
+#include "UpdateFlow.h"
 
 #include "update/ChannelFetch.h"
 #include "update/FileUtil.h"
@@ -28,6 +31,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <cstring>
 #include <filesystem>
 #include <mutex>
@@ -337,6 +341,129 @@ void TestEndToEnd(TestServer& server, const std::string& dir, const std::string&
 	k.Wipe();
 }
 
+// Copia un canal armado por mu-patch a la carpeta del "Release", con los
+// nombres de los assets de un Release del proyecto.
+void PublishLikeRelease(const std::string& out, const std::string& channel, const std::string& rel)
+{
+	std::vector<std::string> names;
+	std::string err;
+	Require(ListFiles(out, names, &err), "listar canal");
+	std::string slug = channel;
+	for (char& c : slug)
+		if (c == '/') c = '-';
+	for (const std::string& n : names)
+	{
+		std::string to = n;
+		if (n == "manifest.json") to = slug + ".manifest.json";
+		if (n == "manifest.json.sig") to = slug + ".manifest.json.sig";
+		Require(CopyFileTo(JoinPath(out, n), JoinPath(rel, to)), "copiar asset");
+	}
+}
+
+void TestLauncherConfig(const std::string& dir)
+{
+	const std::string path = JoinPath(dir, "launcher.toml");
+	const std::string text =
+		"# comentario\n"
+		"Music = false\n"
+		"HD = true   # con comentario\n"
+		"Connections = 8\n"
+		"SpeedLimitKB = 100\n"
+		"BaseSource = \"dueño/repo\"\n"
+		"Connections = 99\n"
+		"esto no es una línea\n";
+	Require(WriteFileAtomic(path, text.data(), text.size()), "escribir launcher.toml");
+	Launcher::Config c = Launcher::CompiledConfig();
+	std::vector<std::string> warnings;
+	Launcher::ApplyLauncherToml(path, c, &warnings);
+	Require(!c.music && c.hd && c.connections == 8 && c.speedLimit == 100 * 1024, "launcher.toml: valores");
+	Require(c.baseRepo == "dueño/repo" && c.baseUrl.empty() && c.overrides.size() == 1, "launcher.toml: origen de la base, con aviso");
+	Require(warnings.size() == 2, "launcher.toml: avisa la línea rota y el valor fuera de rango");
+	Launcher::Config d = Launcher::CompiledConfig();
+	Launcher::ApplyLauncherToml(JoinPath(dir, "no-existe.toml"), d, &warnings);
+	Require(d.music && !d.hd && d.connections == 4, "launcher.toml que falta: valores por defecto");
+}
+
+void TestLauncherFlow(TestServer& server, const std::string& dir, const std::string& www)
+{
+	std::string err;
+	KeyPair k;
+	Require(GenerateKey(k), "clave flow");
+	const std::string key = JoinPath(dir, "flow.key");
+	Require(SaveKeyFile(key, k), "guardar clave flow");
+	const std::string rel = JoinPath(www, "flow-rel");
+
+	const std::string inBase = JoinPath(dir, "flow-in-base"), inMusic = JoinPath(dir, "flow-in-music");
+	const auto data = Random(300000, 7), song = Random(200000, 8);
+	Write(JoinPath(inBase, "Content/data/b.bin"), data);
+	Write(JoinPath(inMusic, "Content/audio/music/s.mp3"), song);
+	for (const auto& ch : { std::make_pair(std::string("mu-linux/base"), inBase), std::make_pair(std::string("mu-linux/music"), inMusic) })
+	{
+		MuPatch::BuildOptions o;
+		o.channel = ch.first;
+		o.version = "0.97.50";
+		o.in = ch.second;
+		o.out = JoinPath(dir, "flow-out-" + std::to_string(ch.first.size()));
+		o.keyPath = key;
+		o.level = 3;
+		o.threads = 2;
+		Require(MuPatch::BuildPatch(o, &err), ("flow: build " + ch.first + ": " + err).c_str());
+		PublishLikeRelease(o.out, ch.first, rel);
+	}
+
+	Launcher::Config c;
+	c.title = "prueba";
+	c.baseUrl = server.Url("/flow-rel");
+	c.baseTag = "0.97.50";
+	c.baseKey = ToHex(k.publicKey, kKeySize);
+	c.gameExe = "main.exe";
+	const std::string root = JoinPath(dir, "flow-client");
+	Write(JoinPath(root, "main.exe"), Random(100, 9));
+
+	auto run = [&](const Launcher::Config& cfg, const std::string& r) {
+		Launcher::UpdateFlow flow(cfg, r, std::make_unique<Launcher::AnyTransport>(std::make_unique<HttpTransport>()));
+		flow.Start();
+		flow.Wait();
+		return flow.Snapshot();
+	};
+
+	Launcher::Status st = run(c, root);
+	std::vector<std::uint8_t> got;
+	Require(st.phase == Launcher::Phase::Ready && st.canPlay, ("flow: instala base y música: " + st.message).c_str());
+	Require(ReadWholeFile(JoinPath(root, "Content/data/b.bin"), got) && got == data &&
+	            ReadWholeFile(JoinPath(root, "Content/audio/music/s.mp3"), got) && got == song, "flow: archivos instalados");
+	Require(FileExists(JoinPath(Launcher::UserDirFor(root), "Cache/install.json")) &&
+	            FileExists(JoinPath(Launcher::UserDirFor(root), "Cache/sequences.json")), "flow: índice y secuencias");
+
+	st = run(c, root);
+	Require(st.phase == Launcher::Phase::Ready && st.message.find("al día") != std::string::npos, "flow: segunda vez, al día");
+
+	// Sin red (o un Release que no está) con algo instalado: se juega igual.
+	Launcher::Config off = c;
+	off.baseUrl = server.Url("/no-existe");
+	st = run(off, root);
+	Require(st.phase == Launcher::Phase::Offline && st.canPlay, "flow: sin conexión, juega con lo instalado");
+	// Otra versión de la base que la publicada: no se acepta.
+	Launcher::Config tag = c;
+	tag.baseTag = "0.97.49";
+	st = run(tag, root);
+	Require(st.phase == Launcher::Phase::Offline, "flow: tag distinto al del manifiesto, no se acepta");
+	// Instalación vacía y sin red: no se puede jugar.
+	st = run(off, JoinPath(dir, "flow-vacio"));
+	Require(st.phase == Launcher::Phase::Failed && !st.canPlay, "flow: sin nada instalado y sin red, no se juega");
+	// Clave rota.
+	Launcher::Config badKey = c;
+	badKey.baseKey = "xyz";
+	st = run(badKey, root);
+	Require(st.phase == Launcher::Phase::Failed, "flow: clave de la base inválida");
+	// Música apagada: no se baja, pero lo ya instalado queda.
+	Launcher::Config noMusic = c;
+	noMusic.music = false;
+	st = run(noMusic, root);
+	Require(st.phase == Launcher::Phase::Ready && FileExists(JoinPath(root, "Content/audio/music/s.mp3")), "flow: sin música no borra la instalada");
+	k.Wipe();
+}
+
 // Con MU_TEST_ONLINE=1: HTTPS real contra un asset de GitHub (redirige a otro
 // host), para probar el TLS del sistema.  El CI no lo corre.
 void TestOnline()
@@ -378,6 +505,8 @@ int main()
 	}
 	TestTransport(server, root);
 	TestEndToEnd(server, d, root);
+	TestLauncherConfig(d);
+	TestLauncherFlow(server, d, root);
 	server.Stop();
 	TestOnline();
 

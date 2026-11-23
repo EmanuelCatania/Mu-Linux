@@ -17,6 +17,9 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
+// Hilos para escribir los archivos de un tramo ya bajado.
+constexpr std::size_t kInstallThreads = 4;
+
 enum class PieceResult { Ok, Corrupt, DeltaFailed, InstallFailed, Skipped };
 
 struct Run
@@ -126,6 +129,7 @@ PieceResult InstallPiece(Run& run, const PlanFile& pf, std::size_t fileIndex, co
 		return PieceResult::InstallFailed;
 	}
 
+	if (e.platform.compare(0, 6, "linux-") == 0) SetExecutable(target);
 	std::int64_t mtime = 0;
 	FileModTime(target, mtime);
 	std::lock_guard<std::mutex> lock(run.mutex);
@@ -152,7 +156,8 @@ void ProcessRequest(Run& run, const std::vector<PlanFile>& files, const RangeReq
 	const std::string part = JoinPath(run.o.downloadDir, ToHex(bundle.hash.data(), 8) + "-" + std::to_string(req.offset) +
 	                                                        "-" + std::to_string(req.length) + ".part");
 
-	std::vector<bool> done(req.pieces.size(), false);
+	// char y no bool: los hilos de la instalación escriben posiciones distintas.
+	std::vector<char> done(req.pieces.size(), 0);
 	if (run.o.selfOnly)
 		for (std::size_t i = 0; i < req.pieces.size(); ++i)
 			if (!files[req.pieces[i].file].entry->self) done[i] = true;
@@ -162,7 +167,7 @@ void ProcessRequest(Run& run, const std::vector<PlanFile>& files, const RangeReq
 	for (int attempt = 0; attempt < attempts; ++attempt)
 	{
 		if (run.Cancelled()) return;
-		if (std::all_of(done.begin(), done.end(), [](bool d) { return d; })) break;
+		if (std::all_of(done.begin(), done.end(), [](char d) { return d != 0; })) break;
 		if (attempt) Backoff(run, attempt - 1, rng);
 		if (run.Cancelled()) return;
 
@@ -216,43 +221,60 @@ void ProcessRequest(Run& run, const std::vector<PlanFile>& files, const RangeReq
 			}
 		}
 
-		bool corrupt = false;
-		for (std::size_t i = 0; i < req.pieces.size(); ++i)
-		{
-			if (done[i]) continue;
-			const Piece& pc = req.pieces[i];
-			const PlanFile& pf = files[pc.file];
-			std::string why;
-			switch (InstallPiece(run, pf, pc.file, part, pc.offset, pc.packed, &why))
+		// Instalar los archivos del tramo en paralelo: con un zip entero son miles
+		// de archivos chicos, y escribir cada uno cuesta más que decodificarlo.
+		std::atomic<bool> corrupt{ false };
+		std::atomic<std::size_t> nextPiece{ 0 };
+		std::mutex errorMutex;
+		auto installPieces = [&] {
+			for (;;)
 			{
-			case PieceResult::Ok:
-			case PieceResult::Skipped:
-				done[i] = true;
-				break;
-			case PieceResult::DeltaFailed:
-			{
-				done[i] = true;
-				std::lock_guard<std::mutex> lock(run.mutex);
-				PlanFile full = pf;
-				full.delta = nullptr;
-				run.fallback.push_back(full);
-				++run.result.deltaFallbacks;
-				run.Log(pf.entry->path + ": " + why + "; se baja entero");
-				break;
+				const std::size_t i = nextPiece++;
+				if (i >= req.pieces.size() || run.Cancelled()) return;
+				if (done[i]) continue;
+				const Piece& pc = req.pieces[i];
+				const PlanFile& pf = files[pc.file];
+				std::string why;
+				switch (InstallPiece(run, pf, pc.file, part, pc.offset, pc.packed, &why))
+				{
+				case PieceResult::Ok:
+				case PieceResult::Skipped:
+					done[i] = 1;
+					break;
+				case PieceResult::DeltaFailed:
+				{
+					done[i] = 1;
+					std::lock_guard<std::mutex> lock(run.mutex);
+					PlanFile full = pf;
+					full.delta = nullptr;
+					run.fallback.push_back(full);
+					++run.result.deltaFallbacks;
+					run.Log(pf.entry->path + ": " + why + "; se baja entero");
+					break;
+				}
+				case PieceResult::InstallFailed:
+				{
+					done[i] = 1;
+					std::lock_guard<std::mutex> lock(run.mutex);
+					run.result.failures.push_back(pf.entry->path + ": " + why);
+					break;
+				}
+				case PieceResult::Corrupt:
+				{
+					corrupt = true;
+					std::lock_guard<std::mutex> lock(errorMutex);
+					lastError = why;
+					break;
+				}
+				}
 			}
-			case PieceResult::InstallFailed:
-			{
-				done[i] = true;
-				std::lock_guard<std::mutex> lock(run.mutex);
-				run.result.failures.push_back(pf.entry->path + ": " + why);
-				break;
-			}
-			case PieceResult::Corrupt:
-				corrupt = true;
-				lastError = why;
-				break;
-			}
-		}
+		};
+		const std::size_t workers = std::min<std::size_t>(req.pieces.size(), kInstallThreads);
+		std::vector<std::thread> pool;
+		for (std::size_t w = 1; w < workers; ++w) pool.emplace_back(installPieces);
+		installPieces();
+		for (std::thread& t : pool) t.join();
+		if (run.Cancelled()) return;
 		RemoveFile(part);
 		if (!corrupt) return;
 		std::lock_guard<std::mutex> lock(run.mutex);
