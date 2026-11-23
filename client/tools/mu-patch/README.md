@@ -93,6 +93,24 @@ Se rechazan:
 - un overlay sin ejecutable;
 - una carpeta de salida que no esté vacía.
 
+## Releases del proyecto
+
+El workflow `Client channels` arma la base, la música y el HD en cada Release y
+los adjunta a la Release (script: `.github/scripts/client_channels.py`). Los
+assets son `mu-linux-base.manifest.json` (+ `.sig`), `mu-linux-music.*` y
+`mu-linux-hd.*`, más sus zips. Los zips sin `url` están en la misma Release que
+el manifiesto.
+
+- Reusa los zips de las 3 Releases anteriores para lo que no cambió y baja sólo
+  los que hacen falta para los deltas.
+- La secuencia es la más alta publicada en el canal + 1, así un parche publicado
+  después (una 0.97.47 tras la 0.97.50) no queda por debajo.
+- Firma con el secreto `MU_RELEASE_SIGNING_KEY`: el contenido de un archivo de
+  `mu-patch keygen`. Sin el secreto avisa y no publica. Guardá una copia de la
+  clave fuera de GitHub: el secreto no se puede volver a leer, y sin la clave
+  las Releases siguientes no pueden reusar ni firmar sobre las anteriores.
+- En un PR que toca `mu-patch` corre en seco, con una clave descartable.
+
 ## Versión del cliente
 
 El ejecutable lleva compilada su versión: `MU_RELEASE`, en
