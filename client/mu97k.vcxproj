@@ -134,6 +134,7 @@
     <ClInclude Include="src\app\config\Config.h" />
     <ClInclude Include="src\app\config\Release.h" />
     <ClInclude Include="src\app\config\ServerConfig.h" />
+    <ClInclude Include="src\app\config\OptionTable.h" />
     <ClInclude Include="src\app\config\UserSettings.h" />
     <ClInclude Include="src\game\entity\CharacterVisual_Models.h" />
     <ClInclude Include="src\scenes\WorldObject_Behavior.h" />

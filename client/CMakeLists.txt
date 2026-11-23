@@ -446,6 +446,7 @@ set(MU_HEADERS
     src/app/config/Config.h
     src/app/config/Release.h
     src/app/config/ServerConfig.h
+    src/app/config/OptionTable.h
     src/app/config/UserSettings.h
     src/game/entity/CharacterVisual_Models.h
     src/scenes/WorldObject_Behavior.h

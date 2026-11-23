@@ -4,7 +4,9 @@
 // Range, cortes y una instalación de punta a punta que retoma después de un
 // corte.  También el armado y la validación de canales (ChannelFetch) por HTTP.
 
+#include "IniDocument.h"
 #include "LauncherConfig.h"
+#include "OptionsModel.h"
 #include "PatchBuilder.h"
 #include "UpdateFlow.h"
 
@@ -464,6 +466,111 @@ void TestLauncherFlow(TestServer& server, const std::string& dir, const std::str
 	k.Wipe();
 }
 
+void TestIniDocument()
+{
+	// Comentarios, mayúsculas, claves desconocidas y CRLF se conservan.
+	const std::string text =
+		"[Window]\r\n"
+		"WindowMode=1\r\n"
+		"resolution = 3 \r\n"
+		"ClaveDeUnMod=x\r\n"
+		"\r\n"
+		"; comentario de [Font]\r\n"
+		"[Font]\r\n"
+		"FontName=Arial\r\n";
+	Launcher::IniDocument d;
+	d.Parse(text);
+	std::string v;
+	Require(d.Get("window", "RESOLUTION", v) && v == "3", "ini: sin mayúsculas y sin espacios");
+	Require(!d.Set("Window", "Resolution", "3"), "ini: mismo valor no cambia nada");
+	Require(d.Text() == text, "ini: sin cambios, el texto queda igual");
+	Require(d.Set("Window", "Resolution", "7"), "ini: cambiar un valor");
+	Require(d.Text().find("resolution = 7 \r\n") != std::string::npos, "ini: conserva la clave y los espacios");
+	Require(d.Set("Window", "VSync", "1"), "ini: clave nueva");
+	const std::string t = d.Text();
+	Require(t.find("ClaveDeUnMod=x\r\nVSync=1\r\n\r\n; comentario de [Font]") != std::string::npos,
+	        "ini: la clave nueva va al final de su sección, antes del comentario de la siguiente");
+	Require(d.Set("MiniMap", "Alpha", "5") && d.Text().find("FontName=Arial\r\n[MiniMap]\r\nAlpha=5\r\n") != std::string::npos,
+	        "ini: sección nueva al final");
+	Require(d.Text().find("\n") == d.Text().find("\r\n") + 1, "ini: conserva CRLF");
+
+	// .toml: claves en la raíz, antes de la primera sección.
+	Launcher::IniDocument toml(" = ");
+	toml.Parse("# preferencias\nMusic = true\n");
+	Require(toml.Set("", "HD", "true") && toml.Text() == "# preferencias\nMusic = true\nHD = true\n", "toml: clave nueva en la raíz");
+	Require(toml.Set("", "Music", "false") && toml.Text() == "# preferencias\nMusic = false\nHD = true\n", "toml: cambiar un valor");
+	Launcher::IniDocument empty(" = ");
+	empty.Parse("");
+	Require(empty.Set("", "HD", "true") && empty.Text() == "HD = true\n", "toml: archivo vacío");
+	Launcher::IniDocument noEol;
+	noEol.Parse("[A]\nx=1");
+	Require(noEol.Set("A", "x", "2") && noEol.Text() == "[A]\nx=2", "ini: sin salto al final, sigue sin salto");
+}
+
+void TestOptions(const std::string& dir)
+{
+	const std::string user = JoinPath(dir, "opt-user");
+	const std::string ini = JoinPath(user, "Config.ini"), tmpl = JoinPath(dir, "opt-plantilla.ini"), toml = JoinPath(user, "launcher.toml");
+	const std::string plantilla =
+		"[Window]\n"
+		"WindowMode=1\n"
+		"Resolution=3\n"
+		"Sharpness=9\n"
+		"; nota\n"
+		"[Sound]\n"
+		"SoundLevel=8\n";
+	Require(WriteFileAtomic(tmpl, plantilla.data(), plantilla.size()), "escribir plantilla");
+
+	Launcher::OptionsEditor ed;
+	Require(ed.Load(ini, tmpl, toml), "opciones: cargar desde la plantilla");
+	auto find = [&](const char* key, std::size_t& t, std::size_t& r) {
+		for (t = 0; t < ed.Tabs().size(); ++t)
+			for (r = 0; r < ed.Tabs()[t].rows.size(); ++r)
+				if (ed.Tabs()[t].rows[r].key == key) return true;
+		return false;
+	};
+	std::size_t t = 0, r = 0;
+	Require(find("Resolution", t, r) && ed.Tabs()[t].rows[r].choices[static_cast<std::size_t>(ed.Current(t, r))].label == "1280x1024",
+	        "opciones: lee la resolución");
+	Require(find("Sharpness", t, r) && ed.Current(t, r) == 0, "opciones: valor fuera de rango se muestra como el default");
+	Require(!ed.Dirty(), "opciones: sin cambios");
+	Require(find("Resolution", t, r), "fila resolución");
+	ed.Cycle(t, r, +1);
+	Require(ed.Dirty(), "opciones: hay cambios");
+	ed.Cycle(t, r, -1);
+	Require(!ed.Dirty(), "opciones: volver al valor guardado no es un cambio");
+	ed.Cycle(t, r, +1);
+	bool dl = true;
+	Require(ed.Save(&dl) && !dl, "opciones: guardar");
+	std::string out;
+	Require(ReadWholeFile(ini, out), "opciones: escribe User/Config.ini");
+	Require(out == "[Window]\nWindowMode=1\nResolution=4\nSharpness=9\n; nota\n[Sound]\nSoundLevel=8\n",
+	        "opciones: sólo cambia la resolución; el valor fuera de rango no se toca");
+	Require(!FileExists(toml), "opciones: no toca launcher.toml si no cambió una descarga");
+
+	// Texturas HD prendidas: también se bajan.
+	Launcher::OptionsEditor ed2;
+	Require(ed2.Load(ini, tmpl, toml), "opciones: recargar desde User/");
+	Require(find("Resolution", t, r) && ed2.Current(t, r) == 4, "opciones: ahora lee User/Config.ini");
+	Require(find("HDTextures", t, r), "fila HD");
+	ed2.Select(t, r, 1);
+	Require(ed2.Save(&dl) && dl, "opciones: HD avisa que cambian las descargas");
+	Require(ReadWholeFile(toml, out) && out == "HD = true\n", "opciones: HD también en launcher.toml");
+	Require(ReadWholeFile(ini, out) && out.find("[Window]\nWindowMode=1\nResolution=4\nSharpness=9\nHDTextures=1\n") == 0,
+	        "opciones: HDTextures en [Window]");
+
+	// Sin HD en launcher.toml, la descarga sigue a HDTextures del juego.
+	RemoveFile(toml);
+	Launcher::OptionsEditor ed3;
+	Require(ed3.Load(ini, tmpl, toml) && find("HD", t, r) && ed3.Current(t, r) == 1, "opciones: la descarga HD sigue a HDTextures");
+	Require(Launcher::HDTexturesEnabled(ini) && !Launcher::HDTexturesEnabled(tmpl), "HDTexturesEnabled");
+
+		// La tabla compartida con el cliente arma las filas.
+	Require(find("RenderBackend", t, r) && !ed2.Tabs()[t].rows[r].numeric, "opciones: backend por nombre");
+	Require(find("DeleteGlow", t, r) && ed2.Tabs()[t].rows[r].section == "Antilag", "opciones: antilag de la tabla");
+	Require(find("LangSelection", t, r) && ed2.Tabs()[t].rows[r].choices.size() == 4, "opciones: idiomas");
+}
+
 // Con MU_TEST_ONLINE=1: HTTPS real contra un asset de GitHub (redirige a otro
 // host), para probar el TLS del sistema.  El CI no lo corre.
 void TestOnline()
@@ -506,6 +613,8 @@ int main()
 	TestTransport(server, root);
 	TestEndToEnd(server, d, root);
 	TestLauncherConfig(d);
+	TestIniDocument();
+	TestOptions(d);
 	TestLauncherFlow(server, d, root);
 	server.Stop();
 	TestOnline();

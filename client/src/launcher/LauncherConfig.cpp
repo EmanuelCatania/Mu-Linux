@@ -1,5 +1,8 @@
 #include "LauncherConfig.h"
 
+#include "IniDocument.h"
+
+#include "app/config/OptionTable.h"
 #include "app/config/Release.h"
 #include "update/FileUtil.h"
 
@@ -128,7 +131,11 @@ void ApplyLauncherToml(const std::string& path, Config& config, std::vector<std:
 		long long n = 0;
 		bool b = false;
 		if (key == "Music" && ParseBool(value, b)) config.music = b;
-		else if (key == "HD" && ParseBool(value, b)) config.hd = b;
+		else if (key == "HD" && ParseBool(value, b))
+		{
+			config.hd = b;
+			config.hdSet = true;
+		}
 		else if (key == "Connections" && ParseInt(value, 1, 16, n)) config.connections = static_cast<int>(n);
 		else if (key == "SpeedLimitKB" && ParseInt(value, 0, 10000000, n)) config.speedLimit = static_cast<std::uint64_t>(n) * 1024;
 		else if (key == "BaseSource")
@@ -158,6 +165,14 @@ void ApplyLauncherToml(const std::string& path, Config& config, std::vector<std:
 		else
 			warn("clave o valor no válido en la línea " + std::to_string(lineNo) + " (" + key + ")");
 	}
+}
+
+bool HDTexturesEnabled(const std::string& configIni)
+{
+	IniDocument ini;
+	std::string v;
+	const auto& o = UserOptionTable::kHDTextures;
+	return ini.Load(configIni) && ini.Get(o.section, o.key, v) && v == "1";
 }
 
 std::string UserDirFor(const std::string& root)

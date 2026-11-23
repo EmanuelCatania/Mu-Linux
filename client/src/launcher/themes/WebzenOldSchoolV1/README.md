@@ -8,5 +8,7 @@ repo no tiene licencia, así que el crédito va acá y en la ventana del launche
 Las imágenes son las del original, sin cambios.  La disposición (ventana de
 450x458, cabecera de 26 px que se arrastra, panel de imagen, barra de progreso,
 línea de estado y los tres botones de 67x31) sale de su `Forms/Main.Designer.cs`.
+La pantalla de opciones usa su `OptionsBackground.png`, con pestañas en lugar
+de sus cuatro recuadros fijos (hay más opciones que en el original).
 
 `MainImage.png` es arte de MU Online (Webzen).

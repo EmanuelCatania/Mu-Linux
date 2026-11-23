@@ -188,7 +188,7 @@ void UpdateFlow::Run()
 		return;
 	}
 
-	Set(Phase::Checking, "Buscando actualizaciones...");
+	Set(Phase::Checking, m_Config.fullVerify ? "Verificando los archivos..." : "Buscando actualizaciones...");
 	std::vector<FetchedChannel> fetched(wanted.size());
 	std::vector<bool> have(wanted.size(), false);
 	for (std::size_t i = 0; i < wanted.size(); ++i)
@@ -226,6 +226,7 @@ void UpdateFlow::Run()
 	po.root = m_Root;
 	po.platform = kPlatform;
 	po.includeSelf = false;
+	po.fullVerify = m_Config.fullVerify;
 	Plan plan;
 	if (!BuildPlan(sources, po, index, plan, &err)) return finish(Phase::Failed, err, false);
 	{
