@@ -75,7 +75,9 @@ add_library(mu_launcher_core STATIC
     UpdateFlow.cpp UpdateFlow.h
     # El canal cifrado y la confianza en la identidad, los mismos del cliente.
     "${MU_CLIENT_SOURCE_DIR}/src/net/SecureChannel.cpp"
-    "${MU_CLIENT_SOURCE_DIR}/src/net/ServerTrustCore.cpp")
+    "${MU_CLIENT_SOURCE_DIR}/src/net/ServerTrustCore.cpp"
+    # "Hay un cliente corriendo": el lock que toma el juego.
+    "${MU_CLIENT_SOURCE_DIR}/src/platform/RunningLock.cpp")
 target_include_directories(mu_launcher_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${MU_CLIENT_SOURCE_DIR}/src")
 target_link_libraries(mu_launcher_core PUBLIC mu_update_http)
 if(WIN32)

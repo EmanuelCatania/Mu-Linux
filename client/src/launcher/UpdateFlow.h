@@ -14,12 +14,19 @@
 // ServerAnnounce.h): de ahí salen la URL y el canal de los parches, el origen
 // de la base y las noticias.  Lo de launcher.toml (pruebas) sigue mandando
 // sobre el origen de la base.
+//
+// Jugar mientras baja (diseño, 4b): con el juego cerrado se instala primero lo
+// obligatorio; ahí se habilita Jugar y sigue lo opcional (música, HD).  Con el
+// juego abierto (User/Cache/running.lock, platform/RunningLock.h) se baja con
+// una conexión y el límite de "jugando", y no se pisa ningún archivo que ya
+// existe: esos se instalan cuando el juego se cierra.
 
 #include "LauncherConfig.h"
 
 #include "update/Transfer.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -48,6 +55,10 @@ struct Status
 	bool canPlay = false;
 	std::vector<std::string> notices;  // avisos (configuración de prueba, etc.)
 	std::string news;                  // lo que anuncia el server (launcher.json)
+	bool background = false;           // bajando lo opcional: ya se puede jugar
+	bool playing = false;              // hay un cliente corriendo
+	bool paused = false;
+	std::size_t waitingForClose = 0;   // archivos que esperan a que se cierre el juego
 };
 
 // Elige el transporte por esquema: file:// y rutas locales, o HTTP(S).
@@ -78,10 +89,17 @@ public:
 	void Cancel();
 	// Bloquea hasta que termine (para las pruebas).
 	void Wait();
+	// El jugador apretó Jugar en este launcher: se baja como "jugando" ya, sin
+	// esperar a que el cliente tome su lock.
+	void SetPlaying();
+	void SetPaused(bool paused);
 
 private:
 	void Run();
 	void Set(Phase phase, const std::string& message);
+	// Mira el lock del cliente (como mucho cada medio segundo) y ajusta la
+	// velocidad y las conexiones.
+	void PollGame(bool force = false);
 
 	Config m_Config;
 	std::string m_Root;
@@ -91,6 +109,13 @@ private:
 	Status m_Status;
 	std::atomic<bool> m_Cancel{ false };
 	std::atomic<bool> m_Finished{ false };
+	std::string m_LockPath;
+	std::atomic<bool> m_GameRunning{ false };
+	std::atomic<int> m_MaxConnections{ 4 };
+	std::atomic<bool> m_Paused{ false };
+	std::atomic<std::int64_t> m_PlayingSince{ 0 };   // ms del reloj; 0 = nunca
+	std::mutex m_PollMutex;
+	std::chrono::steady_clock::time_point m_LastPoll{};
 	std::thread m_Thread;
 };
 

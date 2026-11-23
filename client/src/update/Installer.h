@@ -48,6 +48,20 @@ struct InstallOptions
 	unsigned backoffMs = 500;      // primera espera; se duplica hasta backoffMaxMs
 	unsigned backoffMaxMs = 30000;
 	bool selfOnly = false;         // sólo el launcher (va antes que todo, ver 3.1)
+	// Qué pedidos de este plan: con el juego cerrado primero lo obligatorio y
+	// después, ya con "Jugar" habilitado, lo opcional (música, HD).
+	enum class Part { All, Required, Optional };
+	Part part = Part::All;
+	// Prendido: hay un cliente corriendo.  Un archivo que ya existe no se pisa
+	// (en Windows estaría abierto): queda en InstallResult::deferred para
+	// instalarlo con el juego cerrado.  Lo nuevo se agrega igual.
+	const std::atomic<bool>* gameRunning = nullptr;
+	// Si no es nulo, conexiones simultáneas como mucho (se puede bajar mientras
+	// corre: las que están en curso terminan su pedido).
+	const std::atomic<int>* maxConnections = nullptr;
+	// Si no está vacío, se escribe ahí la revisión del índice cada vez que se
+	// guarda (User/Cache/content.rev): el cliente la mira al cambiar de mapa.
+	std::string revisionPath;
 	const std::atomic<bool>* cancel = nullptr;
 	// Se llama desde los hilos de descarga, de a uno por vez, como mucho cada
 	// ~100 ms y al terminar cada archivo.
@@ -64,6 +78,7 @@ struct InstallResult
 	std::uint64_t downloaded = 0;
 	bool cancelled = false;
 	std::vector<std::string> failures;   // "ruta: motivo"
+	std::vector<std::string> deferred;   // ya existían y el juego estaba abierto
 };
 
 // true si quedó todo instalado (y, sin selfOnly, borrado lo que sobraba).

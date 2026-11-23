@@ -21,6 +21,7 @@
 //   HD = false            bajar las texturas HD
 //   Connections = 4
 //   SpeedLimitKB = 0      0: sin límite
+//   PlayingSpeedLimitKB = 512   con el juego abierto (una conexión); 0: sin límite
 //   Scale = 0             tamaño de la ventana en %, 100..200; 0: el de la pantalla
 //   BaseSource = "dueño/repo" o una URL   (pruebas: se avisa en la ventana)
 //   BaseTag = "0.97.50"                   (pruebas)
@@ -49,6 +50,7 @@ struct Config
 	bool hdSet = false;            // launcher.toml fija HD (si no, sigue a HDTextures del juego)
 	int connections = 4;
 	std::uint64_t speedLimit = 0;  // bytes/s
+	std::uint64_t playingSpeedLimit = 512 * 1024;   // bytes/s con el juego abierto; 0: sin límite
 	int scale = 0;                 // % del tamaño de la ventana; 0: el de la pantalla
 	bool fullVerify = false;       // "Verificar archivos": rehashear todo
 	// El launcher que corre, relativo a la raíz ("Launcher/launcher.exe"); vacío

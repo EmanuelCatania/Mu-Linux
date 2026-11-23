@@ -15,6 +15,7 @@
 #include "Resources.h"
 #include "UpdateFlow.h"
 
+#include "platform/RunningLock.h"
 #include "update/FileUtil.h"
 #include "update/HttpTransport.h"
 
@@ -407,6 +408,9 @@ int main(int argc, char** argv)
 		};
 		std::unique_ptr<UpdateFlow> flow = startFlow(config);
 		std::string launchError;
+		bool launched = false;   // se arrancó el juego con descargas en curso: el launcher sigue
+		Button pause{ { 373, 386, 70, 15 }, "Pausar" };
+		const std::string lockPath = Update::JoinPath(Update::JoinPath(userDir, "Cache"), "running.lock");
 
 		std::unique_ptr<OptionsScreen> opts;
 		auto stopEditing = [&] {
@@ -430,6 +434,12 @@ int main(int argc, char** argv)
 		auto openOptions = [&](std::size_t tab) {
 			opts = std::make_unique<OptionsScreen>();
 			if (!opts->editor.Load(iniPath, iniTemplate, tomlPath)) opts->message = "No se pudo leer Config.ini.";
+			else if (RunningLock::IsHeld(lockPath))
+			{
+				// El juego también escribe Config.ini desde su menú.
+				opts->editor.SetGameLocked(true);
+				opts->message = "El juego está abierto: sus opciones se ven pero se cambian al cerrarlo.";
+			}
 			if (tab < opts->editor.Tabs().size()) opts->tab = tab;
 		};
 		for (int i = 1; i < argc; ++i)
@@ -457,6 +467,10 @@ int main(int argc, char** argv)
 				if (LaunchProgram(exe, a, nullptr, &launchError)) break;
 			}
 			play.enabled = st.canPlay;
+			// Jugando con lo que quedaba por bajar: al terminar, el launcher se cierra.
+			if (launched && flow->Finished() && st.phase == Phase::Ready) running = false;
+			const bool canPause = st.background && !flow->Finished() && st.waitingForClose == 0;
+			pause.label = st.paused ? "Seguir" : "Pausar";
 			Button* mainButtons[] = { &options, &play, &close };
 			std::vector<Button*> buttons;
 			if (opts)
@@ -467,7 +481,10 @@ int main(int argc, char** argv)
 				if (opts->IsDownloads()) buttons.push_back(&opts->verify);
 			}
 			else
+			{
 				buttons.assign(std::begin(mainButtons), std::end(mainButtons));
+				if (canPause) buttons.push_back(&pause);
+			}
 
 			SDL_Event e;
 			while (SDL_PollEvent(&e))
@@ -523,7 +540,7 @@ int main(int argc, char** argv)
 						{
 							if (rows[i].text)
 							{
-								if (Inside(opts->RowRect(i), x, y)) textRow = static_cast<int>(i);
+								if (Inside(opts->RowRect(i), x, y) && opts->editor.Editable(opts->tab, i)) textRow = static_cast<int>(i);
 							}
 							else if (Inside(opts->LeftArrow(i), x, y)) opts->editor.Cycle(opts->tab, i, -1);
 							else if (Inside(opts->RowRect(i), x, y) && x >= 262) opts->editor.Cycle(opts->tab, i, +1);
@@ -551,7 +568,18 @@ int main(int argc, char** argv)
 					}
 					if (!clicked) continue;
 					if (clicked == &close) running = false;
-					else if (clicked == &play && LaunchGame(root, config.gameExe, &launchError)) running = false;
+					else if (clicked == &play && LaunchGame(root, config.gameExe, &launchError))
+					{
+						// Con descargas en curso el launcher sigue (más despacio) y se
+						// cierra solo al terminar.
+						if (flow->Finished()) running = false;
+						else
+						{
+							launched = true;
+							flow->SetPlaying();
+						}
+					}
+					else if (clicked == &pause) flow->SetPaused(!st.paused);
 					else if (clicked == &options)
 						openOptions(0);
 					else if (opts && clicked == &opts->back) closeOptions();
@@ -655,8 +683,18 @@ int main(int argc, char** argv)
 					else SDL_SetRenderDrawColor(renderer, 0, 120, 215, 255);
 					SDL_RenderFillRect(renderer, &fill);
 				}
-				const std::string status = launchError.empty() ? st.message : launchError;
-				ui.tiny->Draw(ui.tiny->Fit(status, 437), 6, 388, st.phase == Phase::Failed || !launchError.empty() ? kRed : kBlack);
+				std::string status = launchError.empty() ? st.message : launchError;
+				if (launchError.empty() && st.paused) status = "En pausa. " + status;
+				else if (launchError.empty() && st.playing && !flow->Finished() && st.waitingForClose == 0)
+					status += " (jugando: más despacio)";
+				ui.tiny->Draw(ui.tiny->Fit(status, canPause ? 362.0f : 437.0f), 6, 388,
+				              st.phase == Phase::Failed || !launchError.empty() ? kRed : kBlack);
+				if (canPause)
+				{
+					Fill(renderer, pause.rect, pause.hover ? 250 : 225);
+					DrawBevel(renderer, pause.rect, pause.pressed);
+					ui.tiny->DrawCentered(pause.label, pause.rect, kBlack);
+				}
 				for (Button* b : mainButtons) ui.DrawButton(*b);
 				ui.tiny->Draw("Diseño: kayito", 350, 442, kGray);
 			}
@@ -703,9 +741,13 @@ int main(int argc, char** argv)
 					}
 					const int cur = opts->editor.Current(opts->tab, i);
 					const SDL_FRect value{ 282, row.y, 130, row.h };
-					ui.label->DrawCentered(rows[i].choices[static_cast<std::size_t>(cur)].label, value, kBlack);
-					ui.label->DrawCentered("<", opts->LeftArrow(i), kLightGray);
-					ui.label->DrawCentered(">", opts->RightArrow(i), kLightGray);
+					const bool editable = opts->editor.Editable(opts->tab, i);
+					ui.label->DrawCentered(rows[i].choices[static_cast<std::size_t>(cur)].label, value, editable ? kBlack : kGray);
+					if (editable)
+					{
+						ui.label->DrawCentered("<", opts->LeftArrow(i), kLightGray);
+						ui.label->DrawCentered(">", opts->RightArrow(i), kLightGray);
+					}
 				}
 				if (opts->IsDownloads())
 				{

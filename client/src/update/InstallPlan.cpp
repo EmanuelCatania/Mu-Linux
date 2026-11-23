@@ -141,7 +141,11 @@ bool BuildPlan(const std::vector<ChannelSource>& sources, const PlanOptions& opt
 			++out.upToDate;
 			continue;
 		}
-		if (options.gameRunning && st != LocalState::Missing) continue;
+		if (options.gameRunning && st != LocalState::Missing)
+		{
+			++out.heldForGame;
+			continue;
+		}
 		if (st == LocalState::Unreadable) out.unreadable.push_back(path);
 
 		PlanFile pf;

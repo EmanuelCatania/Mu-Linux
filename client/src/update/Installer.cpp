@@ -20,7 +20,7 @@ using Clock = std::chrono::steady_clock;
 // Hilos para escribir los archivos de un tramo ya bajado.
 constexpr std::size_t kInstallThreads = 4;
 
-enum class PieceResult { Ok, Corrupt, DeltaFailed, InstallFailed, Skipped };
+enum class PieceResult { Ok, Corrupt, DeltaFailed, InstallFailed, Skipped, Deferred };
 
 struct Run
 {
@@ -36,6 +36,15 @@ struct Run
 	std::size_t sinceSave = 0;
 	bool dirty = false;
 	std::vector<PlanFile> fallback;   // deltas que no sirvieron
+	std::atomic<int> active{ 0 };     // pedidos bajando ahora
+
+	bool Wanted(const RangeRequest& r) const
+	{
+		if (o.selfOnly) return r.self;
+		if (o.part == InstallOptions::Part::Required) return r.required || r.self;
+		if (o.part == InstallOptions::Part::Optional) return !r.required && !r.self;
+		return true;
+	}
 
 	bool Cancelled() const { return o.cancel && o.cancel->load(); }
 
@@ -61,6 +70,11 @@ struct Run
 		if (!dirty || o.indexPath.empty()) return;
 		++index.revision;
 		if (!SaveIndex(o.indexPath, index)) Log("no se pudo guardar " + o.indexPath);
+		else if (!o.revisionPath.empty())
+		{
+			const std::string rev = std::to_string(index.revision) + "\n";
+			WriteFileAtomic(o.revisionPath, rev.data(), rev.size());
+		}
 		dirty = false;
 		sinceSave = 0;
 	}
@@ -88,6 +102,8 @@ PieceResult InstallPiece(Run& run, const PlanFile& pf, std::size_t fileIndex, co
 		return PieceResult::Corrupt;
 	}
 	const std::string target = JoinPath(run.o.root, e.path);
+	// Con el juego abierto no se pisa nada: queda para cuando se cierre.
+	if (run.o.gameRunning && run.o.gameRunning->load() && !e.self && FileExists(target)) return PieceResult::Deferred;
 	std::vector<std::uint8_t> file;
 	if (pf.delta)
 	{
@@ -256,6 +272,13 @@ void ProcessRequest(Run& run, const std::vector<PlanFile>& files, const RangeReq
 				case PieceResult::Skipped:
 					done[i] = 1;
 					break;
+				case PieceResult::Deferred:
+				{
+					done[i] = 1;
+					std::lock_guard<std::mutex> lock(run.mutex);
+					run.result.deferred.push_back(pf.entry->path);
+					break;
+				}
 				case PieceResult::DeltaFailed:
 				{
 					done[i] = 1;
@@ -305,7 +328,7 @@ void RunRequests(Run& run, const std::vector<PlanFile>& files, const std::vector
 {
 	std::vector<const RangeRequest*> todo;
 	for (const RangeRequest& r : requests)
-		if (!run.o.selfOnly || r.self) todo.push_back(&r);
+		if (run.Wanted(r)) todo.push_back(&r);
 	if (todo.empty()) return;
 
 	std::atomic<std::size_t> next{ 0 };
@@ -313,9 +336,15 @@ void RunRequests(Run& run, const std::vector<PlanFile>& files, const std::vector
 		std::mt19937 rng(seed);
 		for (;;)
 		{
+			// Con menos conexiones permitidas (se empezó a jugar), espera a que
+			// terminen otras antes de tomar un pedido.
+			while (run.o.maxConnections && run.active.load() >= std::max(1, run.o.maxConnections->load()) && !run.Cancelled())
+				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 			const std::size_t i = next++;
 			if (i >= todo.size() || run.Cancelled()) return;
+			++run.active;
 			ProcessRequest(run, files, *todo[i], rng);
+			--run.active;
 		}
 	};
 	const std::size_t n = std::min<std::size_t>(todo.size(), static_cast<std::size_t>(std::clamp(run.o.connections, 1, 16)));
@@ -338,10 +367,20 @@ bool RunPlan(const std::vector<ChannelSource>& sources, const Plan& plan, Instal
 		return false;
 	}
 	Run run{ sources, options, index, out };
-	for (const RangeRequest& r : plan.requests)
-		if (!options.selfOnly || r.self) run.status.downloadTotal += r.length;
-	for (const PlanFile& f : plan.files)
-		if (!options.selfOnly || f.entry->self) ++run.status.filesTotal;
+	{
+		std::vector<char> counted(plan.files.size(), 0);
+		for (const RangeRequest& r : plan.requests)
+		{
+			if (!run.Wanted(r)) continue;
+			run.status.downloadTotal += r.length;
+			for (const Piece& p : r.pieces)
+				if (p.file < counted.size() && !counted[p.file] && (!options.selfOnly || plan.files[p.file].entry->self))
+				{
+					counted[p.file] = 1;
+					++run.status.filesTotal;
+				}
+		}
+	}
 
 	RunRequests(run, plan.files, plan.requests);
 
@@ -366,7 +405,7 @@ bool RunPlan(const std::vector<ChannelSource>& sources, const Plan& plan, Instal
 		RunRequests(run, files, requests);
 	}
 
-	if (!options.selfOnly && !run.Cancelled())
+	if (!options.selfOnly && options.part != InstallOptions::Part::Optional && !run.Cancelled())
 		for (const std::string& rel : plan.remove)
 		{
 			if (!RemoveFile(JoinPath(options.root, rel)))

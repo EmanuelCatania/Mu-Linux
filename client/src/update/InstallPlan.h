@@ -80,6 +80,9 @@ struct Plan
 	std::uint64_t downloadBytes = 0;        // suma de los pedidos
 	std::uint64_t installBytes = 0;         // tamaño final de lo que se instala
 	std::size_t upToDate = 0;
+	// Con gameRunning: archivos que habría que reemplazar y quedaron afuera
+	// (se instalan con el juego cerrado).
+	std::size_t heldForGame = 0;
 	bool selfUpdate = false;                // hay launcher nuevo: va antes que el resto
 	// Archivos que no se pueden leer (permisos, en uso): se intentan reemplazar
 	// igual, pero sirve para avisar.

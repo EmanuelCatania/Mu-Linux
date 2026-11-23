@@ -27,4 +27,11 @@ bool Tick();
 void OnManifest(const std::uint8_t* msg, int size);   // F4:11
 void OnFile(const std::uint8_t* msg, int size);       // F4:13
 
+// Lo que el launcher instala mientras se juega (música, texturas HD): el
+// launcher sube el número de User/Cache/content.rev cada vez que agrega algo.
+// La primera llamada (al arrancar) sólo lo anota; después, si cambió, se vuelven
+// a armar las capas de contenido, como al recibir .toml nuevos.  Se llama al
+// cambiar de mapa: lo nuevo se ve desde ese mapa.
+void CheckLauncherRevision();
+
 } // namespace ContentSync
