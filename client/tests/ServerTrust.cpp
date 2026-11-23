@@ -162,6 +162,15 @@ int main()
     Require(fromRoot(repaired, third.pub, next.pub, second) == Result::Rotated && repaired == twoSteps,
             "cadena: al rotar se reescribe sin la basura");
 
+    // La clave vigente (la usa el launcher para verificar lo que firma el server).
+    std::uint8_t tip[32];
+    ServerTrust::ChainTip(server.pub, "", tip);
+    Require(std::memcmp(tip, server.pub, 32) == 0, "punta: sin cadena es la raíz");
+    ServerTrust::ChainTip(server.pub, twoSteps, tip);
+    Require(std::memcmp(tip, third.pub, 32) == 0, "punta: la última rotación");
+    ServerTrust::ChainTip(server.pub, extended, tip);
+    Require(std::memcmp(tip, third.pub, 32) == 0, "punta: hasta el último paso bueno");
+
     std::uint8_t parsed[32];
     const std::string hex = Hex(server.pub, 32);
     Require(ServerTrust::ParseKey(hex.c_str(), parsed) && std::memcmp(parsed, server.pub, 32) == 0, "clave: 64 dígitos hex");

@@ -198,6 +198,39 @@ bool LaunchGame(const std::string& root, const std::string& exe, std::string* er
 	return LaunchProgram(path, {}, &root, error);
 }
 
+// Corta el texto en líneas que entren en `width` (respeta los saltos de línea).
+std::vector<std::string> Wrap(const Font& font, const std::string& text, float width)
+{
+	std::vector<std::string> lines;
+	std::size_t start = 0;
+	while (start <= text.size())
+	{
+		std::size_t nl = text.find('\n', start);
+		if (nl == std::string::npos) nl = text.size();
+		const std::string para = text.substr(start, nl - start);
+		std::string line;
+		std::size_t i = 0;
+		while (i <= para.size())
+		{
+			std::size_t sp = para.find(' ', i);
+			if (sp == std::string::npos) sp = para.size();
+			const std::string word = para.substr(i, sp - i);
+			const std::string candidate = line.empty() ? word : line + " " + word;
+			if (!line.empty() && font.Width(candidate) > width)
+			{
+				lines.push_back(line);
+				line = word;
+			}
+			else
+				line = candidate;
+			i = sp + 1;
+		}
+		lines.push_back(font.Fit(line, width));
+		start = nl + 1;
+	}
+	return lines;
+}
+
 void DrawBevel(SDL_Renderer* r, const SDL_FRect& box, bool sunken = true)
 {
 	// Borde 3D, como el Fixed3D del original.
@@ -573,6 +606,24 @@ int main(int argc, char** argv)
 				DrawBevel(renderer, panel);
 				const SDL_FRect inner{ panel.x + 2, panel.y + 2, panel.w - 4, panel.h - 4 };
 				if (ui.image) SDL_RenderTexture(renderer, ui.image, nullptr, &inner);
+
+				// Noticias del server, arriba de la imagen (hasta 6 líneas).
+				if (!st.news.empty())
+				{
+					std::vector<std::string> lines = Wrap(*ui.notice, st.news, inner.w - 20);
+					if (lines.size() > 6)
+					{
+						lines.resize(6);
+						lines.back() = ui.notice->Fit(lines.back() + " ...", inner.w - 20);
+					}
+					const float lh = ui.notice->Height() + 3;
+					const SDL_FRect box{ inner.x + 4, inner.y + 4, inner.w - 8, lh * static_cast<float>(lines.size()) + 8 };
+					SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+					SDL_SetRenderDrawColor(renderer, 0, 0, 0, 160);
+					SDL_RenderFillRect(renderer, &box);
+					for (std::size_t i = 0; i < lines.size(); ++i)
+						ui.notice->Draw(lines[i], box.x + 6, box.y + 4 + lh * static_cast<float>(i), kWhite);
+				}
 
 				// Avisos sobre la imagen (configuración de prueba, canales que faltaron).
 				std::vector<std::string> notes = warnings;

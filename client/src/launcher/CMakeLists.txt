@@ -12,7 +12,9 @@
 # Lo que fija el operador (ver LauncherConfig.h), por ejemplo:
 #   -DMU_LAUNCHER_TITLE="Mi Server" -DMU_BASE_KEY=<64 hex>
 #   -DMU_OVERLAY_URL=https://miserver.com/updates -DMU_OVERLAY_CHANNEL=miserver/overlay
-#   -DMU_OVERLAY_KEY=<64 hex>
+#   -DMU_OVERLAY_KEY=<64 hex> -DMU_CONNECT_SERVER=mu.miserver.com:44405
+# Con MU_CONNECT_SERVER y MU_OVERLAY_KEY alcanza: lo demás lo anuncia el server
+# (launcher.json, ver ServerAnnounce.h).
 
 cmake_minimum_required(VERSION 3.25)
 project(mu_launcher LANGUAGES C CXX)
@@ -31,6 +33,7 @@ set(MU_BASE_KEY "" CACHE STRING "Clave pública que firma los Releases de la bas
 set(MU_OVERLAY_URL "" CACHE STRING "Carpeta HTTP con los parches del server")
 set(MU_OVERLAY_CHANNEL "" CACHE STRING "Canal de los parches del server (miserver/overlay)")
 set(MU_OVERLAY_KEY "" CACHE STRING "Identidad del server (64 hex)")
+set(MU_CONNECT_SERVER "" CACHE STRING "ConnectServer del server (host:puerto, varios separados por coma)")
 set(MU_GAME_EXE "" CACHE STRING "Ejecutable del cliente (vacío: main.exe / main)")
 
 # Imágenes del tema y fuente, adentro del ejecutable.
@@ -67,9 +70,17 @@ add_library(mu_launcher_core STATIC
     LauncherConfig.cpp LauncherConfig.h
     OptionsModel.cpp OptionsModel.h
     SelfUpdate.cpp SelfUpdate.h
-    UpdateFlow.cpp UpdateFlow.h)
+    CsClient.cpp CsClient.h
+    ServerAnnounce.cpp ServerAnnounce.h
+    UpdateFlow.cpp UpdateFlow.h
+    # El canal cifrado y la confianza en la identidad, los mismos del cliente.
+    "${MU_CLIENT_SOURCE_DIR}/src/net/SecureChannel.cpp"
+    "${MU_CLIENT_SOURCE_DIR}/src/net/ServerTrustCore.cpp")
 target_include_directories(mu_launcher_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${MU_CLIENT_SOURCE_DIR}/src")
 target_link_libraries(mu_launcher_core PUBLIC mu_update_http)
+if(WIN32)
+    target_link_libraries(mu_launcher_core PUBLIC ws2_32)
+endif()
 
 add_executable(launcher WIN32
     main.cpp
@@ -82,7 +93,7 @@ if(WIN32)
 endif()
 target_include_directories(launcher PRIVATE "${MU_CLIENT_SOURCE_DIR}/lib")
 target_link_libraries(launcher PRIVATE mu_launcher_core SDL3::SDL3-static)
-foreach(_opt MU_LAUNCHER_TITLE MU_BASE_REPO MU_BASE_TAG MU_BASE_KEY MU_OVERLAY_URL MU_OVERLAY_CHANNEL MU_OVERLAY_KEY MU_GAME_EXE)
+foreach(_opt MU_LAUNCHER_TITLE MU_BASE_REPO MU_BASE_TAG MU_BASE_KEY MU_OVERLAY_URL MU_OVERLAY_CHANNEL MU_OVERLAY_KEY MU_CONNECT_SERVER MU_GAME_EXE)
     if(NOT "${${_opt}}" STREQUAL "")
         target_compile_definitions(mu_launcher_core PRIVATE "${_opt}=\"${${_opt}}\"")
     endif()

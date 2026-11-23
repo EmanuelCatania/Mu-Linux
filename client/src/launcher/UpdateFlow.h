@@ -9,6 +9,11 @@
 // Restart: el nuevo procesa el resto (ver SelfUpdate.h).  Si no se puede
 // verificar nada pero ya hay algo instalado, deja jugar con lo que hay y lo
 // avisa.
+//
+// Antes que nada pide la configuración del server (launcher.json, ver
+// ServerAnnounce.h): de ahí salen la URL y el canal de los parches, el origen
+// de la base y las noticias.  Lo de launcher.toml (pruebas) sigue mandando
+// sobre el origen de la base.
 
 #include "LauncherConfig.h"
 
@@ -42,6 +47,7 @@ struct Status
 	std::uint64_t total = 0;
 	bool canPlay = false;
 	std::vector<std::string> notices;  // avisos (configuración de prueba, etc.)
+	std::string news;                  // lo que anuncia el server (launcher.json)
 };
 
 // Elige el transporte por esquema: file:// y rutas locales, o HTTP(S).

@@ -74,15 +74,14 @@ Result Decide(bool hasPinned, const std::uint8_t pinned[KeySize],
     return SignsNextKey(previousKey, publicKey, rotationSignature) ? Result::Rotated : Result::Mismatch;
 }
 
-Result DecideFromRoot(const std::uint8_t root[KeySize], std::string& chain,
-                      const std::uint8_t publicKey[KeySize],
-                      const std::uint8_t* previousKey,
-                      const std::uint8_t* rotationSignature)
+namespace {
+// Recorre la cadena desde la raíz hasta el último paso que verifica: deja la
+// clave vigente en `current` y las líneas válidas en `verified`.
+void WalkChain(const std::uint8_t root[KeySize], const std::string& chain,
+               std::uint8_t current[KeySize], std::string& verified)
 {
     const std::size_t keyDigits = KeySize * 2, signatureDigits = SignatureSize * 2;
-    std::uint8_t current[KeySize];
     std::memcpy(current, root, KeySize);
-    std::string verified;
     for (std::size_t start = 0; start < chain.size();) {
         const std::size_t end = chain.find('\n', start);
         if (end == std::string::npos) break;   // línea sin terminar
@@ -100,6 +99,23 @@ Result DecideFromRoot(const std::uint8_t root[KeySize], std::string& chain,
         verified += '\n';
         start = end + 1;
     }
+}
+} // namespace
+
+void ChainTip(const std::uint8_t root[KeySize], const std::string& chain, std::uint8_t out[KeySize])
+{
+    std::string verified;
+    WalkChain(root, chain, out, verified);
+}
+
+Result DecideFromRoot(const std::uint8_t root[KeySize], std::string& chain,
+                      const std::uint8_t publicKey[KeySize],
+                      const std::uint8_t* previousKey,
+                      const std::uint8_t* rotationSignature)
+{
+    std::uint8_t current[KeySize];
+    std::string verified;
+    WalkChain(root, chain, current, verified);
     const Result result = Decide(true, current, publicKey, previousKey, rotationSignature);
     if (result == Result::Rotated) {
         AppendHex(verified, publicKey, KeySize);

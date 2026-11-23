@@ -1,6 +1,7 @@
 #include "LauncherConfig.h"
 
 #include "IniDocument.h"
+#include "ServerAnnounce.h"
 
 #include "app/config/OptionTable.h"
 #include "app/config/Release.h"
@@ -29,6 +30,9 @@
 #endif
 #ifndef MU_OVERLAY_KEY
 #define MU_OVERLAY_KEY ""
+#endif
+#ifndef MU_CONNECT_SERVER
+#define MU_CONNECT_SERVER ""
 #endif
 #ifndef MU_GAME_EXE
 #ifdef _WIN32
@@ -99,6 +103,7 @@ Config CompiledConfig()
 	c.overlayUrl = MU_OVERLAY_URL;
 	c.overlayChannel = MU_OVERLAY_CHANNEL;
 	c.overlayKey = MU_OVERLAY_KEY;
+	c.connectServers = SplitList(MU_CONNECT_SERVER);
 	c.gameExe = MU_GAME_EXE;
 	return c;
 }

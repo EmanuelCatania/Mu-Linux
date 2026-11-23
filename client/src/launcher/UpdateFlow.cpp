@@ -8,7 +8,9 @@
 #include "update/Signing.h"
 
 #include "SelfUpdate.h"
+#include "ServerAnnounce.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -27,6 +29,18 @@ constexpr const char* kPlatform = "linux-x64";
 bool IsLocal(const std::string& url)
 {
 	return url.compare(0, 7, "file://") == 0 || url.find("://") == std::string::npos;
+}
+
+std::string HexKey(const std::uint8_t* p)
+{
+	static const char digits[] = "0123456789abcdef";
+	std::string s;
+	for (std::size_t i = 0; i < kKeySize; ++i)
+	{
+		s += digits[p[i] >> 4];
+		s += digits[p[i] & 15];
+	}
+	return s;
 }
 
 std::string Human(std::uint64_t bytes)
@@ -137,6 +151,46 @@ void UpdateFlow::Run()
 	};
 	std::vector<Wanted> wanted;
 	auto parseKey = [&](const std::string& hex, std::uint8_t out[kKeySize]) { return ParsePublicKey(hex, out); };
+
+	// ── Configuración del server ──────────────────────────────────────────
+	std::vector<std::string> overlayUrls;
+	if (!m_Config.overlayKey.empty() && (!m_Config.connectServers.empty() || !m_Config.overlayUrl.empty() ||
+	                                     FileExists(JoinPath(cache, "launcher.json"))))
+	{
+		Set(Phase::Checking, "Buscando la configuración del server...");
+		SocketCsFetcher cs(4000, &m_Cancel);
+		AnnounceSeed seed;
+		seed.rootKey = m_Config.overlayKey;
+		seed.connectServers = m_Config.connectServers;
+		if (!m_Config.overlayUrl.empty()) seed.urls.push_back(m_Config.overlayUrl);
+		const AnnounceResult a = ResolveAnnounce(seed, cache, cs, *m_Transport, &m_Cancel);
+		if (m_Cancel) return finish(Phase::Failed, "Cancelado.", installed);
+		// La identidad vigente (si rotó, la nueva) verifica el manifiesto del overlay.
+		if (a.haveIdentity) m_Config.overlayKey = HexKey(a.identity);
+		if (a.have)
+		{
+			const Announce& n = a.data;
+			overlayUrls = n.patchUrls;
+			if (!n.patchChannel.empty()) m_Config.overlayChannel = n.patchChannel;
+			if (m_Config.overrides.empty())
+			{
+				if (!n.baseSource.empty())
+				{
+					const bool isUrl = n.baseSource.find("://") != std::string::npos;
+					m_Config.baseUrl = isUrl ? n.baseSource : std::string();
+					m_Config.baseRepo = isUrl ? std::string() : n.baseSource;
+				}
+				if (!n.baseTag.empty()) m_Config.baseTag = n.baseTag;
+				if (!n.baseKey.empty()) m_Config.baseKey = n.baseKey;
+			}
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			m_Status.news = n.news;
+		}
+	}
+	// La compilada queda como último espejo.
+	if (!m_Config.overlayUrl.empty() &&
+	    std::find(overlayUrls.begin(), overlayUrls.end(), m_Config.overlayUrl) == overlayUrls.end())
+		overlayUrls.push_back(m_Config.overlayUrl);
 	if (!m_Config.baseKey.empty())
 	{
 		std::uint8_t key[kKeySize];
@@ -168,7 +222,7 @@ void UpdateFlow::Run()
 	// Sin clave de la base el launcher sólo trae los archivos del server: es una
 	// configuración válida (el operador reparte el cliente entero) y no se avisa
 	// al jugador.  Sin nada para bajar, lo dice la línea de estado.
-	if (!m_Config.overlayUrl.empty())
+	if (!overlayUrls.empty())
 	{
 		Wanted w;
 		if (!parseKey(m_Config.overlayKey, w.spec.publicKey) || m_Config.overlayChannel.empty())
@@ -177,7 +231,7 @@ void UpdateFlow::Run()
 			return;
 		}
 		w.spec.channel = m_Config.overlayChannel;
-		w.spec.urls = { m_Config.overlayUrl };
+		w.spec.urls = overlayUrls;
 		w.spec.priority = 20;
 		wanted.push_back(w);
 	}

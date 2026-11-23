@@ -69,4 +69,8 @@ Result DecideFromRoot(const std::uint8_t root[KeySize], std::string& chain,
                       const std::uint8_t* previousKey,
                       const std::uint8_t* rotationSignature);
 
+// Pura: la clave vigente según la cadena (la raíz si no hay pasos válidos).  La
+// usa el launcher para verificar lo que firmó el server después de rotar.
+void ChainTip(const std::uint8_t root[KeySize], const std::string& chain, std::uint8_t out[KeySize]);
+
 } // namespace ServerTrust
