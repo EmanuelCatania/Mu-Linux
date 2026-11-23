@@ -85,7 +85,9 @@ jobs:
           if [ "$DRY_RUN" = "true" ]; then
             # Sin Release: la versión que lleva compilada el cliente, y nivel
             # bajo para que el PR no tarde.
-            version=$(sed -n 's/^#define MU_RELEASE "\(.*\)"$/\1/p' client/src/app/config/Release.h)
+            # Los fuentes del cliente se guardan con CRLF (eol=crlf): la línea
+            # termina en \r también en Linux.
+            version=$(sed -n 's/^#define MU_RELEASE "\([0-9.]*\)".*/\1/p' client/src/app/config/Release.h)
             extra=(--level 3)
           else
             version="$TAG"
