@@ -9,16 +9,22 @@
 //                       [--optional <glob>]... [--deleted <archivo>] [--base-manifest <archivo>]
 //                       [--bundle-size <MB>] [--level <1-22>] [--threads <n>]
 //   mu-patch verify     --in <carpeta> (--pubkey <hex> | --key <archivo>) [--prev <carpeta>]...
+//   mu-patch publish    --patches <Data/Patches> --channel <server/overlay> --key <archivo>
+//                       [--out <carpeta>] [--base <x.y.z>] [--protocol <n>] [--level <1-22>] [--threads <n>]
+//   mu-patch watch      (las mismas opciones) [--interval <segundos>]
 
 #include "PatchBuilder.h"
+#include "Publish.h"
 
 #include "update/FileUtil.h"
 #include "update/Hash.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifdef _WIN32
@@ -43,6 +49,11 @@ const char kUsage[] =
 	"             [--optional <glob>]... [--deleted <archivo>] [--base-manifest <archivo>]\n"
 	"             [--bundle-size <MB>] [--level <1-22>] [--threads <n>]\n"
 	"  verify     --in <carpeta> (--pubkey <hex> | --key <archivo>) [--prev <carpeta>]...\n"
+	"  publish    --patches <Data/Patches> --channel <server/overlay> --key <archivo>\n"
+	"             [--out <carpeta>] [--base <x.y.z>] [--protocol <n>] [--level <1-22>] [--threads <n>]\n"
+	"             arma el canal desde las carpetas DDMMAAAA-N (por defecto en <patches>/published)\n"
+	"  watch      las opciones de publish y [--interval <segundos>]: publica cada vez que\n"
+	"             Data/Patches cambia y se queda quieto entre dos pasadas\n"
 	"\n"
 	"El overlay de un server se firma con su Data/Keys/ServerIdentity.key.\n";
 
@@ -199,6 +210,71 @@ int CmdBuild(Args& a)
 	return 0;
 }
 
+// publish y watch comparten opciones.
+int ParsePublish(Args& a, MuPatch::PublishOptions& o, unsigned* interval)
+{
+	o.log = Print;
+	while (a.HasMore())
+	{
+		const std::string opt = a.Next();
+		if (!a.HasMore()) return Error("falta el valor de " + opt);
+		const std::string v = a.Next();
+		unsigned long long n = 0;
+		if (opt == "--patches") o.patches = v;
+		else if (opt == "--out") o.out = v;
+		else if (opt == "--channel") o.channel = v;
+		else if (opt == "--key") o.keyPath = v;
+		else if (opt == "--base") o.base = v;
+		else if (opt == "--protocol") { if (!ParseUint(v, n) || n > 65535) return Error("--protocol no válido"); o.protocol = static_cast<int>(n); }
+		else if (opt == "--level") { if (!ParseUint(v, n) || n > 22) return Error("--level no válido"); o.level = static_cast<int>(n); }
+		else if (opt == "--threads") { if (!ParseUint(v, n) || n > 256) return Error("--threads no válido"); o.threads = static_cast<int>(n); }
+		else if (opt == "--interval" && interval) { if (!ParseUint(v, n) || n == 0 || n > 86400) return Error("--interval no válido"); *interval = static_cast<unsigned>(n); }
+		else return Error("opción desconocida: " + opt);
+	}
+	if (o.patches.empty() || o.channel.empty() || o.keyPath.empty())
+		return Error("necesita --patches, --channel y --key");
+	return 0;
+}
+
+int CmdPublish(Args& a)
+{
+	MuPatch::PublishOptions o;
+	if (const int rc = ParsePublish(a, o, nullptr)) return rc;
+	std::string error;
+	if (!MuPatch::PublishPatches(o, nullptr, &error)) return Error(error);
+	return 0;
+}
+
+// Proceso del server (MU_UPDATE_ENABLED=1): no termina.  Publica al arrancar
+// si hace falta y después cada vez que Data/Patches cambia y se queda quieto
+// entre dos pasadas (una carpeta a medio subir cambia entre pasadas).  Un
+// error no lo cierra: lo avisa y vuelve a intentar con el próximo cambio.
+int CmdWatch(Args& a)
+{
+	MuPatch::PublishOptions o;
+	unsigned interval = 30;
+	if (const int rc = ParsePublish(a, o, &interval)) return rc;
+	const std::string out = o.out.empty() ? Update::JoinPath(o.patches, "published") : o.out;
+	std::string done;        // lo que había en la última publicación
+	std::string previous;    // lo de la pasada anterior
+	for (;;)
+	{
+		const std::string now = MuPatch::SnapshotPatches(o.patches, out);
+		if (now != done && now == previous && !now.empty())
+		{
+			std::string error;
+			if (MuPatch::PublishPatches(o, nullptr, &error)) done = now;
+			else
+			{
+				Print("ERROR: " + error);
+				done = now;   // no reintentar hasta que algo cambie
+			}
+		}
+		previous = now;
+		std::this_thread::sleep_for(std::chrono::seconds(interval));
+	}
+}
+
 int CmdVerify(Args& a)
 {
 	MuPatch::VerifyOptions o;
@@ -277,6 +353,8 @@ int main(int argc, char** argv)
 	if (cmd == "release-of") return CmdReleaseOf(a);
 	if (cmd == "build") return CmdBuild(a);
 	if (cmd == "verify") return CmdVerify(a);
+	if (cmd == "publish") return CmdPublish(a);
+	if (cmd == "watch") return CmdWatch(a);
 	std::fputs(kUsage, stderr);
 	return Error("comando desconocido: " + cmd);
 }

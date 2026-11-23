@@ -72,6 +72,36 @@ Verificar:
 mu-patch verify --in dist/base --pubkey <hex> --prev dist/base-anterior
 ```
 
+## Parches del operador: `publish` y `watch`
+
+El admin no arma el canal a mano: deja cada parche en una carpeta
+`Data/Patches/DDMMAAAA-N/` (fecha y número del día), con un `update.zip` armado
+con cualquier herramienta (Deflate o sin comprimir) o con los archivos sueltos,
+y opcionalmente un `deleted.txt` (una ruta por línea, para que el cliente borre
+algo que agregó un parche anterior).
+
+```bash
+mu-patch publish --patches Data/Patches --channel miserver/overlay --key Data/Keys/ServerIdentity.key
+```
+
+- Las carpetas se ordenan por fecha (`19112026` va antes que `01122026`); un
+  nombre que no cumple el formato se ignora con un aviso.
+- El manifiesto es el **estado final**: para cada ruta gana el parche más nuevo,
+  y `deleted.txt` la saca (un parche posterior la puede volver a traer).
+- Sale en `Data/Patches/published/` (es lo único que se sirve): manifiesto
+  firmado, zips y `history/` con las últimas 3 versiones.  Lo que no cambió se
+  reusa de los zips ya publicados; lo nuevo va en zips nuevos, con delta contra
+  esas versiones.  Un zip que ya no usa ninguna de las 3 se borra.
+- Si nada cambió no publica una versión nueva.  La versión es `1.0.<secuencia>`.
+
+`watch` hace lo mismo en un bucle (es el proceso del server con
+`MU_UPDATE_ENABLED=1`): publica cuando `Data/Patches` cambia y queda igual entre
+dos pasadas, así una carpeta a medio subir no se publica.
+
+```bash
+mu-patch watch --patches Data/Patches --channel miserver/overlay --key Data/Keys/ServerIdentity.key --interval 30
+```
+
 ### Opciones de `build`
 
 | Opción | |
@@ -142,6 +172,4 @@ Detalle en `client/src/launcher/SelfUpdate.h`.
 
 ## Pendiente
 
-- Leer zips con Deflate armados a mano por el admin. Hoy se listan pero no se
-  descomprimen; hace falta cuando el server acepte `Data/Patches/`.
-- `mu-patch prune`, `publish` y `watch` (lado server).
+- Correr `watch` en la imagen del server y servir `published/` desde `mu-web`.

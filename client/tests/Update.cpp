@@ -5,6 +5,7 @@
 // borrados.
 
 #include "PatchBuilder.h"
+#include "Publish.h"
 
 #include "update/ChannelFetch.h"
 #include "update/Delta.h"
@@ -897,6 +898,151 @@ void TestChannelFetch(const std::string& dir)
 	other.Wipe();
 }
 
+// Un zip como el que arma cualquier herramienta: Deflate.
+void WriteDeflateZip(const std::string& path, const std::vector<std::pair<std::string, std::vector<std::uint8_t>>>& files)
+{
+	ZipWriter w;
+	Require(w.Open(path), "abrir zip deflate");
+	for (const auto& [name, data] : files)
+	{
+		std::vector<std::uint8_t> packed;
+		std::string err;
+		Require(DeflateCompress(data.data(), data.size(), 6, packed, &err), "deflate");
+		Require(w.Add(name, ZipMethod::Deflate, packed.data(), packed.size(), data.size(), Crc32(data.data(), data.size()), nullptr),
+		        "agregar al zip deflate");
+	}
+	Require(w.Finish(), "cerrar zip deflate");
+}
+
+void TestDeflate(const std::string& dir)
+{
+	const auto data = Compressible(100000, 61);
+	const std::string zip = JoinPath(dir, "deflate.zip");
+	WriteDeflateZip(zip, { { "a/b.txt", data } });
+	ZipReader r;
+	std::string err;
+	std::vector<std::uint8_t> out;
+	Require(r.Open(zip, &err) && r.Entries().size() == 1 && r.Entries()[0].method == ZipMethod::Deflate, "deflate: listar");
+	Require(ZipExtract(zip, r.Entries()[0], out, &err) && out == data, ("deflate: descomprimir: " + err).c_str());
+	std::vector<std::uint8_t> packed;
+	Require(DeflateCompress(data.data(), data.size(), 6, packed, &err), "deflate 2");
+	packed[packed.size() / 2] ^= 0xFF;
+	Require(!ZipDecode(ZipMethod::Deflate, packed.data(), packed.size(), data.size(), out, &err), "deflate: datos rotos se rechazan");
+}
+
+void TestPublish(const std::string& dir)
+{
+	std::uint64_t a = 0, b = 0;
+	Require(MuPatch::ParsePatchFolder("19112026-1", &a) && MuPatch::ParsePatchFolder("01122026-1", &b) && a < b,
+	        "carpetas: el orden es por fecha, no alfabético");
+	Require(MuPatch::ParsePatchFolder("19112026-2", &b) && a < b, "carpetas: y por número del día");
+	Require(!MuPatch::ParsePatchFolder("parche-nuevo", nullptr) && !MuPatch::ParsePatchFolder("32112026-1", nullptr) &&
+	            !MuPatch::ParsePatchFolder("19112026-0", nullptr) && !MuPatch::ParsePatchFolder("19112026", nullptr),
+	        "carpetas: formatos inválidos");
+
+	std::string err;
+	KeyPair k;
+	Require(GenerateKey(k), "clave publish");
+	const std::string key = JoinPath(dir, "ServerIdentity.key");
+	Require(SaveKeyFile(key, k), "guardar clave publish");
+	const std::string patches = JoinPath(dir, "Patches");
+	const std::string out = JoinPath(patches, "published");
+
+	// Parche 1: sueltos (el exe y una textura).  Parche 2 (fecha anterior en el
+	// texto pero posterior en el calendario): zip Deflate que pisa la textura y
+	// borra un archivo del 1.  Una carpeta con otro nombre se ignora.
+	const auto exe = FakeExe("0.97.50"), tex1 = Random(30000, 62), tex2 = Random(30000, 63), extra = Random(2000, 64);
+	Write(JoinPath(patches, "19112026-1/main.exe"), exe);
+	Write(JoinPath(patches, "19112026-1/Content/item/casa.ozj"), tex1);
+	Write(JoinPath(patches, "19112026-1/Content/item/viejo.ozj"), extra);
+	MakeDirs(JoinPath(patches, "01122026-1"));
+	WriteDeflateZip(JoinPath(patches, "01122026-1/update.zip"), { { "Content/item/casa.ozj", tex2 } });
+	Write(JoinPath(patches, "01122026-1/deleted.txt"), std::string("# comentario\r\nContent\\item\\viejo.ozj\r\n"));
+	Write(JoinPath(patches, "borrador/main.exe"), FakeExe("0.97.49"));
+
+	MuPatch::PublishOptions o;
+	o.patches = patches;
+	o.channel = "miserver/overlay";
+	o.keyPath = key;
+	o.level = 3;
+	o.threads = 2;
+	bool published = false;
+	Require(MuPatch::PublishPatches(o, &published, &err) && published, ("publish 1: " + err).c_str());
+
+	MuPatch::VerifyOptions v;
+	std::memcpy(v.publicKey, k.publicKey, kKeySize);
+	v.in = out;
+	Require(MuPatch::VerifyPatch(v, &err), ("publish 1: verify: " + err).c_str());
+	Manifest m1;
+	std::string text;
+	Require(ReadWholeFile(JoinPath(out, "manifest.json"), text) && ParseManifest(text, m1, &err), "publish 1: manifiesto");
+	Require(m1.sequence == 1 && m1.version == "1.0.1" && m1.requiresBase == "0.97.50", "publish 1: secuencia, versión y base del exe");
+	Require(m1.files.size() == 2, "publish 1: el exe y la textura (viejo.ozj borrado)");
+	for (const FileEntry& f : m1.files)
+		if (f.path == "Content/item/casa.ozj") Require(f.hash == HashBytes(tex2.data(), tex2.size()), "publish 1: gana el parche más nuevo");
+	Require(m1.deleted.size() == 1 && m1.deleted[0] == "Content/item/viejo.ozj", "publish 1: deleted.txt");
+	Require(FileExists(JoinPath(out, "history/1/manifest.json")) && !FileExists(JoinPath(out, ".staging")), "publish 1: historial y sin temporales");
+
+	// Sin cambios: no hay versión nueva.
+	Require(MuPatch::PublishPatches(o, &published, &err) && !published, "publish sin cambios");
+
+	// Un parche más: sólo lo nuevo en zips nuevos; lo demás se reusa sin copiar.
+	Write(JoinPath(patches, "02122026-1/Content/item/nuevo.ozj"), Random(4000, 65));
+	Require(MuPatch::PublishPatches(o, &published, &err) && published, ("publish 2: " + err).c_str());
+	Manifest m2;
+	Require(ReadWholeFile(JoinPath(out, "manifest.json"), text) && ParseManifest(text, m2, &err) && m2.sequence == 2, "publish 2: secuencia 2");
+	std::size_t reused = 0;
+	for (const FileEntry& f : m2.files)
+		if (m2.bundles[f.bundle].name.find("-1.0.1-") != std::string::npos) ++reused;
+	Require(reused == 2 && m2.files.size() == 3, "publish 2: los 2 archivos anteriores vienen de los zips de la 1");
+	v.in = out;
+	Require(MuPatch::VerifyPatch(v, &err), ("publish 2: verify: " + err).c_str());
+
+	// El admin saca la textura nueva: el zip de la 1 deja de usarse cuando ya
+	// no está en ninguna de las últimas versiones.
+	Write(JoinPath(patches, "03122026-1/deleted.txt"), std::string("Content/item/casa.ozj\nContent/item/nuevo.ozj\n"));
+	Require(MuPatch::PublishPatches(o, &published, &err) && published, ("publish 3: " + err).c_str());
+	for (int i = 4; i <= 6; ++i)
+	{
+		Write(JoinPath(patches, "0" + std::to_string(i) + "122026-1/Content/x" + std::to_string(i) + ".txt"), std::string("x"));
+		Require(MuPatch::PublishPatches(o, &published, &err) && published, ("publish 4..6: " + err).c_str());
+	}
+	std::vector<std::string> left;
+	ListFiles(out, left, &err);
+	bool oldZip = false;
+	for (const std::string& f : left) oldZip |= f.find("-1.0.1-") != std::string::npos && f.find('/') == std::string::npos;
+	Require(m2.sequence == 2, "publish: guardas");
+	Manifest m6;
+	Require(ReadWholeFile(JoinPath(out, "manifest.json"), text) && ParseManifest(text, m6, &err) && m6.sequence == 6, "publish 6");
+	bool exeFromV1 = false;
+	for (const FileEntry& f : m6.files)
+		if (f.path == "main.exe") exeFromV1 = m6.bundles[f.bundle].name.find("-1.0.1-") != std::string::npos;
+	Require(exeFromV1 && oldZip, "publish: un zip se conserva mientras alguna versión lo use");
+	bool v2Zip = false;
+	for (const std::string& f : left) v2Zip |= f.find("-1.0.2-") != std::string::npos && f.find('/') == std::string::npos;
+	Require(!v2Zip, "publish: el zip que sólo usaba la 2 se borra cuando sale de las últimas 3");
+	Require(!FileExists(JoinPath(out, "history/1")) && FileExists(JoinPath(out, "history/6/manifest.json")),
+	        "publish: se guardan sólo las últimas 3 versiones");
+	v.in = out;
+	Require(MuPatch::VerifyPatch(v, &err), ("publish 6: verify: " + err).c_str());
+
+	// Un zip con una ruta peligrosa se rechaza.
+	const std::string bad = JoinPath(dir, "PatchesMalos");
+	MakeDirs(JoinPath(bad, "19112026-1"));
+	WriteDeflateZip(JoinPath(bad, "19112026-1/update.zip"), { { "../fuera.txt", extra } });
+	MuPatch::PublishOptions ob = o;
+	ob.patches = bad;
+	Require(!MuPatch::PublishPatches(ob, &published, &err), "publish: rechaza rutas fuera de la carpeta");
+
+	// Snapshot: cambia si cambia un archivo e ignora published/.
+	const std::string s1 = MuPatch::SnapshotPatches(patches, out);
+	Write(JoinPath(out, "otra-cosa.txt"), std::string("y"));
+	Require(MuPatch::SnapshotPatches(patches, out) == s1, "snapshot: ignora published/");
+	Write(JoinPath(patches, "06122026-1/Content/x6.txt"), std::string("xx"));
+	Require(MuPatch::SnapshotPatches(patches, out) != s1, "snapshot: ve un cambio");
+	k.Wipe();
+}
+
 } // namespace
 
 int main()
@@ -917,6 +1063,8 @@ int main()
 	TestRateLimiter();
 	TestInstall(d);
 	TestChannelFetch(d);
+	TestDeflate(d);
+	TestPublish(d);
 
 	std::error_code ec;
 	fs::remove_all(dir, ec);

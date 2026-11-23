@@ -3,6 +3,8 @@
 #include "update/Delta.h"
 #include "update/FileUtil.h"
 
+#include <zlib.h>
+
 #include <cstring>
 
 namespace Update {
@@ -365,9 +367,42 @@ bool ZipDecode(ZipMethod method, const std::uint8_t* packed, std::size_t packedS
 	case ZipMethod::Zstd:
 		return ZstdDecompress(packed, packedSize, size, out, error);
 	case ZipMethod::Deflate:
-		return Fail(error, "Deflate todavía no está soportado");
+	{
+		// Deflate "crudo" (sin cabecera zlib), el de los zips.
+		if (size > (1ull << 32)) return Fail(error, "entrada Deflate demasiado grande");
+		out.resize(static_cast<std::size_t>(size));
+		z_stream z{};
+		if (inflateInit2(&z, -MAX_WBITS) != Z_OK) return Fail(error, "no se pudo iniciar inflate");
+		z.next_in = const_cast<Bytef*>(packed);
+		z.avail_in = static_cast<uInt>(packedSize);
+		z.next_out = out.data();
+		z.avail_out = static_cast<uInt>(out.size());
+		const int rc = inflate(&z, Z_FINISH);
+		const bool ok = rc == Z_STREAM_END && z.total_out == size;
+		inflateEnd(&z);
+		if (!ok) return Fail(error, "datos Deflate inválidos o de otro tamaño");
+		return true;
+	}
 	}
 	return Fail(error, "método de compresión no soportado");
+}
+
+bool DeflateCompress(const std::uint8_t* data, std::size_t size, int level, std::vector<std::uint8_t>& out,
+                     std::string* error)
+{
+	z_stream z{};
+	if (deflateInit2(&z, level, Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY) != Z_OK)
+		return Fail(error, "no se pudo iniciar deflate");
+	out.resize(deflateBound(&z, static_cast<uLong>(size)));
+	z.next_in = const_cast<Bytef*>(data);
+	z.avail_in = static_cast<uInt>(size);
+	z.next_out = out.data();
+	z.avail_out = static_cast<uInt>(out.size());
+	const int rc = deflate(&z, Z_FINISH);
+	out.resize(z.total_out);
+	deflateEnd(&z);
+	if (rc != Z_STREAM_END) return Fail(error, "deflate falló");
+	return true;
 }
 
 bool ZipExtract(const std::string& zipPath, const ZipEntry& entry, std::vector<std::uint8_t>& out,
