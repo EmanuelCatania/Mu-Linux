@@ -4,6 +4,7 @@
 #include "platform/Text.h"
 #include "platform/IFileSystem.h"
 #include "app/config/UserSettings.h"
+#include "app/config/OptionTable.h"
 #include "game/core/FrameLimiter.h"
 #include "platform/IGLContext.h"
 #include "render/Gfx.h"
@@ -17,14 +18,13 @@ CUserSettings gUserSettings;
 
 namespace {
 
-struct ResolutionSize { DWORD width; DWORD height; };
+namespace Opt = UserOptionTable;
 
-// Misma tabla que CWindow::iResolutionValues del DLL.
-constexpr ResolutionSize kResolutions[MAX_USER_RESOLUTION] = {
-    {  640,  480 }, {  800,  600 }, { 1024,  768 }, { 1280, 1024 },
-    { 1280,  720 }, { 1366,  768 }, { 1600,  900 }, { 1920, 1080 },
-    { 3440, 1440 },
-};
+// Las tablas viven en OptionTable.h (las comparte el launcher).
+static_assert(Opt::kResolutionCount == MAX_USER_RESOLUTION, "OptionTable: resoluciones");
+static_assert(Opt::kLanguageCount == MAX_USER_LANGUAGE, "OptionTable: idiomas");
+static_assert(Opt::kAntilagCount == MAX_ANTILAG, "OptionTable: antilag");
+static_assert(Opt::kRenderBackendCount == static_cast<int>(RenderBackendPreference::Count), "OptionTable: backends");
 
 // Ausente, truncado o inválido: no reemplazar el valor del registro/default.
 bool TryReadInt(const char* section, const char* key, const char* iniPath, int& result)
@@ -56,26 +56,27 @@ int ReadRange(const char* section, const char* key, const char* iniPath,
         ? value : fallback;
 }
 
+// Opción de la tabla: fuera de rango o ausente vale su default.
+int ReadOption(const Opt::IntOption& o, const char* iniPath)
+{
+    return ReadRange(o.section, o.key, iniPath, o.min, o.max, o.def);
+}
+
 int ReadFlag(const char* section, const char* key, const char* iniPath)
 {
     int value = ReadInt(section, key, iniPath);
     return value < 0 ? -1 : (value != 0);
 }
 
-const char* const AntilagKeys[MAX_ANTILAG] = {
-    "DeleteShadows", "DeleteObjects", "DeleteFloor", "DeleteSkills",
-    "DeleteStaticEffects", "DeleteDynamicEffects", "DeleteWings",
-    "DeleteHealthBar", "DeleteInterface", "DeleteWeather", "DeleteGlow"
-};
-const char* AntilagKey(int option) { return AntilagKeys[option]; }
+const char* AntilagKey(int option) { return Opt::kAntilagKeys[option]; }
 
 } // namespace
 
 bool CUserSettings::GetResolutionSize(int index, DWORD* width, DWORD* height)
 {
     if (index < 0 || index >= MAX_USER_RESOLUTION) return false;
-    *width  = kResolutions[index].width;
-    *height = kResolutions[index].height;
+    *width  = Opt::kResolutions[index].width;
+    *height = Opt::kResolutions[index].height;
     return true;
 }
 
@@ -90,10 +91,10 @@ void CUserSettings::Load(const char* iniPath)
     m_Borderless  = ReadFlag("Window", "Borderless", iniPath);
     m_Resolution  = ReadInt ("Window", "Resolution", iniPath);
     // DESVIACION: 0 desactiva el límite; entradas inválidas conservan 60 fps.
-    m_FpsLimit = ReadRange("Window", "FpsLimit", iniPath, 0, INT_MAX, 60);
-    m_RenderDecoupled = ReadRange("Window", "RenderDecoupled", iniPath, 0, 1, 1) != 0;
-    m_VSync = ReadRange("Window", "VSync", iniPath, 0, 1, 0) != 0;
-    m_GraphicsValidation = ReadRange("Window", "GraphicsValidation", iniPath, 0, 1, 0) != 0;
+    m_FpsLimit = ReadOption(Opt::kFpsLimit, iniPath);
+    m_RenderDecoupled = ReadOption(Opt::kRenderDecoupled, iniPath) != 0;
+    m_VSync = ReadOption(Opt::kVSync, iniPath) != 0;
+    m_GraphicsValidation = ReadOption(Opt::kGraphicsValidation, iniPath) != 0;
     char backend[16] = {};
     Platform::GetFileSystem().ReadIniString("Window", "RenderBackend", "opengl", backend, sizeof(backend), iniPath);
     for (int i = 0; i < static_cast<int>(RenderBackendPreference::Count); ++i)
@@ -103,18 +104,18 @@ void CUserSettings::Load(const char* iniPath)
     // acá como WebGPU automático, sin reescribir el archivo.
     if (!IsRenderBackendAvailable(m_RenderBackend)) m_RenderBackend = RenderBackendPreference::Auto;
     m_StartupRenderBackend = m_RenderBackend;
-    m_TextureQuality = m_StartupTextureQuality = ReadRange("Window", "TextureQuality", iniPath, 0, 2, 0);
-    m_Sharpness = ReadRange("Window", "Sharpness", iniPath, 0, 3, 0);
-    m_Antialiasing = m_StartupAntialiasing = ReadRange("Window", "Antialiasing", iniPath, 0, 3, 0);
-    m_HDTextures = m_StartupHDTextures = ReadRange("Window", "HDTextures", iniPath, 0, 1, 0) != 0;
-    m_Shadows = ReadRange("Window", "Shadows", iniPath, 0, 2, 0);
-    m_DepthFog = ReadRange("Window", "DepthFog", iniPath, 0, 1, 0) != 0;
-    m_DynamicLights = ReadRange("Window", "DynamicLights", iniPath, 0, 2, 1);
-    m_Bloom = ReadRange("Window", "Bloom", iniPath, 0, 2, 1);
-    m_Sky = ReadRange("Window", "Sky", iniPath, 0, 1, 1) != 0;
-    m_Underwater = ReadRange("Window", "Underwater", iniPath, 0, 2, 2);
-    m_WorldWater = ReadRange("Window", "WorldWater", iniPath, 0, 1, 1) != 0;
-    m_DrawDistance = ReadRange("Window", "DrawDistance", iniPath, 0, 3, 0);
+    m_TextureQuality = m_StartupTextureQuality = ReadOption(Opt::kTextureQuality, iniPath);
+    m_Sharpness = ReadOption(Opt::kSharpness, iniPath);
+    m_Antialiasing = m_StartupAntialiasing = ReadOption(Opt::kAntialiasing, iniPath);
+    m_HDTextures = m_StartupHDTextures = ReadOption(Opt::kHDTextures, iniPath) != 0;
+    m_Shadows = ReadOption(Opt::kShadows, iniPath);
+    m_DepthFog = ReadOption(Opt::kDepthFog, iniPath) != 0;
+    m_DynamicLights = ReadOption(Opt::kDynamicLights, iniPath);
+    m_Bloom = ReadOption(Opt::kBloom, iniPath);
+    m_Sky = ReadOption(Opt::kSky, iniPath) != 0;
+    m_Underwater = ReadOption(Opt::kUnderwater, iniPath);
+    m_WorldWater = ReadOption(Opt::kWorldWater, iniPath) != 0;
+    m_DrawDistance = ReadOption(Opt::kDrawDistance, iniPath);
     if (m_Resolution < -1 || m_Resolution >= MAX_USER_RESOLUTION) {
         char line[96];
         Platform::TextFormat(line, "Config.ini: Resolution=%d IGNORADO (fuera de 0..%d)",
@@ -125,12 +126,13 @@ void CUserSettings::Load(const char* iniPath)
 
     m_EnableSound = ReadFlag("Sound", "EnableSound", iniPath);
     m_EnableMusic = ReadFlag("Sound", "EnableMusic", iniPath);
-    m_SoundLevel  = ReadRange("Sound", "SoundLevel", iniPath, 0, 9, -1);
-    m_MusicLevel  = ReadRange("Sound", "MusicLevel", iniPath, 0, 9, -1);
+    // -1: no está; manda el registro.
+    m_SoundLevel  = ReadRange(Opt::kSoundLevel.section, Opt::kSoundLevel.key, iniPath, Opt::kSoundLevel.min, Opt::kSoundLevel.max, -1);
+    m_MusicLevel  = ReadRange(Opt::kMusicLevel.section, Opt::kMusicLevel.key, iniPath, Opt::kMusicLevel.min, Opt::kMusicLevel.max, -1);
 
     Platform::GetFileSystem().ReadIniString("User", "Username", "", m_Username, sizeof(m_Username), iniPath);
-    m_MiniMapAlpha = ReadRange("MiniMap", "Alpha", iniPath, 3, 10, 10);
-    m_MiniMapZoom  = ReadRange("MiniMap", "ZoomLevel", iniPath, 0, 6, 0);
+    m_MiniMapAlpha = ReadOption(Opt::kMiniMapAlpha, iniPath);
+    m_MiniMapZoom  = ReadOption(Opt::kMiniMapZoom, iniPath);
 
     char language[8] = {};
     Platform::GetFileSystem().ReadIniString("Language", "LangSelection", "", language, sizeof(language), iniPath);
@@ -181,8 +183,7 @@ void CUserSettings::Load(const char* iniPath)
 
 const char* CUserSettings::GetLanguageSuffix(int language)
 {
-    static const char* const Suffix[MAX_USER_LANGUAGE] = { "Eng", "Spn", "Por" };
-    return language >= 0 && language < MAX_USER_LANGUAGE ? Suffix[language] : nullptr;
+    return language >= 0 && language < MAX_USER_LANGUAGE ? Opt::kLanguageSuffixes[language] : nullptr;
 }
 
 void CUserSettings::SaveInt(const char* section, const char* key, int value) const
@@ -223,13 +224,8 @@ void CUserSettings::SetAntilag(eAntilag option, bool enabled)
 
 const char* CUserSettings::RenderBackendKey(RenderBackendPreference preference)
 {
-    switch (preference) {
-    case RenderBackendPreference::Auto: return "auto";
-    case RenderBackendPreference::D3D12: return "d3d12";
-    case RenderBackendPreference::D3D11: return "d3d11";
-    case RenderBackendPreference::Vulkan: return "vulkan";
-    default: return "opengl";
-    }
+    const int i = static_cast<int>(preference);
+    return Opt::kRenderBackendKeys[i >= 0 && i < Opt::kRenderBackendCount ? i : 0];
 }
 
 bool CUserSettings::IsRenderBackendAvailable(RenderBackendPreference preference)
@@ -247,98 +243,93 @@ bool CUserSettings::IsRenderBackendAvailable(RenderBackendPreference preference)
 
 const char* CUserSettings::RenderBackendName(RenderBackendPreference preference)
 {
-    switch (preference) {
-    case RenderBackendPreference::Auto: return "WebGPU";
-    case RenderBackendPreference::D3D12: return "DirectX 12";
-    case RenderBackendPreference::D3D11: return "DirectX 11";
-    case RenderBackendPreference::Vulkan: return "Vulkan";
-    default: return "OpenGL";
-    }
+    const int i = static_cast<int>(preference);
+    return Opt::kRenderBackendNames[i >= 0 && i < Opt::kRenderBackendCount ? i : 0];
 }
 
 void CUserSettings::SetTextureQuality(int level)
 {
-    if (level < 0 || level > 2) return;
+    if (!Opt::InRange(Opt::kTextureQuality, level)) return;
     m_TextureQuality = level;
     // Los mipmaps se generan al subir las texturas: valen los del arranque.
     Gfx::SetTextureQuality(m_StartupTextureQuality >= 1, level >= 2);
-    SaveInt("Window", "TextureQuality", level);
+    SaveInt(Opt::kTextureQuality.section, Opt::kTextureQuality.key, level);
 }
 
 void CUserSettings::SetSharpness(int level)
 {
-    if (level < 0 || level > 3) return;
+    if (!Opt::InRange(Opt::kSharpness, level)) return;
     m_Sharpness = level;
-    SaveInt("Window", "Sharpness", level);
+    SaveInt(Opt::kSharpness.section, Opt::kSharpness.key, level);
 }
 
 void CUserSettings::SetHDTextures(bool enabled)
 {
     m_HDTextures = enabled;
-    SaveInt("Window", "HDTextures", enabled ? 1 : 0);
+    SaveInt(Opt::kHDTextures.section, Opt::kHDTextures.key, enabled ? 1 : 0);
 }
 
 void CUserSettings::SetShadows(int level)
 {
-    if (level < 0 || level > 2) return;
+    if (!Opt::InRange(Opt::kShadows, level)) return;
     m_Shadows = level;
-    SaveInt("Window", "Shadows", level);
+    SaveInt(Opt::kShadows.section, Opt::kShadows.key, level);
     Gfx::SetShadowMaps(level > 0, ShadowStrength());
 }
 
 void CUserSettings::SetDepthFog(bool enabled)
 {
     m_DepthFog = enabled;
-    SaveInt("Window", "DepthFog", enabled ? 1 : 0);
+    SaveInt(Opt::kDepthFog.section, Opt::kDepthFog.key, enabled ? 1 : 0);
     Gfx::SetDepthFog(enabled);
 }
 
 void CUserSettings::SetDynamicLights(int level)
 {
-    if (level < 0 || level > 2) return;
+    if (!Opt::InRange(Opt::kDynamicLights, level)) return;
     m_DynamicLights = level;
-    SaveInt("Window", "DynamicLights", level);
+    SaveInt(Opt::kDynamicLights.section, Opt::kDynamicLights.key, level);
 }
 
 void CUserSettings::SetBloom(int level)
 {
-    if (level < 0 || level > 2) return;
+    if (!Opt::InRange(Opt::kBloom, level)) return;
     m_Bloom = level;
-    SaveInt("Window", "Bloom", level);
+    SaveInt(Opt::kBloom.section, Opt::kBloom.key, level);
 }
 
 void CUserSettings::SetSky(bool enabled)
 {
     m_Sky = enabled;
-    SaveInt("Window", "Sky", enabled ? 1 : 0);
+    SaveInt(Opt::kSky.section, Opt::kSky.key, enabled ? 1 : 0);
 }
 
 void CUserSettings::SetUnderwater(int level)
 {
-    if (level < 0 || level > 2) return;
+    if (!Opt::InRange(Opt::kUnderwater, level)) return;
     m_Underwater = level;
-    SaveInt("Window", "Underwater", level);
+    SaveInt(Opt::kUnderwater.section, Opt::kUnderwater.key, level);
 }
 
 void CUserSettings::SetWorldWater(bool enabled)
 {
     m_WorldWater = enabled;
     Gfx::SetWater(enabled);
-    SaveInt("Window", "WorldWater", enabled ? 1 : 0);
+    SaveInt(Opt::kWorldWater.section, Opt::kWorldWater.key, enabled ? 1 : 0);
 }
 
 void CUserSettings::SetDrawDistance(int level)
 {
-    if (level < 0 || level > 3) return;
+    if (!Opt::InRange(Opt::kDrawDistance, level)) return;
     m_DrawDistance = level;
-    SaveInt("Window", "DrawDistance", level);
+    SaveInt(Opt::kDrawDistance.section, Opt::kDrawDistance.key, level);
 }
 
 void CUserSettings::SetAntialiasingLevel(int level)
 {
-    if (level < 0 || level > 3) return;
+    if (!Opt::InRange(Opt::kAntialiasing, level)) return;
     m_Antialiasing = level;
-    SaveInt("Window", "Antialiasing", level);
+    SaveInt(Opt::kAntialiasing.section, Opt::kAntialiasing.key, level);
 }
 
 bool CUserSettings::RestartPending() const
@@ -384,7 +375,7 @@ void CUserSettings::SetWindow(bool windowMode, bool borderless, int resolution)
 int CUserSettings::FindResolution(DWORD width, DWORD height)
 {
     for (int i = 0; i < MAX_USER_RESOLUTION; ++i)
-        if (kResolutions[i].width == width && kResolutions[i].height == height) return i;
+        if (Opt::kResolutions[i].width == width && Opt::kResolutions[i].height == height) return i;
     return -1;
 }
 

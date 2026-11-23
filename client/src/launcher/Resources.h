@@ -10,6 +10,8 @@ namespace LauncherRes {
 
 extern const unsigned char MainBackground[];
 extern const std::size_t MainBackgroundSize;
+extern const unsigned char OptionsBackground[];
+extern const std::size_t OptionsBackgroundSize;
 extern const unsigned char MainImage[];
 extern const std::size_t MainImageSize;
 extern const unsigned char ButtonNormal[];

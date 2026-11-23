@@ -1,5 +1,6 @@
 # Launcher (Fase 5): ventana SDL3 con el tema WebzenOldSchoolV1 de kayito, que
-# actualiza el cliente (núcleo en src/update) y lo arranca.
+# actualiza el cliente (núcleo en src/update), edita sus opciones (Config.ini,
+# con la tabla compartida app/config/OptionTable.h) y lo arranca.
 #
 # Se compila solo, como mu-patch (no necesita el resto del cliente):
 #   cmake -S client/src/launcher -B build/launcher -DCMAKE_BUILD_TYPE=Release
@@ -38,6 +39,7 @@ set(_font "${MU_CLIENT_SOURCE_DIR}/bin/Client/System/Font")
 set(_embedded)
 foreach(_pair
         "MainBackground=${_theme}/MainBackground.png"
+        "OptionsBackground=${_theme}/OptionsBackground.png"
         "MainImage=${_theme}/MainImage.png"
         "ButtonNormal=${_theme}/Button_n.png"
         "ButtonHover=${_theme}/Button_h.png"
@@ -60,7 +62,11 @@ endforeach()
 
 # Lo que no depende de la ventana: configuración y flujo de actualización (lo
 # usan el ejecutable y las pruebas).
-add_library(mu_launcher_core STATIC LauncherConfig.cpp LauncherConfig.h UpdateFlow.cpp UpdateFlow.h)
+add_library(mu_launcher_core STATIC
+    IniDocument.cpp IniDocument.h
+    LauncherConfig.cpp LauncherConfig.h
+    OptionsModel.cpp OptionsModel.h
+    UpdateFlow.cpp UpdateFlow.h)
 target_include_directories(mu_launcher_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${MU_CLIENT_SOURCE_DIR}/src")
 target_link_libraries(mu_launcher_core PUBLIC mu_update_http)
 

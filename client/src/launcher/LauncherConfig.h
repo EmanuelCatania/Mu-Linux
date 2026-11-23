@@ -42,8 +42,10 @@ struct Config
 	std::string gameExe;
 	bool music = true;
 	bool hd = false;
+	bool hdSet = false;            // launcher.toml fija HD (si no, sigue a HDTextures del juego)
 	int connections = 4;
 	std::uint64_t speedLimit = 0;  // bytes/s
+	bool fullVerify = false;       // "Verificar archivos": rehashear todo
 	// Lo que launcher.toml cambió del origen de la base: se muestra como aviso.
 	std::vector<std::string> overrides;
 };
@@ -53,6 +55,9 @@ Config CompiledConfig();
 // Aplica launcher.toml.  Las líneas que no entiende las ignora y las anota en
 // *warnings.  Un archivo que falta no es error.
 void ApplyLauncherToml(const std::string& path, Config& config, std::vector<std::string>* warnings);
+
+// [Window] HDTextures del Config.ini del juego (0 si falta o no se puede leer).
+bool HDTexturesEnabled(const std::string& configIni);
 
 // La carpeta de usuario del cliente para una instalación: <raíz>/User en
 // Windows; la raíz misma en Linux, donde el launcher arranca el cliente con
