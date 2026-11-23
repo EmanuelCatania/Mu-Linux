@@ -300,7 +300,7 @@ static bool DbgLog_IsError(const char* text)
     for (; text[n] && n + 1 < sizeof(lower); ++n)
         lower[n] = (char)((text[n] >= 'A' && text[n] <= 'Z') ? text[n] + 32 : text[n]);
     lower[n] = 0;
-    static const char* const kWords[] = { "error", "fail", "no se pud", "invalid", "inv??lid",
+    static const char* const kWords[] = { "error", "fail", "no se pud", "invalid", "inválid",
                                           "crash", "corrupt", "not found", "no encontr", "abort",
                                           // Errores de WebGPU ("validación", "interno", "dispositivo
                                           // perdido") que no llevan ninguna de las palabras de arriba.
@@ -329,14 +329,32 @@ static void DbgLog(const char* msg)
     const char* safeMsg = msg ? msg : "(null)";
     DWORD t = Platform::GetTimer().Ticks();
 
-    // Sanitiza msg a ASCII printable: el debugger de VS intercepta WriteFile en
-    // debug.log y crashea si el contenido tiene caracteres no printables.
+    // Sanitiza msg a texto imprimible: el debugger de VS intercepta WriteFile en
+    // debug.log y crashea si el contenido tiene caracteres de control.  Las
+    // secuencias UTF-8 válidas (los acentos de los mensajes) pasan enteras; un
+    // byte suelto o un carácter de control queda como '?'.
     char sanitized[510];
     {
         int j = 0;
-        for (int i = 0; safeMsg[i] && j < (int)sizeof(sanitized) - 1; ++i) {
-            unsigned char c = (unsigned char)safeMsg[i];
-            sanitized[j++] = (c >= 0x20 && c < 0x7F) || c == '\t' ? c : '?';
+        for (int i = 0; safeMsg[i] && j < (int)sizeof(sanitized) - 1;) {
+            const unsigned char c = (unsigned char)safeMsg[i];
+            if ((c >= 0x20 && c < 0x7F) || c == '\t') {
+                sanitized[j++] = (char)c;
+                ++i;
+                continue;
+            }
+            const int len = c >= 0xC2 && c <= 0xDF ? 2 : c >= 0xE0 && c <= 0xEF ? 3 : c >= 0xF0 && c <= 0xF4 ? 4 : 0;
+            bool ok = len > 0 && j + len < (int)sizeof(sanitized);
+            for (int k = 1; ok && k < len; ++k) {
+                const unsigned char d = (unsigned char)safeMsg[i + k];
+                ok = d >= 0x80 && d <= 0xBF;
+            }
+            if (!ok) {
+                sanitized[j++] = '?';
+                ++i;
+                continue;
+            }
+            for (int k = 0; k < len; ++k) sanitized[j++] = safeMsg[i++];
         }
         sanitized[j] = 0;
     }
