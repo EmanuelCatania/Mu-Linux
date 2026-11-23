@@ -1,0 +1,110 @@
+name: Client channels
+# Al publicar una Release: arma con mu-patch la base, la música y el HD del
+# cliente (client/bin/Client) y los adjunta a la Release, cada uno con su
+# manifiesto firmado. Es lo que baja el launcher; la base nunca trae ejecutables,
+# porque cada server compila el suyo.
+#
+# Assets: <canal>.manifest.json + .sig y <canal>-<versión>-N.zip, con canal
+# mu-linux-base, mu-linux-music y mu-linux-hd. Lo que no cambió desde las 3
+# Releases anteriores no se vuelve a subir: el manifiesto apunta a los zips de
+# esas Releases, y los archivos grandes que cambiaron llevan además un delta.
+#
+# Secret: MU_RELEASE_SIGNING_KEY = el contenido del archivo que crea
+# `mu-patch keygen` ("seed=<64 hex>"). Un fork que no lo define no publica nada
+# (avisa y termina bien); el que lo define firma con su propia clave.
+#
+# Se arma en Linux a propósito: el checkout deja los bytes de git (LF). En un
+# Windows con core.autocrlf los .toml y .txt salen con CRLF y cambiarían los
+# hashes de una Release a otra.
+#
+# En un PR que toca mu-patch, el núcleo del actualizador o este workflow corre en
+# seco: clave descartable, sin bajar Releases y sin publicar.
+# A mano (Actions > Client channels > Run workflow) se puede repetir un tag.
+on:
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de la Release (por ejemplo 0.97.50)"
+        required: true
+  pull_request:
+    paths:
+      - "client/tools/mu-patch/**"
+      - "client/src/update/**"
+      - "client/cmake/MuUpdate.cmake"
+      - "client/tests/Update.cpp"
+      - ".github/scripts/client_channels.py"
+      - ".github/workflows/client-channels.yml"
+permissions:
+  contents: read
+concurrency:
+  group: client-channels-${{ github.event.release.tag_name || inputs.tag || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  DRY_RUN: ${{ github.event_name == 'pull_request' }}
+jobs:
+  channels:
+    name: Base, música y HD
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Vacío en un PR: el commit del PR.
+          ref: ${{ env.TAG }}
+      - name: Compilar mu-patch
+        run: |
+          cmake -S client/tools/mu-patch -B build/mu-patch -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/mu-patch --parallel 4
+          ctest --test-dir build/mu-patch --output-on-failure
+      - name: Clave de firma
+        id: key
+        env:
+          SIGNING_KEY: ${{ secrets.MU_RELEASE_SIGNING_KEY }}
+        run: |
+          umask 077
+          key="$RUNNER_TEMP/release.key"
+          if [ "$DRY_RUN" = "true" ]; then
+            build/mu-patch/mu-patch keygen --out "$key"
+          elif [ -z "$SIGNING_KEY" ]; then
+            echo "::warning::Sin el secreto MU_RELEASE_SIGNING_KEY: no se publican la base, la música ni el HD del cliente."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          else
+            printf '%s\n' "$SIGNING_KEY" > "$key"
+          fi
+          echo "path=$key" >> "$GITHUB_OUTPUT"
+      - name: Armar los canales
+        if: steps.key.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            # Sin Release: la versión que lleva compilada el cliente, y nivel
+            # bajo para que el PR no tarde.
+            version=$(sed -n 's/^#define MU_RELEASE "\(.*\)"$/\1/p' client/src/app/config/Release.h)
+            extra=(--level 3)
+          else
+            version="$TAG"
+            extra=(--fetch-prev)
+          fi
+          python3 .github/scripts/client_channels.py \
+            --mu-patch build/mu-patch/mu-patch \
+            --in client/bin/Client \
+            --tag "$version" \
+            --key "${{ steps.key.outputs.path }}" \
+            --out dist/channels \
+            --work "$RUNNER_TEMP/channels" \
+            "${extra[@]}"
+          ls -l dist/channels
+      - name: Adjuntar a la Release
+        if: steps.key.outputs.skip != 'true' && env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/channels/* --clobber --repo "$GITHUB_REPOSITORY"
+      - name: Borrar la clave
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.key"
