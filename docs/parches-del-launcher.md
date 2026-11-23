@@ -28,6 +28,37 @@ Con eso `mu-server` publica los parches y `mu-web` los sirve en
 necesita nada especial: los zips se pueden guardar en caché para siempre (su
 nombre cambia con cada versión) y el manifiesto no.
 
+## Lo que el launcher aprende del server
+
+Con `MU_UPDATE_ENABLED=1` el server publica además un `launcher.json` firmado
+con su identidad. El launcher lo pide al ConnectServer cada vez que arranca y lo
+guarda: así podés cambiar la dirección del ConnectServer o la de los parches sin
+volver a repartir el launcher.
+
+En `.env`:
+
+```bash
+MU_UPDATE_URL=https://mu.ejemplo.com/updates
+MU_LAUNCHER_CONNECT_SERVERS=mu.ejemplo.com:44405,respaldo.ejemplo.com:44405
+MU_LAUNCHER_NEWS=Mantenimiento el lunes a las 10.\nDura una hora.
+```
+
+- `MU_UPDATE_URL`: la dirección pública de `/updates/` (la de tu web, como la ve
+  un jugador). Podés poner varias separadas por coma: el launcher prueba la
+  siguiente si una falla. Vacía, el launcher sigue usando la que tiene compilada.
+- `MU_LAUNCHER_CONNECT_SERVERS`: las direcciones del ConnectServer
+  (`host:puerto`). Vacía, se usa `PUBLIC_IP:44405`.
+- `MU_LAUNCHER_NEWS`: un texto que el launcher muestra sobre la imagen. `\n`
+  corta la línea.
+- `MU_LAUNCHER_BASE_SOURCE`, `MU_LAUNCHER_BASE_TAG`, `MU_LAUNCHER_BASE_KEY`: el
+  origen del cliente base, si usás un fork propio (vacíos: el compilado en el
+  launcher).
+
+**Para mudar el ConnectServer**: agregá la dirección nueva en
+`MU_LAUNCHER_CONNECT_SERVERS` **antes** de apagar la vieja y dejala unos días.
+Cada launcher que se conecta la aprende; uno que ya no encuentra la vieja prueba
+las demás y, como último recurso, baja `launcher.json` de `/updates/`.
+
 ## Subir un parche
 
 Cada parche es una carpeta en el volumen `mu_patches` (dentro del contenedor,

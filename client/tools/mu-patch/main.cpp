@@ -12,6 +12,9 @@
 //   mu-patch publish    --patches <Data/Patches> --channel <server/overlay> --key <archivo>
 //                       [--out <carpeta>] [--base <x.y.z>] [--protocol <n>] [--level <1-22>] [--threads <n>]
 //   mu-patch watch      (las mismas opciones) [--interval <segundos>]
+//   publish y watch, además (launcher.json, ver update/Announce.h):
+//                       [--connect-server <host:puerto>]... [--url <url de los parches>]...
+//                       [--news <texto>] [--base-source <dueño/repo|url>] [--base-tag <x.y.z>] [--base-key <hex>]
 
 #include "PatchBuilder.h"
 #include "Publish.h"
@@ -54,6 +57,9 @@ const char kUsage[] =
 	"             arma el canal desde las carpetas DDMMAAAA-N (por defecto en <patches>/published)\n"
 	"  watch      las opciones de publish y [--interval <segundos>]: publica cada vez que\n"
 	"             Data/Patches cambia y se queda quieto entre dos pasadas\n"
+	"             publish y watch arman además launcher.json si se pasa alguna de:\n"
+	"             [--connect-server <host:puerto>]... [--url <url de los parches>]... [--news <texto>]\n"
+	"             [--base-source <dueño/repo|url>] [--base-tag <x.y.z>] [--base-key <hex>]\n"
 	"\n"
 	"El overlay de un server se firma con su Data/Keys/ServerIdentity.key.\n";
 
@@ -210,10 +216,29 @@ int CmdBuild(Args& a)
 	return 0;
 }
 
-// publish y watch comparten opciones.
-int ParsePublish(Args& a, MuPatch::PublishOptions& o, unsigned* interval)
+// "\n" escrito como dos caracteres (como queda en un .env) pasa a salto de línea.
+std::string UnescapeNewlines(const std::string& s)
+{
+	std::string out;
+	for (std::size_t i = 0; i < s.size(); ++i)
+	{
+		if (s[i] == '\\' && i + 1 < s.size() && s[i + 1] == 'n')
+		{
+			out.push_back('\n');
+			++i;
+		}
+		else
+			out.push_back(s[i]);
+	}
+	return out;
+}
+
+// publish y watch comparten opciones.  *announce: si hay que armar launcher.json.
+int ParsePublish(Args& a, MuPatch::PublishOptions& o, unsigned* interval, MuPatch::AnnounceOptions& an, bool* announce)
 {
 	o.log = Print;
+	an.log = Print;
+	*announce = false;
 	while (a.HasMore())
 	{
 		const std::string opt = a.Next();
@@ -228,19 +253,39 @@ int ParsePublish(Args& a, MuPatch::PublishOptions& o, unsigned* interval)
 		else if (opt == "--protocol") { if (!ParseUint(v, n) || n > 65535) return Error("--protocol no válido"); o.protocol = static_cast<int>(n); }
 		else if (opt == "--level") { if (!ParseUint(v, n) || n > 22) return Error("--level no válido"); o.level = static_cast<int>(n); }
 		else if (opt == "--threads") { if (!ParseUint(v, n) || n > 256) return Error("--threads no válido"); o.threads = static_cast<int>(n); }
+		else if (opt == "--connect-server") { an.content.connectServers.push_back(v); *announce = true; }
+		else if (opt == "--url") { an.content.patchUrls.push_back(v); *announce = true; }
+		else if (opt == "--news") { an.content.news = UnescapeNewlines(v); *announce = true; }
+		else if (opt == "--base-source") { an.content.baseSource = v; *announce = true; }
+		else if (opt == "--base-tag") { an.content.baseTag = v; *announce = true; }
+		else if (opt == "--base-key") { an.content.baseKey = v; *announce = true; }
 		else if (opt == "--interval" && interval) { if (!ParseUint(v, n) || n == 0 || n > 86400) return Error("--interval no válido"); *interval = static_cast<unsigned>(n); }
 		else return Error("opción desconocida: " + opt);
 	}
 	if (o.patches.empty() || o.channel.empty() || o.keyPath.empty())
 		return Error("necesita --patches, --channel y --key");
+	an.out = o.out.empty() ? Update::JoinPath(o.patches, "published") : o.out;
+	an.keyPath = o.keyPath;
+	an.content.patchChannel = o.channel;
+	if (*announce)
+	{
+		// Se valida al arrancar: un valor mal escrito se avisa antes de publicar.
+		Update::Announce check = an.content;
+		check.sequence = 1;
+		std::string why;
+		if (!Update::ParseAnnounce(Update::DumpAnnounce(check), check, &why)) return Error("launcher.json: " + why);
+	}
 	return 0;
 }
 
 int CmdPublish(Args& a)
 {
 	MuPatch::PublishOptions o;
-	if (const int rc = ParsePublish(a, o, nullptr)) return rc;
+	MuPatch::AnnounceOptions an;
+	bool announce = false;
+	if (const int rc = ParsePublish(a, o, nullptr, an, &announce)) return rc;
 	std::string error;
+	if (announce && !MuPatch::PublishAnnounce(an, nullptr, &error)) return Error(error);
 	if (!MuPatch::PublishPatches(o, nullptr, &error)) return Error(error);
 	return 0;
 }
@@ -252,13 +297,24 @@ int CmdPublish(Args& a)
 int CmdWatch(Args& a)
 {
 	MuPatch::PublishOptions o;
+	MuPatch::AnnounceOptions an;
+	bool announce = false;
 	unsigned interval = 30;
-	if (const int rc = ParsePublish(a, o, &interval)) return rc;
+	if (const int rc = ParsePublish(a, o, &interval, an, &announce)) return rc;
 	const std::string out = o.out.empty() ? Update::JoinPath(o.patches, "published") : o.out;
 	std::string done;        // lo que había en la última publicación
 	std::string previous;    // lo de la pasada anterior
+	std::string announceError;
 	for (;;)
 	{
+		// launcher.json no depende de los parches: se escribe aunque no haya
+		// ninguno, y se vuelve a firmar si la identidad rotó.
+		if (announce)
+		{
+			std::string error;
+			if (!MuPatch::PublishAnnounce(an, nullptr, &error) && error != announceError) Print("ERROR: " + error);
+			announceError = error;
+		}
 		const std::string now = MuPatch::SnapshotPatches(o.patches, out);
 		if (now != done && now == previous && !now.empty())
 		{

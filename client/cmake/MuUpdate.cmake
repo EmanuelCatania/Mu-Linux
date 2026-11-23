@@ -41,6 +41,8 @@ endif()
 
 set(_mu_update_dir "${MU_CLIENT_SOURCE_DIR}/src/update")
 add_library(mu_update_core STATIC
+    "${_mu_update_dir}/Announce.cpp"
+    "${_mu_update_dir}/Announce.h"
     "${_mu_update_dir}/Json.cpp"
     "${_mu_update_dir}/Json.h"
     "${_mu_update_dir}/Hash.cpp"
