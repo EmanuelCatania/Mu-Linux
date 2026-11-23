@@ -137,6 +137,7 @@ std::string DumpAnnounce(const Announce& a)
 		root.Set("base", b);
 	}
 	if (!a.news.empty()) root.Set("news", JsonValue::MakeString(a.news));
+	if (!a.web.empty()) root.Set("web", JsonValue::MakeString(a.web));
 	return root.Dump();
 }
 
@@ -170,6 +171,7 @@ bool ParseAnnounce(const std::string& text, Announce& out, std::string* error)
 		if (!OptString(*b, "key", a.baseKey, IsValidKeyHex, error)) return false;
 	}
 	if (!OptString(root, "news", a.news, IsValidNews, error)) return false;
+	if (!OptString(root, "web", a.web, IsValidUrl, error)) return false;
 	out = a;
 	return true;
 }
@@ -177,7 +179,7 @@ bool ParseAnnounce(const std::string& text, Announce& out, std::string* error)
 bool SameAnnounceContent(const Announce& a, const Announce& b)
 {
 	return a.connectServers == b.connectServers && a.patchChannel == b.patchChannel && a.patchUrls == b.patchUrls &&
-	       a.baseSource == b.baseSource && a.baseTag == b.baseTag && a.baseKey == b.baseKey && a.news == b.news;
+	       a.baseSource == b.baseSource && a.baseTag == b.baseTag && a.baseKey == b.baseKey && a.news == b.news && a.web == b.web;
 }
 
 } // namespace Update

@@ -59,6 +59,7 @@ struct Status
 	bool playing = false;              // hay un cliente corriendo
 	bool paused = false;
 	std::size_t waitingForClose = 0;   // archivos que esperan a que se cierre el juego
+	std::string webUrl;                // sitio del server (anunciado o compilado)
 };
 
 // Elige el transporte por esquema: file:// y rutas locales, o HTTP(S).
