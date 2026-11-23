@@ -21,7 +21,10 @@ SDL_Texture* LoadPng(SDL_Renderer* renderer, const unsigned char* data, std::siz
 class Font
 {
 public:
-	Font(SDL_Renderer* renderer, const unsigned char* ttf, std::size_t size, float pixelHeight);
+	// scale: píxeles de pantalla por unidad lógica.  La fuente se rasteriza a ese
+	// tamaño para que el texto no salga borroso al agrandar la ventana; todas las
+	// medidas siguen en unidades lógicas.
+	Font(SDL_Renderer* renderer, const unsigned char* ttf, std::size_t size, float pixelHeight, float scale = 1.0f);
 	~Font();
 	Font(const Font&) = delete;
 	Font& operator=(const Font&) = delete;
@@ -39,7 +42,9 @@ private:
 	SDL_Renderer* m_Renderer;
 	SDL_Texture* m_Texture = nullptr;
 	float m_PixelHeight;
-	float m_Ascent = 0;
+	float m_Scale;
+	int m_Atlas;
+	float m_Ascent = 0;          // en píxeles de la fuente rasterizada
 	std::vector<unsigned char> m_Chars;   // stbtt_bakedchar[224]
 };
 

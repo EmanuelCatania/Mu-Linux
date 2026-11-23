@@ -6,7 +6,7 @@
 // (--updated y --rolled-back los pone el propio launcher al reiniciarse)
 // Sin --root, la carpeta del cliente es la del launcher (o la de arriba si el
 // launcher está en Launcher/, donde lo pone el overlay).  --options abre directo
-// la pantalla de opciones (0 = Pantalla ... 7 = Descargas).
+// la pantalla de opciones (0 = General ... 7 = Descargas).
 
 #include "Gfx.h"
 #include "LauncherConfig.h"
@@ -21,7 +21,9 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
+#include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -64,9 +66,46 @@ struct Button
 	bool pressed = false;
 };
 
+// Unidades de ventana por unidad lógica (la ventana se agranda con "Tamaño del
+// launcher"; el dibujo sigue en 450x458).
+float g_WindowScale = 1.0f;
+
 SDL_HitTestResult HitTest(SDL_Window*, const SDL_Point* p, void*)
 {
-	return p->y < kHeaderHeight ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
+	return p->y < kHeaderHeight * g_WindowScale ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
+}
+
+// Escala de la ventana: la elegida (percent) o la de la pantalla (0), sin pasar
+// del área útil de la pantalla.
+float ChooseScale(SDL_Window* window, int percent)
+{
+	const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+	float s = percent > 0 ? static_cast<float>(percent) / 100.0f : SDL_GetDisplayContentScale(display);
+	if (!(s >= 1.0f)) s = 1.0f;
+	SDL_Rect area;
+	if (SDL_GetDisplayUsableBounds(display, &area))
+	{
+		const float fit = std::min(static_cast<float>(area.w) / kWidth, static_cast<float>(area.h) / kHeight) * 0.95f;
+		if (s > fit) s = std::max(1.0f, fit);
+	}
+	return s;
+}
+
+// Cambia el tamaño de la ventana y la centra.  Devuelve los píxeles por unidad
+// lógica, para rasterizar las fuentes a ese tamaño.
+float ApplyScale(SDL_Window* window, SDL_Renderer* renderer, int percent)
+{
+	const float s = ChooseScale(window, percent);
+	const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+	SDL_SetWindowSize(window, static_cast<int>(std::lround(kWidth * s)), static_cast<int>(std::lround(kHeight * s)));
+	SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(display), SDL_WINDOWPOS_CENTERED_DISPLAY(display));
+	SDL_SyncWindow(window);
+	int ww = kWidth, wh = kHeight, ow = kWidth, oh = kHeight;
+	SDL_GetWindowSize(window, &ww, &wh);
+	SDL_GetRenderOutputSize(renderer, &ow, &oh);
+	g_WindowScale = std::min(static_cast<float>(ww) / kWidth, static_cast<float>(wh) / kHeight);
+	const float px = std::min(static_cast<float>(ow) / kWidth, static_cast<float>(oh) / kHeight);
+	return px > 1.0f ? px : 1.0f;
 }
 
 std::string Utf8(const std::filesystem::path& p)
@@ -188,6 +227,16 @@ struct Ui
 	SDL_Texture* btnDisabled = nullptr;
 	std::unique_ptr<Font> title, label, regular, tiny, notice;
 
+	void MakeFonts(float scale)
+	{
+		using namespace LauncherRes;
+		title = std::make_unique<Font>(r, FontBold, FontBoldSize, 13.0f, scale);
+		label = std::make_unique<Font>(r, FontBold, FontBoldSize, 12.5f, scale);
+		regular = std::make_unique<Font>(r, FontRegular, FontRegularSize, 12.5f, scale);
+		tiny = std::make_unique<Font>(r, FontBold, FontBoldSize, 10.0f, scale);
+		notice = std::make_unique<Font>(r, FontRegular, FontRegularSize, 11.0f, scale);
+	}
+
 	void DrawButton(const Button& b) const
 	{
 		SDL_Texture* t = !b.enabled ? btnDisabled : (b.hover ? btnHover : btnNormal);
@@ -210,6 +259,7 @@ struct OptionsScreen
 {
 	OptionsEditor editor;
 	std::size_t tab = 0;
+	int editing = -1;         // fila de texto que se está escribiendo (de la pestaña actual)
 	std::string message;
 	Button save{ { 150, 417, 67, 31 }, "Guardar" };
 	Button back{ { 233, 417, 67, 31 }, "Volver" };
@@ -224,6 +274,7 @@ struct OptionsScreen
 	SDL_FRect RowRect(std::size_t i) const { return { 14, kRowY + static_cast<float>(i) * kRowH, 422, kRowH - 2 }; }
 	SDL_FRect LeftArrow(std::size_t i) const { const SDL_FRect r = RowRect(i); return { 262, r.y, 20, r.h }; }
 	SDL_FRect RightArrow(std::size_t i) const { const SDL_FRect r = RowRect(i); return { 412, r.y, 20, r.h }; }
+	SDL_FRect TextBox(std::size_t i) const { const SDL_FRect r = RowRect(i); return { 262, r.y + 1, 170, r.h - 2 }; }
 	bool IsDownloads() const { return editor.Tabs()[tab].name == "Descargas"; }
 };
 
@@ -283,7 +334,8 @@ int main(int argc, char** argv)
 		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Launcher", SDL_GetError(), nullptr);
 		return 1;
 	}
-	SDL_Window* window = SDL_CreateWindow(config.title.c_str(), kWidth, kHeight, SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+	SDL_Window* window = SDL_CreateWindow(config.title.c_str(), kWidth, kHeight,
+	                                      SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
 	SDL_Renderer* renderer = window ? SDL_CreateRenderer(window, nullptr) : nullptr;
 	if (!renderer)
 	{
@@ -294,6 +346,9 @@ int main(int argc, char** argv)
 	SDL_SetRenderLogicalPresentation(renderer, kWidth, kHeight, SDL_LOGICAL_PRESENTATION_LETTERBOX);
 	SDL_SetRenderVSync(renderer, 1);
 	SDL_SetWindowHitTest(window, HitTest, nullptr);
+	int appliedScale = config.scale;
+	float fontScale = ApplyScale(window, renderer, appliedScale);
+	SDL_ShowWindow(window);
 
 	{
 		using namespace LauncherRes;
@@ -305,11 +360,7 @@ int main(int argc, char** argv)
 		ui.btnNormal = LoadPng(renderer, ButtonNormal, ButtonNormalSize);
 		ui.btnHover = LoadPng(renderer, ButtonHover, ButtonHoverSize);
 		ui.btnDisabled = LoadPng(renderer, ButtonDisabled, ButtonDisabledSize);
-		ui.title = std::make_unique<Font>(renderer, FontBold, FontBoldSize, 13.0f);
-		ui.label = std::make_unique<Font>(renderer, FontBold, FontBoldSize, 12.5f);
-		ui.regular = std::make_unique<Font>(renderer, FontRegular, FontRegularSize, 12.5f);
-		ui.tiny = std::make_unique<Font>(renderer, FontBold, FontBoldSize, 10.0f);
-		ui.notice = std::make_unique<Font>(renderer, FontRegular, FontRegularSize, 11.0f);
+		ui.MakeFonts(fontScale);
 
 		// Botones en la posición del original (panel en 96,412 + cada botón).
 		Button options{ { 110, 417, 67, 31 }, "Opciones" };
@@ -325,6 +376,24 @@ int main(int argc, char** argv)
 		std::string launchError;
 
 		std::unique_ptr<OptionsScreen> opts;
+		auto stopEditing = [&] {
+			if (opts && opts->editing >= 0) SDL_StopTextInput(window);
+			if (opts) opts->editing = -1;
+		};
+		auto startEditing = [&](int row) {
+			if (opts->editing == row) return;
+			stopEditing();
+			opts->editing = row;
+			const SDL_FRect box = opts->TextBox(static_cast<std::size_t>(row));
+			const SDL_Rect area{ static_cast<int>(box.x * g_WindowScale), static_cast<int>(box.y * g_WindowScale),
+			                     static_cast<int>(box.w * g_WindowScale), static_cast<int>(box.h * g_WindowScale) };
+			SDL_SetTextInputArea(window, &area, 0);
+			SDL_StartTextInput(window);
+		};
+		auto closeOptions = [&] {
+			stopEditing();
+			opts.reset();
+		};
 		auto openOptions = [&](std::size_t tab) {
 			opts = std::make_unique<OptionsScreen>();
 			if (!opts->editor.Load(iniPath, iniTemplate, tomlPath)) opts->message = "No se pudo leer Config.ini.";
@@ -371,9 +440,31 @@ int main(int argc, char** argv)
 			while (SDL_PollEvent(&e))
 			{
 				if (e.type == SDL_EVENT_QUIT || e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) running = false;
+				if (opts && opts->editing >= 0)
+				{
+					const std::size_t row = static_cast<std::size_t>(opts->editing);
+					if (e.type == SDL_EVENT_TEXT_INPUT)
+					{
+						opts->editor.SetText(opts->tab, row, opts->editor.Text(opts->tab, row) + e.text.text);
+						continue;
+					}
+					if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_BACKSPACE)
+					{
+						std::string t = opts->editor.Text(opts->tab, row);
+						if (!t.empty()) t.pop_back();
+						opts->editor.SetText(opts->tab, row, t);
+						continue;
+					}
+					if (e.type == SDL_EVENT_KEY_DOWN && (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER ||
+					                                     e.key.key == SDLK_ESCAPE || e.key.key == SDLK_TAB))
+					{
+						stopEditing();
+						continue;
+					}
+				}
 				if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE)
 				{
-					if (opts) opts.reset();
+					if (opts) closeOptions();
 					else running = false;
 					continue;
 				}
@@ -387,14 +478,25 @@ int main(int argc, char** argv)
 					if (opts)
 					{
 						const float x = e.button.x, y = e.button.y;
+						int textRow = -1;
 						for (std::size_t i = 0; i < opts->editor.Tabs().size(); ++i)
-							if (Inside(opts->TabRect(i), x, y)) opts->tab = i;
+							if (Inside(opts->TabRect(i), x, y) && i != opts->tab)
+							{
+								stopEditing();
+								opts->tab = i;
+							}
 						const auto& rows = opts->editor.Tabs()[opts->tab].rows;
 						for (std::size_t i = 0; i < rows.size(); ++i)
 						{
-							if (Inside(opts->LeftArrow(i), x, y)) opts->editor.Cycle(opts->tab, i, -1);
+							if (rows[i].text)
+							{
+								if (Inside(opts->RowRect(i), x, y)) textRow = static_cast<int>(i);
+							}
+							else if (Inside(opts->LeftArrow(i), x, y)) opts->editor.Cycle(opts->tab, i, -1);
 							else if (Inside(opts->RowRect(i), x, y) && x >= 262) opts->editor.Cycle(opts->tab, i, +1);
 						}
+						if (textRow >= 0) startEditing(textRow);
+						else stopEditing();
 					}
 				}
 				if (e.type == SDL_EVENT_MOUSE_WHEEL && opts)
@@ -419,7 +521,7 @@ int main(int argc, char** argv)
 					else if (clicked == &play && LaunchGame(root, config.gameExe, &launchError)) running = false;
 					else if (clicked == &options)
 						openOptions(0);
-					else if (opts && clicked == &opts->back) opts.reset();
+					else if (opts && clicked == &opts->back) closeOptions();
 					else if (opts && clicked == &opts->save)
 					{
 						bool downloadsChanged = false;
@@ -428,6 +530,16 @@ int main(int argc, char** argv)
 						else
 						{
 							opts->message = "Guardado. El juego lo usa la próxima vez que arranque.";
+							// El tamaño de la ventana se aplica en el momento.
+							std::vector<std::string> ignored;
+							const int scale = loadConfig(&ignored).scale;
+							if (scale != appliedScale)
+							{
+								appliedScale = scale;
+								config.scale = scale;
+								fontScale = ApplyScale(window, renderer, scale);
+								ui.MakeFonts(fontScale);
+							}
 							if (downloadsChanged)
 							{
 								// Lo que se baja cambió: se vuelve a planear.
@@ -445,7 +557,7 @@ int main(int argc, char** argv)
 						Config c = config;
 						c.fullVerify = true;
 						flow = startFlow(c);
-						opts.reset();
+						closeOptions();
 					}
 				}
 			}
@@ -520,6 +632,24 @@ int main(int argc, char** argv)
 					const SDL_FRect row = opts->RowRect(i);
 					if (i % 2) Fill(renderer, row, 232);
 					ui.regular->Draw(rows[i].label, row.x + 6, row.y + (row.h - ui.regular->Height()) / 2, kBlack);
+					if (rows[i].text)
+					{
+						const SDL_FRect box = opts->TextBox(i);
+						const bool editing = opts->editing == static_cast<int>(i);
+						Fill(renderer, box, 255);
+						DrawBevel(renderer, box);
+						const std::string t = opts->editor.Text(opts->tab, i);
+						ui.regular->Draw(t, box.x + 5, box.y + (box.h - ui.regular->Height()) / 2, kBlack);
+						if (editing && (SDL_GetTicks() / 500) % 2 == 0)
+						{
+							const float cx = box.x + 5 + ui.regular->Width(t) + 1;
+							SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+							SDL_RenderLine(renderer, cx, box.y + 3, cx, box.y + box.h - 4);
+						}
+						else if (t.empty() && !editing)
+							ui.notice->Draw("(ninguno)", box.x + 5, box.y + (box.h - ui.notice->Height()) / 2, kLightGray);
+						continue;
+					}
 					const int cur = opts->editor.Current(opts->tab, i);
 					const SDL_FRect value{ 282, row.y, 130, row.h };
 					ui.label->DrawCentered(rows[i].choices[static_cast<std::size_t>(cur)].label, value, kBlack);

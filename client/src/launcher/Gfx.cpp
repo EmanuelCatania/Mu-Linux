@@ -16,7 +16,6 @@ namespace {
 
 constexpr int kFirst = 32;
 constexpr int kCount = 224;     // U+0020..U+00FF
-constexpr int kAtlas = 512;
 
 const stbtt_bakedchar* Chars(const std::vector<unsigned char>& v)
 {
@@ -71,11 +70,15 @@ SDL_Texture* LoadPng(SDL_Renderer* renderer, const unsigned char* data, std::siz
 	return t;
 }
 
-Font::Font(SDL_Renderer* renderer, const unsigned char* ttf, std::size_t, float pixelHeight)
-	: m_Renderer(renderer), m_PixelHeight(pixelHeight), m_Chars(sizeof(stbtt_bakedchar) * kCount)
+Font::Font(SDL_Renderer* renderer, const unsigned char* ttf, std::size_t, float pixelHeight, float scale)
+	: m_Renderer(renderer), m_PixelHeight(pixelHeight), m_Scale(scale < 1.0f ? 1.0f : scale),
+	  m_Chars(sizeof(stbtt_bakedchar) * kCount)
 {
-	std::vector<unsigned char> gray(kAtlas * kAtlas);
-	if (stbtt_BakeFontBitmap(ttf, 0, pixelHeight, gray.data(), kAtlas, kAtlas, kFirst, kCount,
+	const float baked = pixelHeight * m_Scale;
+	m_Atlas = baked > 24.0f ? 1024 : 512;
+	const int kAtlas = m_Atlas;
+	std::vector<unsigned char> gray(static_cast<std::size_t>(kAtlas) * kAtlas);
+	if (stbtt_BakeFontBitmap(ttf, 0, baked, gray.data(), kAtlas, kAtlas, kFirst, kCount,
 	                         reinterpret_cast<stbtt_bakedchar*>(m_Chars.data())) <= 0)
 		return;
 	stbtt_fontinfo info;
@@ -83,9 +86,9 @@ Font::Font(SDL_Renderer* renderer, const unsigned char* ttf, std::size_t, float 
 	{
 		int ascent = 0, descent = 0, gap = 0;
 		stbtt_GetFontVMetrics(&info, &ascent, &descent, &gap);
-		m_Ascent = ascent * stbtt_ScaleForPixelHeight(&info, pixelHeight);
+		m_Ascent = ascent * stbtt_ScaleForPixelHeight(&info, baked);
 	}
-	std::vector<std::uint32_t> rgba(kAtlas * kAtlas);
+	std::vector<std::uint32_t> rgba(static_cast<std::size_t>(kAtlas) * kAtlas);
 	for (std::size_t i = 0; i < gray.size(); ++i) rgba[i] = (static_cast<std::uint32_t>(gray[i]) << 24) | 0x00FFFFFFu;
 	SDL_Surface* s = SDL_CreateSurfaceFrom(kAtlas, kAtlas, SDL_PIXELFORMAT_ARGB8888, rgba.data(), kAtlas * 4);
 	if (s)
@@ -105,7 +108,7 @@ float Font::Width(const std::string& utf8) const
 {
 	float w = 0;
 	for (std::uint32_t cp : DecodeUtf8(utf8)) w += Chars(m_Chars)[Glyph(cp)].xadvance;
-	return w;
+	return w / m_Scale;
 }
 
 void Font::Draw(const std::string& utf8, float x, float y, SDL_Color color) const
@@ -113,13 +116,15 @@ void Font::Draw(const std::string& utf8, float x, float y, SDL_Color color) cons
 	if (!m_Texture) return;
 	SDL_SetTextureColorMod(m_Texture, color.r, color.g, color.b);
 	SDL_SetTextureAlphaMod(m_Texture, color.a);
-	float px = x, py = y + m_Ascent;
+	// Se avanza en píxeles de la fuente rasterizada y se pasa a unidades lógicas.
+	const float a = static_cast<float>(m_Atlas);
+	float px = 0, py = m_Ascent;
 	for (std::uint32_t cp : DecodeUtf8(utf8))
 	{
 		stbtt_aligned_quad q;
-		stbtt_GetBakedQuad(Chars(m_Chars), kAtlas, kAtlas, Glyph(cp), &px, &py, &q, 1);
-		const SDL_FRect src{ q.s0 * kAtlas, q.t0 * kAtlas, (q.s1 - q.s0) * kAtlas, (q.t1 - q.t0) * kAtlas };
-		const SDL_FRect dst{ q.x0, q.y0, q.x1 - q.x0, q.y1 - q.y0 };
+		stbtt_GetBakedQuad(Chars(m_Chars), m_Atlas, m_Atlas, Glyph(cp), &px, &py, &q, 1);
+		const SDL_FRect src{ q.s0 * a, q.t0 * a, (q.s1 - q.s0) * a, (q.t1 - q.t0) * a };
+		const SDL_FRect dst{ x + q.x0 / m_Scale, y + q.y0 / m_Scale, (q.x1 - q.x0) / m_Scale, (q.y1 - q.y0) / m_Scale };
 		if (dst.w > 0 && dst.h > 0) SDL_RenderTexture(m_Renderer, m_Texture, &src, &dst);
 	}
 }

@@ -165,11 +165,9 @@ void UpdateFlow::Run()
 			wanted.push_back(w);
 		}
 	}
-	else
-	{
-		std::lock_guard<std::mutex> lock(m_Mutex);
-		m_Status.notices.push_back("Este launcher no tiene la clave de la base: sólo se actualizan los archivos del server.");
-	}
+	// Sin clave de la base el launcher sólo trae los archivos del server: es una
+	// configuración válida (el operador reparte el cliente entero) y no se avisa
+	// al jugador.  Sin nada para bajar, lo dice la línea de estado.
 	if (!m_Config.overlayUrl.empty())
 	{
 		Wanted w;

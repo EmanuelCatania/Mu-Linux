@@ -88,9 +88,40 @@ bool ParseInt(const std::string& s, long& out)
 
 } // namespace
 
+bool AllowedTextChar(char c)
+{
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+}
+
 std::vector<OptionTab> BuildOptionTabs()
 {
 	std::vector<OptionTab> tabs;
+
+	OptionTab general{ "General", {} };
+	{
+		// El cliente lo pone en el campo de usuario del login (CUserSettings).
+		OptionRow r;
+		r.label = "Usuario guardado";
+		r.section = "User";
+		r.key = "Username";
+		r.text = true;
+		r.maxLength = 10;
+		general.rows.push_back(r);
+	}
+	{
+		OptionRow r;
+		r.label = "Idioma del juego";
+		r.section = "Language";
+		r.key = "LangSelection";
+		r.numeric = false;
+		r.choices = { { "Original (0.97k)", "" }, { "English", Opt::kLanguageSuffixes[0] },
+		              { "Español", Opt::kLanguageSuffixes[1] }, { "Português", Opt::kLanguageSuffixes[2] } };
+		general.rows.push_back(r);
+	}
+	general.rows.push_back(LauncherRow("Tamaño del launcher", "Scale",
+	                                   { { "Automático", "0" }, { "100%", "100" }, { "125%", "125" }, { "150%", "150" },
+	                                     { "175%", "175" }, { "200%", "200" } }, 0));
+	tabs.push_back(general);
 
 	OptionTab screen{ "Pantalla", {} };
 	screen.rows.push_back(Toggle("Modo ventana", Opt::kWindowMode));
@@ -162,19 +193,6 @@ std::vector<OptionTab> BuildOptionTabs()
 	sound.rows.push_back(Numbers("Volumen de la música", Opt::kMusicLevel));
 	tabs.push_back(sound);
 
-	OptionTab lang{ "Idioma", {} };
-	{
-		OptionRow r;
-		r.label = "Idioma del juego";
-		r.section = "Language";
-		r.key = "LangSelection";
-		r.numeric = false;
-		r.choices = { { "Original (0.97k)", "" }, { "English", Opt::kLanguageSuffixes[0] },
-		              { "Español", Opt::kLanguageSuffixes[1] }, { "Português", Opt::kLanguageSuffixes[2] } };
-		lang.rows.push_back(r);
-	}
-	tabs.push_back(lang);
-
 	OptionTab text{ "Texto", {} };
 	text.rows.push_back(Toggle("Sombra del texto", Opt::kTextShadow));
 	text.rows.push_back(Toggle("Contorno del texto", Opt::kTextOutline));
@@ -222,7 +240,36 @@ bool OptionsEditor::Load(const std::string& configIni, const std::string& templa
 void OptionsEditor::Revert()
 {
 	m_Selected.assign(m_Tabs.size(), {});
-	for (std::size_t t = 0; t < m_Tabs.size(); ++t) m_Selected[t].assign(m_Tabs[t].rows.size(), -1);
+	m_Text.assign(m_Tabs.size(), {});
+	for (std::size_t t = 0; t < m_Tabs.size(); ++t)
+	{
+		m_Selected[t].assign(m_Tabs[t].rows.size(), -1);
+		m_Text[t].assign(m_Tabs[t].rows.size(), std::string());
+	}
+}
+
+std::string OptionsEditor::StoredText(const OptionRow& r) const
+{
+	const IniDocument& doc = r.file == OptionFile::Game ? m_Game : m_Toml;
+	std::string v;
+	doc.Get(r.section, r.key, v);
+	return v;
+}
+
+std::string OptionsEditor::Text(std::size_t tab, std::size_t row) const
+{
+	return m_Selected[tab][row] >= 0 ? m_Text[tab][row] : StoredText(m_Tabs[tab].rows[row]);
+}
+
+void OptionsEditor::SetText(std::size_t tab, std::size_t row, const std::string& value)
+{
+	const OptionRow& r = m_Tabs[tab].rows[row];
+	if (!r.text) return;
+	std::string clean;
+	for (char c : value)
+		if (AllowedTextChar(c) && clean.size() < r.maxLength) clean.push_back(c);
+	m_Text[tab][row] = clean;
+	m_Selected[tab][row] = clean == StoredText(r) ? -1 : 1;
 }
 
 int OptionsEditor::Stored(const OptionRow& r) const
@@ -252,20 +299,23 @@ int OptionsEditor::Stored(const OptionRow& r) const
 
 int OptionsEditor::Current(std::size_t tab, std::size_t row) const
 {
+	const OptionRow& r = m_Tabs[tab].rows[row];
+	if (r.text) return 0;
 	const int sel = m_Selected[tab][row];
-	return sel >= 0 ? sel : Stored(m_Tabs[tab].rows[row]);
+	return sel >= 0 ? sel : Stored(r);
 }
 
 void OptionsEditor::Select(std::size_t tab, std::size_t row, int index)
 {
 	const OptionRow& r = m_Tabs[tab].rows[row];
-	if (index < 0 || index >= static_cast<int>(r.choices.size())) return;
+	if (r.text || index < 0 || index >= static_cast<int>(r.choices.size())) return;
 	m_Selected[tab][row] = index == Stored(r) ? -1 : index;
 }
 
 void OptionsEditor::Cycle(std::size_t tab, std::size_t row, int direction)
 {
 	const int n = static_cast<int>(m_Tabs[tab].rows[row].choices.size());
+	if (n == 0) return;
 	Select(tab, row, ((Current(tab, row) + direction) % n + n) % n);
 }
 
@@ -287,7 +337,7 @@ bool OptionsEditor::Save(bool* downloadsChanged)
 			const int sel = m_Selected[t][r];
 			if (sel < 0) continue;
 			const OptionRow& row = m_Tabs[t].rows[r];
-			const std::string& value = row.choices[static_cast<std::size_t>(sel)].value;
+			const std::string& value = row.text ? m_Text[t][r] : row.choices[static_cast<std::size_t>(sel)].value;
 			if (row.file == OptionFile::Game)
 			{
 				game |= m_Game.Set(row.section, row.key, value);
@@ -302,7 +352,7 @@ bool OptionsEditor::Save(bool* downloadsChanged)
 			else
 			{
 				toml |= m_Toml.Set("", row.key, value);
-				if (downloadsChanged) *downloadsChanged = true;
+				if (downloadsChanged && row.key != "Scale") *downloadsChanged = true;
 			}
 		}
 	bool ok = true;

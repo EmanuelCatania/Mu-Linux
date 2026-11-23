@@ -570,6 +570,28 @@ void TestOptions(const std::string& dir)
 	Require(find("RenderBackend", t, r) && !ed2.Tabs()[t].rows[r].numeric, "opciones: backend por nombre");
 	Require(find("DeleteGlow", t, r) && ed2.Tabs()[t].rows[r].section == "Antilag", "opciones: antilag de la tabla");
 	Require(find("LangSelection", t, r) && ed2.Tabs()[t].rows[r].choices.size() == 4, "opciones: idiomas");
+	Require(ed2.Tabs()[0].name == "General", "opciones: General es la primera pestaña");
+
+	// Usuario guardado: texto libre, sólo letras y números, hasta 10.
+	Launcher::OptionsEditor ed4;
+	Require(ed4.Load(ini, tmpl, toml) && find("Username", t, r) && ed4.Tabs()[t].rows[r].text, "opciones: fila de usuario");
+	Require(ed4.Text(t, r).empty(), "opciones: sin usuario guardado");
+	ed4.SetText(t, r, "mi cuenta;123456789");
+	Require(ed4.Text(t, r) == "micuenta12", "opciones: usuario filtrado y cortado en 10");
+	ed4.SetText(t, r, "");
+	Require(!ed4.Dirty(), "opciones: borrar lo escrito no es un cambio");
+	ed4.SetText(t, r, "emanuel");
+	std::size_t st = 0, sr = 0;
+	Require(find("Scale", st, sr), "opciones: fila de tamaño");
+	ed4.Select(st, sr, 3);
+	Require(ed4.Save(&dl) && !dl, "opciones: usuario y tamaño no cambian las descargas");
+	Require(ReadWholeFile(ini, out) && out.find("[User]\nUsername=emanuel\n") != std::string::npos, "opciones: usuario en [User]");
+	Require(ReadWholeFile(toml, out) && out.find("Scale = 150\n") != std::string::npos, "opciones: tamaño en launcher.toml");
+	Launcher::Config c;
+	Launcher::ApplyLauncherToml(toml, c, nullptr);
+	Require(c.scale == 150, "launcher.toml: Scale");
+	Launcher::OptionsEditor ed5;
+	Require(ed5.Load(ini, tmpl, toml) && ed5.Text(t, r) == "emanuel" && ed5.Current(st, sr) == 3, "opciones: relee usuario y tamaño");
 }
 
 // Un ejecutable mínimo de la plataforma donde corre la prueba (mu-patch lo
