@@ -13,6 +13,7 @@
 #include <functional>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace Update {
 
@@ -28,6 +29,10 @@ public:
 	// desde varios hilos a la vez.
 	virtual bool Fetch(const std::string& url, std::uint64_t offset, std::uint64_t length,
 	                   const DataSink& sink, std::string* error) = 0;
+	// Baja un archivo entero (manifiestos, firmas).  false si no existe, si
+	// falla o si pasa de maxSize.
+	virtual bool Get(const std::string& url, std::uint64_t maxSize, std::vector<std::uint8_t>& out,
+	                 std::string* error) = 0;
 };
 
 // Rutas locales y URLs file:// ("file:///C:/mu/x.zip", "file:///home/x.zip").
@@ -36,6 +41,8 @@ class FileTransport : public Transport
 public:
 	bool Fetch(const std::string& url, std::uint64_t offset, std::uint64_t length,
 	           const DataSink& sink, std::string* error) override;
+	bool Get(const std::string& url, std::uint64_t maxSize, std::vector<std::uint8_t>& out,
+	         std::string* error) override;
 };
 
 // "file:///C:/a" -> "C:/a", "file:///a" -> "/a"; vacío si no es una URL file://.

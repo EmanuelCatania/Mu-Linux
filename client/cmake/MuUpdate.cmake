@@ -47,6 +47,8 @@ add_library(mu_update_core STATIC
     "${_mu_update_dir}/Transfer.h"
     "${_mu_update_dir}/Installer.cpp"
     "${_mu_update_dir}/Installer.h"
+    "${_mu_update_dir}/ChannelFetch.cpp"
+    "${_mu_update_dir}/ChannelFetch.h"
     "${MU_CLIENT_SOURCE_DIR}/src/net/crypto/monocypher.c")
 target_include_directories(mu_update_core PUBLIC "${MU_CLIENT_SOURCE_DIR}/src"
     PRIVATE "${mu_zstd_SOURCE_DIR}/lib")
