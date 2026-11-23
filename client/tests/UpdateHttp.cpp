@@ -572,16 +572,27 @@ void TestOptions(const std::string& dir)
 	Require(find("LangSelection", t, r) && ed2.Tabs()[t].rows[r].choices.size() == 4, "opciones: idiomas");
 }
 
-// Un ejecutable PE mínimo (mu-patch lo reconoce como windows-x64).
+// Un ejecutable mínimo de la plataforma donde corre la prueba (mu-patch lo
+// reconoce como windows-x64 o linux-x64): el launcher filtra los de otra.
 std::vector<std::uint8_t> FakePe(unsigned seed)
 {
 	std::vector<std::uint8_t> d(0x200, 0);
+#ifdef _WIN32
 	d[0] = 'M';
 	d[1] = 'Z';
 	d[0x3C] = 0x40;
 	std::memcpy(&d[0x40], "PE\0\0", 4);
 	d[0x44] = 0x64;
 	d[0x45] = 0x86;
+#else
+	d[0] = 0x7F;
+	d[1] = 'E';
+	d[2] = 'L';
+	d[3] = 'F';
+	d[4] = 2;     // 64 bits
+	d[5] = 1;     // little endian
+	d[18] = 62;   // x86-64
+#endif
 	const auto tail = Random(64, seed);
 	d.insert(d.end(), tail.begin(), tail.end());
 	return d;
