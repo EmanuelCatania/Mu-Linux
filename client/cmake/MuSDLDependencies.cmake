@@ -26,8 +26,13 @@ set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "" FORCE)
 set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
+# Savannah se cae seguido (2026-11-23: 504 y descargas colgadas); el de
+# SourceForge es el espejo oficial de FreeType y el hash es el mismo.  Sin
+# INACTIVITY_TIMEOUT una descarga colgada no pasa nunca a la siguiente URL.
 FetchContent_Declare(mu_freetype
     URL https://download.savannah.gnu.org/releases/freetype/freetype-2.14.1.tar.gz
+        https://downloads.sourceforge.net/project/freetype/freetype2/2.14.1/freetype-2.14.1.tar.gz
+    INACTIVITY_TIMEOUT 60
     URL_HASH SHA256=174d9e53402e1bf9ec7277e22ec199ba3e55a6be2c0740cb18c0ee9850fc8c34)
 FetchContent_MakeAvailable(mu_freetype)
 
