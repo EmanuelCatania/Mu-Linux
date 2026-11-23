@@ -36,6 +36,14 @@ struct PMSG_CONTENT_FILE_RECV
 	DWORD offset;
 };
 
+// Configuración del launcher (Data/Patches/published/launcher.json, la arma y la
+// firma mu-patch).  El launcher la pide de a pedazos desde `offset`.
+struct PMSG_LAUNCHER_CONFIG_RECV
+{
+	PSBMSG_HEAD header; // C1:F4:14
+	DWORD offset;
+};
+
 #pragma pack(pop)
 
 //**********************************************//
@@ -88,6 +96,7 @@ enum eContentResult
 	CONTENT_NOT_SECURE = 1,   // la conexión no tiene canal cifrado: no se reparte nada
 	CONTENT_CHANGED = 2,      // el manifiesto cambió: hay que volver a pedirlo
 	CONTENT_BAD_REQUEST = 3,  // índice u offset fuera de rango
+	CONTENT_NOT_FOUND = 4,    // (F4:15) el server no publica launcher.json
 };
 
 // Seguido de `count` entradas: BYTE largo de la ruta, la ruta (sin el cero
@@ -114,6 +123,18 @@ struct PMSG_CONTENT_FILE_SEND
 	WORD length;
 };
 
+// Seguido de `length` bytes desde `offset` de: la firma (64 bytes, contexto
+// MuLauncher1) y después launcher.json tal cual.  El ConnectServer no lo
+// interpreta: el launcher verifica la firma con la identidad del server.
+struct PMSG_LAUNCHER_CONFIG_SEND
+{
+	PSWMSG_HEAD header; // C2:F4:15
+	BYTE result;
+	DWORD size;         // firma + archivo
+	DWORD offset;
+	WORD length;
+};
+
 #pragma pack(pop)
 
 // Los mismos tamaños que en el cliente (net/Protocol/ConnectServerProtocol.h).
@@ -121,9 +142,14 @@ static_assert(sizeof(PMSG_CONTENT_MANIFEST_RECV) == 10, "F4:10");
 static_assert(sizeof(PMSG_CONTENT_MANIFEST_SEND) == 15, "F4:11");
 static_assert(sizeof(PMSG_CONTENT_FILE_RECV) == 14, "F4:12");
 static_assert(sizeof(PMSG_CONTENT_FILE_SEND) == 22, "F4:13");
+static_assert(sizeof(PMSG_LAUNCHER_CONFIG_RECV) == 8, "F4:14");
+static_assert(sizeof(PMSG_LAUNCHER_CONFIG_SEND) == 16, "F4:15");
 
 // Bytes de archivo por paquete: entra con el encabezado en MAX_PACKET_SIZE.
 #define CONTENT_FILE_CHUNK 2000
+
+// Tope de launcher.json (el mismo que Update::kAnnounceMaxSize del launcher).
+#define LAUNCHER_CONFIG_MAX_SIZE (16 * 1024)
 
 //**********************************************//
 //**********************************************//
@@ -142,3 +168,5 @@ void CCServerInitSend(int index, int result);
 void CCContentManifestRecv(PMSG_CONTENT_MANIFEST_RECV* lpMsg, int size, int index);
 
 void CCContentFileRecv(PMSG_CONTENT_FILE_RECV* lpMsg, int size, int index);
+
+void CCLauncherConfigRecv(PMSG_LAUNCHER_CONFIG_RECV* lpMsg, int size, int index);

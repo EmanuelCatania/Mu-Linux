@@ -7,6 +7,7 @@
 #include "PatchBuilder.h"
 #include "Publish.h"
 
+#include "update/Announce.h"
 #include "update/ChannelFetch.h"
 #include "update/Delta.h"
 #include "update/FileUtil.h"
@@ -1043,6 +1044,72 @@ void TestPublish(const std::string& dir)
 	k.Wipe();
 }
 
+void TestAnnounce(const std::string& dir)
+{
+	std::string host;
+	std::uint16_t port = 0;
+	Require(ParseHostPort("mu.ejemplo.com:44405", &host, &port) && host == "mu.ejemplo.com" && port == 44405, "host:puerto");
+	Require(!ParseHostPort("mu.ejemplo.com", nullptr, nullptr) && !ParseHostPort("x:0", nullptr, nullptr) &&
+	            !ParseHostPort("x:70000", nullptr, nullptr) && !ParseHostPort("a b:1", nullptr, nullptr) &&
+	            !ParseHostPort(":1", nullptr, nullptr),
+	        "host:puerto inválidos");
+
+	Announce a;
+	a.sequence = 4;
+	a.connectServers = { "mu.ejemplo.com:44405", "10.0.0.2:44405" };
+	a.patchChannel = "miserver/overlay";
+	a.patchUrls = { "https://mu.ejemplo.com/updates" };
+	a.baseSource = "dueno/repo";
+	a.baseTag = "0.97.50";
+	a.news = "Mantenimiento el lunes.\nVuelve \"pronto\".";
+	Announce b;
+	std::string err;
+	Require(ParseAnnounce(DumpAnnounce(a), b, &err) && b.sequence == 4 && SameAnnounceContent(a, b), "launcher.json: ida y vuelta");
+	Require(ParseAnnounce("{\"format\":1,\"sequence\":1,\"nuevo\":true}", b, &err) && b.connectServers.empty(),
+	        "launcher.json: un campo desconocido se ignora");
+	Require(!ParseAnnounce("{\"format\":2,\"sequence\":1}", b, &err), "launcher.json: formato desconocido");
+	Require(!ParseAnnounce("{\"format\":1}", b, &err), "launcher.json: sin secuencia");
+	Require(!ParseAnnounce("{\"format\":1,\"sequence\":1,\"connectServers\":[\"sin-puerto\"]}", b, &err),
+	        "launcher.json: dirección inválida");
+	Require(!ParseAnnounce("{\"format\":1,\"sequence\":1,\"patches\":{\"urls\":[\"ftp://x\"]}}", b, &err),
+	        "launcher.json: url inválida");
+	Require(!ParseAnnounce("{\"format\":1,\"sequence\":1,\"news\":\"a\\u0007b\"}", b, &err), "launcher.json: control en news");
+	Require(!ParseAnnounce(std::string(kAnnounceMaxSize + 1, ' '), b, &err), "launcher.json: tope de tamaño");
+
+	// Publicar: secuencia 1, sin cambios no reescribe, un cambio sube la
+	// secuencia, y con otra clave (rotación) la secuencia sigue.
+	KeyPair k1, k2;
+	Require(GenerateKey(k1) && GenerateKey(k2), "claves launcher.json");
+	const std::string key = JoinPath(dir, "announce.key");
+	Require(SaveKeyFile(key, k1), "guardar clave launcher.json");
+	MuPatch::AnnounceOptions o;
+	o.out = JoinPath(dir, "announce");
+	o.keyPath = key;
+	o.content = a;
+	bool wrote = false;
+	Require(MuPatch::PublishAnnounce(o, &wrote, &err) && wrote, "launcher.json: publicar");
+	auto load = [&](Announce& m, const KeyPair& k) {
+		std::string text, sigText;
+		std::uint8_t sig[kSignatureSize];
+		return ReadWholeFile(JoinPath(o.out, "launcher.json"), text) && ReadWholeFile(JoinPath(o.out, "launcher.json.sig"), sigText) &&
+		       ParseSignatureFile(sigText, sig) && Verify(kLauncherContext, text.data(), text.size(), sig, k.publicKey) &&
+		       !Verify(kPatchContext, text.data(), text.size(), sig, k.publicKey) && ParseAnnounce(text, m, nullptr);
+	};
+	Announce got;
+	Require(load(got, k1) && got.sequence == 1 && SameAnnounceContent(got, a), "launcher.json: firmado con MuLauncher1");
+	Require(MuPatch::PublishAnnounce(o, &wrote, &err) && !wrote, "launcher.json: sin cambios no se reescribe");
+	o.content.news = "Otra noticia";
+	Require(MuPatch::PublishAnnounce(o, &wrote, &err) && wrote && load(got, k1) && got.sequence == 2, "launcher.json: un cambio sube la secuencia");
+	Require(SaveKeyFile(key, k2), "rotar clave launcher.json");
+	Require(MuPatch::PublishAnnounce(o, &wrote, &err) && wrote && load(got, k2) && got.sequence == 3,
+	        "launcher.json: con la clave nueva se vuelve a firmar y la secuencia sigue");
+	o.content.connectServers = { "sin-puerto" };
+	Require(!MuPatch::PublishAnnounce(o, &wrote, &err) && load(got, k2) && got.sequence == 3,
+	        "launcher.json: un valor inválido no publica");
+	k1.Wipe();
+	k2.Wipe();
+}
+
 } // namespace
 
 int main()
@@ -1065,6 +1132,7 @@ int main()
 	TestChannelFetch(d);
 	TestDeflate(d);
 	TestPublish(d);
+	TestAnnounce(d);
 
 	std::error_code ec;
 	fs::remove_all(dir, ec);

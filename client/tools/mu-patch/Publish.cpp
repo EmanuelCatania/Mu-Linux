@@ -1,5 +1,6 @@
 #include "Publish.h"
 
+#include "update/Announce.h"
 #include "update/FileUtil.h"
 #include "update/Hash.h"
 #include "update/Manifest.h"
@@ -309,6 +310,53 @@ bool PublishPatches(const PublishOptions& o, bool* published, std::string* error
 			RemoveFile(JoinPath(out, rel));
 			Say(o.log, "borrado " + rel + " (ya no lo usa ninguna versión)");
 		}
+	return true;
+}
+
+bool PublishAnnounce(const AnnounceOptions& o, bool* published, std::string* error)
+{
+	if (published) *published = false;
+	if (o.out.empty() || o.keyPath.empty()) return Fail(error, "faltan la carpeta o la clave del launcher.json");
+	KeyPair key;
+	if (!LoadKeyFile(o.keyPath, key, error)) return false;
+
+	const std::string path = JoinPath(o.out, "launcher.json");
+	const std::string sigPath = path + ".sig";
+	Announce current;
+	bool haveCurrent = false, signedOk = false;
+	std::string text, sigText;
+	if (ReadWholeFile(path, text) && ParseAnnounce(text, current, nullptr))
+	{
+		haveCurrent = true;
+		std::uint8_t sig[kSignatureSize];
+		signedOk = ReadWholeFile(sigPath, sigText) && ParseSignatureFile(sigText, sig) &&
+		           Verify(kLauncherContext, text.data(), text.size(), sig, key.publicKey);
+	}
+	if (signedOk && SameAnnounceContent(current, o.content))
+	{
+		key.Wipe();
+		return true;
+	}
+
+	Announce next = o.content;
+	next.sequence = haveCurrent ? current.sequence + 1 : 1;
+	const std::string json = DumpAnnounce(next);
+	Announce check;
+	std::string why;
+	if (!ParseAnnounce(json, check, &why))
+	{
+		key.Wipe();
+		return Fail(error, "launcher.json no válido: " + why);
+	}
+	std::uint8_t sig[kSignatureSize];
+	Sign(kLauncherContext, json.data(), json.size(), key, sig);
+	key.Wipe();
+	const std::string sigFile = FormatSignatureFile(sig);
+	if (!MakeDirs(o.out) || !WriteFileAtomic(path, json.data(), json.size()) ||
+	    !WriteFileAtomic(sigPath, sigFile.data(), sigFile.size()))
+		return Fail(error, "no se puede escribir " + path);
+	if (published) *published = true;
+	Say(o.log, "launcher.json publicado (secuencia " + std::to_string(next.sequence) + ")");
 	return true;
 }
 

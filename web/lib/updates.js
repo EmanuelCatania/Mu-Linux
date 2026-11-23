@@ -4,7 +4,8 @@
 //
 // mu-server los publica en Data/Patches/published (mu-patch watch) y mu-web los
 // sirve en /updates/ desde un volumen montado de sólo lectura.  Sólo se sirven
-// el manifiesto, su firma y los zips de esa carpeta: nunca una carpeta de
+// el manifiesto, launcher.json (la configuración del server para el launcher),
+// sus firmas y los zips de esa carpeta: nunca una carpeta de
 // parche del admin a medio subir, ni history/, ni nada más.
 //
 // - Range: express.static responde un rango por pedido (206).  A un pedido con
@@ -16,7 +17,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 
-const ALLOWED = /^(manifest\.json|manifest\.json\.sig|[A-Za-z0-9][A-Za-z0-9._-]*\.zip)$/;
+const ALLOWED = /^((manifest|launcher)\.json|(manifest|launcher)\.json\.sig|[A-Za-z0-9][A-Za-z0-9._-]*\.zip)$/;
 
 function updatesRouter(dir, { perMinute = 120 } = {}) {
   const router = express.Router();

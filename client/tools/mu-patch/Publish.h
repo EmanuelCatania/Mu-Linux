@@ -27,6 +27,8 @@
 
 #include "PatchBuilder.h"
 
+#include "update/Announce.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -48,6 +50,21 @@ struct PublishOptions
 
 // *published: true si salió una versión nueva.
 bool PublishPatches(const PublishOptions& options, bool* published, std::string* error);
+
+// launcher.json (update/Announce.h): la configuración del server para el
+// launcher, firmada con la misma identidad.  Va en la misma carpeta que el
+// manifiesto (la sirven mu-web y el ConnectServer).
+struct AnnounceOptions
+{
+	std::string out;              // <patches>/published
+	std::string keyPath;
+	Update::Announce content;     // la secuencia la pone PublishAnnounce
+	Log log;
+};
+
+// Publica sólo si cambió algo; la secuencia sigue a la del archivo anterior,
+// aunque esté firmado con una clave que ya rotó.  *published: true si escribió.
+bool PublishAnnounce(const AnnounceOptions& options, bool* published, std::string* error);
 
 // Nombre de carpeta de parche válido; *order queda con una clave ordenable.
 bool ParsePatchFolder(const std::string& name, std::uint64_t* order);

@@ -6,6 +6,10 @@
 #include "ServerList.h"
 #include "SocketManager.h"
 #include "Util.h"
+#include <algorithm>
+#include <fstream>
+#include <iterator>
+#include <vector>
 
 void ConnectServerProtocolCore(int index, BYTE head, BYTE* lpMsg, int size)
 {
@@ -45,6 +49,13 @@ void ConnectServerProtocolCore(int index, BYTE head, BYTE* lpMsg, int size)
 				case 0x12:
 				{
 					CCContentFileRecv((PMSG_CONTENT_FILE_RECV*)lpMsg, size, index);
+
+					break;
+				}
+
+				case 0x14:
+				{
+					CCLauncherConfigRecv((PMSG_LAUNCHER_CONFIG_RECV*)lpMsg, size, index);
 
 					break;
 				}
@@ -243,6 +254,115 @@ void CCContentFileRecv(PMSG_CONTENT_FILE_RECV* lpMsg, int size, int index)
 	const int total = (int)sizeof(pMsg) + length;
 
 	pMsg.header.set(0xF4, 0x13, (WORD)total);
+
+	memcpy(send, &pMsg, sizeof(pMsg));
+
+	gSocketManager.DataSend(index, send, total);
+}
+
+// launcher.json y su firma, como los dejó mu-patch.  Se leen en cada pedido:
+// son unos pocos KB y el launcher los pide una vez por arranque.
+static bool ReadLauncherConfig(std::vector<BYTE>& out)
+{
+	const std::string path = GetDataPath() + "Patches/published/launcher.json";
+
+	std::ifstream json(path, std::ios::binary);
+
+	std::ifstream sig(path + ".sig", std::ios::binary);
+
+	if (!json || !sig)
+	{
+		return false;
+	}
+
+	const std::string text((std::istreambuf_iterator<char>(json)), std::istreambuf_iterator<char>());
+
+	const std::string sigText((std::istreambuf_iterator<char>(sig)), std::istreambuf_iterator<char>());
+
+	// La firma va en hex en el .sig; acá viaja en binario.
+	out.assign(64, 0);
+
+	int digits = 0;
+
+	for (char c : sigText)
+	{
+		int v = -1;
+
+		if (c >= '0' && c <= '9') v = c - '0';
+		else if (c >= 'a' && c <= 'f') v = c - 'a' + 10;
+		else if (c >= 'A' && c <= 'F') v = c - 'A' + 10;
+		else if (c == '\r' || c == '\n' || c == ' ') continue;
+		else return false;
+
+		if (digits >= 128)
+		{
+			return false;
+		}
+
+		out[digits / 2] = (BYTE)((out[digits / 2] << 4) | v);
+
+		digits++;
+	}
+
+	if (digits != 128 || text.empty() || text.size() > LAUNCHER_CONFIG_MAX_SIZE)
+	{
+		return false;
+	}
+
+	out.insert(out.end(), text.begin(), text.end());
+
+	return true;
+}
+
+void CCLauncherConfigRecv(PMSG_LAUNCHER_CONFIG_RECV* lpMsg, int size, int index)
+{
+	if (size < (int)sizeof(PMSG_LAUNCHER_CONFIG_RECV))
+	{
+		return;
+	}
+
+	BYTE send[sizeof(PMSG_LAUNCHER_CONFIG_SEND) + CONTENT_FILE_CHUNK];
+
+	PMSG_LAUNCHER_CONFIG_SEND pMsg;
+
+	memset(&pMsg, 0, sizeof(pMsg));
+
+	pMsg.offset = lpMsg->offset;
+
+	int length = 0;
+
+	std::vector<BYTE> blob;
+
+	if (gSecureLink.IsSecure(index) == false)
+	{
+		pMsg.result = CONTENT_NOT_SECURE;
+	}
+	else if (ReadLauncherConfig(blob) == false)
+	{
+		pMsg.result = CONTENT_NOT_FOUND;
+	}
+	else if (lpMsg->offset > blob.size())
+	{
+		pMsg.result = CONTENT_BAD_REQUEST;
+
+		pMsg.size = (DWORD)blob.size();
+	}
+	else
+	{
+		pMsg.result = CONTENT_OK;
+
+		pMsg.size = (DWORD)blob.size();
+
+		length = (int)std::min<size_t>(blob.size() - lpMsg->offset, CONTENT_FILE_CHUNK);
+
+		memcpy(&send[sizeof(pMsg)], blob.data() + lpMsg->offset, length);
+	}
+
+	pMsg.length = (WORD)length;
+
+	const int total = (int)sizeof(pMsg) + length;
+
+	pMsg.header.set(0xF4, 0x15, (WORD)total);
 
 	memcpy(send, &pMsg, sizeof(pMsg));
 
