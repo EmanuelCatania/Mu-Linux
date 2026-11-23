@@ -50,10 +50,16 @@
 #include "app/config/Config.h"
 #include "net/MuEmu.h"
 #include "app/config/ServerConfig.h"
+#include "app/config/Release.h"
 #include "app/config/UserSettings.h"
 #include "audio/SoundManager.h"
 
 extern "C" void DbgLogPublic(const char* msg);
+
+// Marca de versión que lee mu-patch (ver app/config/Release.h).
+namespace ClientRelease {
+extern const char kMarker[] = "MuRelease1:" MU_RELEASE;
+}
 
 // Globals set by Config_Load
 //
@@ -278,10 +284,11 @@ int Config_ReadServerAddr(void* pConfig, char* lpCmdLine, char* outIP, unsigned 
 
 
     char line[256];
-    Platform::TextFormat(line, "ServerConfig: %s=%s:%u GameServer=%s:%u version='%s'",
+    Platform::TextFormat(line, "ServerConfig: %s=%s:%u GameServer=%s:%u version='%s' release=%s",
               gNetwork.HasConnectServer() ? "ConnectServer" : "GameServer(directo)",
               outIP, (unsigned)*outPort,
-              ServerConfig::GameServerIP, (unsigned)ServerConfig::GameServerPort, v5);
+              ServerConfig::GameServerIP, (unsigned)ServerConfig::GameServerPort, v5,
+              ClientRelease::Version());
     DbgLogPublic(line);
     return 1;
 }

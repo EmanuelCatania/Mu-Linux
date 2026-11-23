@@ -444,6 +444,7 @@ set(MU_HEADERS
     src/ghidra_compat.h
     src/types.h
     src/app/config/Config.h
+    src/app/config/Release.h
     src/app/config/ServerConfig.h
     src/app/config/UserSettings.h
     src/game/entity/CharacterVisual_Models.h
@@ -679,6 +680,18 @@ target_include_directories(mu97k PRIVATE
 # Modo benchmark (src/app/debug/Benchmark.h): siempre en Debug; en Release sólo si
 # se configura con -DMU_BENCHMARK=ON.  Las Releases publicadas no lo traen.
 option(MU_BENCHMARK "Incluir el modo benchmark tambien en Release" OFF)
+
+# Versión del cliente (src/app/config/Release.h): se puede fijar desde el tag con
+# -DMU_RELEASE=<versión>.  Vacía: la escrita en Release.h.  Sólo la usa
+# Config_Load.cpp, así que no hace falta recompilar el resto.
+set(MU_RELEASE "" CACHE STRING "Versión del cliente (tag de la Release)")
+if(MU_RELEASE)
+    if(NOT MU_RELEASE MATCHES "^[0-9]+([.][0-9]+)+$")
+        message(FATAL_ERROR "MU_RELEASE no válida: ${MU_RELEASE} (ej. 0.97.50)")
+    endif()
+    set_property(SOURCE src/app/config/Config_Load.cpp APPEND PROPERTY
+        COMPILE_DEFINITIONS "MU_RELEASE=\"${MU_RELEASE}\"")
+endif()
 
 if(MSVC)
 # CharacterSet=MultiByte -> _MBCS. NO se define UNICODE/_UNICODE.
@@ -947,3 +960,13 @@ add_executable(mu_panel_anchor_test EXCLUDE_FROM_ALL tests/PanelAnchor.cpp)
 target_include_directories(mu_panel_anchor_test PRIVATE src)
 target_compile_features(mu_panel_anchor_test PRIVATE cxx_std_17)
 add_test(NAME panel_anchor COMMAND mu_panel_anchor_test)
+
+# Fase 5, launcher: núcleo del actualizador y mu-patch (tools/mu-patch).
+set(MU_CLIENT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+add_subdirectory(tools/mu-patch EXCLUDE_FROM_ALL)
+add_executable(mu_update_test EXCLUDE_FROM_ALL tests/Update.cpp)
+target_link_libraries(mu_update_test PRIVATE mu_patch_core)
+if(MSVC)
+    target_compile_options(mu_update_test PRIVATE /utf-8 /EHsc)
+endif()
+add_test(NAME update COMMAND mu_update_test)
