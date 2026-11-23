@@ -132,6 +132,7 @@
     <ClInclude Include="src\ghidra_compat.h" />
     <ClInclude Include="src\types.h" />
     <ClInclude Include="src\app\config\Config.h" />
+    <ClInclude Include="src\app\config\Release.h" />
     <ClInclude Include="src\app\config\ServerConfig.h" />
     <ClInclude Include="src\app\config\UserSettings.h" />
     <ClInclude Include="src\game\entity\CharacterVisual_Models.h" />

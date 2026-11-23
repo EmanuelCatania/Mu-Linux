@@ -444,6 +444,7 @@ set(MU_HEADERS
     src/ghidra_compat.h
     src/types.h
     src/app/config/Config.h
+    src/app/config/Release.h
     src/app/config/ServerConfig.h
     src/app/config/UserSettings.h
     src/game/entity/CharacterVisual_Models.h
@@ -679,6 +680,18 @@ target_include_directories(mu97k PRIVATE
 # Modo benchmark (src/app/debug/Benchmark.h): siempre en Debug; en Release sólo si
 # se configura con -DMU_BENCHMARK=ON.  Las Releases publicadas no lo traen.
 option(MU_BENCHMARK "Incluir el modo benchmark tambien en Release" OFF)
+
+# Versión del cliente (src/app/config/Release.h): se puede fijar desde el tag con
+# -DMU_RELEASE=<versión>.  Vacía: la escrita en Release.h.  Sólo la usa
+# Config_Load.cpp, así que no hace falta recompilar el resto.
+set(MU_RELEASE "" CACHE STRING "Versión del cliente (tag de la Release)")
+if(MU_RELEASE)
+    if(NOT MU_RELEASE MATCHES "^[0-9]+([.][0-9]+)+$")
+        message(FATAL_ERROR "MU_RELEASE no válida: ${MU_RELEASE} (ej. 0.97.50)")
+    endif()
+    set_property(SOURCE src/app/config/Config_Load.cpp APPEND PROPERTY
+        COMPILE_DEFINITIONS "MU_RELEASE=\"${MU_RELEASE}\"")
+endif()
 
 if(MSVC)
 # CharacterSet=MultiByte -> _MBCS. NO se define UNICODE/_UNICODE.
