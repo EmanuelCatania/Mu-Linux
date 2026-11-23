@@ -7,6 +7,8 @@
 #include "update/Installer.h"
 #include "update/Signing.h"
 
+#include "SelfUpdate.h"
+
 #include <cstdio>
 #include <cstring>
 
@@ -225,15 +227,57 @@ void UpdateFlow::Run()
 	PlanOptions po;
 	po.root = m_Root;
 	po.platform = kPlatform;
-	po.includeSelf = false;
 	po.fullVerify = m_Config.fullVerify;
 	Plan plan;
 	if (!BuildPlan(sources, po, index, plan, &err)) return finish(Phase::Failed, err, false);
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);
-		m_Status.newLauncher = plan.selfUpdate;
 		m_Status.total = plan.downloadBytes;
 	}
+
+	// ── El launcher primero ───────────────────────────────────────────────
+	bool ownUpdate = false;
+	const SelfPaths self = SelfPathsFor(JoinPath(m_Root, m_Config.selfPath), cache);
+	Digest blocked{};
+	const bool haveBlocked = !m_Config.selfPath.empty() && BlockedVersion(self, blocked);
+	for (const PlanFile& f : plan.files)
+	{
+		if (!f.entry->self || m_Config.selfPath.empty() || f.entry->path != m_Config.selfPath) continue;
+		if (haveBlocked && f.entry->hash == blocked)
+		{
+			// Esa versión ya no arrancó una vez: se sigue con ésta (y no se la
+			// instala junto con el resto, que la pisaría sin reiniciar).
+			{
+				std::lock_guard<std::mutex> lock(m_Mutex);
+				m_Status.notices.push_back("La versión nueva del launcher no arranca en este equipo; se sigue con la actual.");
+			}
+			po.includeSelf = false;
+			if (!BuildPlan(sources, po, index, plan, &err)) return finish(Phase::Failed, err, false);
+			break;
+		}
+		ownUpdate = true;
+	}
+	if (ownUpdate)
+	{
+		Set(Phase::Downloading, "Actualizando el launcher...");
+		InstallOptions so;
+		so.root = m_Root;
+		so.downloadDir = JoinPath(cache, "downloads");
+		so.indexPath = indexPath;
+		so.transport = m_Transport.get();
+		so.limiter = &m_Limiter;
+		so.cancel = &m_Cancel;
+		so.selfOnly = true;
+		InstallResult sr;
+		if (!RunPlan(sources, plan, index, so, sr))
+			return finish(installed ? Phase::Offline : Phase::Failed,
+			              "No se pudo actualizar el launcher: " + (sr.failures.empty() ? std::string("cancelado") : sr.failures.front()),
+			              installed);
+		if (!MarkPending(SelfPathsFor(JoinPath(m_Root, m_Config.selfPath), cache)))
+			return finish(Phase::Failed, "No se pudo escribir en " + cache, installed);
+		return finish(Phase::Restart, "Launcher actualizado. Reiniciando...", false);
+	}
+
 	if (plan.files.empty() && plan.remove.empty())
 	{
 		SaveIndex(indexPath, index);

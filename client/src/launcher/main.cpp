@@ -3,12 +3,15 @@
 // User/launcher.toml, y "Jugar" arranca el cliente.
 //
 // Uso: launcher [--root=<carpeta del cliente>] [--options[=<pestaña>]]
-// Sin --root, la carpeta del cliente es la del launcher.  --options abre directo
+// (--updated y --rolled-back los pone el propio launcher al reiniciarse)
+// Sin --root, la carpeta del cliente es la del launcher (o la de arriba si el
+// launcher está en Launcher/, donde lo pone el overlay).  --options abre directo
 // la pantalla de opciones (0 = Pantalla ... 7 = Descargas).
 
 #include "Gfx.h"
 #include "LauncherConfig.h"
 #include "OptionsModel.h"
+#include "SelfUpdate.h"
 #include "Resources.h"
 #include "UpdateFlow.h"
 
@@ -18,13 +21,18 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <memory>
 #include <string>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#else
 #include <sys/stat.h>
 #endif
 
@@ -61,12 +69,83 @@ SDL_HitTestResult HitTest(SDL_Window*, const SDL_Point* p, void*)
 	return p->y < kHeaderHeight ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
 }
 
-std::string RootFromArgs(int argc, char** argv)
+std::string Utf8(const std::filesystem::path& p)
+{
+	const auto s = p.generic_u8string();
+	return std::string(s.begin(), s.end());
+}
+
+// Ruta del ejecutable del launcher, con "/".
+std::string ExecutablePath()
+{
+#ifdef _WIN32
+	std::wstring buf(32768, L'\0');
+	const DWORD n = GetModuleFileNameW(nullptr, buf.data(), static_cast<DWORD>(buf.size()));
+	buf.resize(n);
+	return Utf8(std::filesystem::path(buf));
+#else
+	std::error_code ec;
+	return Utf8(std::filesystem::read_symlink("/proc/self/exe", ec));
+#endif
+}
+
+// La carpeta del cliente: --root, o la del launcher (la de arriba si el
+// launcher está en su lugar de siempre, Launcher/).
+std::string RootFor(int argc, char** argv, const std::string& exe)
 {
 	for (int i = 1; i < argc; ++i)
 		if (std::strncmp(argv[i], "--root=", 7) == 0) return argv[i] + 7;
-	const char* base = SDL_GetBasePath();
-	return base ? base : ".";
+	std::filesystem::path dir = std::filesystem::u8path(exe).parent_path();
+	std::string name = Utf8(dir.filename());
+	for (char& c : name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	if (name == "launcher") dir = dir.parent_path();
+	const std::string s = Utf8(dir);
+	return s.empty() ? std::string(".") : s;
+}
+
+// El launcher relativo a la raíz ("Launcher/launcher.exe"), o vacío si está
+// fuera de la carpeta del cliente.
+std::string SelfPathIn(const std::string& root, const std::string& exe)
+{
+	std::error_code ec;
+	const std::string r = Utf8(std::filesystem::relative(std::filesystem::u8path(exe), std::filesystem::u8path(root), ec));
+	if (ec || r.empty() || r.compare(0, 2, "..") == 0 || !Update::IsSafeRelativePath(r)) return std::string();
+	return r;
+}
+
+bool LaunchProgram(const std::string& path, const std::vector<std::string>& extraArgs, const std::string* clientRoot,
+                   std::string* error)
+{
+	std::vector<const char*> args{ path.c_str() };
+	for (const std::string& a : extraArgs) args.push_back(a.c_str());
+	args.push_back(nullptr);
+	SDL_PropertiesID props = SDL_CreateProperties();
+	SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, const_cast<char**>(args.data()));
+	SDL_SetBooleanProperty(props, SDL_PROP_PROCESS_CREATE_BACKGROUND_BOOLEAN, true);
+	SDL_Environment* env = nullptr;
+#ifndef _WIN32
+	::chmod(path.c_str(), 0755);
+	if (clientRoot)
+	{
+		// El cliente de Linux toma sus carpetas de acá (ver platform/UserPath.h).
+		env = SDL_CreateEnvironment(true);
+		SDL_SetEnvironmentVariable(env, "MU_CLIENT_ROOT", clientRoot->c_str(), true);
+		SDL_SetEnvironmentVariable(env, "MU_ASSET_ROOT", clientRoot->c_str(), true);
+		SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ENVIRONMENT_POINTER, env);
+	}
+#else
+	(void)clientRoot;
+#endif
+	SDL_Process* proc = SDL_CreateProcessWithProperties(props);
+	SDL_DestroyProperties(props);
+	if (env) SDL_DestroyEnvironment(env);
+	if (!proc)
+	{
+		if (error) *error = std::string("No se pudo abrir ") + path + ": " + SDL_GetError();
+		return false;
+	}
+	SDL_DestroyProcess(proc);   // no lo cierra: sólo suelta el objeto
+	return true;
 }
 
 bool LaunchGame(const std::string& root, const std::string& exe, std::string* error)
@@ -77,31 +156,7 @@ bool LaunchGame(const std::string& root, const std::string& exe, std::string* er
 		*error = "No está " + exe + ".";
 		return false;
 	}
-#ifndef _WIN32
-	::chmod(path.c_str(), 0755);
-#endif
-	const char* args[] = { path.c_str(), nullptr };
-	SDL_PropertiesID props = SDL_CreateProperties();
-	SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, const_cast<char**>(args));
-	SDL_SetBooleanProperty(props, SDL_PROP_PROCESS_CREATE_BACKGROUND_BOOLEAN, true);
-	SDL_Environment* env = nullptr;
-#ifndef _WIN32
-	// El cliente de Linux toma sus carpetas de acá (ver platform/UserPath.h).
-	env = SDL_CreateEnvironment(true);
-	SDL_SetEnvironmentVariable(env, "MU_CLIENT_ROOT", root.c_str(), true);
-	SDL_SetEnvironmentVariable(env, "MU_ASSET_ROOT", root.c_str(), true);
-	SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ENVIRONMENT_POINTER, env);
-#endif
-	SDL_Process* proc = SDL_CreateProcessWithProperties(props);
-	SDL_DestroyProperties(props);
-	if (env) SDL_DestroyEnvironment(env);
-	if (!proc)
-	{
-		*error = std::string("No se pudo abrir el juego: ") + SDL_GetError();
-		return false;
-	}
-	SDL_DestroyProcess(proc);   // no lo cierra: sólo suelta el objeto
-	return true;
+	return LaunchProgram(path, {}, &root, error);
 }
 
 void DrawBevel(SDL_Renderer* r, const SDL_FRect& box, bool sunken = true)
@@ -176,10 +231,33 @@ struct OptionsScreen
 
 int main(int argc, char** argv)
 {
-	std::string root = RootFromArgs(argc, argv);
+	const std::string exe = ExecutablePath();
+	std::string root = RootFor(argc, argv, exe);
 	std::error_code ec;
 	std::filesystem::current_path(std::filesystem::u8path(root), ec);
 	const std::string userDir = UserDirFor(root);
+	const std::string selfPath = SelfPathIn(root, exe);
+	std::vector<std::string> passArgs;   // los que se le pasan al reiniciarse
+	for (int i = 1; i < argc; ++i)
+		if (std::strncmp(argv[i], "--root=", 7) == 0) passArgs.push_back(argv[i]);
+
+	// Lo primero: si el arranque anterior fue el de una versión nueva que no
+	// llegó a confirmarse, se vuelve a la anterior (SelfUpdate.h).
+	const SelfPaths self = SelfPathsFor(exe, Update::JoinPath(userDir, "Cache"));
+	StartupCheck startup = StartupCheck::Normal;
+	if (!selfPath.empty())
+	{
+		startup = CheckAtStartup(self);
+		if (startup == StartupCheck::RolledBack)
+		{
+			std::vector<std::string> a = passArgs;
+			a.push_back("--rolled-back");
+			return LaunchProgram(exe, a, nullptr, nullptr) ? 0 : 1;
+		}
+	}
+	bool rolledBack = false;
+	for (int i = 1; i < argc; ++i)
+		if (std::strcmp(argv[i], "--rolled-back") == 0) rolledBack = true;
 	const std::string tomlPath = Update::JoinPath(userDir, "launcher.toml");
 	const std::string iniPath = Update::JoinPath(userDir, "Config.ini");
 	// En Windows la plantilla está en la raíz y el cliente la copia a User/ al
@@ -196,6 +274,9 @@ int main(int argc, char** argv)
 	};
 	std::vector<std::string> warnings;
 	Config config = loadConfig(&warnings);
+	config.selfPath = selfPath;
+	if (rolledBack) warnings.push_back("La versión nueva del launcher no arrancó; se volvió a la anterior.");
+	if (startup == StartupCheck::RollbackFailed) warnings.push_back("La versión nueva del launcher no arrancó y no se pudo volver a la anterior.");
 
 	if (!SDL_Init(SDL_INIT_VIDEO))
 	{
@@ -252,10 +333,27 @@ int main(int argc, char** argv)
 		for (int i = 1; i < argc; ++i)
 			if (std::strncmp(argv[i], "--options", 9) == 0)
 				openOptions(argv[i][9] == '=' ? static_cast<std::size_t>(std::atoi(argv[i] + 10)) : 0);
+		const Uint64 started = SDL_GetTicks();
+		bool confirmed = startup != StartupCheck::Confirming;
+		bool restartTried = false;
 		bool running = true;
 		while (running)
 		{
 			const Status st = flow->Snapshot();
+			// Versión nueva andando hace 3 s: se confirma y se borra la anterior.
+			if (!confirmed && SDL_GetTicks() - started > 3000)
+			{
+				ConfirmHealthy(self);
+				confirmed = true;
+			}
+			// Se instaló un launcher nuevo: arrancarlo y salir.
+			if (st.phase == Phase::Restart && !restartTried)
+			{
+				restartTried = true;
+				std::vector<std::string> a = passArgs;
+				a.push_back("--updated");
+				if (LaunchProgram(exe, a, nullptr, &launchError)) break;
+			}
 			play.enabled = st.canPlay;
 			Button* mainButtons[] = { &options, &play, &close };
 			std::vector<Button*> buttons;
@@ -336,6 +434,7 @@ int main(int argc, char** argv)
 								flow.reset();
 								warnings.clear();
 								config = loadConfig(&warnings);
+								config.selfPath = selfPath;
 								flow = startFlow(config);
 							}
 						}
@@ -366,7 +465,6 @@ int main(int argc, char** argv)
 				// Avisos sobre la imagen (configuración de prueba, canales que faltaron).
 				std::vector<std::string> notes = warnings;
 				notes.insert(notes.end(), st.notices.begin(), st.notices.end());
-				if (st.newLauncher) notes.push_back("Hay un launcher nuevo; esta versión todavía no se actualiza sola.");
 				float ny = inner.y + inner.h - 4;
 				SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 				for (auto it = notes.rbegin(); it != notes.rend() && ny > inner.y + 20; ++it)

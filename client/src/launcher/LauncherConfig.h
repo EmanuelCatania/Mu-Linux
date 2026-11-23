@@ -46,6 +46,9 @@ struct Config
 	int connections = 4;
 	std::uint64_t speedLimit = 0;  // bytes/s
 	bool fullVerify = false;       // "Verificar archivos": rehashear todo
+	// El launcher que corre, relativo a la raíz ("Launcher/launcher.exe"); vacío
+	// si está fuera de la carpeta del cliente (no se actualiza a sí mismo).
+	std::string selfPath;
 	// Lo que launcher.toml cambió del origen de la base: se muestra como aviso.
 	std::vector<std::string> overrides;
 };

@@ -4,8 +4,11 @@
 // plan y lo instala, en un hilo aparte.  La ventana sólo lee el estado.
 //
 // Orden de los canales: base, música, HD (de los Releases del proyecto) y el
-// overlay del operador.  Si no se puede verificar nada pero ya hay algo
-// instalado, deja jugar con lo que hay y lo avisa.
+// overlay del operador.  Si el overlay trae una versión nueva del launcher que
+// está corriendo (Config::selfPath), se instala sólo esa y el flujo termina en
+// Restart: el nuevo procesa el resto (ver SelfUpdate.h).  Si no se puede
+// verificar nada pero ya hay algo instalado, deja jugar con lo que hay y lo
+// avisa.
 
 #include "LauncherConfig.h"
 
@@ -28,6 +31,7 @@ enum class Phase
 	Ready,         // todo al día
 	Offline,       // no se pudo verificar; se puede jugar con lo instalado
 	Failed,        // no se puede jugar
+	Restart,       // se instaló un launcher nuevo: hay que arrancarlo y salir
 };
 
 struct Status
@@ -37,7 +41,6 @@ struct Status
 	std::uint64_t done = 0;
 	std::uint64_t total = 0;
 	bool canPlay = false;
-	bool newLauncher = false;          // el overlay trae un launcher más nuevo
 	std::vector<std::string> notices;  // avisos (configuración de prueba, etc.)
 };
 
