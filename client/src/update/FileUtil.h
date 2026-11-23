@@ -30,6 +30,15 @@ bool FileExists(const std::string& path);
 bool FileSize(const std::string& path, std::uint64_t& size);
 bool CopyFileTo(const std::string& from, const std::string& to);
 
+// Fecha de modificación en las unidades del reloj de archivos del sistema.  Sólo
+// sirve para comparar contra un valor guardado en el mismo equipo.
+bool FileModTime(const std::string& path, std::int64_t& out);
+// Borra un archivo (true también si no existía).
+bool RemoveFile(const std::string& path);
+// Mueve from encima de to (crea las carpetas que falten).  Si están en volúmenes
+// distintos copia a "<to>.tmp" y lo mueve: to nunca queda a medias.
+bool MoveFileOver(const std::string& from, const std::string& to, std::string* error);
+
 // Une una carpeta con una ruta relativa del manifiesto ("a/b.txt").
 std::string JoinPath(const std::string& dir, const std::string& rel);
 

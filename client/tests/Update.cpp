@@ -1,22 +1,32 @@
 // Núcleo del actualizador (src/update) y mu-patch (tools/mu-patch): JSON, zips,
 // deltas, firma, validación del manifiesto y un canal armado y verificado de
-// punta a punta, con una segunda versión que reusa zips y lleva deltas.
+// punta a punta, con una segunda versión que reusa zips y lleva deltas; y la
+// instalación: índice local, plan por capas, descargas con cortes, deltas y
+// borrados.
 
 #include "PatchBuilder.h"
 
 #include "update/Delta.h"
 #include "update/FileUtil.h"
 #include "update/Hash.h"
+#include "update/InstallIndex.h"
+#include "update/InstallPlan.h"
+#include "update/Installer.h"
 #include "update/Json.h"
 #include "update/Manifest.h"
 #include "update/Signing.h"
+#include "update/Transfer.h"
 #include "update/Zip.h"
 
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <mutex>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace Update;
@@ -423,6 +433,391 @@ void TestEndToEnd(const std::string& dir)
 	k.Wipe();
 }
 
+// ── Instalación (índice, plan por capas, descargas) ───────────────────────
+
+// Transporte de archivos que anota cada pedido y puede fallar a propósito.
+class TestTransport : public FileTransport
+{
+public:
+	struct Call
+	{
+		std::string url;
+		std::uint64_t offset;
+		std::uint64_t length;
+	};
+
+	// Los próximos cutCalls pedidos se cortan después de cutAfter bytes.
+	int cutCalls = 0;
+	std::uint64_t cutAfter = 0;
+	// Los próximos corruptCalls pedidos llegan con el primer byte cambiado.
+	int corruptCalls = 0;
+
+	bool Fetch(const std::string& url, std::uint64_t offset, std::uint64_t length, const DataSink& sink,
+	           std::string* error) override
+	{
+		bool cut = false, corrupt = false;
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			calls.push_back(Call{ url, offset, length });
+			if (cutCalls > 0) { --cutCalls; cut = true; }
+			if (corruptCalls > 0) { --corruptCalls; corrupt = true; }
+		}
+		std::uint64_t sent = 0;
+		bool first = true;
+		const bool ok = FileTransport::Fetch(url, offset, length, [&](const std::uint8_t* data, std::size_t size) {
+			if (cut && sent + size > cutAfter)
+			{
+				const std::size_t keep = static_cast<std::size_t>(cutAfter - sent);
+				if (keep) sink(data, keep);
+				sent += keep;
+				return false;
+			}
+			sent += size;
+			if (corrupt && first)
+			{
+				std::vector<std::uint8_t> copy(data, data + size);
+				copy[0] ^= 0xFF;
+				first = false;
+				return sink(copy.data(), copy.size());
+			}
+			first = false;
+			return sink(data, size);
+		}, error);
+		if (cut && error) *error = "corte de prueba";
+		return ok && !cut;
+	}
+
+	std::vector<Call> calls;
+
+private:
+	std::mutex m_Mutex;
+};
+
+std::string FileUrl(const std::string& path)
+{
+	return "file://" + std::string(path.empty() || path[0] == '/' ? "" : "/") + path;
+}
+
+bool LoadManifest(const std::string& dir, Manifest& m)
+{
+	std::string text, err;
+	return ReadWholeFile(JoinPath(dir, "manifest.json"), text) && ParseManifest(text, m, &err);
+}
+
+bool SameFile(const std::string& path, const std::vector<std::uint8_t>& data)
+{
+	std::vector<std::uint8_t> got;
+	return ReadWholeFile(path, got) && got == data;
+}
+
+const PlanFile* FindPlanned(const Plan& p, const std::string& path)
+{
+	for (const PlanFile& f : p.files)
+		if (f.entry->path == path) return &f;
+	return nullptr;
+}
+
+void TestHdVariantAndIndex(const std::string& dir)
+{
+	Require(HdVariant("Content/a/casa.ozj") == "Content/a/casa-hd.ozj", "HdVariant");
+	Require(HdVariant("Content/a/casa-hd.ozj").empty(), "HdVariant de un -hd");
+	Require(HdVariant("Content/a.b/sinext").empty() && HdVariant("Content/.oculto").empty(), "HdVariant sin extensión");
+	Require(FileUrlToPath("file:///C:/mu/a.zip") == "C:/mu/a.zip" && FileUrlToPath("file:///tmp/a.zip") == "/tmp/a.zip" &&
+	            FileUrlToPath("C:/a.zip").empty(), "FileUrlToPath");
+
+	InstallIndex idx;
+	std::string err;
+	Require(LoadIndex(JoinPath(dir, "no-existe.json"), idx, &err) && idx.files.empty(), "índice que falta: vacío");
+	idx.revision = 7;
+	IndexEntry e;
+	e.size = 5;
+	e.mtime = -3;
+	e.hash = HashBytes("hola", 4);
+	e.channel = "mu-linux/base";
+	idx.files["Content/\xc3\xb1.txt"] = e;
+	const std::string path = JoinPath(dir, "index/install.json");
+	Require(SaveIndex(path, idx), "guardar índice");
+	InstallIndex back;
+	Require(LoadIndex(path, back, &err) && back.revision == 7 && back.files.size() == 1 &&
+	            back.files.begin()->second.hash == e.hash && back.files.begin()->second.mtime == -3, "releer índice");
+	Write(path, std::string("{\"format\": 1, \"revision\": 1, \"savedAt\": 0, \"files\": [{\"path\": \"../x\"}]}"));
+	Require(!LoadIndex(path, back, &err) && back.files.empty(), "índice roto: se rechaza");
+
+	// Tamaño y fecha iguales a lo guardado: se confía en el índice sin rehashear
+	// (salvo "Verificar archivos").  Una fecha cerca del guardado no alcanza.
+	namespace fs = std::filesystem;
+	const std::string root = JoinPath(dir, "index-root");
+	const std::string file = JoinPath(root, "a.bin");
+	const auto v1 = Random(1000, 31), v2 = Random(1000, 32);
+	Write(file, v1);
+	const Digest h1 = HashBytes(v1.data(), v1.size());
+	InstallIndex ix;
+	Require(CheckLocal(root, "a.bin", h1, ix, false, nullptr) == LocalState::Match, "CheckLocal: hashea y coincide");
+	const fs::path fp = fs::u8path(file);
+	const auto when = fs::last_write_time(fp);
+	Write(file, v2);
+	fs::last_write_time(fp, when);
+	ix.savedAt = 0;
+	Require(CheckLocal(root, "a.bin", h1, ix, false, nullptr) == LocalState::Differs, "índice sin guardar: rehashea");
+	Write(file, v1);
+	fs::last_write_time(fp, when);
+	Require(CheckLocal(root, "a.bin", h1, ix, false, nullptr) == LocalState::Match, "vuelve a v1");
+	Write(file, v2);
+	fs::last_write_time(fp, when);
+	ix.savedAt = when.time_since_epoch().count() + static_cast<std::int64_t>(
+		std::chrono::duration_cast<fs::file_time_type::duration>(std::chrono::seconds(60)).count());
+	Require(CheckLocal(root, "a.bin", h1, ix, false, nullptr) == LocalState::Match, "índice confiable: no rehashea");
+	Require(CheckLocal(root, "a.bin", h1, ix, true, nullptr) == LocalState::Differs, "verificar archivos: rehashea igual");
+	Require(CheckLocal(root, "falta.bin", h1, ix, false, nullptr) == LocalState::Missing, "CheckLocal: falta");
+}
+
+void TestRateLimiter()
+{
+	using namespace std::chrono;
+	RateLimiter lim(1 << 20);   // 1 MB/s, ráfaga de 256 KB
+	const auto t0 = steady_clock::now();
+	for (int i = 0; i < 12; ++i) lim.Acquire(64 << 10, nullptr);   // 768 KB
+	const double s = duration<double>(steady_clock::now() - t0).count();
+	Require(s >= 0.4, "el limitador frena (768 KB a 1 MB/s tardan más de 0,4 s)");
+
+	std::atomic<bool> cancel{ false };
+	lim.SetPaused(true);
+	std::thread t([&] {
+		std::this_thread::sleep_for(milliseconds(150));
+		cancel = true;
+		lim.Wake();
+	});
+	Require(!lim.Acquire(1, &cancel), "pausado: la cancelación lo destraba");
+	t.join();
+	lim.SetPaused(false);
+	lim.SetRate(0);
+	Require(lim.Acquire(100 << 20, nullptr), "sin límite pasa todo");
+}
+
+void TestInstall(const std::string& dir)
+{
+	std::string err;
+	KeyPair k;
+	Require(GenerateKey(k), "clave install");
+	const std::string key = JoinPath(dir, "inst.key");
+	Require(SaveKeyFile(key, k), "guardar clave install");
+
+	// Base v1, HD y overlay.
+	const std::string bin = JoinPath(dir, "inst-base1");
+	const auto casa = Random(200000, 21), otra = Compressible(300000, 22), big1 = Random(3 << 20, 23);
+	const auto music = Compressible(200000, 24);
+	Write(JoinPath(bin, "Content/a/casa.ozj"), casa);
+	Write(JoinPath(bin, "Content/a/otra.ozj"), otra);
+	Write(JoinPath(bin, "Content/data/big.bin"), big1);
+	Write(JoinPath(bin, "Content/item/Item.toml"), std::string("x=1\n"));
+	Write(JoinPath(bin, "Content/music/main.ogg"), music);
+	Write(JoinPath(bin, "System/x.cfg"), std::string("a=1\n"));
+	MuPatch::BuildOptions ob;
+	ob.channel = "mu-linux/base";
+	ob.version = "0.97.50";
+	ob.in = bin;
+	ob.out = JoinPath(dir, "inst-out-base1");
+	ob.keyPath = key;
+	ob.optional = { "Content/music/**" };
+	ob.bundleSize = 1 << 20;
+	Require(Build(ob, &err), ("install: base v1: " + err).c_str());
+
+	const std::string hin = JoinPath(dir, "inst-hd");
+	const auto casaHd = Random(100000, 25), otraHd = Random(100000, 26);
+	Write(JoinPath(hin, "Content/a/casa-hd.ozj"), casaHd);
+	Write(JoinPath(hin, "Content/a/otra-hd.ozj"), otraHd);
+	MuPatch::BuildOptions oh = ob;
+	oh.channel = "mu-linux/hd";
+	oh.in = hin;
+	oh.out = JoinPath(dir, "inst-out-hd");
+	oh.optional = { "**" };
+	Require(Build(oh, &err), ("install: hd: " + err).c_str());
+
+	const std::string oin = JoinPath(dir, "inst-ov");
+	const auto casaAdmin = Random(150000, 27), exe = FakeExe("0.97.50");
+	Write(JoinPath(oin, "Content/a/casa.ozj"), casaAdmin);
+	Write(JoinPath(oin, "main.exe"), exe);
+	MuPatch::BuildOptions oo;
+	oo.channel = "prueba/overlay";
+	oo.version = "1.0.0";
+	oo.in = oin;
+	oo.out = JoinPath(dir, "inst-out-ov");
+	oo.keyPath = key;
+	Require(Build(oo, &err), ("install: overlay: " + err).c_str());
+
+	Manifest base1, hd, ov;
+	Require(LoadManifest(ob.out, base1) && LoadManifest(oh.out, hd) && LoadManifest(oo.out, ov), "install: leer manifiestos");
+
+	const std::string root = JoinPath(dir, "cliente");
+	Write(JoinPath(root, "Content/mods/mio.txt"), std::string("del jugador"));
+	const std::string indexPath = JoinPath(root, "User/Cache/install.json");
+
+	// Las URLs de la base son file://; las demás, rutas.  El espejo de la base
+	// no existe: no tiene que hacer falta.
+	std::vector<ChannelSource> sources = {
+		{ &base1, { FileUrl(ob.out), JoinPath(dir, "espejo-que-no-existe") }, 0 },
+		{ &hd, { oh.out }, 10 },
+		{ &ov, { oo.out }, 20 },
+	};
+	PlanOptions po;
+	po.root = root;
+	po.platform = "windows-x64";
+
+	TestTransport transport;
+	InstallOptions io;
+	io.root = root;
+	io.downloadDir = JoinPath(root, "User/Cache/downloads");
+	io.indexPath = indexPath;
+	io.transport = &transport;
+	io.connections = 3;
+	io.backoffMs = 1;
+	io.backoffMaxMs = 4;
+	std::size_t progressCalls = 0;
+	io.progress = [&](const InstallStatus&) { ++progressCalls; };
+
+	auto plan = [&](Plan& p, InstallIndex& idx) {
+		std::string e;
+		Require(BuildPlan(sources, po, idx, p, &e), ("plan: " + e).c_str());
+	};
+	auto run = [&](const Plan& p, InstallIndex& idx, InstallResult& r) {
+		const bool ok = RunPlan(sources, p, idx, io, r);
+		for (const std::string& f : r.failures) std::printf("  falla de instalación: %s\n", f.c_str());
+		return ok;
+	};
+
+	// ── Instalación desde cero ────────────────────────────────────────────
+	InstallIndex idx;
+	Plan p;
+	plan(p, idx);
+	Require(p.files.size() == 8, "plan: 6 de la base (casa del overlay) + otra-hd + main.exe");
+	Require(!FindPlanned(p, "Content/a/casa-hd.ozj"), "plan: el overlay pisa casa.ozj y tapa su -hd");
+	const PlanFile* pc = FindPlanned(p, "Content/a/casa.ozj");
+	Require(pc && pc->channel == 2, "plan: casa.ozj sale del overlay");
+	Require(FindPlanned(p, "Content/a/otra-hd.ozj") && FindPlanned(p, "main.exe"), "plan: otra-hd y el exe");
+	Require(!p.requests.empty() && p.requests.front().required && !p.requests.back().required,
+	        "plan: lo obligatorio primero, lo opcional al final");
+	InstallResult r;
+	Require(run(p, idx, r), "instalar desde cero");
+	Require(r.installed == 8 && r.downloaded == p.downloadBytes, "instalar: 8 archivos y lo planeado");
+	Require(progressCalls > 0, "instalar: avisa el progreso");
+	Require(SameFile(JoinPath(root, "Content/a/casa.ozj"), casaAdmin) && SameFile(JoinPath(root, "main.exe"), exe) &&
+	            SameFile(JoinPath(root, "Content/data/big.bin"), big1) && SameFile(JoinPath(root, "Content/a/otra-hd.ozj"), otraHd),
+	        "instalar: contenidos correctos");
+	Require(!FileExists(JoinPath(root, "Content/a/casa-hd.ozj")), "instalar: no baja el -hd tapado");
+	std::vector<std::string> left;
+	ListFiles(io.downloadDir, left, &err);
+	Require(left.empty(), "instalar: no quedan temporales");
+	InstallIndex saved;
+	Require(LoadIndex(indexPath, saved, &err) && saved.files.size() == 8 && saved.revision >= 1, "instalar: guarda el índice");
+	Require(saved.files["Content/a/casa.ozj"].channel == "prueba/overlay", "índice: canal de cada archivo");
+
+	// ── Nada que hacer; tocar un archivo sin cambiarlo tampoco ────────────
+	plan(p, idx);
+	Require(p.files.empty() && p.requests.empty() && p.remove.empty() && p.upToDate == 8, "segundo plan vacío");
+	Write(JoinPath(root, "Content/a/otra.ozj"), otra);
+	plan(p, idx);
+	Require(p.files.empty(), "misma data, otra fecha: se rehashea y no se baja");
+
+	// ── Un archivo cambiado baja solo, con un tramo del zip ───────────────
+	Write(JoinPath(root, "Content/a/otra.ozj"), std::string("roto"));
+	Write(JoinPath(root, "Content/item/Item.toml"), std::string("x=2\n"));
+	plan(p, idx);
+	Require(p.files.size() == 1 && p.requests.size() == 1, "un archivo cambiado: un pedido (el .toml no se repara)");
+	if (p.requests.size() == 1)
+	{
+		const RangeRequest& rq = p.requests[0];
+		Require(rq.length < base1.bundles[rq.bundle].size, "un archivo: tramo del zip, no el zip entero");
+	}
+	transport.calls.clear();
+	transport.corruptCalls = 1;   // y llega roto la primera vez
+	Require(run(p, idx, r), "reparar otra.ozj");
+	// Intento 1 roto, intento 2 al espejo (no existe), intento 3 bien.
+	Require(transport.calls.size() == 3 && SameFile(JoinPath(root, "Content/a/otra.ozj"), otra),
+	        "datos corruptos: se vuelve a pedir y queda bien");
+
+	// ── Retomar un pedido cortado ─────────────────────────────────────────
+	RemoveFile(JoinPath(root, "Content/data/big.bin"));
+	plan(p, idx);
+	Require(p.files.size() == 1 && p.requests.size() == 1, "falta big.bin: un pedido");
+	transport.calls.clear();
+	transport.cutCalls = 1;
+	transport.cutAfter = 1 << 20;
+	Require(run(p, idx, r), "bajar big.bin con un corte");
+	// Intento 1 cortado, intento 2 al espejo (no existe), intento 3 retoma.
+	Require(transport.calls.size() == 3 && transport.calls[1].url.find("espejo") != std::string::npos &&
+	            transport.calls[2].offset == transport.calls[0].offset + (1 << 20) &&
+	            transport.calls[2].length == transport.calls[0].length - (1 << 20),
+	        "corte: reintenta con el espejo y retoma desde donde quedó");
+	Require(SameFile(JoinPath(root, "Content/data/big.bin"), big1), "corte: big.bin queda bien");
+
+	// ── Base v2: delta del archivo grande, y un archivo que se va ─────────
+	const std::string bin2 = JoinPath(dir, "inst-base2");
+	auto big2 = big1;
+	for (std::size_t i = 0; i < 4096; ++i) big2[1000 + i * 600] ^= 0x5A;
+	Write(JoinPath(bin2, "Content/a/casa.ozj"), casa);
+	Write(JoinPath(bin2, "Content/a/otra.ozj"), otra);
+	Write(JoinPath(bin2, "Content/data/big.bin"), big2);
+	Write(JoinPath(bin2, "Content/item/Item.toml"), std::string("x=1\n"));
+	Write(JoinPath(bin2, "Content/music/main.ogg"), music);
+	MuPatch::BuildOptions ob2 = ob;
+	ob2.version = "0.97.51";
+	ob2.in = bin2;
+	ob2.out = JoinPath(dir, "inst-out-base2");
+	ob2.prev = { { ob.out, "" } };
+	Require(Build(ob2, &err), ("install: base v2: " + err).c_str());
+	Manifest base2;
+	Require(LoadManifest(ob2.out, base2), "install: leer base v2");
+	// Los zips que v2 reusa de v1 no tienen url: en la prueba, v1 va de espejo.
+	sources[0] = { &base2, { ob2.out, ob.out }, 0 };
+
+	plan(p, idx);
+	const PlanFile* pb = FindPlanned(p, "Content/data/big.bin");
+	Require(p.files.size() == 1 && pb && pb->delta, "v2: sólo big.bin, con delta");
+	Require(p.downloadBytes < big2.size() / 4, "v2: el delta pesa mucho menos que el archivo");
+	Require(p.remove.size() == 1 && p.remove[0] == "System/x.cfg", "v2: se borra lo que la base ya no trae");
+	Require(run(p, idx, r), "instalar v2");
+	Require(r.deltasApplied == 1 && r.removed == 1 && SameFile(JoinPath(root, "Content/data/big.bin"), big2) &&
+	            !FileExists(JoinPath(root, "System/x.cfg")),
+	        "v2: delta aplicado y archivo borrado");
+	Require(FileExists(JoinPath(root, "Content/mods/mio.txt")), "v2: no toca lo que no instaló el launcher");
+	std::string toml;
+	Require(ReadWholeFile(JoinPath(root, "Content/item/Item.toml"), toml) && toml == "x=2\n", "v2: el .toml queda como estaba");
+
+	// ── Un delta que ya no sirve: se baja el archivo entero ───────────────
+	Write(JoinPath(root, "Content/data/big.bin"), big1);
+	plan(p, idx);
+	pb = FindPlanned(p, "Content/data/big.bin");
+	Require(pb && pb->delta, "big.bin vuelto a v1: delta");
+	Write(JoinPath(root, "Content/data/big.bin"), Random(1000, 99));   // cambia entre el plan y la descarga
+	Require(run(p, idx, r), "delta que falla");
+	Require(r.deltaFallbacks == 1 && r.deltasApplied == 0 && SameFile(JoinPath(root, "Content/data/big.bin"), big2),
+	        "delta que falla: baja el archivo entero");
+
+	// ── Con el juego abierto: sólo agregar lo que falta ───────────────────
+	RemoveFile(JoinPath(root, "Content/music/main.ogg"));
+	Write(JoinPath(root, "Content/a/otra.ozj"), std::string("roto"));
+	po.gameRunning = true;
+	plan(p, idx);
+	po.gameRunning = false;
+	Require(p.files.size() == 1 && FindPlanned(p, "Content/music/main.ogg") && p.remove.empty(),
+	        "juego abierto: sólo lo que falta, nada que reemplazar ni borrar");
+
+	// ── Sólo el launcher: el overlay no trae ninguno, no se baja nada ─────
+	plan(p, idx);
+	Require(!p.selfUpdate, "sin launcher en el overlay: selfUpdate apagado");
+	io.selfOnly = true;
+	Require(run(p, idx, r) && r.installed == 0, "selfOnly sin launcher: no instala nada");
+	io.selfOnly = false;
+
+	// ── Cancelar ──────────────────────────────────────────────────────────
+	std::atomic<bool> cancel{ true };
+	io.cancel = &cancel;
+	Require(!run(p, idx, r) && r.cancelled && r.installed == 0, "cancelado: no instala nada");
+	io.cancel = nullptr;
+	Require(run(p, idx, r) && r.installed == 2, "después de cancelar se completa");
+	k.Wipe();
+}
+
 } // namespace
 
 int main()
@@ -439,6 +834,9 @@ int main()
 	TestSigning(d);
 	TestManifestValidation();
 	TestEndToEnd(d);
+	TestHdVariantAndIndex(d);
+	TestRateLimiter();
+	TestInstall(d);
 
 	std::error_code ec;
 	fs::remove_all(dir, ec);

@@ -1,7 +1,7 @@
-# Núcleo del actualizador (manifiesto firmado, zips, deltas): lo comparten
-# mu-patch, el launcher y sus pruebas.  No depende de SDL ni del cliente, así
-# que tools/mu-patch lo puede compilar solo (por ejemplo, en el contenedor del
-# server).
+# Núcleo del actualizador (manifiesto firmado, zips, deltas, índice local, plan
+# y descargas): lo comparten mu-patch, el launcher y sus pruebas.  No depende de
+# SDL ni del cliente, así que tools/mu-patch lo puede compilar solo (por
+# ejemplo, en el contenedor del server).
 #
 # Uso: set(MU_CLIENT_SOURCE_DIR <client>) + include(MuUpdate).  Define:
 #   mu_update_core  biblioteca estática (incluir como "update/...").
@@ -39,11 +39,20 @@ add_library(mu_update_core STATIC
     "${_mu_update_dir}/Signing.h"
     "${_mu_update_dir}/FileUtil.cpp"
     "${_mu_update_dir}/FileUtil.h"
+    "${_mu_update_dir}/InstallIndex.cpp"
+    "${_mu_update_dir}/InstallIndex.h"
+    "${_mu_update_dir}/InstallPlan.cpp"
+    "${_mu_update_dir}/InstallPlan.h"
+    "${_mu_update_dir}/Transfer.cpp"
+    "${_mu_update_dir}/Transfer.h"
+    "${_mu_update_dir}/Installer.cpp"
+    "${_mu_update_dir}/Installer.h"
     "${MU_CLIENT_SOURCE_DIR}/src/net/crypto/monocypher.c")
 target_include_directories(mu_update_core PUBLIC "${MU_CLIENT_SOURCE_DIR}/src"
     PRIVATE "${mu_zstd_SOURCE_DIR}/lib")
 target_compile_features(mu_update_core PUBLIC cxx_std_17)
-target_link_libraries(mu_update_core PRIVATE libzstd_static)
+find_package(Threads REQUIRED)
+target_link_libraries(mu_update_core PUBLIC Threads::Threads PRIVATE libzstd_static)
 if(MSVC)
     target_compile_options(mu_update_core PRIVATE /utf-8)
 endif()
