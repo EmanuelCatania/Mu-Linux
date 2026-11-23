@@ -35,6 +35,10 @@ services:
       MU_TRACE_ENABLED: ${MU_TRACE_ENABLED:-0}
       MU_TRACE_RECORD: ${MU_TRACE_RECORD:-0}
       MU_TRACE_KEEP_MB: ${MU_TRACE_KEEP_MB:-1024}
+      # Parches del operador para el launcher (docs/parches-del-launcher.md).
+      MU_UPDATE_ENABLED: ${MU_UPDATE_ENABLED:-0}
+      MU_UPDATE_CHANNEL: ${MU_UPDATE_CHANNEL:-mi-server/overlay}
+      MU_UPDATE_INTERVAL: ${MU_UPDATE_INTERVAL:-30}
     depends_on:
       mysql:
         condition: service_healthy
@@ -49,6 +53,8 @@ services:
       - mu_gameserver_data:/opt/mu/GameServer/Data:rw
       # Logs y traza de paquetes (mu-trace): sobreviven a recrear el contenedor.
       - mu_gameserver_log:/opt/mu/GameServer/LOG:rw
+      # Parches del operador, en su propio volumen: lo monta también mu-web.
+      - mu_patches:/opt/mu/Data/Patches:rw
     networks:
       - default
 
@@ -73,6 +79,8 @@ services:
       ADMIN_PASS: ${ADMIN_PASS}
       TRUST_PROXY: ${TRUST_PROXY}
       WEB_RATE_LIMIT_PER_MINUTE: ${WEB_RATE_LIMIT_PER_MINUTE:-600}
+      MU_UPDATE_ENABLED: ${MU_UPDATE_ENABLED:-0}
+      UPDATES_RATE_LIMIT_PER_MINUTE: ${UPDATES_RATE_LIMIT_PER_MINUTE:-120}
       TZ: ${TZ}
       TIMEZONE: ${TIMEZONE}
       EDITOR_ENABLED: ${EDITOR_ENABLED}
@@ -81,6 +89,10 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+    volumes:
+      # Sólo lectura, y sólo los parches: nunca montar mu_data acá (ahí está
+      # la clave privada del server).
+      - mu_patches:/app/updates:ro
     ports:
       - "8085:8080"
     networks:
@@ -110,6 +122,7 @@ volumes:
   mu_gameserver_data:
   mu_gameserver_log:
   mu_editor_backups:
+  mu_patches:
 
 networks:
   proxy_net:

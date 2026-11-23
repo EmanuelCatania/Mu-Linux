@@ -126,6 +126,14 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Parches del operador para el launcher (lib/updates.js), con su propio límite.
+// Los publica mu-server en el volumen mu_patches, montado acá de sólo lectura.
+if (process.env.MU_UPDATE_ENABLED === '1') {
+  const updatesDir = process.env.UPDATES_DIR || path.join(__dirname, 'updates', 'published');
+  const perMinute = Number.parseInt(process.env.UPDATES_RATE_LIMIT_PER_MINUTE || '120', 10) || 120;
+  app.use('/updates', require('./lib/updates').updatesRouter(updatesDir, { perMinute }));
+}
+
 // Tope general por IP para todo lo dinámico (los estáticos quedan afuera).
 // Detrás de un proxy hace falta TRUST_PROXY: si no, todos comparten la IP del proxy.
 const WEB_RATE_LIMIT = Math.max(1, Number.parseInt(process.env.WEB_RATE_LIMIT_PER_MINUTE || '600', 10) || 600);

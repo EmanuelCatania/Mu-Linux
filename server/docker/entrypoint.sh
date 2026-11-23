@@ -64,4 +64,24 @@ if [ "${MU_TRACE_ENABLED:-0}" = "1" ] && [ "${MU_TRACE_RECORD:-0}" = "1" ]; then
   disown $!
 fi
 
+# Parches del operador (docs/parches-del-launcher.md): con MU_UPDATE_ENABLED=1,
+# mu-patch publica Data/Patches/published cada vez que el admin sube una
+# carpeta DDMMAAAA-N.  Firma con la identidad del server, que se crea sola
+# la primera vez que arranca el server.  Como el grabador de trazas, no entra en el
+# `wait -n`: si se cae, el server sigue.
+if [ "${MU_UPDATE_ENABLED:-0}" = "1" ]; then
+  patches="${MU_DATA_PATH%/}/Patches"
+  key="${MU_DATA_PATH%/}/Keys/ServerIdentity.key"
+  mkdir -p "$patches"
+  (
+    for _ in $(seq 1 120); do
+      [ -f "$key" ] && break
+      sleep 1
+    done
+    exec /opt/mu/mu-patch watch --patches "$patches" --channel "${MU_UPDATE_CHANNEL:-mi-server/overlay}" \
+      --key "$key" --interval "${MU_UPDATE_INTERVAL:-30}"
+  ) &
+  disown $!
+fi
+
 wait -n

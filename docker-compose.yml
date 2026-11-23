@@ -28,6 +28,9 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
+      # mu-patch se compila desde el cliente (server/Dockerfile).
+      additional_contexts:
+        client: ./client
     restart: unless-stopped
     cap_add:
       - SYS_PTRACE
@@ -43,6 +46,10 @@ services:
       MU_TRACE_ENABLED: ${MU_TRACE_ENABLED:-0}
       MU_TRACE_RECORD: ${MU_TRACE_RECORD:-0}
       MU_TRACE_KEEP_MB: ${MU_TRACE_KEEP_MB:-1024}
+      # Parches del operador para el launcher (docs/parches-del-launcher.md).
+      MU_UPDATE_ENABLED: ${MU_UPDATE_ENABLED:-0}
+      MU_UPDATE_CHANNEL: ${MU_UPDATE_CHANNEL:-mi-server/overlay}
+      MU_UPDATE_INTERVAL: ${MU_UPDATE_INTERVAL:-30}
     depends_on:
       mysql:
         condition: service_healthy
@@ -56,6 +63,8 @@ services:
       # Clave de identidad del server (docs/identidad-del-server.md): tiene que
       # sobrevivir a reconstruir la imagen, o los clientes dejan de reconocerlo.
       - mu_keys:/opt/mu/Data/Keys
+      # Parches del operador: el admin sube acá las carpetas DDMMAAAA-N.
+      - mu_patches:/opt/mu/Data/Patches
     networks:
       - default
 
@@ -84,11 +93,17 @@ services:
       ADMIN_PASS: ${ADMIN_PASS}
       TRUST_PROXY: ${TRUST_PROXY}
       WEB_RATE_LIMIT_PER_MINUTE: ${WEB_RATE_LIMIT_PER_MINUTE:-600}
+      MU_UPDATE_ENABLED: ${MU_UPDATE_ENABLED:-0}
+      UPDATES_RATE_LIMIT_PER_MINUTE: ${UPDATES_RATE_LIMIT_PER_MINUTE:-120}
       TZ: ${TZ}
       TIMEZONE: ${TIMEZONE}
     depends_on:
       mysql:
         condition: service_healthy
+    volumes:
+      # Sólo lectura, y sólo los parches: nunca montar los datos del server
+      # enteros acá (ahí está la clave privada).
+      - mu_patches:/app/updates:ro
     ports:
       - "8085:8080"
     networks:
@@ -98,6 +113,7 @@ services:
 volumes:
   mu_mysql:
   mu_keys:
+  mu_patches:
 
 networks:
   proxy_net:

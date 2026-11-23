@@ -5,7 +5,8 @@
 #   cmake --build build/mu-patch --config Release
 # o desde el CMakeLists del cliente, que lo incluye con add_subdirectory.
 
-cmake_minimum_required(VERSION 3.25)
+# 3.22: el de Ubuntu 22.04, donde se compila la imagen del server.
+cmake_minimum_required(VERSION 3.22)
 project(mu_patch LANGUAGES C CXX)
 
 if(NOT DEFINED MU_CLIENT_SOURCE_DIR)
@@ -31,7 +32,9 @@ if(MSVC)
 endif()
 
 # Pruebas: sólo si se compila solo (desde el cliente las registra su CMakeLists).
-if(PROJECT_IS_TOP_LEVEL)
+# La imagen del server las apaga (no copia tests/).
+option(MU_PATCH_TESTS "Compilar las pruebas de mu-patch" ON)
+if(PROJECT_IS_TOP_LEVEL AND MU_PATCH_TESTS)
     enable_testing()
     add_executable(mu_update_test "${MU_CLIENT_SOURCE_DIR}/tests/Update.cpp")
     target_link_libraries(mu_update_test PRIVATE mu_patch_core)

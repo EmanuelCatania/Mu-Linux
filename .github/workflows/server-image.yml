@@ -1,0 +1,52 @@
+name: Server image
+# Construye la imagen del server (sin publicarla) en los PRs que tocan lo que
+# entra en ella desde el cliente: mu-patch y el núcleo del actualizador (ver
+# server/Dockerfile, contexto "client").  Comprueba que mu-patch arranque adentro.
+# La imagen publicada la arma release.yml.
+on:
+  pull_request:
+    paths:
+      - "server/Dockerfile"
+      - "server/docker/entrypoint.sh"
+      - "client/tools/mu-patch/**"
+      - "client/src/update/**"
+      - "client/cmake/MuUpdate.cmake"
+      - "docker-compose.yml"
+      - ".github/workflows/server-image.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: server-image-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  build:
+    name: mu-linux-97k (amd64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: server
+          file: server/Dockerfile
+          build-contexts: client=client
+          load: true
+          tags: mu-linux-97k:pr
+      - name: mu-patch dentro de la imagen
+        run: |
+          docker run --rm --entrypoint mu-patch mu-linux-97k:pr | head -20
+          docker run --rm --entrypoint bash mu-linux-97k:pr -n /opt/mu/entrypoint.sh
+      - name: publish dentro de la imagen
+        run: |
+          # Un overlay sin ejecutable se rechaza: alcanza para ver que publish
+          # lee las carpetas, arma el estado y llega a validar.
+          docker run --rm --entrypoint bash mu-linux-97k:pr -c '
+            set -e
+            mkdir -p /tmp/p/19112026-1/Content /tmp/k
+            echo hola > /tmp/p/19112026-1/Content/a.txt
+            mu-patch keygen --out /tmp/k/id.key
+            out=$(mu-patch publish --patches /tmp/p --channel prueba/overlay --key /tmp/k/id.key --base 0.97.50 2>&1) && exit 1
+            echo "$out"
+            echo "$out" | grep -q ejecutable
+          '

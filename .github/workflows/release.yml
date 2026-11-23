@@ -46,7 +46,8 @@ jobs:
       fail-fast: true
       matrix:
         image:
-          - { name: mu-linux-97k, context: server, file: server/Dockerfile }
+          # mu-patch se compila desde el cliente: contexto con nombre "client".
+          - { name: mu-linux-97k, context: server, file: server/Dockerfile, contexts: "client=client" }
           - { name: mu-linux-97k-mysql, context: server, file: server/docker/mysql/Dockerfile }
           - { name: mu-linux-97k-web, context: web, file: web/Dockerfile }
           - { name: mu-linux-97k-mu-editor, context: editor, file: editor/Dockerfile }
@@ -69,6 +70,7 @@ jobs:
         with:
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.file }}
+          build-contexts: ${{ matrix.image.contexts }}
           platforms: linux/${{ matrix.platform.arch }}
           provenance: false
           outputs: type=image,name=docker.io/${{ env.NAMESPACE }}/${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
