@@ -53,6 +53,30 @@ bool FileTransport::Fetch(const std::string& url, std::uint64_t offset, std::uin
 	return ok;
 }
 
+bool FileTransport::Get(const std::string& url, std::uint64_t maxSize, std::vector<std::uint8_t>& out,
+                        std::string* error)
+{
+	std::string path = FileUrlToPath(url);
+	if (path.empty()) path = url;
+	std::uint64_t size = 0;
+	if (!FileSize(path, size))
+	{
+		if (error) *error = "no existe " + url;
+		return false;
+	}
+	if (size > maxSize)
+	{
+		if (error) *error = url + ": más grande de lo permitido";
+		return false;
+	}
+	if (!ReadWholeFile(path, out))
+	{
+		if (error) *error = "no se pudo leer " + url;
+		return false;
+	}
+	return true;
+}
+
 RateLimiter::RateLimiter(std::uint64_t bytesPerSecond) : m_Last(Clock::now()) { SetRate(bytesPerSecond); }
 
 void RateLimiter::SetRate(std::uint64_t bytesPerSecond)

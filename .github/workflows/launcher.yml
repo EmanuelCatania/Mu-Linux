@@ -1,0 +1,51 @@
+name: Launcher
+# Transporte HTTP del actualizador (libcurl) y, más adelante, el launcher SDL3.
+# Se compila solo (client/src/launcher), en Windows con Schannel y en Linux con
+# el OpenSSL de la distribución, y corre sus pruebas contra un server HTTP
+# local.  Las del núcleo sin red (mu_update_test) las corre client.yml.
+on:
+  pull_request:
+    paths:
+      - "client/src/launcher/**"
+      - "client/src/update/**"
+      - "client/cmake/MuUpdate.cmake"
+      - "client/cmake/MuUpdateHttp.cmake"
+      - "client/tools/mu-patch/**"
+      - "client/tests/UpdateHttp.cpp"
+      - ".github/workflows/launcher.yml"
+  push:
+    branches: [ "release/*", "main" ]
+    paths:
+      - "client/src/launcher/**"
+      - "client/src/update/**"
+      - "client/cmake/MuUpdate.cmake"
+      - "client/cmake/MuUpdateHttp.cmake"
+      - "client/tests/UpdateHttp.cpp"
+      - ".github/workflows/launcher.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: launcher-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-24.04, windows-2022 ]
+    steps:
+      - uses: actions/checkout@v5
+      - name: OpenSSL
+        if: runner.os == 'Linux'
+        run: dpkg -s libssl-dev > /dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y libssl-dev)
+      - name: Compilar
+        shell: bash
+        run: |
+          cmake -S client/src/launcher -B build/launcher -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/launcher --config Release --parallel 4
+      - name: Pruebas
+        shell: bash
+        run: ctest --test-dir build/launcher -C Release --output-on-failure

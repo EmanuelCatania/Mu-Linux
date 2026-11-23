@@ -6,6 +6,7 @@
 
 #include "PatchBuilder.h"
 
+#include "update/ChannelFetch.h"
 #include "update/Delta.h"
 #include "update/FileUtil.h"
 #include "update/Hash.h"
@@ -818,6 +819,84 @@ void TestInstall(const std::string& dir)
 	k.Wipe();
 }
 
+void TestChannelFetch(const std::string& dir)
+{
+	std::string err;
+	KeyPair k, other;
+	Require(GenerateKey(k) && GenerateKey(other), "claves fetch");
+	const std::string key = JoinPath(dir, "fetch.key");
+	Require(SaveKeyFile(key, k), "guardar clave fetch");
+
+	const std::string in = JoinPath(dir, "fetch-in");
+	Write(JoinPath(in, "Content/a.txt"), std::string("a"));
+	MuPatch::BuildOptions o;
+	o.channel = "mu-linux/base";
+	o.version = "0.97.50";
+	o.in = in;
+	o.out = JoinPath(dir, "fetch-v1");
+	o.keyPath = key;
+	o.sequence = 5;
+	Require(Build(o, &err), ("fetch: build v1: " + err).c_str());
+	MuPatch::BuildOptions o2 = o;
+	o2.version = "0.97.51";
+	o2.out = JoinPath(dir, "fetch-v2");
+	o2.sequence = 6;
+	Require(Build(o2, &err), ("fetch: build v2: " + err).c_str());
+
+	FileTransport ft;
+	ChannelSpec spec;
+	spec.channel = "mu-linux/base";
+	spec.urls = { JoinPath(dir, "fetch-no-existe"), FileUrl(o.out) };
+	std::memcpy(spec.publicKey, k.publicKey, kKeySize);
+	spec.version = "0.97.50";
+
+	SequenceStore seq;
+	FetchedChannel f;
+	Require(FetchChannel(ft, spec, seq, f, &err) && f.manifest.version == "0.97.50" && f.urls.size() == 2 &&
+	            f.urls[0] == FileUrl(o.out), ("fetch: un espejo caído y el siguiente bien: " + err).c_str());
+	Require(seq.Seen("mu-linux/base") == 5, "fetch: registra la secuencia");
+	ChannelSource src = SourceOf(f, 10);
+	Require(src.manifest == &f.manifest && src.priority == 10 && src.baseUrls == f.urls, "SourceOf");
+
+	ChannelSpec bad = spec;
+	std::memcpy(bad.publicKey, other.publicKey, kKeySize);
+	Require(!FetchChannel(ft, bad, seq, f, &err), "fetch: otra clave se rechaza");
+	bad = spec;
+	bad.version = "0.97.49";
+	Require(!FetchChannel(ft, bad, seq, f, &err), "fetch: otra versión se rechaza");
+	bad = spec;
+	bad.channel = "mu-linux/hd";
+	Require(!FetchChannel(ft, bad, seq, f, &err), "fetch: otro canal se rechaza");
+
+	// La v2 sube la secuencia; después la v1 (con firma válida) ya no se acepta.
+	ChannelSpec spec2 = spec;
+	spec2.urls = { o2.out };
+	spec2.version.clear();
+	Require(FetchChannel(ft, spec2, seq, f, &err) && seq.Seen("mu-linux/base") == 6, "fetch: v2 sube la secuencia");
+	Require(!FetchChannel(ft, spec, seq, f, &err), "fetch: un parche viejo con firma válida se rechaza");
+
+	const std::string seqPath = JoinPath(dir, "fetch-cache/sequences.json");
+	Require(seq.Save(seqPath), "guardar secuencias");
+	SequenceStore back;
+	Require(back.Load(seqPath, &err) && back.Seen("mu-linux/base") == 6 && back.Seen("otro/canal") == 0, "releer secuencias");
+	Write(seqPath, std::string("{\"channels\": {\"mu-linux/base\": -1}}"));
+	Require(!back.Load(seqPath, &err), "secuencias rotas: se rechazan");
+
+	Require(ReleaseManifestName("mu-linux/base") == "mu-linux-base.manifest.json", "ReleaseManifestName");
+	Require(GithubReleaseUrl("dueño/repo", "0.97.50") == "https://github.com/dueño/repo/releases/download/0.97.50", "GithubReleaseUrl");
+
+	Manifest base, ov;
+	base.version = "0.97.50";
+	ov.requiresBase = "0.97.50";
+	ov.requiresProtocol = 13;
+	Require(CheckRequires(base, ov, 13, &err) && CheckRequires(base, ov, 0, &err), "requires: coincide");
+	Require(!CheckRequires(base, ov, 12, &err), "requires: otro protocolo");
+	base.version = "0.97.51";
+	Require(!CheckRequires(base, ov, 13, &err), "requires: otra base");
+	k.Wipe();
+	other.Wipe();
+}
+
 } // namespace
 
 int main()
@@ -837,6 +916,7 @@ int main()
 	TestHdVariantAndIndex(d);
 	TestRateLimiter();
 	TestInstall(d);
+	TestChannelFetch(d);
 
 	std::error_code ec;
 	fs::remove_all(dir, ec);
