@@ -143,6 +143,48 @@ bool CopyFileTo(const std::string& from, const std::string& to)
 	return !ec;
 }
 
+bool FileModTime(const std::string& path, std::int64_t& out)
+{
+	std::error_code ec;
+	const auto t = fs::last_write_time(ToPath(path), ec);
+	if (ec) return false;
+	out = static_cast<std::int64_t>(t.time_since_epoch().count());
+	return true;
+}
+
+bool RemoveFile(const std::string& path)
+{
+	std::error_code ec;
+	fs::remove(ToPath(path), ec);
+	return !ec;
+}
+
+bool MoveFileOver(const std::string& from, const std::string& to, std::string* error)
+{
+	const fs::path target = ToPath(to);
+	if (target.has_parent_path() && !MakeDirs(FromPath(target.parent_path())))
+	{
+		if (error) *error = "no se pudo crear la carpeta de " + to;
+		return false;
+	}
+	std::error_code ec;
+	fs::rename(ToPath(from), target, ec);
+	if (!ec) return true;
+	// Otro volumen: copiar al lado del destino y mover desde ahí.
+	const fs::path tmp = ToPath(to + ".tmp");
+	std::error_code ec2;
+	fs::copy_file(ToPath(from), tmp, fs::copy_options::overwrite_existing, ec2);
+	if (!ec2) fs::rename(tmp, target, ec2);
+	if (!ec2)
+	{
+		fs::remove(ToPath(from), ec2);
+		return true;
+	}
+	fs::remove(tmp, ec2);
+	if (error) *error = "no se pudo reemplazar " + to + ": " + ec.message();
+	return false;
+}
+
 std::string JoinPath(const std::string& dir, const std::string& rel)
 {
 	if (dir.empty()) return rel;
