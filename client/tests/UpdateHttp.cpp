@@ -9,8 +9,10 @@
 #include "OptionsModel.h"
 #include "PatchBuilder.h"
 #include "SelfUpdate.h"
+#include "ServerAnnounce.h"
 #include "UpdateFlow.h"
 
+#include "update/Announce.h"
 #include "update/ChannelFetch.h"
 #include "update/FileUtil.h"
 #include "update/Hash.h"
@@ -620,6 +622,210 @@ std::vector<std::uint8_t> FakePe(unsigned seed)
 	return d;
 }
 
+// ConnectServer de prueba: el saludo del canal cifrado (SecureChannel del lado
+// server, el mismo del ConnectServer) y F4:14/15 de a `chunk` bytes.
+class FakeCs
+{
+public:
+	std::vector<std::uint8_t> blob;
+	KeyPair identity;
+	bool rotation = false;
+	std::uint8_t previous[kKeySize] = {};
+	std::uint8_t rotationSig[kSignatureSize] = {};
+	std::size_t chunk = 100;
+	std::atomic<int> requests{ 0 };
+	int port = 0;
+
+	bool Start()
+	{
+		m_Listen = socket(AF_INET, SOCK_STREAM, 0);
+		if (m_Listen == kNoSock) return false;
+		sockaddr_in a{};
+		a.sin_family = AF_INET;
+		a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		if (bind(m_Listen, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0 || listen(m_Listen, 4) != 0) return false;
+		socklen_t len = sizeof(a);
+		getsockname(m_Listen, reinterpret_cast<sockaddr*>(&a), &len);
+		port = ntohs(a.sin_port);
+		m_Thread = std::thread([this] {
+			for (;;)
+			{
+				Sock c = accept(m_Listen, nullptr, nullptr);
+				if (m_Stop)
+				{
+					if (c != kNoSock) CloseSock(c);
+					return;
+				}
+				if (c != kNoSock) Serve(c);
+			}
+		});
+		return true;
+	}
+
+	void Stop()
+	{
+		m_Stop = true;
+		Sock s = socket(AF_INET, SOCK_STREAM, 0);
+		sockaddr_in a{};
+		a.sin_family = AF_INET;
+		a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		a.sin_port = htons(static_cast<unsigned short>(port));
+		connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a));
+		CloseSock(s);
+		if (m_Thread.joinable()) m_Thread.join();
+		CloseSock(m_Listen);
+	}
+
+	std::string Address() const { return "127.0.0.1:" + std::to_string(port); }
+
+private:
+	void SendSealed(Sock c, SecureChannel& ch, const std::vector<std::uint8_t>& pkt)
+	{
+		std::vector<std::uint8_t> out(pkt.size() + SecureChannel::Overhead);
+		const std::size_t n = ch.Seal(pkt.data(), pkt.size(), out.data());
+		SendAll(c, reinterpret_cast<const char*>(out.data()), n);
+	}
+
+	void Serve(Sock c)
+	{
+		SecureChannel ch;
+		std::uint8_t hello[SecureChannel::ServerHelloSize];
+		const auto rnd = Random(SecureChannel::KeySize, 77 + port);
+		ch.BeginServer(hello, rnd.data(), identity.secret, identity.publicKey, rotation ? previous : nullptr,
+		               rotation ? rotationSig : nullptr);
+		SendAll(c, reinterpret_cast<const char*>(hello), sizeof(hello));
+		std::vector<std::uint8_t> plain;
+		bool welcomed = false;
+		char buf[4096];
+		for (;;)
+		{
+			const int n = recv(c, buf, sizeof(buf), 0);
+			if (n <= 0 || !ch.Receive(reinterpret_cast<std::uint8_t*>(buf), static_cast<std::size_t>(n), plain)) break;
+			if (ch.IsReady() && !welcomed)
+			{
+				welcomed = true;
+				SendSealed(c, ch, { 0xC1, 0x04, 0x00, 0x01 });
+			}
+			while (plain.size() >= 8 && plain[0] == 0xC1 && plain[1] == 8)
+			{
+				++requests;
+				const std::uint32_t offset = plain[4] | plain[5] << 8 | plain[6] << 16 | static_cast<std::uint32_t>(plain[7]) << 24;
+				plain.erase(plain.begin(), plain.begin() + 8);
+				const std::size_t len = offset < blob.size() ? (std::min)(chunk, blob.size() - offset) : 0;
+				const std::size_t total = 16 + len;
+				std::vector<std::uint8_t> pkt = { 0xC2, static_cast<std::uint8_t>(total >> 8), static_cast<std::uint8_t>(total), 0xF4, 0x15,
+				                                  static_cast<std::uint8_t>(blob.empty() ? 4 : 0) };
+				for (std::uint32_t v : { static_cast<std::uint32_t>(blob.size()), offset })
+					for (int k = 0; k < 4; ++k) pkt.push_back(static_cast<std::uint8_t>(v >> (8 * k)));
+				pkt.push_back(static_cast<std::uint8_t>(len));
+				pkt.push_back(static_cast<std::uint8_t>(len >> 8));
+				pkt.insert(pkt.end(), blob.begin() + offset, blob.begin() + offset + len);
+				SendSealed(c, ch, pkt);
+			}
+		}
+		CloseSock(c);
+	}
+
+	Sock m_Listen = kNoSock;
+	std::atomic<bool> m_Stop{ false };
+	std::thread m_Thread;
+};
+
+std::string HexOf(const std::uint8_t* p, std::size_t n)
+{
+	static const char digits[] = "0123456789abcdef";
+	std::string s;
+	for (std::size_t i = 0; i < n; ++i)
+	{
+		s += digits[p[i] >> 4];
+		s += digits[p[i] & 15];
+	}
+	return s;
+}
+
+std::vector<std::uint8_t> AnnounceBlob(std::uint64_t sequence, const std::string& news, const KeyPair& key,
+                                       std::string* jsonOut = nullptr)
+{
+	Announce a;
+	a.sequence = sequence;
+	a.connectServers = { "mu.ejemplo.com:44405" };
+	a.patchChannel = "srv/overlay";
+	a.patchUrls = { "https://mu.ejemplo.com/updates" };
+	a.news = news;
+	const std::string json = DumpAnnounce(a);
+	std::uint8_t sig[kSignatureSize];
+	Sign(kLauncherContext, json.data(), json.size(), key, sig);
+	std::vector<std::uint8_t> blob(sig, sig + kSignatureSize);
+	blob.insert(blob.end(), json.begin(), json.end());
+	if (jsonOut) *jsonOut = json;
+	return blob;
+}
+
+// Lo que el launcher aprende del server (ServerAnnounce + CsClient): por el
+// ConnectServer en pedazos, una identidad ajena no vale, una secuencia vieja
+// tampoco, /updates/ como respaldo y la rotación de la identidad.
+void TestServerAnnounce(TestServer& http, const std::string& dir, const std::string& www)
+{
+	KeyPair root, other, rotated;
+	Require(GenerateKey(root) && GenerateKey(other) && GenerateKey(rotated), "claves del anuncio");
+	const std::string cache = JoinPath(dir, "announce-cache");
+	Launcher::AnyTransport transport(std::make_unique<HttpTransport>());
+	Launcher::SocketCsFetcher fetcher(3000);
+
+	FakeCs cs;
+	cs.identity = root;
+	cs.blob = AnnounceBlob(2, "Hola desde el server", root);
+	Require(cs.Start(), "abrir el ConnectServer de prueba");
+	Launcher::AnnounceSeed seed;
+	seed.rootKey = HexOf(root.publicKey, kKeySize);
+	seed.connectServers = { cs.Address() };
+
+	Launcher::AnnounceResult r = Launcher::ResolveAnnounce(seed, cache, fetcher, transport);
+	Require(r.have && r.fresh && r.data.sequence == 2 && r.data.news == "Hola desde el server", "anuncio: por el ConnectServer");
+	Require(cs.requests.load() > 1, "anuncio: de a pedazos");
+	Require(r.data.patchChannel == "srv/overlay" && r.data.patchUrls.size() == 1, "anuncio: canal y URL de los parches");
+	Require(std::memcmp(r.identity, root.publicKey, kKeySize) == 0, "anuncio: la identidad vigente es la raíz");
+	Require(FileExists(JoinPath(cache, "launcher.json")), "anuncio: se guarda");
+
+	// Una secuencia menor no reemplaza a la guardada.
+	cs.blob = AnnounceBlob(1, "vieja", root);
+	r = Launcher::ResolveAnnounce(seed, cache, fetcher, transport);
+	Require(r.have && !r.fresh && r.data.sequence == 2 && !r.notes.empty(), "anuncio: una secuencia vieja no vale");
+
+	// Otro server con otra identidad: no se le cree; vale /updates/.
+	cs.identity = other;
+	cs.blob = AnnounceBlob(9, "impostor", other);
+	std::string json;
+	const std::vector<std::uint8_t> good = AnnounceBlob(3, "por http", root, &json);
+	MakeDirs(JoinPath(www, "ann"));
+	Write(JoinPath(www, "ann/launcher.json"), std::vector<std::uint8_t>(json.begin(), json.end()));
+	const std::string sigFile = FormatSignatureFile(good.data());
+	Write(JoinPath(www, "ann/launcher.json.sig"), std::vector<std::uint8_t>(sigFile.begin(), sigFile.end()));
+	seed.urls = { http.Url("/ann") };
+	r = Launcher::ResolveAnnounce(seed, cache, fetcher, transport);
+	Require(r.have && r.fresh && r.data.sequence == 3 && r.data.news == "por http", "anuncio: identidad ajena rechazada, vale /updates/");
+
+	// Rotación: el server presenta una clave nueva firmada por la anterior.
+	cs.identity = rotated;
+	cs.rotation = true;
+	std::memcpy(cs.previous, root.publicKey, kKeySize);
+	Sign("MuIdentityRotation1", rotated.publicKey, kKeySize, root, cs.rotationSig);
+	cs.blob = AnnounceBlob(4, "clave nueva", rotated);
+	seed.urls.clear();
+	r = Launcher::ResolveAnnounce(seed, cache, fetcher, transport);
+	Require(r.have && r.fresh && r.data.sequence == 4, "anuncio: después de rotar la identidad");
+	Require(std::memcmp(r.identity, rotated.publicKey, kKeySize) == 0, "anuncio: la identidad vigente es la nueva");
+	cs.Stop();
+
+	// Sin ConnectServer: queda el guardado, verificado con la clave nueva.
+	r = Launcher::ResolveAnnounce(seed, cache, fetcher, transport);
+	Require(r.have && !r.fresh && r.data.sequence == 4 && std::memcmp(r.identity, rotated.publicKey, kKeySize) == 0,
+	        "anuncio: sin server queda el guardado");
+	root.Wipe();
+	other.Wipe();
+	rotated.Wipe();
+}
+
 void TestSelfUpdateMarks(const std::string& dir)
 {
 	const std::string exe = JoinPath(dir, "self/Launcher/launcher.exe");
@@ -786,6 +992,7 @@ int main()
 	TestSelfUpdateMarks(d);
 	TestSelfUpdateFlow(server, d, root);
 	TestLauncherFlow(server, d, root);
+	TestServerAnnounce(server, d, root);
 	server.Stop();
 	TestOnline();
 
