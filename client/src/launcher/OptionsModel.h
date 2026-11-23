@@ -33,7 +33,15 @@ struct OptionRow
 	std::vector<OptionChoice> choices;
 	int defaultIndex = 0;
 	bool numeric = true;      // compara por número ("01" == "1"); si no, por texto sin mayúsculas
+	// Fila de texto libre (choices vacío): se escribe tal cual, hasta maxLength
+	// caracteres de los que acepta AllowedTextChar.
+	bool text = false;
+	std::size_t maxLength = 0;
 };
+
+// Caracteres aceptados en una fila de texto (letras y números ASCII, como las
+// cuentas del server).
+bool AllowedTextChar(char c);
 
 struct OptionTab
 {
@@ -54,6 +62,10 @@ public:
 	const std::vector<OptionTab>& Tabs() const { return m_Tabs; }
 	int Current(std::size_t tab, std::size_t row) const;
 	void Cycle(std::size_t tab, std::size_t row, int direction);
+	// Filas de texto.  SetText descarta los caracteres no aceptados y corta en
+	// maxLength.
+	std::string Text(std::size_t tab, std::size_t row) const;
+	void SetText(std::size_t tab, std::size_t row, const std::string& value);
 	void Select(std::size_t tab, std::size_t row, int index);
 	bool Dirty() const;
 	// Escribe sólo lo cambiado.  *downloadsChanged: cambió algo que afecta qué
@@ -67,9 +79,11 @@ public:
 
 private:
 	int Stored(const OptionRow& r) const;
+	std::string StoredText(const OptionRow& r) const;
 
 	std::vector<OptionTab> m_Tabs;
-	std::vector<std::vector<int>> m_Selected;   // -1: sin cambios
+	std::vector<std::vector<int>> m_Selected;   // -1: sin cambios (en las de texto, 1: editada)
+	std::vector<std::vector<std::string>> m_Text;
 	IniDocument m_Game;
 	IniDocument m_Toml;
 	std::string m_GamePath;

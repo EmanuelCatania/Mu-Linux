@@ -138,6 +138,7 @@ void ApplyLauncherToml(const std::string& path, Config& config, std::vector<std:
 		}
 		else if (key == "Connections" && ParseInt(value, 1, 16, n)) config.connections = static_cast<int>(n);
 		else if (key == "SpeedLimitKB" && ParseInt(value, 0, 10000000, n)) config.speedLimit = static_cast<std::uint64_t>(n) * 1024;
+		else if (key == "Scale" && ParseInt(value, 0, 300, n) && (n == 0 || n >= 100)) config.scale = static_cast<int>(n);
 		else if (key == "BaseSource")
 		{
 			if (value.find("://") != std::string::npos)
