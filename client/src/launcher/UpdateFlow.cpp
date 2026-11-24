@@ -184,8 +184,10 @@ void UpdateFlow::Run()
 		m_Status.canPlay = canPlay;
 		m_Finished = true;
 	};
+	// Sin conexión alcanza con que el juego esté: un cliente descomprimido a mano
+	// no tiene índice, y no por eso hay que dejar de jugar.
 	auto unreachable = [&](const std::string& why) {
-		if (installed)
+		if (gameThere)
 			finish(Phase::Offline, Fmt("No se pudo buscar actualizaciones ({0}). Podés jugar con lo instalado.", { why }), true);
 		else
 			finish(Phase::Failed, why, false);
