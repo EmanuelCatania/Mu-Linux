@@ -155,10 +155,12 @@ bool ParsePatchFolder(const std::string& name, std::uint64_t* order)
 
 std::string SnapshotPatches(const std::string& patches, const std::string& out)
 {
-	std::string snap;
 	std::error_code ec;
 	const fs::path outPath = P(out).lexically_normal();
-	for (fs::recursive_directory_iterator it(P(patches), ec), end; !ec && it != end; it.increment(ec))
+	fs::recursive_directory_iterator it(P(patches), ec), end;
+	if (ec) return std::string();
+	std::string snap = "patches\n";
+	for (; !ec && it != end; it.increment(ec))
 	{
 		if (it->is_directory(ec) && it->path().lexically_normal() == outPath)
 		{
@@ -169,7 +171,7 @@ std::string SnapshotPatches(const std::string& patches, const std::string& out)
 		snap += U(it->path().lexically_relative(P(patches))) + "\t" + std::to_string(it->file_size(ec)) + "\t" +
 		        std::to_string(static_cast<long long>(it->last_write_time(ec).time_since_epoch().count())) + "\n";
 	}
-	return snap;
+	return ec ? std::string() : snap;
 }
 
 bool PublishPatches(const PublishOptions& o, bool* published, std::string* error)

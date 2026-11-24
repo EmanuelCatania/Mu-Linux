@@ -1060,6 +1060,9 @@ void TestPublish(const std::string& dir)
 	Require(MuPatch::SnapshotPatches(patches, out) == s1, "snapshot: ignora published/");
 	Write(JoinPath(patches, "06122026-1/Content/x6.txt"), std::string("xx"));
 	Require(MuPatch::SnapshotPatches(patches, out) != s1, "snapshot: ve un cambio");
+	MakeDirs(JoinPath(dir, "snap-vacia"));
+	Require(!MuPatch::SnapshotPatches(JoinPath(dir, "snap-vacia"), outE).empty(), "snapshot: una carpeta sin parches no es un error de lectura");
+	Require(MuPatch::SnapshotPatches(JoinPath(dir, "no-existe"), outE).empty(), "snapshot: vacío si no se puede leer");
 	k.Wipe();
 }
 
