@@ -5,6 +5,7 @@
 // corte.  También el armado y la validación de canales (ChannelFetch) por HTTP.
 
 #include "IniDocument.h"
+#include "Lang.h"
 #include "LauncherConfig.h"
 #include "OptionsModel.h"
 #include "PatchBuilder.h"
@@ -35,13 +36,16 @@
 #endif
 
 #include <atomic>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <random>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -820,6 +824,80 @@ std::vector<std::uint8_t> AnnounceBlob(std::uint64_t sequence, const std::string
 // Lo que el launcher aprende del server (ServerAnnounce + CsClient): por el
 // ConnectServer en pedazos, una identidad ajena no vale, una secuencia vieja
 // tampoco, /updates/ como respaldo y la rotación de la identidad.
+// Idioma del launcher: cada texto visible tiene su traducción en Lang.cpp.
+void TestLanguage()
+{
+	using namespace Launcher;
+	Require(LanguageFromSetting("Eng") == Language::English && LanguageFromSetting("Por") == Language::Portuguese &&
+	            LanguageFromSetting("Spn") == Language::Spanish && LanguageFromSetting("") == Language::Spanish,
+	        "idioma: LangSelection del juego");
+
+	// Las opciones: pestañas, filas y valores.  Los que son iguales en todos
+	// los idiomas no necesitan entrada.
+	const std::set<std::string> same = { "Render", "Antialiasing", "Bloom", "Zoom", "Normal", "Original", "Mipmaps",
+	                                     "FXAA", "MSAA 4x", "MSAA 4x + FXAA", "English", "Español", "Português",
+	                                     "OpenGL", "WebGPU", "DirectX 12", "DirectX 11", "Vulkan" };
+	auto needs = [&](const std::string& s) {
+		int letters = 0;
+		for (char c : s) letters += (c >= 'a' && c <= 'z') ? 1 : 0;
+		return letters >= 2 && s.find("KB/s") == std::string::npos && s.find("MB/s") == std::string::npos &&
+		       !same.count(s);
+	};
+	Launcher::OptionsEditor ed;
+	for (const auto& tab : ed.Tabs())
+	{
+		Require(HasTranslation(tab.name), ("idioma: falta la pestaña " + tab.name).c_str());
+		for (const auto& row : tab.rows)
+		{
+			Require(!needs(row.label) || HasTranslation(row.label), ("idioma: falta la opción " + row.label).c_str());
+			for (const auto& c : row.choices)
+				Require(!needs(c.label) || HasTranslation(c.label), ("idioma: falta el valor " + c.label).c_str());
+		}
+	}
+
+	// Los textos que el código pasa por Tr y Fmt (y los de un ternario que sigue
+	// en la línea de abajo).
+	for (const char* file : { "main.cpp", "UpdateFlow.cpp", "CsClient.cpp", "ServerAnnounce.cpp", "LauncherConfig.cpp" })
+	{
+		std::ifstream in(std::string(MU_LAUNCHER_SOURCE_DIR) + "/" + file);
+		Require(in.good(), (std::string("idioma: no se pudo leer ") + file).c_str());
+		std::string line;
+		bool continued = false;
+		while (std::getline(in, line))
+		{
+			const std::size_t first = line.find_first_not_of(" \t");
+			const bool translated = line.find("Tr(") != std::string::npos || line.find("Fmt(") != std::string::npos;
+			if (!translated && !(continued && first != std::string::npos && line[first] == ':'))
+			{
+				continued = false;
+				continue;
+			}
+			continued = translated;
+			for (std::size_t a = line.find('"'); a != std::string::npos; a = line.find('"', a))
+			{
+				const std::size_t b = line.find('"', a + 1);
+				if (b == std::string::npos) break;
+				const std::string lit = line.substr(a + 1, b - a - 1);
+				int letters = 0;
+				for (char c : lit) letters += std::isalpha(static_cast<unsigned char>(c)) ? 1 : 0;
+				if (letters >= 3 && lit.find(".h") == std::string::npos)
+					Require(HasTranslation(lit), (std::string("idioma: ") + file + " sin traducción: " + lit).c_str());
+				a = b + 1;
+			}
+		}
+	}
+
+	SetLanguage(Language::English);
+	Require(Fmt("Bajando {0} de {1} archivos ({2} de {3})...", { "3", "10", "1.0 MB", "4.0 MB" }) ==
+	            "Downloading 3 of 10 files (1.0 MB of 4.0 MB)...",
+	        "idioma: Fmt en inglés");
+	Require(std::string(Tr("texto que no está")) == "texto que no está", "idioma: lo que no está sale en castellano");
+	SetLanguage(Language::Portuguese);
+	Require(Tr(std::string("Jugar")) == "Jogar", "idioma: portugués");
+	SetLanguage(Language::Spanish);
+	Require(std::string(Tr("Jugar")) == "Jugar", "idioma: castellano");
+}
+
 void TestServerAnnounce(TestServer& http, const std::string& dir, const std::string& www)
 {
 	KeyPair root, other, rotated;
@@ -1045,6 +1123,7 @@ int main()
 	TestLauncherConfig(d);
 	TestIniDocument();
 	TestOptions(d);
+	TestLanguage();
 	TestSelfUpdateMarks(d);
 	TestSelfUpdateFlow(server, d, root);
 	TestLauncherFlow(server, d, root);

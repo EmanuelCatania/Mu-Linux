@@ -110,7 +110,8 @@ std::vector<OptionTab> BuildOptionTabs()
 	}
 	{
 		OptionRow r;
-		r.label = "Idioma del juego";
+		// También el del launcher.
+		r.label = "Idioma";
 		r.section = "Language";
 		r.key = "LangSelection";
 		r.numeric = false;

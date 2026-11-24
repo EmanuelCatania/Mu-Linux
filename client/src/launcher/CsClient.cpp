@@ -1,5 +1,7 @@
 #include "CsClient.h"
 
+#include "Lang.h"
+
 #include "net/crypto/SecureRandom.h"
 #include "update/Announce.h"
 
@@ -115,7 +117,7 @@ Socket Connect(const std::string& host, std::uint16_t port, Clock::time_point de
 	addrinfo* list = nullptr;
 	if (::getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &list) != 0 || !list)
 	{
-		Fail(error, "no se encuentra " + host);
+		Fail(error, Fmt("no se encuentra {0}", { host }));
 		return kNoSocket;
 	}
 	Socket result = kNoSocket;
@@ -148,7 +150,7 @@ Socket Connect(const std::string& host, std::uint16_t port, Clock::time_point de
 		CloseSocket(s);
 	}
 	::freeaddrinfo(list);
-	if (result == kNoSocket) Fail(error, "no responde " + host + ":" + std::to_string(port));
+	if (result == kNoSocket) Fail(error, Fmt("no responde {0}", { host + ":" + std::to_string(port) }));
 	return result;
 }
 
@@ -171,7 +173,7 @@ bool SocketCsFetcher::Fetch(const std::string& host, std::uint16_t port, const S
 	if (!SecureRandomBytes(random, sizeof(random)))
 	{
 		CloseSocket(s);
-		return Fail(error, "no hay números aleatorios");
+		return Fail(error, Tr("no hay números aleatorios"));
 	}
 	bool trusted = false;
 	channel.BeginClient(random, [&](const std::uint8_t* id, const std::uint8_t* prev, const std::uint8_t* sig) {
@@ -202,32 +204,32 @@ bool SocketCsFetcher::Fetch(const std::string& host, std::uint16_t port, const S
 	for (;;)
 	{
 		const int w = WaitFor(s, false, deadline, m_Cancel);
-		if (w == 0) return done(false, (m_Cancel && m_Cancel->load()) ? "cancelado" : where + " no contestó a tiempo");
-		if (w < 0) return done(false, "se cortó la conexión con " + where);
+		if (w == 0) return done(false, (m_Cancel && m_Cancel->load()) ? std::string(Tr("cancelado")) : Fmt("{0} no contestó a tiempo", { where }));
+		if (w < 0) return done(false, Fmt("se cortó la conexión con {0}", { where }));
 		const int n = ::recv(s, reinterpret_cast<char*>(buf), sizeof(buf), 0);
-		if (n == 0) return done(false, where + " cerró la conexión");
+		if (n == 0) return done(false, Fmt("{0} cerró la conexión", { where }));
 		if (n < 0)
 		{
 			if (InProgress()) continue;
-			return done(false, "se cortó la conexión con " + where);
+			return done(false, Fmt("se cortó la conexión con {0}", { where }));
 		}
 		if (!channel.Receive(buf, static_cast<std::size_t>(n), plain))
 		{
 			if (channel.GetFailure() == SecureChannel::Failure::Untrusted || (!trusted && channel.GetFailure() == SecureChannel::Failure::BadSignature))
-				return done(false, where + " no presentó la identidad del server");
+				return done(false, Fmt("{0} no presentó la identidad del server", { where }));
 			if (channel.GetFailure() == SecureChannel::Failure::NotThisProtocol)
-				return done(false, where + " no usa el canal cifrado");
-			return done(false, "el canal con " + where + " falló");
+				return done(false, Fmt("{0} no usa el canal cifrado", { where }));
+			return done(false, Fmt("el canal con {0} falló", { where }));
 		}
 		std::uint8_t reply[SecureChannel::ClientHelloSize];
 		if (const std::size_t r = channel.TakeReply(reply))
-			if (!SendAll(s, reply, r, deadline, m_Cancel)) return done(false, "se cortó la conexión con " + where);
+			if (!SendAll(s, reply, r, deadline, m_Cancel)) return done(false, Fmt("se cortó la conexión con {0}", { where }));
 		if (!channel.IsReady()) continue;
 		if (!asked)
 		{
 			asked = true;
 			std::memcpy(identity, channel.PeerIdentity(), SecureChannel::KeySize);
-			if (!request(0)) return done(false, "se cortó la conexión con " + where);
+			if (!request(0)) return done(false, Fmt("se cortó la conexión con {0}", { where }));
 		}
 
 		// Paquetes completos (C1: largo en 1 byte; C2: en 2, big-endian).
@@ -238,8 +240,8 @@ bool SocketCsFetcher::Fetch(const std::string& host, std::uint16_t port, const S
 			std::size_t size = 0;
 			if (type == 0xC1) size = plain[pos + 1];
 			else if (type == 0xC2) size = static_cast<std::size_t>(plain[pos + 1]) << 8 | plain[pos + 2];
-			else return done(false, "respuesta inválida de " + where);
-			if (size < 3) return done(false, "respuesta inválida de " + where);
+			else return done(false, Fmt("respuesta inválida de {0}", { where }));
+			if (size < 3) return done(false, Fmt("respuesta inválida de {0}", { where }));
 			if (pos + size > plain.size()) break;
 			const std::uint8_t* p = plain.data() + pos;
 			pos += size;
@@ -247,16 +249,16 @@ bool SocketCsFetcher::Fetch(const std::string& host, std::uint16_t port, const S
 			const std::uint8_t result = p[5];
 			const std::uint32_t fileSize = ReadLe32(p + 6), offset = ReadLe32(p + 10);
 			const std::size_t length = static_cast<std::size_t>(p[14]) | static_cast<std::size_t>(p[15]) << 8;
-			if (result == 4) return done(false, where + " no publica launcher.json");
-			if (result != 0) return done(false, where + " rechazó el pedido (" + std::to_string(result) + ")");
+			if (result == 4) return done(false, Fmt("{0} no publica launcher.json", { where }));
+			if (result != 0) return done(false, Fmt("{0} rechazó el pedido ({1})", { where, std::to_string(result) }));
 			if (fileSize <= 64 || fileSize > 64 + Update::kAnnounceMaxSize || kReplyHeader + length > size)
-				return done(false, "respuesta inválida de " + where);
+				return done(false, Fmt("respuesta inválida de {0}", { where }));
 			if (blob.empty()) total = fileSize;
 			if (fileSize != total || offset != blob.size() || offset + length > total || length == 0)
-				return done(false, "launcher.json cambió mientras se bajaba de " + where);
+				return done(false, Fmt("launcher.json cambió mientras se bajaba de {0}", { where }));
 			blob.insert(blob.end(), p + kReplyHeader, p + kReplyHeader + length);
 			if (blob.size() == total) return done(true, "");
-			if (!request(static_cast<std::uint32_t>(blob.size()))) return done(false, "se cortó la conexión con " + where);
+			if (!request(static_cast<std::uint32_t>(blob.size()))) return done(false, Fmt("se cortó la conexión con {0}", { where }));
 		}
 		plain.erase(plain.begin(), plain.begin() + static_cast<std::ptrdiff_t>(pos));
 	}

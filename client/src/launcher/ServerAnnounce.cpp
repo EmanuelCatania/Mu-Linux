@@ -1,5 +1,7 @@
 #include "ServerAnnounce.h"
 
+#include "Lang.h"
+
 #include "net/ServerTrust.h"
 #include "update/FileUtil.h"
 #include "update/Signing.h"
@@ -31,13 +33,13 @@ bool CheckBlob(const std::vector<std::uint8_t>& blob, const std::uint8_t key[kKe
 {
 	if (blob.size() <= kSignatureSize)
 	{
-		if (error) *error = "respuesta vacía";
+		if (error) *error = Tr("respuesta vacía");
 		return false;
 	}
 	const std::string text(blob.begin() + kSignatureSize, blob.end());
 	if (!Verify(kLauncherContext, text.data(), text.size(), blob.data(), key))
 	{
-		if (error) *error = "la firma no es del server";
+		if (error) *error = Tr("la firma no es del server");
 		return false;
 	}
 	return ParseAnnounce(text, out, error);
@@ -134,7 +136,7 @@ AnnounceResult ResolveAnnounce(const AnnounceSeed& seed, const std::string& cach
 			continue;
 		}
 		if (accept(a, blob)) return r;
-		r.notes.push_back(s + ": configuración más vieja que la guardada");
+		r.notes.push_back(Fmt("{0}: configuración más vieja que la guardada", { s }));
 	}
 
 	// 3. /updates/ de cada URL de parches.
@@ -156,7 +158,7 @@ AnnounceResult ResolveAnnounce(const AnnounceSeed& seed, const std::string& cach
 		std::uint8_t sig[kSignatureSize];
 		if (!ParseSignatureFile(std::string(sigText.begin(), sigText.end()), sig))
 		{
-			r.notes.push_back(u + ": firma ilegible");
+			r.notes.push_back(Fmt("{0}: firma ilegible", { u }));
 			continue;
 		}
 		std::vector<std::uint8_t> blob(sig, sig + kSignatureSize);
@@ -168,7 +170,7 @@ AnnounceResult ResolveAnnounce(const AnnounceSeed& seed, const std::string& cach
 			continue;
 		}
 		if (accept(a, blob)) return r;
-		r.notes.push_back(u + ": configuración más vieja que la guardada");
+		r.notes.push_back(Fmt("{0}: configuración más vieja que la guardada", { u }));
 	}
 
 	if (haveCached)

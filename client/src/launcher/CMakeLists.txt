@@ -116,6 +116,7 @@ endforeach()
 # usan el ejecutable y las pruebas).
 add_library(mu_launcher_core STATIC
     IniDocument.cpp IniDocument.h
+    Lang.cpp Lang.h
     LauncherConfig.cpp LauncherConfig.h
     OptionsModel.cpp OptionsModel.h
     SelfUpdate.cpp SelfUpdate.h
@@ -180,6 +181,8 @@ if(PROJECT_IS_TOP_LEVEL)
     add_subdirectory("${MU_CLIENT_SOURCE_DIR}/tools/mu-patch" mu-patch EXCLUDE_FROM_ALL)
     add_executable(mu_update_http_test "${MU_CLIENT_SOURCE_DIR}/tests/UpdateHttp.cpp")
     target_link_libraries(mu_update_http_test PRIVATE mu_launcher_core mu_patch_core)
+    # La prueba del idioma lee las fuentes del launcher.
+    target_compile_definitions(mu_update_http_test PRIVATE MU_LAUNCHER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
     if(WIN32)
         target_link_libraries(mu_update_http_test PRIVATE ws2_32)
     endif()

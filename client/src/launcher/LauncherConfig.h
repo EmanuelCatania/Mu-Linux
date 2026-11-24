@@ -71,6 +71,9 @@ void ApplyLauncherToml(const std::string& path, Config& config, std::vector<std:
 // [Window] HDTextures del Config.ini del juego (0 si falta o no se puede leer).
 bool HDTexturesEnabled(const std::string& configIni);
 
+// [Language] LangSelection del juego (vacío si no está): el idioma del launcher.
+std::string LanguageSetting(const std::string& configIni);
+
 // La carpeta de usuario del cliente para una instalación: <raíz>/User en
 // Windows; la raíz misma en Linux, donde el launcher arranca el cliente con
 // MU_CLIENT_ROOT (ver platform/UserPath.h).
