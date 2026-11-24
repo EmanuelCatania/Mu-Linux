@@ -33,6 +33,9 @@ public:
 	// Devuelve 0 si el canal todavía no terminó el saludo: el paquete no se manda.
 	int Seal(int index, const BYTE* plain, int size, BYTE* out);
 
+	// Hash del saludo de la conexión (MU-Guard); nullptr si el canal no está listo.
+	const BYTE* Transcript(int index);
+
 private:
 
 	SecureChannel* Channel(int index);

@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "GameMain.h"
+#include "GuardLink.h"
 #include "JSProtocol.h"
 #include "MiniDump.h"
 #include "QueueTimer.h"
@@ -171,6 +172,11 @@ int main()
 		else
 		{
 			GameMainInit(nullptr);
+
+#ifdef MU_GUARD
+			// MU-Guard: latido con mu-guard (sólo si Data/Guard/Guard.toml lo activa).
+			gGuardLink.Start(gPath.GetFullPath(""));
+#endif
 
 			JoinServerConnect();
 
