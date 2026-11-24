@@ -60,6 +60,8 @@ enum class ClientTextId {
     Underwater,
     UnderwaterNoWobble,
     WorldWater,
+    // El server pide abrir el juego desde el launcher y no se lo encontró.
+    LauncherRequired,
     Count
 };
 // Los textos salen del server (F3/F0, tabla 4, Data/Text/<idioma>/Client.txt).

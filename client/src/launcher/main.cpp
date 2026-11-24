@@ -275,17 +275,20 @@ bool LaunchProgram(const std::string& path, const std::vector<std::string>& extr
 	SDL_Environment* env = nullptr;
 #ifndef _WIN32
 	::chmod(path.c_str(), 0755);
+#endif
 	if (clientRoot)
 	{
-		// El cliente de Linux toma sus carpetas de acá (ver platform/UserPath.h).
 		env = SDL_CreateEnvironment(true);
+		// El juego lo abrió el launcher: si el server pide jugar sólo desde el
+		// launcher, el cliente sigue (ver net/LauncherPolicy.h).
+		SDL_SetEnvironmentVariable(env, "MU_STARTED_BY_LAUNCHER", "1", true);
+#ifndef _WIN32
+		// El cliente de Linux toma sus carpetas de acá (ver platform/UserPath.h).
 		SDL_SetEnvironmentVariable(env, "MU_CLIENT_ROOT", clientRoot->c_str(), true);
 		SDL_SetEnvironmentVariable(env, "MU_ASSET_ROOT", clientRoot->c_str(), true);
+#endif
 		SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ENVIRONMENT_POINTER, env);
 	}
-#else
-	(void)clientRoot;
-#endif
 	SDL_Process* proc = SDL_CreateProcessWithProperties(props);
 	SDL_DestroyProperties(props);
 	if (env) SDL_DestroyEnvironment(env);

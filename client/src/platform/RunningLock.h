@@ -18,6 +18,10 @@ namespace RunningLock {
 // launcher no va a saber que el juego está abierto).
 bool Acquire(const std::string& path);
 
+// Cliente: lo suelta antes de terminar (al abrir el launcher, ver
+// net/LauncherPolicy.h).  Sin Acquire no hace nada.
+void Release();
+
 // Launcher: true si algún cliente lo tiene tomado.
 bool IsHeld(const std::string& path);
 

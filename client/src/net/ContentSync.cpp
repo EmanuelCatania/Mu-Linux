@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "net/ContentSync.h"
 #include "net/ContentSyncCore.h"
+#include "net/LauncherPolicy.h"
 #include "net/NetChannel.h"
 #include "net/Network.h"
 #include "net/Protocol/ProtocolBase.h"
@@ -195,6 +196,7 @@ bool Tick()
     if (s_Stage == Stage::Connecting) {
         if (NetChannel::IsSecure()) {
             s_Stage = Stage::Manifest;
+            LauncherPolicy::Request();
             RequestManifest(0);
         } else if (NetChannel::IsPlain()) {
             Finish("el ConnectServer no tiene canal cifrado, no se sincroniza");

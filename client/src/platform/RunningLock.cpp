@@ -39,6 +39,12 @@ HANDLE Open(const std::string& path)
 }
 #endif
 
+#ifdef _WIN32
+HANDLE s_Held = INVALID_HANDLE_VALUE;
+#else
+int s_Held = -1;
+#endif
+
 } // namespace
 
 bool Acquire(const std::string& path)
@@ -52,7 +58,8 @@ bool Acquire(const std::string& path)
 		CloseHandle(h);
 		return false;
 	}
-	return true;   // el handle queda abierto hasta que termine el proceso
+	s_Held = h;    // queda abierto hasta que termine el proceso (o Release)
+	return true;
 #else
 	const int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
 	if (fd < 0) return false;
@@ -61,7 +68,19 @@ bool Acquire(const std::string& path)
 		::close(fd);
 		return false;
 	}
+	s_Held = fd;
 	return true;
+#endif
+}
+
+void Release()
+{
+#ifdef _WIN32
+	if (s_Held != INVALID_HANDLE_VALUE) CloseHandle(s_Held);
+	s_Held = INVALID_HANDLE_VALUE;
+#else
+	if (s_Held >= 0) ::close(s_Held);
+	s_Held = -1;
 #endif
 }
 

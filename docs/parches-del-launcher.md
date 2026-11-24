@@ -58,6 +58,24 @@ MU_LAUNCHER_NEWS=Mantenimiento el lunes a las 10.\nDura una hora.
   origen del cliente base, si usás un fork propio (vacíos: el compilado en el
   launcher).
 
+### Jugar sólo desde el launcher
+
+`MU_LAUNCHER_REQUIRED=1` (o `RequireLauncher=1` en la sección `[Launcher]` de
+`ConnectServer.ini`, fuera de docker) hace que el cliente de escritorio abierto
+directo, sin el launcher, abra el launcher y se cierre, como el `main.exe` del
+0.97k original con `mu.exe`. Así nadie juega sin actualizar. El cliente lo
+pregunta al ConnectServer en la intro, por el canal cifrado; el `.ini` se lee en
+cada pedido, así que cambiarlo no pide reiniciar.
+
+- El launcher tiene que estar al lado del juego: en `Launcher/` (donde lo deja
+  su parche) o en la misma carpeta. Si no está, el cliente avisa que hay que
+  bajarlo del sitio del server y se cierra.
+- Sólo aplica al cliente de **escritorio** (Windows y Linux). La versión web no
+  tiene launcher: no lo pregunta ni lo aplica.
+- No es seguridad: el launcher marca el juego con una variable de entorno
+  (`MU_STARTED_BY_LAUNCHER`) que cualquiera puede poner. Lo que protege es la
+  seguridad del server.
+
 **Para mudar el ConnectServer**: agregá la dirección nueva en
 `MU_LAUNCHER_CONNECT_SERVERS` **antes** de apagar la vieja y dejala unos días.
 Cada launcher que se conecta la aprende; uno que ya no encuentra la vieja prueba
