@@ -87,13 +87,22 @@ bool FindImage(const std::string& name, const unsigned char** data, std::size_t*
 }
 " @ONLY)
 file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/res/launcher.rc" CONTENT "IDI_ICON1 ICON \"${_theme}/Icon.ico\"\n" @ONLY)
+# Lo generado a partir de los archivos del tema va en una carpeta y con un
+# nombre por tema.  Todos los temas tienen un Theme.cpp y casi todos las mismas
+# imágenes (MainBackground.png...): con la misma salida, al cambiar de tema en
+# la misma carpeta de build MSBuild compara fechas, ve el .obj o el .cpp
+# generado más nuevo que el archivo del tema nuevo y se queda con el del tema
+# anterior.
+set(_theme_out "${CMAKE_CURRENT_BINARY_DIR}/res/${MU_LAUNCHER_THEME}")
+set(_theme_src "${_theme_out}/Theme_${MU_LAUNCHER_THEME}.cpp")
+file(CONFIGURE OUTPUT "${_theme_src}" CONTENT "#include \"${_theme}/Theme.cpp\"\n" @ONLY)
 set(_embedded "${CMAKE_CURRENT_BINARY_DIR}/res/ThemeIndex.cpp")
 foreach(_pair IN LISTS _pairs)
     string(FIND "${_pair}" "=" _eq)
     string(SUBSTRING "${_pair}" 0 ${_eq} _sym)
     math(EXPR _from "${_eq} + 1")
     string(SUBSTRING "${_pair}" ${_from} -1 _file)
-    set(_out "${CMAKE_CURRENT_BINARY_DIR}/res/${_sym}.cpp")
+    set(_out "${_theme_out}/${_sym}.cpp")
     add_custom_command(OUTPUT "${_out}"
         COMMAND "${CMAKE_COMMAND}" -DINPUT=${_file} -DOUTPUT=${_out} -DSYMBOL=${_sym}
                 -P "${MU_CLIENT_SOURCE_DIR}/cmake/MuEmbedFile.cmake"
@@ -132,7 +141,7 @@ add_executable(launcher WIN32
     ThemeSpec.h
     WebPanel.cpp
     WebPanel.h
-    "${_theme}/Theme.cpp"
+    "${_theme_src}"
     ${_embedded})
 if(WIN32)
     target_sources(launcher PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/res/launcher.rc")

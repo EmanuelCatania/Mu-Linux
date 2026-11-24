@@ -82,11 +82,20 @@ SDL_FRect DragRect()
 	return g_OptionsMode && g_Theme.optionsDrag.w > 0 ? g_Theme.optionsDrag : g_Theme.drag;
 }
 
+
 SDL_HitTestResult HitTest(SDL_Window*, const SDL_Point* p, void*)
 {
-	const SDL_FRect d = DragRect();
 	const float x = static_cast<float>(p->x) / g_WindowScale, y = static_cast<float>(p->y) / g_WindowScale;
-	return x >= d.x && x < d.x + d.w && y >= d.y && y < d.y + d.h ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
+	// Los botones que caen dentro de la zona de arrastre (la X y el engranaje
+	// de la cabecera) tienen que recibir el clic: si no, Windows se lo come
+	// para mover la ventana.
+	const SDL_FRect* buttons[] = { &g_Theme.options, &g_Theme.play, &g_Theme.close, &g_Theme.exit, &g_Theme.pause, &g_Theme.save, &g_Theme.back };
+	for (const SDL_FRect* b : buttons)
+	{
+		const bool optionsButton = b == &g_Theme.save || b == &g_Theme.back;
+		if (optionsButton == g_OptionsMode && b->w > 0 && Inside(*b, x, y)) return SDL_HITTEST_NORMAL;
+	}
+	return Inside(DragRect(), x, y) ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
 }
 
 // Escala de la ventana: la elegida (percent) o la de la pantalla (0), sin pasar
@@ -356,7 +365,7 @@ struct Ui
 	SDL_Renderer* r = nullptr;
 	std::map<std::string, SDL_Texture*> images;   // las del tema, por nombre
 	std::unique_ptr<Font> title, label, regular, tiny, notice;
-	std::map<float, std::unique_ptr<Font>> sized;   // la de los botones con fontSize
+	std::map<std::pair<float, bool>, std::unique_ptr<Font>> sized;   // la de los botones con fontSize
 	float fontScale = 1.0f;
 
 	// La imagen del tema con ese nombre; nullptr si el nombre está vacío o el
@@ -385,10 +394,12 @@ struct Ui
 		fontScale = scale;
 	}
 
-	Font& Bold(float size)
+	Font& Sized(float size, bool bold)
 	{
-		auto& f = sized[size];
-		if (!f) f = std::make_unique<Font>(r, LauncherRes::FontBold, LauncherRes::FontBoldSize, size, fontScale);
+		auto& f = sized[{ size, bold }];
+		if (!f)
+			f = bold ? std::make_unique<Font>(r, LauncherRes::FontBold, LauncherRes::FontBoldSize, size, fontScale)
+			         : std::make_unique<Font>(r, LauncherRes::FontRegular, LauncherRes::FontRegularSize, size, fontScale);
 		return *f;
 	}
 
@@ -400,11 +411,12 @@ struct Ui
 	void DrawButton(const Button& b)
 	{
 		const ButtonStyle& s = b.style ? *b.style : g_Theme.buttonStyle;
-		SDL_Texture* t = Image(!b.enabled ? s.disabled : (b.hover ? s.hover : s.normal));
+		SDL_Texture* t = Image(!b.enabled ? s.disabled : (b.pressed ? s.pressed : (b.hover ? s.hover : s.normal)));
+		if (!t && b.pressed) t = Image(s.hover);
 		if (!t) t = Image(s.normal);
 		if (t) SDL_RenderTexture(r, t, nullptr, &b.rect);
-		if (!b.label || !*b.label) return;
-		Font& f = s.fontSize > 0 ? Bold(s.fontSize) : *label;
+		if (s.noLabel || !b.label || !*b.label) return;
+		Font& f = s.fontSize > 0 ? Sized(s.fontSize, s.bold) : *label;
 		SDL_FRect box = b.rect;
 		if (s.textTop) box.h = f.Height() + 6;
 		if (b.pressed) box.y += 1;
@@ -453,8 +465,8 @@ struct OptionsScreen
 	std::size_t tab = 0;
 	int editing = -1;         // fila de texto que se está escribiendo (de la pestaña actual)
 	std::string message;
-	Button save{ g_Theme.save, "Guardar" };
-	Button back{ g_Theme.back, "Volver" };
+	Button save{ g_Theme.save, "Guardar", &g_Theme.Or(g_Theme.saveStyle) };
+	Button back{ g_Theme.back, "Volver", &g_Theme.Or(g_Theme.backStyle) };
 	Button verify{ { 0, 0, 150, 26 }, "Verificar archivos" };
 	Button web{ { 0, 0, 150, 26 }, "Ir a la web" };
 
@@ -578,7 +590,7 @@ int main(int argc, char** argv)
 		WebPanel webPanel(window, Update::JoinPath(Update::JoinPath(userDir, "Cache"), "WebView2"));
 		std::string webShownUrl;
 
-		Button options{ g_Theme.options, "Opciones" };
+		Button options{ g_Theme.options, "Opciones", &g_Theme.Or(g_Theme.optionsStyle) };
 		Button play{ g_Theme.play, "Jugar", &g_Theme.PlayStyle() };
 		Button close{ g_Theme.close, "Cerrar" };
 		Button exitX{ g_Theme.exit, "", &g_Theme.exitStyle };
@@ -663,7 +675,10 @@ int main(int argc, char** argv)
 			if (launched && flow->Finished() && st.phase == Phase::Ready) running = false;
 			const bool canPause = st.background && !flow->Finished() && st.waitingForClose == 0;
 			pause.label = st.paused ? "Seguir" : "Pausar";
-			Button* mainButtons[] = { &options, &play, &close, &exitX };
+			// Los que el tema no tiene (ancho 0) no se dibujan ni se pueden apretar.
+			std::vector<Button*> mainButtons;
+			for (Button* b : { &options, &play, &close, &exitX })
+				if (b->rect.w > 0) mainButtons.push_back(b);
 			std::vector<Button*> buttons;
 			if (opts)
 			{
@@ -676,8 +691,7 @@ int main(int argc, char** argv)
 			}
 			else
 			{
-				buttons.assign(std::begin(mainButtons), std::end(mainButtons));
-				if (exitX.rect.w <= 0) buttons.pop_back();
+				buttons = mainButtons;
 				if (canPause) buttons.push_back(&pause);
 			}
 
@@ -834,12 +848,12 @@ int main(int argc, char** argv)
 			const SDL_FRect inner{ th.imagePanel.x + pb, th.imagePanel.y + pb, th.imagePanel.w - 2 * pb, th.imagePanel.h - 2 * pb };
 			// La web tapa la imagen: sólo en la pantalla principal y sin avisos que
 			// mostrar.  Mientras carga (o si no carga) queda la imagen.
-			if (!st.webUrl.empty() && st.webUrl != webShownUrl)
+			if (th.webPanel && !st.webUrl.empty() && st.webUrl != webShownUrl)
 			{
 				webPanel.Navigate(st.webUrl);
 				webShownUrl = st.webUrl;
 			}
-			const bool webWanted = !opts && notes.empty();
+			const bool webWanted = th.webPanel && !opts && notes.empty();
 			{
 				int pw = th.width, ph = th.height;
 				SDL_GetWindowSizeInPixels(window, &pw, &ph);
@@ -852,12 +866,13 @@ int main(int argc, char** argv)
 			// Con forma, lo que no tapa el fondo queda transparente.
 			SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 			if (th.shaped && !opts) SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-			else SDL_SetRenderDrawColor(renderer, 224, 224, 224, 255);
+			else SDL_SetRenderDrawColor(renderer, th.clearColor.r, th.clearColor.g, th.clearColor.b, 255);
 			SDL_RenderClear(renderer);
 			if (!opts)
 			{
 				// ── Pantalla principal ─────────────────────────────────────
 				ui.DrawImage(th.background, nullptr);
+				for (const ThemeImage& d : th.decor) ui.DrawImage(d.name, &d.rect);
 				if (th.showTitle) ui.title->Draw(config.title, th.titlePos.x, th.titlePos.y, th.titleColor);
 
 				if (th.imageBevel) DrawBevel(renderer, th.imagePanel);
@@ -915,8 +930,7 @@ int main(int argc, char** argv)
 					DrawBevel(renderer, pause.rect, pause.pressed);
 					ui.tiny->DrawCentered(pause.label, pause.rect, th.pauseText);
 				}
-				for (Button* b : mainButtons)
-					if (b->rect.w > 0) ui.DrawButton(*b);
+				for (Button* b : mainButtons) ui.DrawButton(*b);
 				ui.tiny->Draw("Diseño: kayito", th.credit.x, th.credit.y, th.creditColor);
 			}
 			else
