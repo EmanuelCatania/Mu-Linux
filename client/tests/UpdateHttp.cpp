@@ -466,6 +466,12 @@ void TestLauncherFlow(TestServer& server, const std::string& dir, const std::str
 	// Instalación vacía y sin red: no se puede jugar.
 	st = run(off, JoinPath(dir, "flow-vacio"));
 	Require(st.phase == Launcher::Phase::Failed && !st.canPlay, "flow: sin nada instalado y sin red, no se juega");
+	// El cliente descomprimido a mano (sin índice del launcher) y sin red: se
+	// juega igual.
+	const std::string byHand = JoinPath(dir, "flow-a-mano");
+	Write(JoinPath(byHand, "main.exe"), Random(100, 11));
+	st = run(off, byHand);
+	Require(st.phase == Launcher::Phase::Offline && st.canPlay, "flow: cliente a mano y sin red, se juega");
 	// Clave rota.
 	Launcher::Config badKey = c;
 	badKey.baseKey = "xyz";
