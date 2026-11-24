@@ -44,6 +44,10 @@ struct BuildOptions
 	// Los zips que se reusan sin url ya están donde se va a servir el manifiesto
 	// nuevo: no se copian a out (publish deja todo en una carpeta).
 	bool reuseInPlace = false;
+	// Se acepta una versión sin archivos (publish con Data/Patches vacía): dice,
+	// firmado, que el server no tiene parches.  Sin esto el launcher no encuentra
+	// el manifiesto y un jugador nuevo no puede instalar.
+	bool allowEmpty = false;
 	int level = 19;
 	int threads = 0;                    // 0: los núcleos del equipo
 	Log log;

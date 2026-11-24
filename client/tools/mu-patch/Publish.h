@@ -71,7 +71,9 @@ bool ParsePatchFolder(const std::string& name, std::uint64_t* order);
 
 // Lo que hay en Data/Patches (sin published/): ruta, tamaño y fecha de cada
 // archivo.  watch publica cuando cambia y se mantiene igual entre dos pasadas
-// (una carpeta a medio subir cambia entre pasadas).
+// (una carpeta a medio subir cambia entre pasadas).  Vacío sólo si no se puede
+// leer la carpeta: una carpeta sin parches da algo no vacío (y se publica la
+// versión vacía), un error de lectura no publica nada.
 std::string SnapshotPatches(const std::string& patches, const std::string& out);
 
 } // namespace MuPatch

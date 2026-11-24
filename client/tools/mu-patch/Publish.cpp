@@ -155,10 +155,12 @@ bool ParsePatchFolder(const std::string& name, std::uint64_t* order)
 
 std::string SnapshotPatches(const std::string& patches, const std::string& out)
 {
-	std::string snap;
 	std::error_code ec;
 	const fs::path outPath = P(out).lexically_normal();
-	for (fs::recursive_directory_iterator it(P(patches), ec), end; !ec && it != end; it.increment(ec))
+	fs::recursive_directory_iterator it(P(patches), ec), end;
+	if (ec) return std::string();
+	std::string snap = "patches\n";
+	for (; !ec && it != end; it.increment(ec))
 	{
 		if (it->is_directory(ec) && it->path().lexically_normal() == outPath)
 		{
@@ -169,7 +171,7 @@ std::string SnapshotPatches(const std::string& patches, const std::string& out)
 		snap += U(it->path().lexically_relative(P(patches))) + "\t" + std::to_string(it->file_size(ec)) + "\t" +
 		        std::to_string(static_cast<long long>(it->last_write_time(ec).time_since_epoch().count())) + "\n";
 	}
-	return snap;
+	return ec ? std::string() : snap;
 }
 
 bool PublishPatches(const PublishOptions& o, bool* published, std::string* error)
@@ -204,7 +206,8 @@ bool PublishPatches(const PublishOptions& o, bool* published, std::string* error
 	}
 	if (ec) return Fail(error, "no se puede leer " + o.patches + ": " + ec.message());
 	std::sort(folders.begin(), folders.end());
-	if (folders.empty()) return Fail(error, "no hay parches en " + o.patches);
+	// Sin parches se publica igual una versión vacía (ver BuildOptions::allowEmpty).
+	if (folders.empty()) Say(o.log, "no hay parches en " + o.patches + ": se publica una versión sin archivos");
 
 	fs::remove_all(P(staging), ec);
 	if (!MakeDirs(staging)) return Fail(error, "no se puede crear " + staging);
@@ -251,6 +254,7 @@ bool PublishPatches(const PublishOptions& o, bool* published, std::string* error
 	b.keyPath = o.keyPath;
 	b.deleted.assign(deleted.begin(), deleted.end());
 	b.reuseInPlace = true;
+	b.allowEmpty = true;
 	b.level = o.level;
 	b.threads = o.threads;
 	b.log = o.log;

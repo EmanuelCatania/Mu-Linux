@@ -385,10 +385,10 @@ bool BuildPatch(const BuildOptions& o, std::string* error)
 		f.required = !MatchesAny(o.optional, path);
 		files.push_back(std::move(f));
 	}
-	if (files.empty()) { key.Wipe(); return Fail(error, "no hay archivos para publicar en " + o.in); }
+	if (files.empty() && !o.allowEmpty) { key.Wipe(); return Fail(error, "no hay archivos para publicar en " + o.in); }
 
 	// ── Versión base ─────────────────────────────────────────────────────
-	if (overlay)
+	if (overlay && !files.empty())
 	{
 		if (!anyExecutable)
 		{

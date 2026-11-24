@@ -87,6 +87,9 @@ docker compose cp ./19112026-2 mu-server:/opt/mu/Data/Patches/
 
 - **El primer parche tiene que traer tu ejecutable** (`main.exe` para Windows,
   el binario para Linux). Un parche posterior puede traer sólo lo que cambió.
+- Mientras `Data/Patches/` no tenga ningún parche, el server publica una versión
+  vacía: los launchers ven que no hay nada para bajar y dejan jugar. Lo mismo si
+  borrás todos los parches: los jugadores vuelven a los archivos de la base.
 - Tu launcher va en `Launcher/`. El launcher se actualiza a sí mismo antes que
   todo lo demás.
 - Las carpetas se aplican **por fecha**: para cada archivo vale la versión del
