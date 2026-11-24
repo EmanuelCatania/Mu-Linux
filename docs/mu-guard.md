@@ -1,9 +1,9 @@
 # MU-Guard
 
-MU-Guard es la protección propia del cliente de Mu-Linux. Esta primera versión
-cierra un solo camino: **abrir el juego sin pasar por su guardián**. Las
-detecciones (editores de memoria, depuradores, inyección) llegan en las
-próximas versiones.
+MU-Guard es la protección propia del cliente de Mu-Linux. Por ahora cierra dos
+caminos: **abrir el juego sin pasar por su guardián** y **abrir su memoria desde
+otro programa** (Windows). Las detecciones (editores de memoria, depuradores,
+inyección) llegan en las próximas versiones.
 
 ## Cómo funciona
 
@@ -12,6 +12,13 @@ próximas versiones.
   proceso pasa a ser el **guardián**: saluda a `mu-guard` y abre el juego como
   un proceso hijo. Da igual cómo se haya abierto (launcher, acceso directo o
   doble clic).
+- Mientras tanto el guardián muestra el banner de MU-Guard con lo que va
+  verificando. Se va cuando aparece la ventana del juego.
+- En Windows, el guardián y el juego quedan con una lista de permisos (DACL) que
+  no deja a ningún otro programa del mismo usuario leer ni escribir su memoria,
+  duplicar sus handles o cambiarles los permisos. Terminarlos sí (el
+  Administrador de tareas sigue funcionando). En Linux el guardián no se puede
+  leer y el juego lo protege Yama (`ptrace_scope` 1: sólo un proceso padre).
 - En cada intento de login el juego le pide al guardián un **ticket** de un
   solo uso. `mu-guard` lo ata a la IP del jugador, vence en 60 segundos y sólo
   sirve en la conexión donde se presenta.
@@ -73,7 +80,8 @@ server se comporta como antes.
 - `mu-guard` y la verificación en el GameServer son sólo Linux (Docker y
   Pterodactyl).
 - La versión web no tiene guardián: con `MU_GUARD_REQUIRED=1` no puede entrar.
-- Todavía no hay banner, ni protección de la memoria del juego, ni
-  detecciones: un programa que se haga pasar por el guardián puede pedir
-  tickets. Eso lo cierran las próximas versiones (desafío de memoria y builds
-  aceptados).
+- Todavía no hay detecciones: un programa que se haga pasar por el guardián
+  puede pedir tickets, y con administrador se saltea la DACL. Eso lo cierran
+  las próximas versiones (detecciones, desafío de memoria y builds aceptados).
+- En Linux con `ptrace_scope` 0 no hay bloqueo de lectura de la memoria del
+  juego, sólo la detección que llega después.
