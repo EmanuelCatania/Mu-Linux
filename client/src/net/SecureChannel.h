@@ -21,6 +21,12 @@
 //   BLAKE2b(clave = X25519(efímeras), mensaje = "MuChannel1" + efímera del server
 //           + efímera del cliente) -> 32 bytes server->cliente, 32 cliente->server
 //
+// Las dos puntas guardan además un hash del saludo de esta conexión
+// (TranscriptHash): MU-Guard lo usa para atar un ticket a la conexión donde se
+// presenta, así no sirve en otra (por ejemplo, la de un proxy en el medio):
+//   BLAKE2b-256("MuTranscript1" + efímera del server + efímera del cliente
+//               + clave de identidad del server)
+//
 // Después todo viaja en registros:
 //   largo del texto claro (2 bytes, little-endian) | cifrado | MAC (16 bytes)
 // con XChaCha20-Poly1305.  El nonce es un contador por sentido, así un registro
@@ -96,6 +102,10 @@ public:
 	// Identidad que presentó el server (válida desde que el canal está listo).
 	const std::uint8_t* PeerIdentity() const { return this->m_PeerIdentity; }
 
+	// Hash del saludo de esta conexión (KeySize bytes; válido desde que el
+	// canal está listo).  Es el mismo en las dos puntas.
+	const std::uint8_t* TranscriptHash() const { return this->m_Transcript; }
+
 	// ── Las dos puntas ──────────────────────────────────────────────────────
 	// Bytes que llegaron del socket.  Consume el saludo si falta y después los
 	// registros completos; el texto claro se agrega a `plain`.  false = error
@@ -134,7 +144,9 @@ private:
 
 	std::uint64_t m_ReceiveCounter;
 
-	std::uint8_t m_PeerIdentity[KeySize];
+	std::uint8_t m_PeerIdentity[KeySize]; // en el server, la propia
+
+	std::uint8_t m_Transcript[KeySize];
 
 	std::vector<std::uint8_t> m_Pending;  // bytes recibidos que todavía no forman un saludo o un registro
 

@@ -19,6 +19,7 @@ namespace
 	const char kClientMagic[4] = { 'M', 'U', 'C', '1' };
 	const char kHandshakeContext[] = "MuHandshake1";
 	const char kChannelContext[] = "MuChannel1";
+	const char kTranscriptContext[] = "MuTranscript1";
 	const std::uint8_t kHasRotation = 0x01;
 	const std::size_t kMacSize = 16;
 
@@ -82,6 +83,8 @@ void SecureChannel::Reset()
 
 	std::memset(this->m_PeerIdentity, 0, sizeof(this->m_PeerIdentity));
 
+	std::memset(this->m_Transcript, 0, sizeof(this->m_Transcript));
+
 	this->m_SendCounter = 0;
 
 	this->m_ReceiveCounter = 0;
@@ -104,6 +107,9 @@ void SecureChannel::BeginServer(std::uint8_t* out, const std::uint8_t random[Key
 	std::memcpy(this->m_Secret, random, KeySize);
 
 	crypto_x25519_public_key(this->m_Public, this->m_Secret);
+
+	// Para el hash del saludo: la identidad entra en las dos puntas.
+	std::memcpy(this->m_PeerIdentity, identityPublic, KeySize);
 
 	std::uint8_t message[sizeof(kHandshakeContext) - 1 + KeySize];
 
@@ -202,6 +208,20 @@ void SecureChannel::DeriveKeys(const std::uint8_t serverEphemeral[KeySize], cons
 	crypto_wipe(shared, sizeof(shared));
 
 	crypto_wipe(keys, sizeof(keys));
+
+	// Hash del saludo (ver SecureChannel.h).  m_PeerIdentity ya tiene la
+	// identidad del server en las dos puntas.
+	std::uint8_t transcript[sizeof(kTranscriptContext) - 1 + KeySize * 3];
+
+	std::memcpy(transcript, kTranscriptContext, sizeof(kTranscriptContext) - 1);
+
+	std::memcpy(transcript + sizeof(kTranscriptContext) - 1, serverEphemeral, KeySize);
+
+	std::memcpy(transcript + sizeof(kTranscriptContext) - 1 + KeySize, clientEphemeral, KeySize);
+
+	std::memcpy(transcript + sizeof(kTranscriptContext) - 1 + KeySize * 2, this->m_PeerIdentity, KeySize);
+
+	crypto_blake2b(this->m_Transcript, KeySize, transcript, sizeof(transcript));
 
 	crypto_wipe(this->m_Secret, sizeof(this->m_Secret));
 
