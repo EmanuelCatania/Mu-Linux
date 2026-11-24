@@ -36,6 +36,11 @@ trap 'shutdown 0' INT TERM
 apply_db_settings "$MU_ROOT/JoinServer/JoinServer.ini"
 apply_db_settings "$MU_ROOT/DataServer/DataServer.ini"
 
+# Cliente de escritorio sólo por el launcher (docs/parches-del-launcher.md).
+if [ -f "$MU_ROOT/ConnectServer/ConnectServer.ini" ]; then
+  sed -i -E "s/^RequireLauncher *=.*/RequireLauncher=${MU_LAUNCHER_REQUIRED:-0}/" "$MU_ROOT/ConnectServer/ConnectServer.ini"
+fi
+
 if [ -n "$PUBLIC_IP" ] && [ -f "$MU_ROOT/ConnectServer/ServerList.dat" ]; then
   sed -i -E "s/\"([0-9]{1,3}\.){3}[0-9]{1,3}\"/\"${PUBLIC_IP}\"/g" "$MU_ROOT/ConnectServer/ServerList.dat"
 fi
@@ -70,6 +75,34 @@ if [ "${MU_TRACE_ENABLED:-0}" = "1" ] && [ "${MU_TRACE_RECORD:-0}" = "1" ]; then
       sleep 1
     done
     exec "$MU_ROOT/mu-trace" record --out "${MU_TRACE_DIR:-$MU_ROOT/GameServer/LOG/trace}" --keep-mb "${MU_TRACE_KEEP_MB:-1024}"
+  ) &
+fi
+
+# Parches del operador (ver server/docker/entrypoint.sh y
+# docs/parches-del-launcher.md, "Pterodactyl").  mu-patch publica
+# Data/Patches/published; para que la web lo sirva, ese directorio es un Mount
+# compartido con el server de la web.  Tampoco entra en `children`.
+if [ "${MU_UPDATE_ENABLED:-0}" = "1" ]; then
+  patches="$MU_ROOT/Data/Patches"
+  key="$MU_ROOT/Data/Keys/ServerIdentity.key"
+  mkdir -p "$patches"
+  announce=()
+  IFS=',' read -r -a list <<< "${MU_LAUNCHER_CONNECT_SERVERS:-${PUBLIC_IP:+${PUBLIC_IP}:44405}}"
+  for v in "${list[@]}"; do [ -n "$v" ] && announce+=(--connect-server "$v"); done
+  IFS=',' read -r -a list <<< "${MU_UPDATE_URL:-}"
+  for v in "${list[@]}"; do [ -n "$v" ] && announce+=(--url "$v"); done
+  [ -n "${MU_LAUNCHER_NEWS:-}" ] && announce+=(--news "$MU_LAUNCHER_NEWS")
+  [ -n "${MU_LAUNCHER_WEB_URL:-}" ] && announce+=(--web "$MU_LAUNCHER_WEB_URL")
+  [ -n "${MU_LAUNCHER_BASE_SOURCE:-}" ] && announce+=(--base-source "$MU_LAUNCHER_BASE_SOURCE")
+  [ -n "${MU_LAUNCHER_BASE_TAG:-}" ] && announce+=(--base-tag "$MU_LAUNCHER_BASE_TAG")
+  [ -n "${MU_LAUNCHER_BASE_KEY:-}" ] && announce+=(--base-key "$MU_LAUNCHER_BASE_KEY")
+  (
+    for _ in $(seq 1 120); do
+      [ -f "$key" ] && break
+      sleep 1
+    done
+    exec "$MU_ROOT/mu-patch" watch --patches "$patches" --channel "${MU_UPDATE_CHANNEL:-mi-server/overlay}" \
+      --key "$key" --interval "${MU_UPDATE_INTERVAL:-30}" "${announce[@]}"
   ) &
 fi
 
