@@ -91,6 +91,6 @@ RUN chmod +x /opt/mu/entrypoint.sh \
     && ln -s /opt/mu/mu-patch /usr/local/bin/mu-patch \
     && mv /opt/mu/GameServer/DATA /opt/mu/GameServer/Data
 
-EXPOSE 44405/tcp 55601/udp 55901/tcp 55980/tcp
+EXPOSE 44405/tcp 44406/tcp 55601/udp 55901/tcp
 
 ENTRYPOINT ["/opt/mu/entrypoint.sh"]

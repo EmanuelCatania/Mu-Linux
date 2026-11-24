@@ -53,7 +53,7 @@ GuardSettings ReadGuardSettings(const std::string& dataPath)
 			settings.Enabled = table["Enabled"].value_or(false);
 			settings.Required = table["Required"].value_or(false);
 
-			const std::int64_t port = table["Port"].value_or(std::int64_t(55980));
+			const std::int64_t port = table["Port"].value_or(std::int64_t(44406));
 
 			if (port > 0 && port < 65536)
 			{

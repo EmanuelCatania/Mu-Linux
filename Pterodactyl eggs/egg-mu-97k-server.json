@@ -41,6 +41,6 @@
     { "name": "Require launcher", "description": "1 = the desktop client opened without the launcher opens the launcher and closes (so nobody plays outdated; not a security measure). The web client ignores it.", "env_variable": "MU_LAUNCHER_REQUIRED", "default_value": "0", "user_viewable": true, "user_editable": true, "rules": "required|in:0,1" },
     { "name": "MU-Guard", "description": "1 = start mu-guard, the client protection (docs/mu-guard.md). It needs its own TCP port: MU-Guard port.", "env_variable": "MU_GUARD_ENABLED", "default_value": "0", "user_viewable": true, "user_editable": true, "rules": "required|in:0,1" },
     { "name": "Require MU-Guard", "description": "1 = reject the login of a desktop client that was not opened by its guardian.", "env_variable": "MU_GUARD_REQUIRED", "default_value": "0", "user_viewable": true, "user_editable": true, "rules": "required|in:0,1" },
-    { "name": "MU-Guard port", "description": "TCP port of mu-guard (an additional allocation). The client gets it from the ConnectServer.", "env_variable": "MU_GUARD_PORT", "default_value": "55980", "user_viewable": true, "user_editable": true, "rules": "required|integer|between:1,65535" }
+    { "name": "MU-Guard port", "description": "TCP port of mu-guard (an additional allocation). The client gets it from the ConnectServer.", "env_variable": "MU_GUARD_PORT", "default_value": "44406", "user_viewable": true, "user_editable": true, "rules": "required|integer|between:1,65535" }
   ]
 }

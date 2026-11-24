@@ -7,7 +7,7 @@
 //
 //   Enabled = false     # hay un mu-guard corriendo (MU_GUARD_ENABLED)
 //   Required = false    # sin ticket válido no se entra (MU_GUARD_REQUIRED)
-//   Port = 55980        # puerto público de mu-guard
+//   Port = 44406        # puerto público de mu-guard (MU_GUARD_PORT)
 //   Socket = ""         # socket local GameServer <-> mu-guard;
 //                       # vacío = Data/Guard/mu-guard.sock
 //
@@ -21,7 +21,7 @@ struct GuardSettings
 {
 	bool Enabled = false;
 	bool Required = false;
-	std::uint16_t Port = 55980;
+	std::uint16_t Port = 44406;
 	std::string Socket;   // ruta completa
 };
 

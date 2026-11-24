@@ -37,7 +37,7 @@ namespace GuardProto {
 
 constexpr std::uint16_t Version = 1;
 
-constexpr std::uint16_t DefaultPort = 55980;
+constexpr std::uint16_t DefaultPort = 44406;   // al lado del ConnectServer; 55980 es del DataServer
 
 constexpr std::size_t TicketIdSize = 16;
 constexpr std::size_t TicketKeySize = 32;

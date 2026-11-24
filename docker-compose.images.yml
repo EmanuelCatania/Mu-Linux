@@ -50,6 +50,7 @@ services:
       # MU-Guard (docs/mu-guard.md): protección del cliente.
       MU_GUARD_ENABLED: ${MU_GUARD_ENABLED:-0}
       MU_GUARD_REQUIRED: ${MU_GUARD_REQUIRED:-0}
+      MU_GUARD_PORT: ${MU_GUARD_PORT:-44406}
     depends_on:
       mysql:
         condition: service_healthy
@@ -60,7 +61,7 @@ services:
       # excluded port range, and publishing it keeps the container from starting.
       - "55901:55901/tcp"
       # mu-guard (MU_GUARD_ENABLED=1): el guardián del cliente se conecta acá.
-      - "55980:55980/tcp"
+      - "${MU_GUARD_PORT:-44406}:${MU_GUARD_PORT:-44406}/tcp"
     volumes:
       - mu_data:/opt/mu/Data:rw
       - mu_gameserver_data:/opt/mu/GameServer/Data:rw
