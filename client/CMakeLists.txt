@@ -827,9 +827,34 @@ endif()
 # (Win32) no lo tiene.
 option(MU_GUARD "MU-Guard: guardian del cliente y ticket en el login" ON)
 if(MU_GUARD)
-    target_sources(mu97k PRIVATE src/guard/Guardian.cpp src/guard/GuardSocket.cpp
-        src/guard/Guardian.h src/guard/GuardSocket.h src/guard/GuardProtocol.h)
+    target_sources(mu97k PRIVATE src/guard/Guardian.cpp src/guard/GuardSocket.cpp src/guard/GuardBanner.cpp
+        src/guard/Guardian.h src/guard/GuardSocket.h src/guard/GuardProtocol.h src/guard/GuardBanner.h)
     target_compile_definitions(mu97k PRIVATE MU_GUARD)
+    # Banner (seguridad/index.html): SDL3 y el dibujo del launcher (launcher/Gfx,
+    # sus stb son static y no chocan con los del cliente).  Las imágenes van
+    # embebidas; sin SDL3 el guardián funciona sin banner.
+    if(MU_PLATFORM_BACKEND STREQUAL "SDL3")
+        set(_guard_res "${CMAKE_CURRENT_BINARY_DIR}/guard-res")
+        set(_guard_embedded "")
+        foreach(_pair "GuardBackground=background" "GuardLogo=mu_logo" "GuardDragon=dragon")
+            string(REPLACE "=" ";" _parts "${_pair}")
+            list(GET _parts 0 _sym)
+            list(GET _parts 1 _name)
+            set(_in "${CMAKE_CURRENT_SOURCE_DIR}/src/guard/res/${_name}.png")
+            set(_out "${_guard_res}/${_sym}.cpp")
+            add_custom_command(OUTPUT "${_out}"
+                COMMAND "${CMAKE_COMMAND}" -DINPUT=${_in} -DOUTPUT=${_out} -DSYMBOL=${_sym}
+                        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/MuEmbedFile.cmake"
+                DEPENDS "${_in}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/MuEmbedFile.cmake"
+                COMMENT "Embebiendo ${_sym}"
+                VERBATIM)
+            list(APPEND _guard_embedded "${_out}")
+        endforeach()
+        target_sources(mu97k PRIVATE src/launcher/Gfx.cpp src/launcher/Gfx.h ${_guard_embedded})
+        set_source_files_properties(src/launcher/Gfx.cpp PROPERTIES
+            INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/lib")
+        target_compile_definitions(mu97k PRIVATE MU_GUARD_BANNER)
+    endif()
 endif()
 enable_testing()
 add_executable(mu_resource_tables_test EXCLUDE_FROM_ALL
