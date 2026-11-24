@@ -1,6 +1,11 @@
 // Ver Guardian.h.
 
 #include "stdafx.h"
+// stdafx.h redirige send() al hook del tráfico del juego (net/MuEmu.h); el pipe
+// con el guardián no es tráfico del juego.
+#ifdef send
+#undef send
+#endif
 #include "guard/Guardian.h"
 
 #include "guard/GuardProtocol.h"
