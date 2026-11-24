@@ -514,6 +514,27 @@ namespace
 			return;
 		}
 
+		if (type == Report && c.greeted && payload.size() >= 2 && payload.size() <= 2 + MaxDetail)
+		{
+			// Por ahora sólo se registra; los avisos y bans son del paso 5.
+			static const char* const kNames[] = { "?", "DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH", "FILES", "TOOL" };
+			const char* name = payload[0] < sizeof(kNames) / sizeof(kNames[0]) ? kNames[payload[0]] : "?";
+			std::string detail(payload.begin() + 2, payload.end());
+
+			for (char& ch : detail)
+			{
+				if ((unsigned char)ch < 0x20)
+				{
+					ch = ' ';   // el detalle lo escribe el cliente: sin saltos de línea en el log
+				}
+			}
+
+			LogAdd(payload[1] ? LOG_RED : LOG_BLUE, "[MU-Guard] [%s] %s %s: %s", c.ip.c_str(), name,
+				payload[1] ? "(cerro el juego)" : "(registrado)", detail.c_str());
+
+			return;
+		}
+
 		// Cualquier otra cosa del guardián: fuera.
 		c.closing = true;
 	}
