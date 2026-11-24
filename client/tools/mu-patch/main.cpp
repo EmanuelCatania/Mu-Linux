@@ -14,7 +14,7 @@
 //   mu-patch watch      (las mismas opciones) [--interval <segundos>]
 //   publish y watch, además (launcher.json, ver update/Announce.h):
 //                       [--connect-server <host:puerto>]... [--url <url de los parches>]...
-//                       [--news <texto>] [--base-source <dueño/repo|url>] [--base-tag <x.y.z>] [--base-key <hex>]
+//                       [--news <texto>] [--web <url>] [--base-source <dueño/repo|url>] [--base-tag <x.y.z>] [--base-key <hex>]
 
 #include "PatchBuilder.h"
 #include "Publish.h"
@@ -58,7 +58,7 @@ const char kUsage[] =
 	"  watch      las opciones de publish y [--interval <segundos>]: publica cada vez que\n"
 	"             Data/Patches cambia y se queda quieto entre dos pasadas\n"
 	"             publish y watch arman además launcher.json si se pasa alguna de:\n"
-	"             [--connect-server <host:puerto>]... [--url <url de los parches>]... [--news <texto>]\n"
+	"             [--connect-server <host:puerto>]... [--url <url de los parches>]... [--news <texto>] [--web <url>]\n"
 	"             [--base-source <dueño/repo|url>] [--base-tag <x.y.z>] [--base-key <hex>]\n"
 	"\n"
 	"El overlay de un server se firma con su Data/Keys/ServerIdentity.key.\n";
@@ -256,6 +256,7 @@ int ParsePublish(Args& a, MuPatch::PublishOptions& o, unsigned* interval, MuPatc
 		else if (opt == "--connect-server") { an.content.connectServers.push_back(v); *announce = true; }
 		else if (opt == "--url") { an.content.patchUrls.push_back(v); *announce = true; }
 		else if (opt == "--news") { an.content.news = UnescapeNewlines(v); *announce = true; }
+		else if (opt == "--web") { an.content.web = v; *announce = true; }
 		else if (opt == "--base-source") { an.content.baseSource = v; *announce = true; }
 		else if (opt == "--base-tag") { an.content.baseTag = v; *announce = true; }
 		else if (opt == "--base-key") { an.content.baseKey = v; *announce = true; }

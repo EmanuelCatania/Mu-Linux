@@ -1062,6 +1062,7 @@ void TestAnnounce(const std::string& dir)
 	a.baseSource = "dueno/repo";
 	a.baseTag = "0.97.50";
 	a.news = "Mantenimiento el lunes.\nVuelve \"pronto\".";
+	a.web = "https://mu.ejemplo.com";
 	Announce b;
 	std::string err;
 	Require(ParseAnnounce(DumpAnnounce(a), b, &err) && b.sequence == 4 && SameAnnounceContent(a, b), "launcher.json: ida y vuelta");
@@ -1075,6 +1076,9 @@ void TestAnnounce(const std::string& dir)
 	        "launcher.json: url inválida");
 	Require(!ParseAnnounce("{\"format\":1,\"sequence\":1,\"news\":\"a\\u0007b\"}", b, &err), "launcher.json: control en news");
 	Require(!ParseAnnounce(std::string(kAnnounceMaxSize + 1, ' '), b, &err), "launcher.json: tope de tamaño");
+	Require(ParseAnnounce(DumpAnnounce(a), b, &err) && b.web == "https://mu.ejemplo.com", "launcher.json: sitio del server");
+	Require(!ParseAnnounce("{\"format\":1,\"sequence\":1,\"web\":\"javascript:alert(1)\"}", b, &err),
+	        "launcher.json: un sitio que no es http no vale");
 
 	// Publicar: secuencia 1, sin cambios no reescribe, un cambio sube la
 	// secuencia, y con otra clave (rotación) la secuencia sigue.

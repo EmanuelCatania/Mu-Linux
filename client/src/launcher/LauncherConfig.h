@@ -14,6 +14,7 @@
 //   MU_OVERLAY_KEY        identidad del server (64 hex)
 //   MU_CONNECT_SERVER     ConnectServer del server ("host:puerto", varios con coma):
 //                         de ahí se pide launcher.json (ServerAnnounce.h)
+//   MU_WEB_URL            sitio del server, si no lo anuncia launcher.json
 //   MU_GAME_EXE           ejecutable del cliente
 //
 // launcher.toml (todo opcional):
@@ -44,6 +45,7 @@ struct Config
 	std::string overlayChannel;
 	std::string overlayKey;
 	std::vector<std::string> connectServers;   // "host:puerto"
+	std::string webUrl;
 	std::string gameExe;
 	bool music = true;
 	bool hd = false;

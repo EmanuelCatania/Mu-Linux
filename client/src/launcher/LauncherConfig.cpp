@@ -34,6 +34,9 @@
 #ifndef MU_CONNECT_SERVER
 #define MU_CONNECT_SERVER ""
 #endif
+#ifndef MU_WEB_URL
+#define MU_WEB_URL ""
+#endif
 #ifndef MU_GAME_EXE
 #ifdef _WIN32
 #define MU_GAME_EXE "main.exe"
@@ -104,6 +107,7 @@ Config CompiledConfig()
 	c.overlayChannel = MU_OVERLAY_CHANNEL;
 	c.overlayKey = MU_OVERLAY_KEY;
 	c.connectServers = SplitList(MU_CONNECT_SERVER);
+	c.webUrl = MU_WEB_URL;
 	c.gameExe = MU_GAME_EXE;
 	return c;
 }

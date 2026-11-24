@@ -81,6 +81,7 @@ UpdateFlow::UpdateFlow(Config config, std::string root, std::unique_ptr<Transpor
 {
 	m_LockPath = JoinPath(JoinPath(UserDirFor(m_Root), "Cache"), "running.lock");
 	m_MaxConnections = std::max(1, m_Config.connections);
+	m_Status.webUrl = m_Config.webUrl;
 	for (const std::string& o : m_Config.overrides) m_Status.notices.push_back("Configuración de prueba: " + o);
 }
 
@@ -233,6 +234,7 @@ void UpdateFlow::Run()
 			}
 			std::lock_guard<std::mutex> lock(m_Mutex);
 			m_Status.news = n.news;
+			if (!n.web.empty()) m_Status.webUrl = n.web;
 		}
 	}
 	// La compilada queda como último espejo.

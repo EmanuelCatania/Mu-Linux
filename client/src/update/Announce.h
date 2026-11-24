@@ -15,7 +15,8 @@
 //     "connectServers": [ "mu.ejemplo.com:44405", "respaldo.ejemplo.com:44405" ],
 //     "patches": { "channel": "miserver/overlay", "urls": [ "https://mu.ejemplo.com/updates" ] },
 //     "base": { "source": "dueño/repo", "tag": "0.97.50", "key": "<64 hex>" },
-//     "news": "Texto que se muestra en el launcher"
+//     "news": "Texto que se muestra en el launcher",
+//     "web": "https://mu.ejemplo.com"
 //   }
 //
 // Todo menos format y sequence es opcional.  La secuencia sube cada vez que
@@ -45,6 +46,7 @@ struct Announce
 	std::string baseTag;
 	std::string baseKey;                       // 64 hex
 	std::string news;
+	std::string web;                           // sitio del server (botón en Opciones > General)
 };
 
 std::string DumpAnnounce(const Announce& a);

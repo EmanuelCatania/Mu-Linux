@@ -81,6 +81,7 @@ if [ "${MU_UPDATE_ENABLED:-0}" = "1" ]; then
   IFS=',' read -r -a list <<< "${MU_UPDATE_URL:-}"
   for v in "${list[@]}"; do [ -n "$v" ] && announce+=(--url "$v"); done
   [ -n "${MU_LAUNCHER_NEWS:-}" ] && announce+=(--news "$MU_LAUNCHER_NEWS")
+  [ -n "${MU_LAUNCHER_WEB_URL:-}" ] && announce+=(--web "$MU_LAUNCHER_WEB_URL")
   [ -n "${MU_LAUNCHER_BASE_SOURCE:-}" ] && announce+=(--base-source "$MU_LAUNCHER_BASE_SOURCE")
   [ -n "${MU_LAUNCHER_BASE_TAG:-}" ] && announce+=(--base-tag "$MU_LAUNCHER_BASE_TAG")
   [ -n "${MU_LAUNCHER_BASE_KEY:-}" ] && announce+=(--base-key "$MU_LAUNCHER_BASE_KEY")

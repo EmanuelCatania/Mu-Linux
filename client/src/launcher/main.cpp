@@ -298,6 +298,7 @@ struct OptionsScreen
 	Button save{ { 150, 417, 67, 31 }, "Guardar" };
 	Button back{ { 233, 417, 67, 31 }, "Volver" };
 	Button verify{ { 20, 0, 150, 26 }, "Verificar archivos" };
+	Button web{ { 20, 0, 150, 26 }, "Ir a la web" };
 
 	static constexpr float kTabY = 36, kTabH = 20, kTabW = 106, kRowY = 86, kRowH = 23;
 
@@ -310,6 +311,7 @@ struct OptionsScreen
 	SDL_FRect RightArrow(std::size_t i) const { const SDL_FRect r = RowRect(i); return { 412, r.y, 20, r.h }; }
 	SDL_FRect TextBox(std::size_t i) const { const SDL_FRect r = RowRect(i); return { 262, r.y + 1, 170, r.h - 2 }; }
 	bool IsDownloads() const { return editor.Tabs()[tab].name == "Descargas"; }
+	bool IsGeneral() const { return editor.Tabs()[tab].name == "General"; }
 };
 
 } // namespace
@@ -479,6 +481,8 @@ int main(int argc, char** argv)
 				opts->verify.enabled = flow->Finished();
 				buttons = { &opts->save, &opts->back };
 				if (opts->IsDownloads()) buttons.push_back(&opts->verify);
+				opts->web.enabled = !st.webUrl.empty();
+				if (opts->IsGeneral()) buttons.push_back(&opts->web);
 			}
 			else
 			{
@@ -611,6 +615,13 @@ int main(int argc, char** argv)
 								flow = startFlow(config);
 							}
 						}
+					}
+					else if (opts && clicked == &opts->web)
+					{
+						// Sólo http(s): la URL la anuncia el server o viene compilada.
+						if ((st.webUrl.compare(0, 7, "http://") == 0 || st.webUrl.compare(0, 8, "https://") == 0) &&
+						    !SDL_OpenURL(st.webUrl.c_str()))
+							opts->message = std::string("No se pudo abrir el navegador: ") + SDL_GetError();
 					}
 					else if (opts && clicked == &opts->verify)
 					{
@@ -755,6 +766,13 @@ int main(int argc, char** argv)
 					ui.DrawButton(opts->verify);
 					ui.notice->Draw("Vuelve a revisar todos los archivos instalados.", 180,
 					                opts->verify.rect.y + (opts->verify.rect.h - ui.notice->Height()) / 2, kGray);
+				}
+				if (opts->IsGeneral())
+				{
+					opts->web.rect.y = OptionsScreen::kRowY + static_cast<float>(rows.size()) * OptionsScreen::kRowH + 10;
+					ui.DrawButton(opts->web);
+					const std::string where = st.webUrl.empty() ? std::string("El server no tiene sitio configurado.") : st.webUrl;
+					ui.notice->Draw(ui.notice->Fit(where, 245), 180, opts->web.rect.y + (opts->web.rect.h - ui.notice->Height()) / 2, kGray);
 				}
 				if (!opts->message.empty()) ui.tiny->Draw(ui.tiny->Fit(opts->message, 430), 12, 402, kBlack);
 				ui.DrawButton(opts->save);
