@@ -21,7 +21,10 @@
 #define MU_BASE_TAG MU_RELEASE
 #endif
 #ifndef MU_BASE_KEY
-#define MU_BASE_KEY ""
+// Clave pública con la que el workflow "Client channels" firma la base, la
+// música y el HD de los Releases del proyecto (su privada es el secreto
+// MU_RELEASE_SIGNING_KEY).  Un fork que publica su propia base compila la suya.
+#define MU_BASE_KEY "114031dbdd2a67065a17172d5297151e82209b333c99a37b71478f81076e4c84"
 #endif
 #ifndef MU_OVERLAY_URL
 #define MU_OVERLAY_URL ""
