@@ -50,8 +50,10 @@ MU_LAUNCHER_NEWS=Mantenimiento el lunes a las 10.\nDura una hora.
   (`host:puerto`). Vacía, se usa `PUBLIC_IP:44405`.
 - `MU_LAUNCHER_NEWS`: un texto que el launcher muestra sobre la imagen. `\n`
   corta la línea.
-- `MU_LAUNCHER_WEB_URL`: el sitio del server (`https://...`). El launcher lo
-  abre con el botón "Ir a la web" de Opciones > General.
+- `MU_LAUNCHER_WEB_URL`: el sitio del server (`https://...`). En Windows el
+  launcher lo muestra en el panel de la imagen apenas carga (los enlaces a otros
+  sitios se abren en el navegador), y en cualquier sistema lo abre el botón
+  "Ir a la web" de Opciones > General.
 - `MU_LAUNCHER_BASE_SOURCE`, `MU_LAUNCHER_BASE_TAG`, `MU_LAUNCHER_BASE_KEY`: el
   origen del cliente base, si usás un fork propio (vacíos: el compilado en el
   launcher).

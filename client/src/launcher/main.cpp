@@ -15,6 +15,7 @@
 #include "Resources.h"
 #include "ThemeSpec.h"
 #include "UpdateFlow.h"
+#include "WebPanel.h"
 
 #include "platform/RunningLock.h"
 #include "update/FileUtil.h"
@@ -409,6 +410,9 @@ int main(int argc, char** argv)
 		Ui ui;
 		ui.r = renderer;
 		ui.MakeFonts(fontScale);
+		// La web del server en el panel de la imagen (sólo Windows, WebPanel.h).
+		WebPanel webPanel(window, Update::JoinPath(Update::JoinPath(userDir, "Cache"), "WebView2"));
+		std::string webShownUrl;
 
 		Button options{ g_Theme.options, "Opciones" };
 		Button play{ g_Theme.play, "Jugar" };
@@ -646,6 +650,28 @@ int main(int argc, char** argv)
 			}
 
 			const ThemeSpec& th = g_Theme;
+			// Avisos sobre la imagen (configuración de prueba, canales que faltaron).
+			std::vector<std::string> notes = warnings;
+			notes.insert(notes.end(), st.notices.begin(), st.notices.end());
+			const float pb = th.imageBevel ? 2.0f : 0.0f;
+			const SDL_FRect inner{ th.imagePanel.x + pb, th.imagePanel.y + pb, th.imagePanel.w - 2 * pb, th.imagePanel.h - 2 * pb };
+			// La web tapa la imagen: sólo en la pantalla principal y sin avisos que
+			// mostrar.  Mientras carga (o si no carga) queda la imagen.
+			if (!st.webUrl.empty() && st.webUrl != webShownUrl)
+			{
+				webPanel.Navigate(st.webUrl);
+				webShownUrl = st.webUrl;
+			}
+			const bool webWanted = !opts && notes.empty();
+			{
+				int pw = th.width, ph = th.height;
+				SDL_GetWindowSizeInPixels(window, &pw, &ph);
+				const float k = static_cast<float>(pw) / static_cast<float>(th.width);
+				webPanel.Place({ static_cast<int>(std::lround(inner.x * k)), static_cast<int>(std::lround(inner.y * k)),
+				                 static_cast<int>(std::lround(inner.w * k)), static_cast<int>(std::lround(inner.h * k)) },
+				               webWanted);
+			}
+			const bool webShown = webWanted && webPanel.Loaded();
 			Fill(renderer, { 0, 0, static_cast<float>(th.width), static_cast<float>(th.height) }, { 224, 224, 224, 255 });
 			if (!opts)
 			{
@@ -653,14 +679,11 @@ int main(int argc, char** argv)
 				ui.DrawImage(th.background, nullptr);
 				ui.title->Draw(config.title, th.titlePos.x, th.titlePos.y, th.titleColor);
 
-				const SDL_FRect panel = th.imagePanel;
-				if (th.imageBevel) DrawBevel(renderer, panel);
-				const float pb = th.imageBevel ? 2.0f : 0.0f;
-				const SDL_FRect inner{ panel.x + pb, panel.y + pb, panel.w - 2 * pb, panel.h - 2 * pb };
+				if (th.imageBevel) DrawBevel(renderer, th.imagePanel);
 				ui.DrawImage(th.image, &inner);
 
 				// Noticias del server, arriba de la imagen (hasta 6 líneas).
-				if (!st.news.empty())
+				if (!st.news.empty() && !webShown)
 				{
 					std::vector<std::string> lines = Wrap(*ui.notice, st.news, inner.w - 20);
 					if (lines.size() > 6)
@@ -677,9 +700,6 @@ int main(int argc, char** argv)
 						ui.notice->Draw(lines[i], box.x + 6, box.y + 4 + lh * static_cast<float>(i), kWhite);
 				}
 
-				// Avisos sobre la imagen (configuración de prueba, canales que faltaron).
-				std::vector<std::string> notes = warnings;
-				notes.insert(notes.end(), st.notices.begin(), st.notices.end());
 				float ny = inner.y + inner.h - 4;
 				SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 				for (auto it = notes.rbegin(); it != notes.rend() && ny > inner.y + 20; ++it)
