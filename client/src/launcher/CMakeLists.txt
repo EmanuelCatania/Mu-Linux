@@ -38,6 +38,13 @@ set(MU_CONNECT_SERVER "" CACHE STRING "ConnectServer del server (host:puerto, va
 set(MU_WEB_URL "" CACHE STRING "Sitio del server (si no lo anuncia el server)")
 set(MU_GAME_EXE "" CACHE STRING "Ejecutable del cliente (vacío: main.exe / main)")
 set(MU_LAUNCHER_THEME "WebzenOldSchoolV1" CACHE STRING "Tema del launcher (una carpeta de themes/)")
+# La web del server en el panel de la imagen (WebPanel.h).  Sólo Windows con
+# MSVC: el SDK de WebView2 sale de NuGet y su loader se enlaza estático.
+if(WIN32 AND MSVC)
+    option(MU_LAUNCHER_WEBVIEW "Mostrar la web del server en el launcher (WebView2)" ON)
+else()
+    set(MU_LAUNCHER_WEBVIEW OFF)
+endif()
 
 # El tema: su Theme.cpp (disposición y colores, ver ThemeSpec.h), su ícono y
 # todas sus imágenes, adentro del ejecutable con la fuente.
@@ -123,6 +130,8 @@ add_executable(launcher WIN32
     Gfx.h
     Resources.h
     ThemeSpec.h
+    WebPanel.cpp
+    WebPanel.h
     "${_theme}/Theme.cpp"
     ${_embedded})
 if(WIN32)
@@ -130,6 +139,22 @@ if(WIN32)
 endif()
 target_include_directories(launcher PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${MU_CLIENT_SOURCE_DIR}/lib")
 target_link_libraries(launcher PRIVATE mu_launcher_core SDL3::SDL3-static)
+if(MU_LAUNCHER_WEBVIEW)
+    include(FetchContent)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(_wv2_arch x64)
+    else()
+        set(_wv2_arch x86)
+    endif()
+    FetchContent_Declare(mu_webview2
+        URL https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.4314.35
+        URL_HASH SHA256=90778deb1b77e36292828b4b5833c9255c27533f40e0ddd55891ae718944edc4
+        DOWNLOAD_NAME webview2.zip)
+    FetchContent_MakeAvailable(mu_webview2)
+    target_include_directories(launcher PRIVATE "${mu_webview2_SOURCE_DIR}/build/native/include")
+    target_link_libraries(launcher PRIVATE "${mu_webview2_SOURCE_DIR}/build/native/${_wv2_arch}/WebView2LoaderStatic.lib" ole32 shlwapi version)
+    target_compile_definitions(launcher PRIVATE MU_WEBVIEW2)
+endif()
 foreach(_opt MU_LAUNCHER_TITLE MU_BASE_REPO MU_BASE_TAG MU_BASE_KEY MU_OVERLAY_URL MU_OVERLAY_CHANNEL MU_OVERLAY_KEY MU_CONNECT_SERVER MU_WEB_URL MU_GAME_EXE)
     if(NOT "${${_opt}}" STREQUAL "")
         target_compile_definitions(mu_launcher_core PRIVATE "${_opt}=\"${${_opt}}\"")
