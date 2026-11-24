@@ -239,6 +239,11 @@ std::string ExecutablePath()
 	buf.resize(n);
 	return Utf8(std::filesystem::path(buf));
 #else
+	// Dentro de un AppImage el ejecutable corre desde un montaje temporal
+	// (/tmp/.mount_...): la carpeta del juego y lo que se actualiza es el
+	// archivo .AppImage, que el runtime avisa en APPIMAGE.
+	if (const char* appImage = std::getenv("APPIMAGE"); appImage && *appImage)
+		return Utf8(std::filesystem::path(appImage));
 	std::error_code ec;
 	return Utf8(std::filesystem::read_symlink("/proc/self/exe", ec));
 #endif
