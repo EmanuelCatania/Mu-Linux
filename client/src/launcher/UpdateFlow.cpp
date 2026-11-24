@@ -437,9 +437,21 @@ void UpdateFlow::Run()
 		// ...y ya se puede jugar mientras baja el resto.
 		if (!requiredFailed)
 		{
+			// Lo que falta: hasta el primer aviso del instalador quedaba el
+			// mensaje de la tanda obligatoria ("0 de 0" si no había nada).
+			std::size_t optionalFiles = 0;
+			std::uint64_t optionalBytes = 0;
+			for (const RangeRequest& r : plan.requests)
+				if (!r.required && !r.self)
+				{
+					optionalFiles += r.pieces.size();
+					optionalBytes += r.length;
+				}
 			std::lock_guard<std::mutex> lock(m_Mutex);
 			m_Status.background = true;
 			m_Status.canPlay = FileExists(JoinPath(m_Root, m_Config.gameExe));
+			m_Status.message = Fmt("Ya podés jugar. Bajando {0} archivos ({1})...",
+			                       { std::to_string(optionalFiles), Human(optionalBytes) });
 		}
 		io.part = InstallOptions::Part::Optional;
 		res = InstallResult();

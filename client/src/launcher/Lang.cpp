@@ -170,6 +170,8 @@ const Entry kTable[] = {
 	{ "Bajando {0} archivos ({1})...", "Downloading {0} files ({1})...", "Baixando {0} arquivos ({1})..." },
 	{ "Bajando {0} de {1} archivos ({2} de {3})...", "Downloading {0} of {1} files ({2} of {3})...",
 	  "Baixando {0} de {1} arquivos ({2} de {3})..." },
+	{ "Ya podés jugar. Bajando {0} archivos ({1})...", "You can play now. Downloading {0} files ({1})...",
+	  "Você já pode jogar. Baixando {0} arquivos ({1})..." },
 	{ "Ya podés jugar. Bajando {0} de {1} archivos ({2} de {3})...",
 	  "You can play now. Downloading {0} of {1} files ({2} of {3})...",
 	  "Você já pode jogar. Baixando {0} de {1} arquivos ({2} de {3})..." },
