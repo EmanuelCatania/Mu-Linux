@@ -47,6 +47,9 @@ services:
       MU_LAUNCHER_BASE_SOURCE: ${MU_LAUNCHER_BASE_SOURCE:-}
       MU_LAUNCHER_BASE_TAG: ${MU_LAUNCHER_BASE_TAG:-}
       MU_LAUNCHER_BASE_KEY: ${MU_LAUNCHER_BASE_KEY:-}
+      # MU-Guard (docs/mu-guard.md): protección del cliente.
+      MU_GUARD_ENABLED: ${MU_GUARD_ENABLED:-0}
+      MU_GUARD_REQUIRED: ${MU_GUARD_REQUIRED:-0}
     depends_on:
       mysql:
         condition: service_healthy
@@ -56,6 +59,8 @@ services:
       # ConnectServer inside the container. On Windows it often falls in an
       # excluded port range, and publishing it keeps the container from starting.
       - "55901:55901/tcp"
+      # mu-guard (MU_GUARD_ENABLED=1): el guardián del cliente se conecta acá.
+      - "55980:55980/tcp"
     volumes:
       - mu_data:/opt/mu/Data:rw
       - mu_gameserver_data:/opt/mu/GameServer/Data:rw

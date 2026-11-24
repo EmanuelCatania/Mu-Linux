@@ -30,6 +30,27 @@ if [ -f /opt/mu/ConnectServer/ConnectServer.ini ]; then
   sed -i -E "s/^RequireLauncher *=.*/RequireLauncher=${MU_LAUNCHER_REQUIRED:-0}/" /opt/mu/ConnectServer/ConnectServer.ini
 fi
 
+# MU-Guard (docs/mu-guard.md): Data/Guard/Guard.toml lo leen el ConnectServer,
+# el GameServer y mu-guard.  Data/ es un volumen: si el archivo no está (una
+# instalación anterior) se crea acá, y Enabled/Required salen de las variables.
+guard_dir="${MU_DATA_PATH%/}/Guard"
+guard_toml="$guard_dir/Guard.toml"
+mkdir -p "$guard_dir"
+if [ ! -f "$guard_toml" ]; then
+  cat > "$guard_toml" <<'EOF'
+# MU-Guard (docs/mu-guard.md).  Enabled y Required los pisa el entrypoint con
+# MU_GUARD_ENABLED y MU_GUARD_REQUIRED; el resto se edita acá.
+Enabled = false
+Required = false
+Port = 55980
+# Socket local GameServer <-> mu-guard; vacío = Data/Guard/mu-guard.sock
+Socket = ""
+EOF
+fi
+guard_bool() { [ "${1:-0}" = "1" ] && echo true || echo false; }
+sed -i -E "s/^Enabled *=.*/Enabled = $(guard_bool "${MU_GUARD_ENABLED:-0}")/" "$guard_toml"
+sed -i -E "s/^Required *=.*/Required = $(guard_bool "${MU_GUARD_REQUIRED:-0}")/" "$guard_toml"
+
 if [ -n "$PUBLIC_IP" ] && [ -f /opt/mu/ConnectServer/ServerList.dat ]; then
   sed -i -E "s/\"([0-9]{1,3}\.){3}[0-9]{1,3}\"/\"${PUBLIC_IP}\"/g" /opt/mu/ConnectServer/ServerList.dat
 fi
@@ -65,6 +86,25 @@ if [ "${MU_TRACE_ENABLED:-0}" = "1" ] && [ "${MU_TRACE_RECORD:-0}" = "1" ]; then
       sleep 1
     done
     exec /opt/mu/mu-trace record --out "${MU_TRACE_DIR:-/opt/mu/GameServer/LOG/trace}" --keep-mb "${MU_TRACE_KEEP_MB:-1024}"
+  ) &
+  disown $!
+fi
+
+# MU-Guard: mu-guard no entra en el `wait -n` (si se cae, el server sigue y el
+# GameServer deja entrar sin validar hasta que vuelva).  Se relanza con una
+# espera que crece de 1 a 30 s.
+if [ "${MU_GUARD_ENABLED:-0}" = "1" ] && [ -x /opt/mu/mu-guard ]; then
+  (
+    wait_s=1
+    while true; do
+      started=$(date +%s)
+      /opt/mu/mu-guard || true
+      # Corrió un buen rato: la próxima caída vuelve a esperar poco.
+      [ $(( $(date +%s) - started )) -ge 60 ] && wait_s=1
+      echo "mu-guard termino; se relanza en ${wait_s}s"
+      sleep "$wait_s"
+      wait_s=$(( wait_s * 2 )); [ "$wait_s" -gt 30 ] && wait_s=30
+    done
   ) &
   disown $!
 fi

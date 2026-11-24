@@ -41,6 +41,27 @@ if [ -f "$MU_ROOT/ConnectServer/ConnectServer.ini" ]; then
   sed -i -E "s/^RequireLauncher *=.*/RequireLauncher=${MU_LAUNCHER_REQUIRED:-0}/" "$MU_ROOT/ConnectServer/ConnectServer.ini"
 fi
 
+# MU-Guard (ver server/docker/entrypoint.sh y docs/mu-guard.md).
+guard_dir="$MU_ROOT/Data/Guard"
+guard_toml="$guard_dir/Guard.toml"
+mkdir -p "$guard_dir"
+if [ ! -f "$guard_toml" ]; then
+  cat > "$guard_toml" <<'EOF'
+# MU-Guard (docs/mu-guard.md).  Enabled y Required los pisa start.sh con
+# MU_GUARD_ENABLED y MU_GUARD_REQUIRED; el resto se edita acá.
+Enabled = false
+Required = false
+Port = 55980
+# Socket local GameServer <-> mu-guard; vacío = Data/Guard/mu-guard.sock
+Socket = ""
+EOF
+fi
+guard_bool() { [ "${1:-0}" = "1" ] && echo true || echo false; }
+sed -i -E "s/^Enabled *=.*/Enabled = $(guard_bool "${MU_GUARD_ENABLED:-0}")/" "$guard_toml"
+sed -i -E "s/^Required *=.*/Required = $(guard_bool "${MU_GUARD_REQUIRED:-0}")/" "$guard_toml"
+# El puerto de mu-guard es el que asigna el panel (MU_GUARD_PORT).
+sed -i -E "s/^Port *=.*/Port = ${MU_GUARD_PORT:-55980}/" "$guard_toml"
+
 if [ -n "$PUBLIC_IP" ] && [ -f "$MU_ROOT/ConnectServer/ServerList.dat" ]; then
   sed -i -E "s/\"([0-9]{1,3}\.){3}[0-9]{1,3}\"/\"${PUBLIC_IP}\"/g" "$MU_ROOT/ConnectServer/ServerList.dat"
 fi
@@ -75,6 +96,23 @@ if [ "${MU_TRACE_ENABLED:-0}" = "1" ] && [ "${MU_TRACE_RECORD:-0}" = "1" ]; then
       sleep 1
     done
     exec "$MU_ROOT/mu-trace" record --out "${MU_TRACE_DIR:-$MU_ROOT/GameServer/LOG/trace}" --keep-mb "${MU_TRACE_KEEP_MB:-1024}"
+  ) &
+fi
+
+# MU-Guard: fuera de `children` (si se cae, el server sigue y el GameServer
+# deja entrar sin validar hasta que vuelva).  Se relanza con espera creciente.
+if [ "${MU_GUARD_ENABLED:-0}" = "1" ] && [ -x "$MU_ROOT/mu-guard" ]; then
+  (
+    cd "$MU_ROOT"
+    wait_s=1
+    while true; do
+      started=$(date +%s)
+      "$MU_ROOT/mu-guard" || true
+      [ $(( $(date +%s) - started )) -ge 60 ] && wait_s=1
+      echo "mu-guard termino; se relanza en ${wait_s}s"
+      sleep "$wait_s"
+      wait_s=$(( wait_s * 2 )); [ "$wait_s" -gt 30 ] && wait_s=30
+    done
   ) &
 fi
 
