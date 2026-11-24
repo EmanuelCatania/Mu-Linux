@@ -59,6 +59,13 @@ void ConnectServerProtocolCore(int index, BYTE head, BYTE* lpMsg, int size)
 
 					break;
 				}
+
+				case 0x16:
+				{
+					CCClientPolicyRecv((PMSG_CLIENT_POLICY_RECV*)lpMsg, size, index);
+
+					break;
+				}
 			}
 
 			break;
@@ -367,4 +374,45 @@ void CCLauncherConfigRecv(PMSG_LAUNCHER_CONFIG_RECV* lpMsg, int size, int index)
 	memcpy(send, &pMsg, sizeof(pMsg));
 
 	gSocketManager.DataSend(index, send, total);
+}
+
+// Se lee en cada pedido, como launcher.json: cambiar el .ini no pide reiniciar.
+void CCClientPolicyRecv(PMSG_CLIENT_POLICY_RECV* lpMsg, int size, int index)
+{
+	(void)lpMsg;
+
+	if (size < (int)sizeof(PMSG_CLIENT_POLICY_RECV))
+	{
+		return;
+	}
+
+	PMSG_CLIENT_POLICY_SEND pMsg;
+
+	memset(&pMsg, 0, sizeof(pMsg));
+
+	pMsg.header.set(0xF4, 0x17, sizeof(pMsg));
+
+	// Sin canal cifrado no se pide nada: el cliente no podría saber si la orden
+	// es del server.
+	if (gSecureLink.IsSecure(index) == false)
+	{
+		pMsg.result = CONTENT_NOT_SECURE;
+	}
+	else
+	{
+		pMsg.result = CONTENT_OK;
+
+#ifdef _WIN32
+		const char* ini = ".\\ConnectServer.ini";
+#else
+		const char* ini = "./ConnectServer.ini";
+#endif
+
+		if (GetPrivateProfileInt("Launcher", "RequireLauncher", 0, ini) != 0)
+		{
+			pMsg.flags |= CLIENT_POLICY_REQUIRE_LAUNCHER;
+		}
+	}
+
+	gSocketManager.DataSend(index, (BYTE*)&pMsg, pMsg.header.size);
 }
