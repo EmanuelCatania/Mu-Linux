@@ -123,6 +123,7 @@ set(MU_SOURCES
     src/net/Network.cpp
     src/net/NetChannel.cpp
     src/net/ContentSync.cpp
+    src/net/LauncherPolicy.cpp
     src/net/ContentSyncCore.cpp
     src/net/SecureChannel.cpp
     src/net/ServerTrust.cpp
@@ -558,6 +559,7 @@ set(MU_HEADERS
     src/net/Network.h
     src/net/NetChannel.h
     src/net/ContentSync.h
+    src/net/LauncherPolicy.h
     src/net/ContentSyncCore.h
     src/net/SecureChannel.h
     src/net/crypto/SecureRandom.h

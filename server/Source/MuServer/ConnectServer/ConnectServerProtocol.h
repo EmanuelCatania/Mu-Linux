@@ -44,6 +44,13 @@ struct PMSG_LAUNCHER_CONFIG_RECV
 	DWORD offset;
 };
 
+// Qué le pide el server al cliente de escritorio (por ahora, que lo abra el
+// launcher).  Lo pide el cliente en la intro, junto con el manifiesto.
+struct PMSG_CLIENT_POLICY_RECV
+{
+	PSBMSG_HEAD header; // C1:F4:16
+};
+
 #pragma pack(pop)
 
 //**********************************************//
@@ -123,6 +130,22 @@ struct PMSG_CONTENT_FILE_SEND
 	WORD length;
 };
 
+// Bits de PMSG_CLIENT_POLICY_SEND::flags.
+enum eClientPolicy
+{
+	// El cliente de escritorio abierto sin el launcher abre el launcher y se
+	// cierra (ConnectServer.ini [Launcher] RequireLauncher).  No es seguridad:
+	// es para que nadie juegue sin actualizar.  La versión web no lo aplica.
+	CLIENT_POLICY_REQUIRE_LAUNCHER = 0x01,
+};
+
+struct PMSG_CLIENT_POLICY_SEND
+{
+	PSBMSG_HEAD header; // C1:F4:17
+	BYTE result;        // CONTENT_OK o CONTENT_NOT_SECURE (entonces flags = 0)
+	BYTE flags;
+};
+
 // Seguido de `length` bytes desde `offset` de: la firma (64 bytes, contexto
 // MuLauncher1) y después launcher.json tal cual.  El ConnectServer no lo
 // interpreta: el launcher verifica la firma con la identidad del server.
@@ -144,6 +167,8 @@ static_assert(sizeof(PMSG_CONTENT_FILE_RECV) == 14, "F4:12");
 static_assert(sizeof(PMSG_CONTENT_FILE_SEND) == 22, "F4:13");
 static_assert(sizeof(PMSG_LAUNCHER_CONFIG_RECV) == 8, "F4:14");
 static_assert(sizeof(PMSG_LAUNCHER_CONFIG_SEND) == 16, "F4:15");
+static_assert(sizeof(PMSG_CLIENT_POLICY_RECV) == 4, "F4:16");
+static_assert(sizeof(PMSG_CLIENT_POLICY_SEND) == 6, "F4:17");
 
 // Bytes de archivo por paquete: entra con el encabezado en MAX_PACKET_SIZE.
 #define CONTENT_FILE_CHUNK 2000
@@ -168,5 +193,7 @@ void CCServerInitSend(int index, int result);
 void CCContentManifestRecv(PMSG_CONTENT_MANIFEST_RECV* lpMsg, int size, int index);
 
 void CCContentFileRecv(PMSG_CONTENT_FILE_RECV* lpMsg, int size, int index);
+
+void CCClientPolicyRecv(PMSG_CLIENT_POLICY_RECV* lpMsg, int size, int index);
 
 void CCLauncherConfigRecv(PMSG_LAUNCHER_CONFIG_RECV* lpMsg, int size, int index);

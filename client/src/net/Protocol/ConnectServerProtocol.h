@@ -117,6 +117,25 @@ struct PMSG_CONTENT_FILE_SEND
 };
 static_assert(sizeof(PMSG_CONTENT_FILE_SEND) == 22, "F4:13");
 
+// Qué le pide el server al cliente de escritorio (net/LauncherPolicy.h).
+struct PMSG_CLIENT_POLICY_RECV
+{
+    PSBMSG_HEAD header;     // C1:F4:16
+};
+static_assert(sizeof(PMSG_CLIENT_POLICY_RECV) == 4, "F4:16");
+
+enum ClientPolicy : std::uint8_t {
+    CLIENT_POLICY_REQUIRE_LAUNCHER = 0x01,   // abrir el juego sólo desde el launcher
+};
+
+struct PMSG_CLIENT_POLICY_SEND
+{
+    PSBMSG_HEAD header;     // C1:F4:17
+    std::uint8_t result;    // CONTENT_OK o CONTENT_NOT_SECURE
+    std::uint8_t flags;
+};
+static_assert(sizeof(PMSG_CLIENT_POLICY_SEND) == 6, "F4:17");
+
 #pragma pack(pop)
 
 } // namespace Proto

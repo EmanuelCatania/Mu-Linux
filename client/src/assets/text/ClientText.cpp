@@ -95,7 +95,8 @@ const char* const English[] = {
     "Sky (F10)",
     "Underwater: %s",
     "No wobble",
-    "Improved water"
+    "Improved water",
+    "This server is played from the launcher, and it was not found in the game folder. Download it from the server website."
 };
 constexpr size_t Count = (size_t)ClientTextId::Count;
 static_assert(sizeof(English) / sizeof(English[0]) == Count, "Faltan textos en ingl\xC3\xA9s");
@@ -165,6 +166,8 @@ const char* MenuFallback(ClientTextId id, int language)
         { ClientTextId::ItemOptionMaxAG, "Incrementa el AG m\xC3\xA1" "ximo +%d%%", "Aumenta o AG m\xC3\xA1" "ximo +%d%%" },
         { ClientTextId::HelperDamageIncrease, "Poder de ataque y poder m\xC3\xA1" "gico incrementado en %d%%", "Poder de ataque e poder m\xC3\xA1" "gico aumentados em %d%%" },
         { ClientTextId::RenderVSyncUnavailable, "VSync no disponible", "VSync indispon\xC3\xAD" "vel" },
+        { ClientTextId::LauncherRequired, "Este server se juega desde el launcher, y no se encontr\xC3\xB3 en la carpeta del juego. Bajalo del sitio del server.",
+          "Este servidor \xC3\xA9 jogado pelo launcher, e ele n\xC3\xA3o foi encontrado na pasta do jogo. Baixe-o do site do servidor." },
     };
     for (const Entry& entry : entries) {
         if (entry.id != id) continue;

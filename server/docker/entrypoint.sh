@@ -25,6 +25,11 @@ apply_db_settings() {
 apply_db_settings /opt/mu/JoinServer/JoinServer.ini
 apply_db_settings /opt/mu/DataServer/DataServer.ini
 
+# Cliente de escritorio sólo por el launcher (docs/parches-del-launcher.md).
+if [ -f /opt/mu/ConnectServer/ConnectServer.ini ]; then
+  sed -i -E "s/^RequireLauncher *=.*/RequireLauncher=${MU_LAUNCHER_REQUIRED:-0}/" /opt/mu/ConnectServer/ConnectServer.ini
+fi
+
 if [ -n "$PUBLIC_IP" ] && [ -f /opt/mu/ConnectServer/ServerList.dat ]; then
   sed -i -E "s/\"([0-9]{1,3}\.){3}[0-9]{1,3}\"/\"${PUBLIC_IP}\"/g" /opt/mu/ConnectServer/ServerList.dat
 fi

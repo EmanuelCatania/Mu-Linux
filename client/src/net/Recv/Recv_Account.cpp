@@ -18,6 +18,7 @@
 #include "net/HWID.h"
 #include "assets/data/ContentCatalog.h"
 #include "net/ContentSync.h"
+#include "net/LauncherPolicy.h"
 #include "net/Protocol/ProtocolVersion.h"
 
 // IDA: FUN_00433A80 ReceiveGGAuth. Pertenece al flujo de protocolo/autenticación,
@@ -384,6 +385,9 @@ void NetRecv_F4(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             break;
         case 0x13:   // pedazo de un archivo del contenido
             ContentSync::OnFile(Msg, Size);
+            break;
+        case 0x17:   // lo que pide el server (abrir sólo desde el launcher)
+            LauncherPolicy::OnPolicy(Msg, Size);
             break;
         default:
             NetLog("NET:  → F4/%02X unhandled", sub);
