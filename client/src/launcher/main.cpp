@@ -84,9 +84,17 @@ SDL_FRect DragRect()
 
 SDL_HitTestResult HitTest(SDL_Window*, const SDL_Point* p, void*)
 {
-	const SDL_FRect d = DragRect();
 	const float x = static_cast<float>(p->x) / g_WindowScale, y = static_cast<float>(p->y) / g_WindowScale;
-	return x >= d.x && x < d.x + d.w && y >= d.y && y < d.y + d.h ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
+	// Los botones que caen dentro de la zona de arrastre (la X y el engranaje
+	// de la cabecera) tienen que recibir el clic: si no, Windows se lo come
+	// para mover la ventana.
+	const SDL_FRect* buttons[] = { &g_Theme.options, &g_Theme.play, &g_Theme.close, &g_Theme.exit, &g_Theme.pause, &g_Theme.save, &g_Theme.back };
+	for (const SDL_FRect* b : buttons)
+	{
+		const bool optionsButton = b == &g_Theme.save || b == &g_Theme.back;
+		if (optionsButton == g_OptionsMode && b->w > 0 && Inside(*b, x, y)) return SDL_HITTEST_NORMAL;
+	}
+	return Inside(DragRect(), x, y) ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
 }
 
 // Escala de la ventana: la elegida (percent) o la de la pantalla (0), sin pasar
