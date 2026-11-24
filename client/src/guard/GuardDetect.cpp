@@ -264,6 +264,39 @@ struct Detector::State
 		}
 	}
 
+	// Funciones de tiempo enganchadas (el speedhack de Cheat Engine): las DLL del
+	// sistema están en la misma dirección en todos los procesos de la sesión, así
+	// que el comienzo de cada función en el juego tiene que ser igual al del
+	// guardián.  El speedhack no aparece como módulo, pero tiene que reescribir
+	// estas funciones para acelerar el juego.  Los overlays (OBS, Discord)
+	// enganchan funciones de dibujo, no éstas.
+	void TimeHooks(std::vector<Finding>& found)
+	{
+		static const struct { const wchar_t* module; const char* function; } kFunctions[] = {
+			{ L"kernel32.dll", "QueryPerformanceCounter" }, { L"kernel32.dll", "GetTickCount" },
+			{ L"kernel32.dll", "GetTickCount64" }, { L"kernelbase.dll", "QueryPerformanceCounter" },
+			{ L"kernelbase.dll", "GetTickCount" }, { L"kernelbase.dll", "GetTickCount64" },
+			{ L"ntdll.dll", "RtlQueryPerformanceCounter" }, { L"ntdll.dll", "NtQueryPerformanceCounter" },
+			{ L"winmm.dll", "timeGetTime" },
+		};
+		constexpr SIZE_T kBytes = 16;
+		for (const auto& entry : kFunctions)
+		{
+			HMODULE module = GetModuleHandleW(entry.module);
+			const void* address = module ? reinterpret_cast<const void*>(GetProcAddress(module, entry.function)) : nullptr;
+			if (!address) continue;
+			std::uint8_t mine[kBytes], theirs[kBytes];
+			SIZE_T read = 0;
+			std::memcpy(mine, address, kBytes);
+			if (!ReadProcessMemory(process, address, theirs, kBytes, &read) || read != kBytes) continue;
+			if (std::memcmp(mine, theirs, kBytes) != 0)
+			{
+				const std::string name = Narrow(entry.module) + "!" + entry.function;
+				if (Once("hook:" + name)) Add(found, GuardProto::Inject, true, "funcion de tiempo enganchada (speedhack): " + name);
+			}
+		}
+	}
+
 	void Modules(std::vector<Finding>& found)
 	{
 		if (!enumModules || !moduleName) return;
@@ -420,6 +453,7 @@ void Detector::Scan(std::vector<Finding>& found)
 	m->Debugger(found);
 #ifdef _WIN32
 	m->Decoys(found);
+	m->TimeHooks(found);
 	if (slow)
 	{
 		m->Drivers(found);

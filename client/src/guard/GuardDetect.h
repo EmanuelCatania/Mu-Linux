@@ -9,7 +9,10 @@
 //   DEBUGGER  depurador sobre el juego o el guardián
 //   MEMEDIT   el driver de Cheat Engine (Windows) u otro proceso con
 //             /proc/<juego>/mem abierto (Linux)
-//   INJECT    módulos conocidos de Cheat Engine (vehdebug, speedhack...)
+//   INJECT    módulos conocidos de Cheat Engine (vehdebug, speedhack...) y
+//             funciones de tiempo del sistema reescritas dentro del juego: el
+//             speedhack de Cheat Engine no aparece como módulo, pero tiene que
+//             engancharlas (Windows)
 // Lo que sólo se reporta, hasta probarlo contra Cheat Engine y antivirus y
 // tener las listas del server (paso 5):
 //   MEMSCAN   páginas señuelo leídas (Windows)
