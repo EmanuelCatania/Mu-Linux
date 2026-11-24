@@ -56,7 +56,8 @@ if(NOT EXISTS "${_theme}/Theme.cpp")
 endif()
 set(_font "${MU_CLIENT_SOURCE_DIR}/bin/Client/System/Font")
 file(GLOB _theme_images CONFIGURE_DEPENDS "${_theme}/*.png")
-set(_pairs "FontRegular=${_font}/LiberationSans-Regular.ttf" "FontBold=${_font}/LiberationSans-Bold.ttf")
+set(_pairs "FontRegular=${_font}/LiberationSans-Regular.ttf" "FontBold=${_font}/LiberationSans-Bold.ttf"
+    "LauncherIcon=${CMAKE_CURRENT_SOURCE_DIR}/packaging/mu-launcher.png")
 set(_index_decl "")
 set(_index_rows "")
 foreach(_img IN LISTS _theme_images)
@@ -140,6 +141,8 @@ add_executable(launcher WIN32
     Gfx.h
     Resources.h
     ThemeSpec.h
+    Shortcuts.cpp
+    Shortcuts.h
     WebPanel.cpp
     WebPanel.h
     "${_theme_src}"
@@ -149,6 +152,10 @@ if(WIN32)
 endif()
 target_include_directories(launcher PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${MU_CLIENT_SOURCE_DIR}/lib")
 target_link_libraries(launcher PRIVATE mu_launcher_core SDL3::SDL3-static)
+if(WIN32)
+    # Accesos directos (Shortcuts.cpp): IShellLink y las carpetas del usuario.
+    target_link_libraries(launcher PRIVATE ole32 shell32 uuid)
+endif()
 if(MU_LAUNCHER_WEBVIEW)
     include(FetchContent)
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)

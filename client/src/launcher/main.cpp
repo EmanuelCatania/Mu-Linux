@@ -13,6 +13,7 @@
 #include "LauncherConfig.h"
 #include "OptionsModel.h"
 #include "SelfUpdate.h"
+#include "Shortcuts.h"
 #include "Resources.h"
 #include "ThemeSpec.h"
 #include "UpdateFlow.h"
@@ -76,6 +77,14 @@ float g_WindowScale = 1.0f;
 // toma otro tamaño mientras tanto).
 float g_Scale = 1.0f;
 bool g_OptionsMode = false;
+
+// Dónde quedan los accesos directos (la pregunta del primer arranque y el
+// botón de Opciones > General).
+#ifdef _WIN32
+constexpr const char* kShortcutsWhere = "En el escritorio y en el menú de inicio.";
+#else
+constexpr const char* kShortcutsWhere = "En el escritorio y en el menú de aplicaciones.";
+#endif
 
 // Repo de los diseños de kayito (pestaña "Acerca de" de las opciones).
 constexpr const char kKayitoUrl[] = "https://github.com/nicomuratona/kayito-MuLauncher";
@@ -542,6 +551,7 @@ struct OptionsScreen
 	Button back{ g_Theme.back, "Volver", &g_Theme.Or(g_Theme.backStyle) };
 	Button verify{ { 0, 0, 150, 26 }, "Verificar archivos" };
 	Button web{ { 0, 0, 150, 26 }, "Ir a la web" };
+	Button shortcuts{ { 0, 0, 150, 26 }, "Crear accesos directos" };
 	Button kayito{ { 0, 0, 150, 26 }, "Repositorio de kayito" };
 
 	// Todo relativo al panel del tema (en el V1: 9,33, 433 de ancho y cuatro
@@ -662,6 +672,41 @@ int main(int argc, char** argv)
 	reshape();
 	SDL_ShowWindow(window);
 
+	// La primera vez, ofrece los accesos directos (el launcher vive en
+	// Launcher/, adentro de la carpeta del juego).  No al reiniciarse a sí mismo
+	// ni abierto directo en las opciones.
+	{
+		bool restart = false;
+		for (int i = 1; i < argc; ++i)
+			restart |= std::strcmp(argv[i], "--updated") == 0 || std::strcmp(argv[i], "--rolled-back") == 0 ||
+			           std::strncmp(argv[i], "--options", 9) == 0;
+		const std::string asked = Update::JoinPath(Update::JoinPath(userDir, "Cache"), "shortcuts-asked");
+		if (!restart && !Update::FileExists(asked))
+		{
+			const SDL_MessageBoxButtonData buttons[] = {
+				{ SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, Tr("Sí") },
+				{ SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, Tr("No") },
+			};
+			const std::string text = Tr("¿Crear un acceso directo al launcher?") + std::string("\n") + Tr(kShortcutsWhere);
+			SDL_MessageBoxData box{};
+			box.flags = SDL_MESSAGEBOX_INFORMATION;
+			box.window = window;
+			box.title = config.title.c_str();
+			box.message = text.c_str();
+			box.numbuttons = 2;
+			box.buttons = buttons;
+			int choice = 0;
+			if (SDL_ShowMessageBox(&box, &choice))
+			{
+				Update::MakeDirs(Update::JoinPath(userDir, "Cache"));
+				Update::WriteFileAtomic(asked, "1\n", 2);
+				std::string why;
+				if (choice == 1 && !CreateShortcuts(exe, config.title, &why))
+					warnings.push_back(Fmt("No se pudieron crear los accesos directos: {0}", { why }));
+			}
+		}
+	}
+
 	{
 		Ui ui;
 		ui.r = renderer;
@@ -767,7 +812,11 @@ int main(int argc, char** argv)
 				buttons = { &opts->save, &opts->back };
 				if (opts->IsDownloads()) buttons.push_back(&opts->verify);
 				opts->web.enabled = !st.webUrl.empty();
-				if (opts->IsGeneral()) buttons.push_back(&opts->web);
+				if (opts->IsGeneral())
+				{
+					buttons.push_back(&opts->web);
+					buttons.push_back(&opts->shortcuts);
+				}
 				if (opts->IsAbout()) buttons.push_back(&opts->kayito);
 			}
 			else
@@ -908,6 +957,13 @@ int main(int argc, char** argv)
 								flow = startFlow(config);
 							}
 						}
+					}
+					else if (opts && clicked == &opts->shortcuts)
+					{
+						std::string why;
+						opts->message = CreateShortcuts(exe, config.title, &why)
+						                    ? std::string(Tr("Accesos directos creados."))
+						                    : Fmt("No se pudieron crear los accesos directos: {0}", { why });
 					}
 					else if (opts && clicked == &opts->web)
 					{
@@ -1078,9 +1134,9 @@ int main(int argc, char** argv)
 					}
 				}
 				// Un botón debajo de las filas, con su explicación al lado.
-				auto drawExtra = [&](Button& b, const std::string& text) {
+				auto drawExtra = [&](Button& b, const std::string& text, int slot = 0) {
 					b.rect.x = th.optionsPanel.x + 11;
-					b.rect.y = opts->BelowRows(rows.size());
+					b.rect.y = opts->BelowRows(rows.size()) + static_cast<float>(slot) * (b.rect.h + 6);
 					ui.DrawButton(b);
 					const float tx = b.rect.x + b.rect.w + 10;
 					ui.notice->Draw(ui.notice->Fit(text, th.optionsPanel.x + th.optionsPanel.w - tx - 8), tx,
@@ -1113,7 +1169,10 @@ int main(int argc, char** argv)
 					                opts->kayito.rect.y + (opts->kayito.rect.h - ui.notice->Height()) / 2, pal.dim);
 				}
 				if (opts->IsGeneral())
+				{
 					drawExtra(opts->web, st.webUrl.empty() ? std::string(Tr("El server no tiene sitio configurado.")) : st.webUrl);
+					drawExtra(opts->shortcuts, Tr(kShortcutsWhere), 1);
+				}
 				if (!opts->message.empty())
 					ui.tiny->Draw(ui.tiny->Fit(opts->message, th.optionsPanel.w - 6), th.optionsPanel.x + 3, th.messageY, pal.text);
 				ui.DrawButton(opts->save);

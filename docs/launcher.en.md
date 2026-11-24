@@ -103,7 +103,9 @@ announced by the server) and `-DMU_BASE_KEY` (your own base).
 - **The launcher goes in `Launcher/`**, inside the game folder
   (`Launcher/launcher.exe` on Windows, `Launcher/launcher` on Linux). That is
   where its own patch puts it, so it is the only place where it updates itself.
-  Give players a shortcut.
+  The first time it is opened, the launcher offers to create a shortcut on the
+  desktop and in the Start menu (on Linux, the applications menu); it is also in
+  Options > General.
 - **To update it**, upload the new one in a patch, under `Launcher/` (see
   [parches-del-launcher.md](parches-del-launcher.md)). It is downloaded before
   everything else and the launcher restarts.
