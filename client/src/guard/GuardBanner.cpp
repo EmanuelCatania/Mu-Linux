@@ -291,7 +291,7 @@ struct Banner::State
 		step->Draw(text, left, rowY + shift, threat ? SDL_Color{ 0xC8, 0x32, 0x1E, static_cast<Uint8>(255 * alpha) }
 		                                            : SDL_Color{ 0x5B, 0x8C, 0xBA, static_cast<Uint8>(255 * alpha) });
 
-		const float lineX = left + step->Width(current) + 14, lineEnd = left + kWidth * 0.78f;
+		const float lineX = left + step->Width(text) + 14, lineEnd = left + kWidth * 0.78f;
 		const float lineY = rowY + rowH / 2;
 		if (lineEnd > lineX)
 		{
