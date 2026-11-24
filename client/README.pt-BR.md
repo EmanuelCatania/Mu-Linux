@@ -935,6 +935,13 @@ FreeType (FreeType License), HarfBuzz (MIT), SheenBidi (Apache 2.0) e Dawn
 (BSD 3-Clause). As fontes de `bin/Client/System/Font/` trazem a sua ao lado
 (SIL OFL 1.1 ou Apache 2.0). O pacote Linux inclui as licenças em `licenses/`.
 
+Os designs do launcher (`src/launcher/themes/`) são de **kayito**
+(NicoMuratona), tirados do seu
+[kayito-MuLauncher](https://github.com/nicomuratona/kayito-MuLauncher), que por
+sua vez segue os launchers originais da Webzen. O repositório dele não tem
+licença: são usados com a permissão dele e **não** são cobertos pela MIT. O
+launcher também dá o crédito em Opções > Sobre.
+
 ---
 
 ## Apêndice: a reconstrução
