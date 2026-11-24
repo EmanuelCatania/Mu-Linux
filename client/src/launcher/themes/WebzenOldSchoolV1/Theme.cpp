@@ -16,6 +16,7 @@ ThemeSpec MakeTheme()
 	t.titlePos = { 5, 6 };
 	t.imagePanel = { 6, 31, 437, 327 };
 	t.image = "MainImage";
+	t.webPanel = false;                            // la web, desde Opciones
 	t.bar.rect = { 6, 362, 437, 22 };
 	t.status = { 6, 388, 437, 0 };
 	t.pause = { 373, 386, 70, 15 };

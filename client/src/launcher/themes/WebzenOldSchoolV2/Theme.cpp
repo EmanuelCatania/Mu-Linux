@@ -20,6 +20,7 @@ ThemeSpec MakeTheme()
 	t.titleColor = control;
 	t.imagePanel = { 6, 32, 437, 327 };
 	t.image = "MainImage";
+	t.webPanel = false;                            // la web, desde Opciones
 	t.bar.rect = { 6, 365, 437, 22 };
 	t.bar.track = { 34, 34, 34, 255 };
 	t.bar.fill = { 153, 180, 209, 255 };   // SystemColors.ActiveCaption
