@@ -52,6 +52,8 @@ struct Status
 	std::string message;
 	std::uint64_t done = 0;
 	std::uint64_t total = 0;
+	std::size_t filesDone = 0;         // archivos de esta tanda (la segunda barra de algunos temas)
+	std::size_t filesTotal = 0;
 	bool canPlay = false;
 	std::vector<std::string> notices;  // avisos (configuración de prueba, etc.)
 	std::string news;                  // lo que anuncia el server (launcher.json)

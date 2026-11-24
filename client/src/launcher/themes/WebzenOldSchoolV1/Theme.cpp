@@ -10,7 +10,7 @@ ThemeSpec MakeTheme()
 	t.name = "WebzenOldSchoolV1";
 	t.width = 450;
 	t.height = 458;
-	t.dragHeight = 26;
+	t.drag = { 0, 0, 450, 26 };
 
 	t.background = "MainBackground";
 	t.titlePos = { 5, 6 };
