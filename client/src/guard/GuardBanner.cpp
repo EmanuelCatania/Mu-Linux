@@ -51,13 +51,28 @@ struct Texts
 	const char* faseInit;
 	const char* network;
 	const char* launch;
+	const char* faseThreat;
+	const char* threat;
+	const char* detail;    // {0}: lo que se detectó
+	const char* closing;   // {0}: segundos
 };
 
 const Texts kTexts[] = {
-	{ "Iniciando protecci\xC3\xB3n...", "Validando conexi\xC3\xB3n con el servidor...", "Abriendo main.exe" },
-	{ "Initializing protection...", "Validating server connection...", "Launching main.exe" },
-	{ "Iniciando prote\xC3\xA7\xC3\xA3o...", "Validando conex\xC3\xA3o com o servidor...", "Abrindo main.exe" },
+	{ "Iniciando protecci\xC3\xB3n...", "Validando conexi\xC3\xB3n con el servidor...", "Abriendo main.exe",
+	  "Se cerr\xC3\xB3 el juego", "AMENAZA DETECTADA", "Se detect\xC3\xB3 {0}. El cliente se va a cerrar.", "Cerrando en {0}..." },
+	{ "Initializing protection...", "Validating server connection...", "Launching main.exe",
+	  "The game was closed", "THREAT DETECTED", "{0} was detected. The client will close.", "Closing in {0}..." },
+	{ "Iniciando prote\xC3\xA7\xC3\xA3o...", "Validando conex\xC3\xA3o com o servidor...", "Abrindo main.exe",
+	  "O jogo foi fechado", "AMEA\xC3\x87" "A DETECTADA", "{0} foi detectado. O cliente ser\xC3\xA1 fechado.", "Fechando em {0}..." },
 };
+
+std::string Fill(const char* text, const std::string& value)
+{
+	std::string s = text;
+	const std::size_t at = s.find("{0}");
+	if (at != std::string::npos) s.replace(at, 3, value);
+	return s;
+}
 
 constexpr int kWidth = 720;
 constexpr int kHeight = 458;
@@ -202,6 +217,7 @@ struct Banner::State
 	std::string previous;   // texto que sale
 	std::string current;    // texto que entra
 	bool videoStarted = false;
+	bool threat = false;    // AMENAZA: paleta roja
 
 	float Seconds() const
 	{
@@ -217,9 +233,21 @@ struct Banner::State
 		if (background) SDL_RenderTexture(r, background, nullptr, nullptr);
 
 		// Marco (.banner box-shadow): línea azul, hueco claro, línea azul tenue.
-		Frame(r, 0, 2, Rgba(0x7C, 0xB8, 0xE4));
-		Frame(r, 2, 2, Rgba(255, 255, 255, 0.92f));
-		Frame(r, 4, 1, Rgba(124, 184, 228, 0.55f));
+		if (threat)
+		{
+			// .banner.amenaza::after: tinte rojo desde la izquierda.
+			RadialEllipse(r, kWidth * 0.2f, kHeight * 0.4f, kWidth * 1.1f, kHeight * 0.85f,
+				Rgba(200, 50, 30, 0.20f), Rgba(200, 50, 30, 0.08f));
+			Frame(r, 0, 2, Rgba(0xD9, 0x65, 0x4C));
+			Frame(r, 2, 2, Rgba(255, 255, 255, 0.92f));
+			Frame(r, 4, 1, Rgba(217, 101, 76, 0.55f));
+		}
+		else
+		{
+			Frame(r, 0, 2, Rgba(0x7C, 0xB8, 0xE4));
+			Frame(r, 2, 2, Rgba(255, 255, 255, 0.92f));
+			Frame(r, 4, 1, Rgba(124, 184, 228, 0.55f));
+		}
 
 		// Bloque izquierdo (.izq): logo centrado sobre el título, regla, fase.
 		const float left = kWidth * 0.075f, top = kHeight * 0.07f;
@@ -230,12 +258,17 @@ struct Banner::State
 			SDL_RenderTexture(r, logo, nullptr, &box);
 		}
 		const float titleY = top + 156 + 4;
-		title->Draw("MU-", left, titleY, SDL_Color{ 0x2F, 0x6E, 0xA8, 255 });
-		title->Draw("Guard", left + wTitle1, titleY, SDL_Color{ 0x6F, 0x9F, 0xC8, 255 });
+		title->Draw("MU-", left, titleY, threat ? SDL_Color{ 0xC8, 0x32, 0x1E, 255 } : SDL_Color{ 0x2F, 0x6E, 0xA8, 255 });
+		title->Draw("Guard", left + wTitle1, titleY, threat ? SDL_Color{ 0xD9, 0x70, 0x5E, 255 } : SDL_Color{ 0x6F, 0x9F, 0xC8, 255 });
 		const float ruleY = titleY + title->Height() * 1.2f + 9;
-		HorizontalGradient(r, left, ruleY, wTitle, 2,
-			{ { 0, Rgba(0x4A, 0xA3, 0xE8) }, { 0.55f, Rgba(120, 180, 230, 0.45f) }, { 1, Rgba(120, 180, 230, 0) } });
-		fase->Draw(kTexts[language].faseInit, left, ruleY + 2 + 14, SDL_Color{ 0x4A, 0x7F, 0xB0, 255 });
+		if (threat)
+			HorizontalGradient(r, left, ruleY, wTitle, 2,
+				{ { 0, Rgba(0xFF, 0x5A, 0x3C) }, { 0.55f, Rgba(230, 120, 100, 0.45f) }, { 1, Rgba(230, 120, 100, 0) } });
+		else
+			HorizontalGradient(r, left, ruleY, wTitle, 2,
+				{ { 0, Rgba(0x4A, 0xA3, 0xE8) }, { 0.55f, Rgba(120, 180, 230, 0.45f) }, { 1, Rgba(120, 180, 230, 0) } });
+		fase->Draw(threat ? kTexts[language].faseThreat : kTexts[language].faseInit, left, ruleY + 2 + 14,
+			threat ? SDL_Color{ 0xB8, 0x44, 0x2F, 255 } : SDL_Color{ 0x4A, 0x7F, 0xB0, 255 });
 
 		// Pie (.pie): el paso actual y el hilo con su destello.
 		const float rowH = step->Height() * 1.3f;
@@ -255,14 +288,19 @@ struct Banner::State
 			alpha = p;
 			shift = 5 * (1 - p);
 		}
-		step->Draw(text, left, rowY + shift, SDL_Color{ 0x5B, 0x8C, 0xBA, static_cast<Uint8>(255 * alpha) });
+		step->Draw(text, left, rowY + shift, threat ? SDL_Color{ 0xC8, 0x32, 0x1E, static_cast<Uint8>(255 * alpha) }
+		                                            : SDL_Color{ 0x5B, 0x8C, 0xBA, static_cast<Uint8>(255 * alpha) });
 
 		const float lineX = left + step->Width(current) + 14, lineEnd = left + kWidth * 0.78f;
 		const float lineY = rowY + rowH / 2;
 		if (lineEnd > lineX)
 		{
-			HorizontalGradient(r, lineX, lineY, lineEnd - lineX, 1,
-				{ { 0, Rgba(90, 150, 200, 0.65f) }, { 0.7f, Rgba(90, 150, 200, 0.12f) }, { 1, Rgba(90, 150, 200, 0) } });
+			if (threat)
+				HorizontalGradient(r, lineX, lineY, lineEnd - lineX, 1,
+					{ { 0, Rgba(210, 80, 60, 0.7f) }, { 0.7f, Rgba(210, 80, 60, 0.12f) }, { 1, Rgba(210, 80, 60, 0) } });
+			else
+				HorizontalGradient(r, lineX, lineY, lineEnd - lineX, 1,
+					{ { 0, Rgba(90, 150, 200, 0.65f) }, { 0.7f, Rgba(90, 150, 200, 0.12f) }, { 1, Rgba(90, 150, 200, 0) } });
 			const float pulse = (since - kSwapMs) / kPulseMs;
 			if (pulse > 0 && pulse < 1)
 			{
@@ -277,7 +315,10 @@ struct Banner::State
 		const float breathe = (1 - std::cos(Seconds() * 2 * 3.14159265f / 3.4f)) / 2;
 		const float scale = 1 + 0.012f * breathe;
 		const float dw = 232 * scale, dh = 229 * scale;
-		const float dx = kWidth - kWidth * 0.03f - 232 - (dw - 232) / 2;
+		// .banner.amenaza .mascota: se sacude tres veces (0,42 s cada una).
+		const float sinceThreat = threat ? std::chrono::duration<float>(Clock::now() - stepAt).count() : 99;
+		const float shake = sinceThreat < 1.26f ? 5 * std::sin(sinceThreat / 0.42f * 2 * 3.14159265f) : 0;
+		const float dx = kWidth - kWidth * 0.03f - 232 - (dw - 232) / 2 + shake;
 		const float dy = kHeight - kHeight * 0.08f - 229 - (dh - 229) / 2 - 5 * breathe;
 		RadialEllipse(r, kWidth - kWidth * 0.03f - 116, kHeight - kHeight * 0.08f, 232 * 0.42f, 10,
 			Rgba(45, 85, 130, 0.42f), Rgba(45, 85, 130, 0.16f));
@@ -396,6 +437,34 @@ void Banner::Close()
 	m->Destroy();
 }
 
+void Banner::Threat(int language, const std::string& what)
+{
+	const int lang = (language >= 0 && language < 3) ? language : 0;
+	const Texts& t = kTexts[lang];
+	if (!this->IsOpen() && !this->Open(lang))
+	{
+		const std::string text = std::string(t.threat) + "\n\n" + Fill(t.detail, what);
+		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "MU-Guard", text.c_str(), nullptr);
+		return;
+	}
+	m->threat = true;
+	m->current.clear();
+	this->Step(BannerStep::Network);   // sólo para la transición; el texto se pisa abajo
+	m->current = t.threat;
+	SDL_RaiseWindow(m->window);
+	// Como amenazaDetectada() del template: el aviso, el detalle a los 1,1 s y
+	// la cuenta regresiva desde los 2,6 s.
+	auto show = [&](const std::string& text, int ms) {
+		m->previous = m->current;
+		m->current = text;
+		m->stepAt = Clock::now();
+		this->Wait([]() { return true; }, ms);
+	};
+	this->Wait([]() { return true; }, 1100);
+	show(Fill(t.detail, what), 1500);
+	for (int left = 5; left > 0; --left) show(Fill(t.closing, std::to_string(left)), 1000);
+}
+
 #else // sin MU_GUARD_BANNER: no hay ventana, Wait() sólo espera.
 
 struct Banner::State {};
@@ -406,6 +475,7 @@ bool Banner::Open(int) { return false; }
 bool Banner::IsOpen() const { return false; }
 void Banner::Step(BannerStep) {}
 void Banner::Close() {}
+void Banner::Threat(int, const std::string&) {}
 
 bool Banner::Wait(const std::function<bool()>& done, int)
 {

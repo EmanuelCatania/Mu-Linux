@@ -12,6 +12,7 @@
 // el guardián funciona igual.
 
 #include <functional>
+#include <string>
 
 namespace Guard {
 
@@ -40,6 +41,11 @@ public:
 	// Dibuja y atiende la ventana hasta que done() dé true y el paso actual lleve
 	// en pantalla al menos minMs.  false si el jugador cerró el banner.
 	bool Wait(const std::function<bool()>& done, int minMs);
+
+	// Estado AMENAZA del template: vira a rojo, muestra qué se detectó y cuenta
+	// 5 s antes de volver.  Abre la ventana si estaba cerrada (language: el de
+	// Open).  Sin banner posible, un cartel del sistema con el mismo texto.
+	void Threat(int language, const std::string& what);
 
 	void Close();
 

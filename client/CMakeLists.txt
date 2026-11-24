@@ -827,8 +827,8 @@ endif()
 # (Win32) no lo tiene.
 option(MU_GUARD "MU-Guard: guardian del cliente y ticket en el login" ON)
 if(MU_GUARD)
-    target_sources(mu97k PRIVATE src/guard/Guardian.cpp src/guard/GuardSocket.cpp src/guard/GuardBanner.cpp
-        src/guard/Guardian.h src/guard/GuardSocket.h src/guard/GuardProtocol.h src/guard/GuardBanner.h)
+    target_sources(mu97k PRIVATE src/guard/Guardian.cpp src/guard/GuardSocket.cpp src/guard/GuardBanner.cpp src/guard/GuardDetect.cpp
+        src/guard/Guardian.h src/guard/GuardSocket.h src/guard/GuardProtocol.h src/guard/GuardBanner.h src/guard/GuardDetect.h)
     target_compile_definitions(mu97k PRIVATE MU_GUARD)
     # Banner (seguridad/index.html): SDL3 y el dibujo del launcher (launcher/Gfx,
     # sus stb son static y no chocan con los del cliente).  Las imágenes van

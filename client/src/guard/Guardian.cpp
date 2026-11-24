@@ -9,6 +9,7 @@
 #include "guard/Guardian.h"
 
 #include "guard/GuardBanner.h"
+#include "guard/GuardDetect.h"
 #include "guard/GuardProtocol.h"
 #include "guard/GuardSocket.h"
 
@@ -46,6 +47,7 @@ extern "C" void DbgLogPublic(const char* msg);
 #include <signal.h>
 #include <spawn.h>
 #include <sys/prctl.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -103,6 +105,7 @@ public:
 	// Conecta y saluda si hace falta.
 	bool Ensure()
 	{
+		std::lock_guard<std::recursive_mutex> lock(this->m_Lock);
 		if (this->m_Socket.IsOpen()) return true;
 		this->m_Pending.clear();
 		if (!this->m_Socket.Open(this->m_Host, this->m_Port, 3000, Trust)) return false;
@@ -124,6 +127,7 @@ public:
 
 	bool Ticket(std::uint8_t out[kTicketReply])
 	{
+		std::lock_guard<std::recursive_mutex> lock(this->m_Lock);
 		std::vector<std::uint8_t> reply;
 		// Si la conexión se había cortado, un reintento con una nueva.
 		for (int attempt = 0; attempt < 2; attempt++)
@@ -140,7 +144,21 @@ public:
 		return false;
 	}
 
-	bool Open() const { return this->m_Socket.IsOpen(); }
+	// Le cuenta a mu-guard lo que se detectó (no tiene respuesta).
+	bool Report(const Guard::Finding& finding)
+	{
+		std::lock_guard<std::recursive_mutex> lock(this->m_Lock);
+		std::vector<std::uint8_t> body{ finding.code, static_cast<std::uint8_t>(finding.closes ? 1 : 0) };
+		body.insert(body.end(), finding.detail.begin(), finding.detail.end());
+		std::vector<std::uint8_t> message;
+		GuardProto::Append(message, GuardProto::Report, body.data(), body.size());
+		for (int attempt = 0; attempt < 2; attempt++)
+		{
+			if (!this->Ensure()) return false;
+			if (this->m_Socket.Send(message.data(), message.size(), 3000)) return true;
+		}
+		return false;
+	}
 
 private:
 	bool Exchange(std::uint8_t type, const void* data, std::size_t size, std::uint8_t expect, std::vector<std::uint8_t>& payload)
@@ -165,6 +183,7 @@ private:
 		}
 	}
 
+	std::recursive_mutex m_Lock;   // tickets (hilo del pipe) y reportes (vigilancia)
 	std::string m_Host;
 	std::uint16_t m_Port = 0;
 	std::uint8_t m_MainHash[GuardProto::HashSize] = {};
@@ -328,6 +347,45 @@ void Serve(int in, int out, GuardConnection& guard)
 		if (!sent) break;
 	}
 }
+
+// Qué se detectó, para el banner (el detalle técnico va al server).
+std::string ThreatName(const Guard::Finding& finding, int language)
+{
+	static const char* const kNames[3][3] = {
+		{ "un depurador", "un editor de memoria", "Cheat Engine" },
+		{ "A debugger", "A memory editor", "Cheat Engine" },
+		{ "Um depurador", "Um editor de mem\xC3\xB3ria", "Cheat Engine" },
+	};
+	const int lang = (language >= 0 && language < 3) ? language : 0;
+	switch (finding.code)
+	{
+	case GuardProto::Debugger: return kNames[lang][0];
+	case GuardProto::MemEdit: return kNames[lang][1];
+	default: return kNames[lang][2];
+	}
+}
+
+// Una pasada de los detectores: todo se reporta; si algo cierra el juego, lo
+// devuelve.
+bool Watch(Guard::Detector& detector, GuardConnection& guard, Guard::Finding& closing)
+{
+	std::vector<Guard::Finding> found;
+	detector.Scan(found);
+	bool close = false;
+	for (const Guard::Finding& finding : found)
+	{
+		Log("MU-Guard: deteccion %u (%s): %s", static_cast<unsigned>(finding.code), finding.closes ? "cierra" : "se reporta", finding.detail.c_str());
+		guard.Report(finding);
+		if (finding.closes && !close)
+		{
+			closing = finding;
+			close = true;
+		}
+	}
+	return close;
+}
+
+constexpr int kWatchMs = 2000;
 
 // Idioma del banner: el del juego (Config.ini [Language] LangSelection), que
 // todavía no se leyó.  0 castellano, 1 inglés, 2 portugués.
@@ -596,8 +654,10 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	// El banner aparece recién ahora: sin MU-Guard en el server no se muestra.
 	// Cada paso queda en pantalla un mínimo (el SECUENCIA del template) para que
 	// un chequeo instantáneo no haga parpadear el texto.
+	const int language = LanguageIndex();
+	const std::string gameDir = exe.substr(0, exe.find_last_of("\\/") + 1);
 	Guard::Banner banner;
-	banner.Open(LanguageIndex());
+	banner.Open(language);
 	banner.Step(Guard::BannerStep::Network);
 	std::atomic<int> connected{ -1 };
 	std::thread hello([&]() { connected = guard.Ensure() ? 1 : 0; });
@@ -682,9 +742,11 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	// lectura (con MinGW, native_handle() no es un HANDLE).
 	ServeArgs args{ fromGameRead, toGameWrite, &guard };
 	const HANDLE thread = CreateThread(nullptr, 0, ServeThread, &args, 0, nullptr);
-	// Se creó suspendido: ya tiene su DACL y el guardián lo puede atender.
+	// Se creó suspendido: ya tiene su DACL, el guardián lo puede atender y las
+	// páginas señuelo quedan puestas antes de que corra.
+	Guard::Detector detector;
+	detector.Attach(pi.hProcess, pi.hThread, pi.dwProcessId, gameDir);
 	ResumeThread(pi.hThread);
-	CloseHandle(pi.hThread);
 
 	// El banner se va cuando el juego muestra su ventana (o termina): así no
 	// queda un hueco sin nada en pantalla.  Como mucho 30 s.
@@ -695,10 +757,30 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	}, 1200);
 	banner.Close();
 
-	WaitForSingleObject(pi.hProcess, INFINITE);
+	// Vigilancia: el guardián queda por debajo de lo normal, no frena al juego.
+	SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
+	Guard::Finding closing;
+	bool threat = false;
+	while (WaitForSingleObject(pi.hProcess, kWatchMs) == WAIT_TIMEOUT)
+	{
+		if (Watch(detector, guard, closing))
+		{
+			threat = true;
+			TerminateProcess(pi.hProcess, 1);
+			WaitForSingleObject(pi.hProcess, 5000);
+			break;
+		}
+	}
 	DWORD code = 0;
 	GetExitCodeProcess(pi.hProcess, &code);
 	CloseHandle(pi.hProcess);
+	CloseHandle(pi.hThread);
+	if (threat)
+	{
+		SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+		banner.Threat(language, ThreatName(closing, language));
+		code = 1;
+	}
 	// El juego terminó.  No se espera el fin del pipe: otro proceso que el juego
 	// haya abierto puede tener heredada una copia de su extremo.  Se corta la
 	// lectura bloqueada de Serve.
@@ -746,16 +828,42 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	}
 
 	std::thread server([&]() { Serve(pair[0], pair[0], guard); });
+	Guard::Detector detector;
+	detector.Attach(nullptr, nullptr, static_cast<unsigned long>(pid), gameDir);
 	banner.Wait([]() { return true; }, 1200);
 	banner.Close();
+
+	// Vigilancia, con el guardián por debajo de lo normal.
+	::setpriority(PRIO_PROCESS, 0, 5);
+	Guard::Finding closing;
+	bool threat = false;
 	int status = 0;
-	while (::waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+	for (;;)
+	{
+		const pid_t done = ::waitpid(pid, &status, WNOHANG);
+		if (done == pid || (done < 0 && errno != EINTR)) break;
+		std::this_thread::sleep_for(std::chrono::milliseconds(kWatchMs));
+		if (::waitpid(pid, &status, WNOHANG) == pid) break;
+		if (Watch(detector, guard, closing))
+		{
+			threat = true;
+			::kill(pid, SIGKILL);
+			while (::waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+			break;
+		}
+	}
 	// Otro proceso que haya abierto el juego puede tener heredado su extremo: se
 	// corta la lectura en vez de esperar el fin del pipe.
 	::shutdown(pair[0], SHUT_RDWR);
 	server.join();
 	::close(pair[0]);
-	const int code = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+	int code = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+	if (threat)
+	{
+		::setpriority(PRIO_PROCESS, 0, 0);
+		banner.Threat(language, ThreatName(closing, language));
+		code = 1;
+	}
 	Log("MU-Guard: el juego termino (%d)", code);
 	*exitCode = code;
 	return true;
