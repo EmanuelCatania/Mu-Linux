@@ -64,10 +64,12 @@ Se aplica a los guardianes que se conecten después del cambio.
 
 ## Desafío de memoria y builds aceptados
 
-Cada unos 30 segundos `mu-guard` le pide al guardián el hash de cuatro rangos al
-azar del código del juego, tal como está cargado en memoria, con una clave
-nueva cada vez. Lo compara con el que calcula él mismo a partir del
-`main.exe` publicado:
+Cada unos 30 segundos `mu-guard` le pide al guardián el hash de 8 bloques de
+64 KB del código del juego, tal como está cargado en memoria, con una clave
+nueva cada vez. Los bloques salen de una recorrida en orden aleatorio de todo
+el código: en unos 16 minutos (para un `main.exe` de 16 MB de código) se
+revisó entero, y vuelve a empezar en otro orden. Lo compara con el hash que
+calcula él mismo a partir del `main.exe` publicado:
 
 - si no coincide (el código del juego fue modificado), le ordena al guardián
   cerrar el juego (banner rojo `PATCH`) y desconecta del GameServer a los
@@ -97,6 +99,10 @@ AcceptUnknownBuilds = false
 
 El cliente que no está en la lista no consigue tickets, así que con
 `MU_GUARD_REQUIRED=1` no entra.
+
+El intervalo se ajusta con `ChallengeSeconds` (30 por defecto, de 5 a 300): más
+corto revisa todo el código antes y le cuesta más CPU a `mu-guard` (hashear
+512 KB por jugador en cada desafío).
 
 ## Activarlo
 
@@ -131,6 +137,7 @@ Port = 28980
 Socket = ""   # vacío = Data/Guard/mu-guard.sock
 MemScanCloses = true
 AcceptUnknownBuilds = true
+ChallengeSeconds = 30
 ```
 
 El ConnectServer y el GameServer lo releen cuando cambia, sin reiniciar. Hay que

@@ -20,9 +20,6 @@ namespace
 	constexpr std::uint32_t kElfLoad = 1;
 	constexpr std::uint32_t kElfExecute = 1;
 
-	// Tamaño de cada rango de un desafío (o la sección entera si es más chica).
-	constexpr std::uint32_t kRangeSize = 8 * 1024;
-
 	std::uint16_t U16(const std::vector<std::uint8_t>& b, std::size_t at)
 	{
 		return at + 2 <= b.size() ? static_cast<std::uint16_t>(b[at] | (b[at + 1] << 8)) : 0;
@@ -452,41 +449,21 @@ bool CGuardBuild::Load(const std::string& path)
 	return !this->m_Sections.empty();
 }
 
-std::vector<GuardBuildRange> CGuardBuild::PickRanges(const std::uint8_t* random, std::size_t count) const
+std::vector<GuardBuildRange> CGuardBuild::Chunks(std::uint32_t size) const
 {
-	std::uint64_t total = 0;
+	std::vector<GuardBuildRange> chunks;
 
 	for (const GuardBuildSection& s : this->m_Sections)
 	{
-		total += s.Bytes.size();
-	}
+		const std::uint32_t length = static_cast<std::uint32_t>(s.Bytes.size());
 
-	std::vector<GuardBuildRange> ranges;
-
-	for (std::size_t i = 0; i < count && total != 0; i++)
-	{
-		std::uint64_t pick = GuardProto::GetLe32(random + i * 4) % total;
-
-		for (const GuardBuildSection& s : this->m_Sections)
+		for (std::uint32_t at = 0; at < length; at += size)
 		{
-			if (pick >= s.Bytes.size())
-			{
-				pick -= s.Bytes.size();
-
-				continue;
-			}
-
-			const std::uint32_t size = static_cast<std::uint32_t>(std::min<std::size_t>(kRangeSize, s.Bytes.size()));
-
-			std::uint32_t offset = static_cast<std::uint32_t>(std::min<std::uint64_t>(pick, s.Bytes.size() - size)) & ~15u;
-
-			ranges.push_back({ s.Rva + offset, size });
-
-			break;
+			chunks.push_back({ s.Rva + at, std::min(size, length - at) });
 		}
 	}
 
-	return ranges;
+	return chunks;
 }
 
 bool CGuardBuild::Copy(std::uint32_t rva, std::uint32_t size, std::uint64_t base, std::vector<std::uint8_t>& out) const

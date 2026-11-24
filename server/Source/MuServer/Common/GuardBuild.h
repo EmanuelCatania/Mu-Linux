@@ -55,9 +55,9 @@ public:
 
 	const std::vector<GuardBuildSection>& Sections() const { return this->m_Sections; }
 
-	// Rangos al azar dentro del código, para un desafío.  random: bytes al azar
-	// (4 por rango).
-	std::vector<GuardBuildRange> PickRanges(const std::uint8_t* random, std::size_t count) const;
+	// Todo el código partido en bloques de `size` bytes (el último de cada
+	// sección puede ser más chico).  mu-guard los pide en orden aleatorio.
+	std::vector<GuardBuildRange> Chunks(std::uint32_t size) const;
 
 	// Hash esperado de un desafío: los bytes de los rangos como quedan en el
 	// juego cargado en `base`.  false si algún rango cae fuera del código.

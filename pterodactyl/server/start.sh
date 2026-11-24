@@ -61,6 +61,8 @@ MemScanCloses = true
 # true: un cliente que no está en Data/Guard/Builds entra igual, sin desafío
 # de memoria.  false: sólo los builds de Data/Guard/Builds.
 AcceptUnknownBuilds = true
+# Cada cuántos segundos se desafía la memoria del juego (5..300).
+ChallengeSeconds = 30
 EOF
 fi
 guard_bool() { [ "${1:-0}" = "1" ] && echo true || echo false; }

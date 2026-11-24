@@ -12,8 +12,9 @@
 //
 // Desafío de memoria (paso 4): con el build del cliente en Data/Guard/Builds
 // (lo arma `mu-guard build <ejecutable>`), cada ~30 s se le pide al guardián el
-// hash de rangos al azar del código del juego.  Distinto del esperado: se le
-// ordena cerrar el juego (Verdict PATCH) y se desconecta a sus jugadores.  Sin
+// hash de bloques del código del juego (una recorrida de todo el código en
+// orden al azar).  Distinto del esperado: se le ordena cerrar el juego
+// (Verdict PATCH) y se desconecta a sus jugadores.  Sin
 // respuesta a tiempo, o con el guardián desconectado más de la gracia, se
 // desconecta a sus jugadores.
 //
@@ -87,7 +88,10 @@ namespace
 	constexpr int kHandshakeSeconds = 10;   // saludo del canal + Hello
 	constexpr std::size_t kMaxTickets = 100000;
 	constexpr std::size_t kMaxBuffered = 64 * 1024;
-	constexpr std::size_t kChallengeRanges = 4;
+	// Cada desafío pide los próximos bloques de una recorrida al azar de todo el
+	// código: 8 x 64 KB cada ~30 s cubren 16 MB en unos 16 minutos, así que un
+	// parche que se queda en memoria cae seguro.
+	constexpr std::size_t kChallengeRanges = GuardProto::MaxChallengeRanges;
 	constexpr std::size_t kMaxSessionsPerGuardian = 64;
 	constexpr std::size_t kMaxKicksPerPong = 256;
 	constexpr int kKickSeconds = 15;   // lo que dura una orden de desconectar para un latido que se reconecta
@@ -174,6 +178,8 @@ namespace
 		std::uint32_t challenge = 0;
 		std::uint8_t nonce[GuardProto::NonceSize] = {};
 		std::vector<GuardBuildRange> ranges;
+		std::vector<GuardBuildRange> tour;   // bloques del código en orden al azar
+		std::size_t tourAt = 0;
 		Clock::time_point deadline;   // del desafío en curso
 		Clock::time_point nextChallenge;
 		bool heartbeat = false;       // el GameServer mandó Ping por esta conexión
@@ -848,18 +854,34 @@ namespace
 	{
 		using namespace GuardProto;
 
-		std::uint8_t random[kChallengeRanges * 4];
-
-		if (!SecureRandomBytes(c.nonce, sizeof(c.nonce)) || !SecureRandomBytes(random, sizeof(random)))
+		if (!SecureRandomBytes(c.nonce, sizeof(c.nonce)))
 		{
 			return;
 		}
 
-		c.ranges = c.build->PickRanges(random, kChallengeRanges);
+		c.ranges.clear();
 
-		if (c.ranges.empty())
+		while (c.ranges.size() < kChallengeRanges)
 		{
-			return;
+			if (c.tourAt >= c.tour.size())
+			{
+				// Una recorrida nueva, en otro orden.
+				c.tour = c.build->Chunks(MaxChallengeRange);
+
+				for (std::size_t i = c.tour.size(); i > 1; i--)
+				{
+					std::swap(c.tour[i - 1], c.tour[(std::size_t)RandomBetween(0, (int)i - 1)]);
+				}
+
+				c.tourAt = 0;
+
+				if (c.tour.empty())
+				{
+					return;
+				}
+			}
+
+			c.ranges.push_back(c.tour[c.tourAt++]);
 		}
 
 		c.challenge = ++this->m_ChallengeSerial;
@@ -913,7 +935,9 @@ namespace
 
 		if (known && crypto_verify32(expected, payload.data() + 12) == 0)
 		{
-			c.nextChallenge = Clock::now() + std::chrono::seconds(RandomBetween(ChallengeSeconds - 10, ChallengeSeconds + 10));
+			const int every = this->m_Settings.ChallengeSeconds;
+
+			c.nextChallenge = Clock::now() + std::chrono::seconds(RandomBetween(every - every / 3, every + every / 3));
 
 			return;
 		}

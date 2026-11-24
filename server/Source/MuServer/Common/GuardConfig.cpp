@@ -55,6 +55,10 @@ GuardSettings ReadGuardSettings(const std::string& dataPath)
 			settings.MemScanCloses = table["MemScanCloses"].value_or(true);
 			settings.AcceptUnknownBuilds = table["AcceptUnknownBuilds"].value_or(true);
 
+			const std::int64_t challenge = table["ChallengeSeconds"].value_or(std::int64_t(30));
+
+			settings.ChallengeSeconds = (int)(challenge < 5 ? 5 : (challenge > 300 ? 300 : challenge));
+
 			const std::int64_t port = table["Port"].value_or(std::int64_t(28980));
 
 			if (port > 0 && port < 65536)
