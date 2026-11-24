@@ -64,3 +64,16 @@ jobs:
             build/launcher/launcher
             build/launcher/Release/launcher.exe
           if-no-files-found: ignore
+      # El artefacto lleva el tema por defecto; los demás sólo se compilan, para
+      # que un cambio en ThemeSpec.h no rompa un tema sin que se note.
+      - name: Compilar los demás temas
+        shell: bash
+        run: |
+          for t in client/src/launcher/themes/*/Theme.cpp; do
+            name=$(basename "$(dirname "$t")")
+            [ "$name" = WebzenOldSchoolV1 ] && continue
+            echo "::group::$name"
+            cmake -S client/src/launcher -B build/launcher -DMU_LAUNCHER_THEME="$name"
+            cmake --build build/launcher --config Release --target launcher --parallel 4
+            echo "::endgroup::"
+          done

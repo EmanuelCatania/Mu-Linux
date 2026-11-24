@@ -1,4 +1,4 @@
-# Launcher (Fase 5): ventana SDL3 con el tema WebzenOldSchoolV1 de kayito, que
+# Launcher (Fase 5): ventana SDL3 con uno de los temas de kayito, que
 # actualiza el cliente (núcleo en src/update), edita sus opciones (Config.ini,
 # con la tabla compartida app/config/OptionTable.h) y lo arranca.
 #
@@ -10,6 +10,7 @@
 # (Wayland, X11, libdecor: ver cmake/MuSDL3.cmake).
 #
 # Lo que fija el operador (ver LauncherConfig.h), por ejemplo:
+#   -DMU_LAUNCHER_THEME=WebzenOldSchoolV2   (una carpeta de themes/)
 #   -DMU_LAUNCHER_TITLE="Mi Server" -DMU_BASE_KEY=<64 hex>
 #   -DMU_OVERLAY_URL=https://miserver.com/updates -DMU_OVERLAY_CHANNEL=miserver/overlay
 #   -DMU_OVERLAY_KEY=<64 hex> -DMU_CONNECT_SERVER=mu.miserver.com:44405
@@ -36,20 +37,51 @@ set(MU_OVERLAY_KEY "" CACHE STRING "Identidad del server (64 hex)")
 set(MU_CONNECT_SERVER "" CACHE STRING "ConnectServer del server (host:puerto, varios separados por coma)")
 set(MU_WEB_URL "" CACHE STRING "Sitio del server (si no lo anuncia el server)")
 set(MU_GAME_EXE "" CACHE STRING "Ejecutable del cliente (vacío: main.exe / main)")
+set(MU_LAUNCHER_THEME "WebzenOldSchoolV1" CACHE STRING "Tema del launcher (una carpeta de themes/)")
 
-# Imágenes del tema y fuente, adentro del ejecutable.
-set(_theme "${CMAKE_CURRENT_SOURCE_DIR}/themes/WebzenOldSchoolV1")
+# El tema: su Theme.cpp (disposición y colores, ver ThemeSpec.h), su ícono y
+# todas sus imágenes, adentro del ejecutable con la fuente.
+set(_theme "${CMAKE_CURRENT_SOURCE_DIR}/themes/${MU_LAUNCHER_THEME}")
+if(NOT EXISTS "${_theme}/Theme.cpp")
+    file(GLOB _themes RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/themes" "${CMAKE_CURRENT_SOURCE_DIR}/themes/*/Theme.cpp")
+    string(REPLACE "/Theme.cpp" "" _themes "${_themes}")
+    message(FATAL_ERROR "MU_LAUNCHER_THEME=${MU_LAUNCHER_THEME} no es un tema. Los que hay: ${_themes}")
+endif()
 set(_font "${MU_CLIENT_SOURCE_DIR}/bin/Client/System/Font")
-set(_embedded)
-foreach(_pair
-        "MainBackground=${_theme}/MainBackground.png"
-        "OptionsBackground=${_theme}/OptionsBackground.png"
-        "MainImage=${_theme}/MainImage.png"
-        "ButtonNormal=${_theme}/Button_n.png"
-        "ButtonHover=${_theme}/Button_h.png"
-        "ButtonDisabled=${_theme}/Button_d.png"
-        "FontRegular=${_font}/LiberationSans-Regular.ttf"
-        "FontBold=${_font}/LiberationSans-Bold.ttf")
+file(GLOB _theme_images CONFIGURE_DEPENDS "${_theme}/*.png")
+set(_pairs "FontRegular=${_font}/LiberationSans-Regular.ttf" "FontBold=${_font}/LiberationSans-Bold.ttf")
+set(_index_decl "")
+set(_index_rows "")
+foreach(_img IN LISTS _theme_images)
+    get_filename_component(_base "${_img}" NAME_WE)
+    string(MAKE_C_IDENTIFIER "Theme_${_base}" _sym)
+    list(APPEND _pairs "${_sym}=${_img}")
+    string(APPEND _index_decl "extern const unsigned char ${_sym}[];\nextern const std::size_t ${_sym}Size;\n")
+    string(APPEND _index_rows "\t{ \"${_base}\", ${_sym}, &${_sym}Size },\n")
+endforeach()
+file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/res/ThemeIndex.cpp" CONTENT
+"// Generado por client/src/launcher/CMakeLists.txt (tema ${MU_LAUNCHER_THEME}).  No editar.
+#include \"Resources.h\"
+#include <cstring>
+namespace LauncherRes {
+${_index_decl}
+namespace {
+struct Row { const char* name; const unsigned char* data; const std::size_t* size; };
+const Row kRows[] = {
+${_index_rows}\t{ nullptr, nullptr, nullptr }
+};
+}
+bool FindImage(const std::string& name, const unsigned char** data, std::size_t* size)
+{
+\tfor (const Row* r = kRows; r->name; ++r)
+\t\tif (name == r->name) { *data = r->data; *size = *r->size; return true; }
+\treturn false;
+}
+}
+" @ONLY)
+file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/res/launcher.rc" CONTENT "IDI_ICON1 ICON \"${_theme}/Icon.ico\"\n" @ONLY)
+set(_embedded "${CMAKE_CURRENT_BINARY_DIR}/res/ThemeIndex.cpp")
+foreach(_pair IN LISTS _pairs)
     string(FIND "${_pair}" "=" _eq)
     string(SUBSTRING "${_pair}" 0 ${_eq} _sym)
     math(EXPR _from "${_eq} + 1")
@@ -90,11 +122,13 @@ add_executable(launcher WIN32
     Gfx.cpp
     Gfx.h
     Resources.h
+    ThemeSpec.h
+    "${_theme}/Theme.cpp"
     ${_embedded})
 if(WIN32)
-    target_sources(launcher PRIVATE launcher.rc)
+    target_sources(launcher PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/res/launcher.rc")
 endif()
-target_include_directories(launcher PRIVATE "${MU_CLIENT_SOURCE_DIR}/lib")
+target_include_directories(launcher PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${MU_CLIENT_SOURCE_DIR}/lib")
 target_link_libraries(launcher PRIVATE mu_launcher_core SDL3::SDL3-static)
 foreach(_opt MU_LAUNCHER_TITLE MU_BASE_REPO MU_BASE_TAG MU_BASE_KEY MU_OVERLAY_URL MU_OVERLAY_CHANNEL MU_OVERLAY_KEY MU_CONNECT_SERVER MU_WEB_URL MU_GAME_EXE)
     if(NOT "${${_opt}}" STREQUAL "")
