@@ -18,6 +18,8 @@
 #include "UpdateFlow.h"
 #include "WebPanel.h"
 
+#include "app/config/Release.h"
+
 #include "platform/RunningLock.h"
 #include "update/FileUtil.h"
 #include "update/HttpTransport.h"
@@ -74,6 +76,9 @@ float g_WindowScale = 1.0f;
 // toma otro tamaño mientras tanto).
 float g_Scale = 1.0f;
 bool g_OptionsMode = false;
+
+// Repo de los diseños de kayito (pestaña "Acerca de" de las opciones).
+constexpr const char kKayitoUrl[] = "https://github.com/nicomuratona/kayito-MuLauncher";
 
 int LogicalW() { return g_OptionsMode ? g_Theme.OptionsWidth() : g_Theme.width; }
 int LogicalH() { return g_OptionsMode ? g_Theme.OptionsHeight() : g_Theme.height; }
@@ -473,6 +478,7 @@ struct OptionsScreen
 	Button back{ g_Theme.back, "Volver", &g_Theme.Or(g_Theme.backStyle) };
 	Button verify{ { 0, 0, 150, 26 }, "Verificar archivos" };
 	Button web{ { 0, 0, 150, 26 }, "Ir a la web" };
+	Button kayito{ { 0, 0, 150, 26 }, "Repositorio de kayito" };
 
 	// Todo relativo al panel del tema (en el V1: 9,33, 433 de ancho y cuatro
 	// pestañas por fila).
@@ -499,6 +505,7 @@ struct OptionsScreen
 	float BelowRows(std::size_t rows) const { return P().y + RowY() + static_cast<float>(rows) * kRowH + 10; }
 	bool IsDownloads() const { return editor.Tabs()[tab].name == "Descargas"; }
 	bool IsGeneral() const { return editor.Tabs()[tab].name == "General"; }
+	bool IsAbout() const { return editor.Tabs()[tab].name == "Acerca de"; }
 };
 
 } // namespace
@@ -697,6 +704,7 @@ int main(int argc, char** argv)
 				if (opts->IsDownloads()) buttons.push_back(&opts->verify);
 				opts->web.enabled = !st.webUrl.empty();
 				if (opts->IsGeneral()) buttons.push_back(&opts->web);
+				if (opts->IsAbout()) buttons.push_back(&opts->kayito);
 			}
 			else
 			{
@@ -842,6 +850,11 @@ int main(int argc, char** argv)
 						// Sólo http(s): la URL la anuncia el server o viene compilada.
 						if ((st.webUrl.compare(0, 7, "http://") == 0 || st.webUrl.compare(0, 8, "https://") == 0) &&
 						    !SDL_OpenURL(st.webUrl.c_str()))
+							opts->message = Fmt("No se pudo abrir el navegador: {0}", { SDL_GetError() });
+					}
+					else if (opts && clicked == &opts->kayito)
+					{
+						if (!SDL_OpenURL(kKayitoUrl))
 							opts->message = Fmt("No se pudo abrir el navegador: {0}", { SDL_GetError() });
 					}
 					else if (opts && clicked == &opts->verify)
@@ -1010,6 +1023,31 @@ int main(int argc, char** argv)
 					                b.rect.y + (b.rect.h - ui.notice->Height()) / 2, pal.dim);
 				};
 				if (opts->IsDownloads()) drawExtra(opts->verify, Tr("Vuelve a revisar todos los archivos instalados."));
+				if (opts->IsAbout())
+				{
+					// Los diseños son de kayito y se usan con su permiso, que pide
+					// el crédito acá y en el README, con el enlace a su repo.
+					float y = th.optionsPanel.y + opts->RowY() + 4;
+					const float x = th.optionsPanel.x + 11, w = th.optionsPanel.w - 22;
+					ui.label->Draw(Fmt("Mu Linux launcher, versión {0}", { MU_RELEASE }), x, y, pal.text);
+					y += ui.label->Height() + 10;
+					for (const char* p : { "Diseño de los temas: kayito (NicoMuratona), sobre los launchers originales de Webzen. Se usan con su permiso.",
+					                       "El launcher y el cliente son de Mu Linux, de código abierto (licencia MIT)." })
+					{
+						for (const std::string& line : Wrap(*ui.regular, Tr(p), w))
+						{
+							ui.regular->Draw(line, x, y, pal.text);
+							y += ui.regular->Height() + 2;
+						}
+						y += 8;
+					}
+					opts->kayito.rect.x = x;
+					opts->kayito.rect.y = y + 4;
+					ui.DrawButton(opts->kayito);
+					const float tx = x + opts->kayito.rect.w + 10;
+					ui.notice->Draw(ui.notice->Fit(kKayitoUrl + 8, th.optionsPanel.x + th.optionsPanel.w - tx - 8), tx,
+					                opts->kayito.rect.y + (opts->kayito.rect.h - ui.notice->Height()) / 2, pal.dim);
+				}
 				if (opts->IsGeneral())
 					drawExtra(opts->web, st.webUrl.empty() ? std::string(Tr("El server no tiene sitio configurado.")) : st.webUrl);
 				if (!opts->message.empty())

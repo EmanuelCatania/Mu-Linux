@@ -219,6 +219,9 @@ std::vector<OptionTab> BuildOptionTabs()
 	                              { { "Sin límite", "0" }, { "128 KB/s", "128" }, { "256 KB/s", "256" }, { "512 KB/s", "512" },
 	                                { "1 MB/s", "1024" }, { "2 MB/s", "2048" } }, 3));
 	tabs.push_back(dl);
+
+	// Créditos y versión: sin opciones, la dibuja el launcher (main.cpp).
+	tabs.push_back(OptionTab{ "Acerca de", {} });
 	return tabs;
 }
 

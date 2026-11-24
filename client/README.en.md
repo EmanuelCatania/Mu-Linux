@@ -936,6 +936,13 @@ License), HarfBuzz (MIT), SheenBidi (Apache 2.0) and Dawn (BSD 3-Clause). The
 fonts in `bin/Client/System/Font/` carry theirs next to them (SIL OFL 1.1 or
 Apache 2.0). The Linux package includes the licenses in `licenses/`.
 
+The launcher designs (`src/launcher/themes/`) are by **kayito** (NicoMuratona),
+taken from his
+[kayito-MuLauncher](https://github.com/nicomuratona/kayito-MuLauncher), which in
+turn follows the original Webzen launchers. His repository has no license: they
+are used with his permission and are **not** covered by the MIT license. The
+launcher also credits him in Options > About.
+
 ---
 
 ## Appendix: the reconstruction
