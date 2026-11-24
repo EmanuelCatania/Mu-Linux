@@ -36,7 +36,7 @@ MU_GUARD_ENABLED=1
 MU_GUARD_REQUIRED=0
 ```
 
-y abrir el puerto **44406/tcp** (`MU_GUARD_PORT`, ya publicado en `docker-compose.yml`).
+y abrir el puerto **28980/tcp** (`MU_GUARD_PORT`, ya publicado en `docker-compose.yml`).
 Conviene arrancar con `MU_GUARD_REQUIRED=0`: los que entren sin guardián quedan
 en el log como `Login sin guardian valido` y nadie queda afuera. Cuando todos
 usan un cliente con MU-Guard, pasarlo a `1`.
@@ -45,7 +45,7 @@ usan un cliente con MU-Guard, pasarlo a `1`.
 
 En el huevo del server: **MU-Guard** = 1, **Require MU-Guard** = 0 o 1, y
 **MU-Guard port** con una asignación adicional del panel (el cliente la recibe
-del ConnectServer, no hace falta que sea 44406).
+del ConnectServer, no hace falta que sea 28980).
 
 ### A mano
 
@@ -54,7 +54,7 @@ del ConnectServer, no hace falta que sea 44406).
 ```toml
 Enabled = true
 Required = false
-Port = 44406
+Port = 28980
 Socket = ""   # vacío = Data/Guard/mu-guard.sock
 ```
 

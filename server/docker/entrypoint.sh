@@ -42,7 +42,7 @@ if [ ! -f "$guard_toml" ]; then
 # MU_GUARD_ENABLED y MU_GUARD_REQUIRED; el resto se edita acá.
 Enabled = false
 Required = false
-Port = 44406
+Port = 28980
 # Socket local GameServer <-> mu-guard; vacío = Data/Guard/mu-guard.sock
 Socket = ""
 EOF
@@ -51,7 +51,7 @@ guard_bool() { [ "${1:-0}" = "1" ] && echo true || echo false; }
 sed -i -E "s/^Enabled *=.*/Enabled = $(guard_bool "${MU_GUARD_ENABLED:-0}")/" "$guard_toml"
 sed -i -E "s/^Required *=.*/Required = $(guard_bool "${MU_GUARD_REQUIRED:-0}")/" "$guard_toml"
 # El puerto también: el 55980 de una versión de prueba chocaba con el DataServer.
-sed -i -E "s/^Port *=.*/Port = ${MU_GUARD_PORT:-44406}/" "$guard_toml"
+sed -i -E "s/^Port *=.*/Port = ${MU_GUARD_PORT:-28980}/" "$guard_toml"
 
 if [ -n "$PUBLIC_IP" ] && [ -f /opt/mu/ConnectServer/ServerList.dat ]; then
   sed -i -E "s/\"([0-9]{1,3}\.){3}[0-9]{1,3}\"/\"${PUBLIC_IP}\"/g" /opt/mu/ConnectServer/ServerList.dat

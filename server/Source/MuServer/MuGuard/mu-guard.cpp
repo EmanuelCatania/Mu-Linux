@@ -2,7 +2,7 @@
 // doc-port/diseno-seguridad-fase5.md; mensajes en Common/GuardProtocol.h.
 //
 // Dos puertas:
-//   - TCP en el puerto público (Guard.toml Port, 44406): el guardián del
+//   - TCP en el puerto público (Guard.toml Port, 28980): el guardián del
 //     cliente, por el mismo canal cifrado que el juego (SecureChannel) y con la
 //     misma identidad del server (Data/Keys/ServerIdentity.key, la genera el
 //     GameServer; acá sólo se lee).  Saluda y pide tickets.
