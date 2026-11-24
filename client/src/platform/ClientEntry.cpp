@@ -39,6 +39,8 @@
 #include "platform/ITimer.h"
 #include "platform/IFileSystem.h"
 #include "platform/ContentLayers.h"
+#include "platform/RunningLock.h"
+#include "net/ContentSync.h"
 #include "game/item/ItemDefines.h"
 #include "resource.h"
 #ifdef _WIN32
@@ -527,6 +529,17 @@ int main(int, char**)
     // Fase 5 (E2): capas de datos (Packs/, Content/) con el directorio ya fijado.
     Platform::ContentLayers::Init();
     DbgLogPublic(Platform::ContentLayers::Describe().c_str());
+    ContentSync::CheckLauncherRevision();   // anota la revisión de lo que instaló el launcher
+
+    // DESVIACION (Fase 5, launcher): en vez del chequeo de instancia única del
+    // original (App_SingleInstanceCheck, más abajo), un lock compartido que dice
+    // "hay un cliente corriendo": el launcher no reemplaza archivos ni escribe
+    // Config.ini mientras esté tomado.  Varias instancias lo comparten.
+    {
+        const std::string cache = std::string(Platform::UserDir()) + "Cache";
+        Platform::GetFileSystem().EnsureDirectory(cache.c_str());
+        if (!RunningLock::Acquire(cache + "/running.lock")) DbgLogPublic("RunningLock: no se pudo tomar el lock");
+    }
 #if defined(_DEBUG) && defined(_WIN32)
     // DIAG: CRT debug heap con guard bytes. La corrupción se detecta en el
     // siguiente alloc/free que toque el bloque dañado — rápido sin O(n^2) de

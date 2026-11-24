@@ -10,9 +10,13 @@
 #include "SelfUpdate.h"
 #include "ServerAnnounce.h"
 
+#include "platform/RunningLock.h"
+
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <thread>
 
 namespace Launcher {
 
@@ -75,6 +79,8 @@ bool AnyTransport::Get(const std::string& url, std::uint64_t maxSize, std::vecto
 UpdateFlow::UpdateFlow(Config config, std::string root, std::unique_ptr<Transport> transport)
 	: m_Config(std::move(config)), m_Root(std::move(root)), m_Transport(std::move(transport)), m_Limiter(m_Config.speedLimit)
 {
+	m_LockPath = JoinPath(JoinPath(UserDirFor(m_Root), "Cache"), "running.lock");
+	m_MaxConnections = std::max(1, m_Config.connections);
 	for (const std::string& o : m_Config.overrides) m_Status.notices.push_back("Configuración de prueba: " + o);
 }
 
@@ -104,6 +110,48 @@ void UpdateFlow::Cancel()
 void UpdateFlow::Wait()
 {
 	if (m_Thread.joinable()) m_Thread.join();
+}
+
+namespace {
+std::int64_t NowMs()
+{
+	return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+} // namespace
+
+void UpdateFlow::SetPlaying()
+{
+	m_PlayingSince = NowMs();
+	PollGame(true);
+}
+
+void UpdateFlow::SetPaused(bool paused)
+{
+	m_Paused = paused;
+	m_Limiter.SetPaused(paused);
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	m_Status.paused = paused;
+}
+
+void UpdateFlow::PollGame(bool force)
+{
+	std::lock_guard<std::mutex> poll(m_PollMutex);
+	const auto now = std::chrono::steady_clock::now();
+	if (!force && now - m_LastPoll < std::chrono::milliseconds(500)) return;
+	m_LastPoll = now;
+	// Recién arrancado, el cliente tarda en tomar su lock: se lo da por abierto.
+	const std::int64_t since = m_PlayingSince.load();
+	const bool running = RunningLock::IsHeld(m_LockPath) || (since != 0 && NowMs() - since < 15000);
+	const bool was = m_GameRunning.exchange(running);
+	if (running != was || force)
+	{
+		std::uint64_t rate = m_Config.speedLimit;
+		if (running && m_Config.playingSpeedLimit && (!rate || m_Config.playingSpeedLimit < rate)) rate = m_Config.playingSpeedLimit;
+		m_Limiter.SetRate(rate);
+		m_MaxConnections = running ? 1 : std::max(1, m_Config.connections);
+	}
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	m_Status.playing = running;
 }
 
 void UpdateFlow::Set(Phase phase, const std::string& message)
@@ -276,10 +324,12 @@ void UpdateFlow::Run()
 		return finish(Phase::Failed, err, false);
 
 	// ── Plan e instalación ────────────────────────────────────────────────
+	PollGame(true);
 	PlanOptions po;
 	po.root = m_Root;
 	po.platform = kPlatform;
 	po.fullVerify = m_Config.fullVerify;
+	po.gameRunning = m_GameRunning.load();
 	Plan plan;
 	if (!BuildPlan(sources, po, index, plan, &err)) return finish(Phase::Failed, err, false);
 	{
@@ -330,7 +380,8 @@ void UpdateFlow::Run()
 		return finish(Phase::Restart, "Launcher actualizado. Reiniciando...", false);
 	}
 
-	if (plan.files.empty() && plan.remove.empty())
+	const std::size_t heldForGame = plan.heldForGame;
+	if (plan.files.empty() && plan.remove.empty() && heldForGame == 0)
 	{
 		SaveIndex(indexPath, index);
 		return finish(Phase::Ready, "El cliente está al día.", FileExists(JoinPath(m_Root, m_Config.gameExe)));
@@ -341,25 +392,112 @@ void UpdateFlow::Run()
 	io.root = m_Root;
 	io.downloadDir = JoinPath(cache, "downloads");
 	io.indexPath = indexPath;
+	io.revisionPath = JoinPath(cache, "content.rev");
 	io.transport = m_Transport.get();
 	io.limiter = &m_Limiter;
-	io.connections = m_Config.connections;
+	io.connections = std::max(1, m_Config.connections);
+	io.maxConnections = &m_MaxConnections;
+	io.gameRunning = &m_GameRunning;
 	io.cancel = &m_Cancel;
 	io.progress = [this](const InstallStatus& s) {
+		PollGame();
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		m_Status.done = s.downloaded;
 		m_Status.total = s.downloadTotal;
-		m_Status.message = "Bajando " + std::to_string(s.filesDone) + " de " + std::to_string(s.filesTotal) + " archivos (" +
+		m_Status.message = std::string(m_Status.background ? "Ya podés jugar. Bajando " : "Bajando ") +
+		                   std::to_string(s.filesDone) + " de " + std::to_string(s.filesTotal) + " archivos (" +
 		                   Human(s.downloaded) + " de " + Human(s.downloadTotal) + ")...";
 	};
-	InstallResult res;
-	const bool ok = RunPlan(sources, plan, index, io, res);
-	if (res.cancelled) return finish(Phase::Failed, "Cancelado.", installed);
+
+	InstallResult total;
+	auto add = [&](const InstallResult& r) {
+		total.installed += r.installed;
+		total.cancelled = total.cancelled || r.cancelled;
+		total.failures.insert(total.failures.end(), r.failures.begin(), r.failures.end());
+		total.deferred.insert(total.deferred.end(), r.deferred.begin(), r.deferred.end());
+	};
+	const bool hasOptional = std::any_of(plan.requests.begin(), plan.requests.end(),
+	                                     [](const RangeRequest& r) { return !r.required && !r.self; });
+	bool requiredFailed = false;
+	if (hasOptional && !m_GameRunning.load())
+	{
+		// Primero lo necesario para jugar...
+		InstallResult res;
+		io.part = InstallOptions::Part::Required;
+		RunPlan(sources, plan, index, io, res);
+		add(res);
+		if (total.cancelled) return finish(Phase::Failed, "Cancelado.", installed);
+		requiredFailed = !res.failures.empty();
+		// ...y ya se puede jugar mientras baja el resto.
+		if (!requiredFailed)
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			m_Status.background = true;
+			m_Status.canPlay = FileExists(JoinPath(m_Root, m_Config.gameExe));
+		}
+		io.part = InstallOptions::Part::Optional;
+		res = InstallResult();
+		RunPlan(sources, plan, index, io, res);
+		add(res);
+	}
+	else
+	{
+		InstallResult res;
+		RunPlan(sources, plan, index, io, res);
+		add(res);
+		requiredFailed = !total.failures.empty();
+	}
+	if (total.cancelled) return finish(Phase::Failed, "Cancelado.", installed);
+
+	// Lo que no se pudo pisar con el juego abierto (o el plan dejó afuera por
+	// eso): al cerrarlo.
+	const std::size_t waiting = total.deferred.size() + heldForGame;
+	if (waiting > 0)
+	{
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			m_Status.background = true;
+			m_Status.waitingForClose = waiting;
+			m_Status.canPlay = FileExists(JoinPath(m_Root, m_Config.gameExe));
+			m_Status.message = std::to_string(waiting) + " archivos se instalan cuando cierres el juego.";
+		}
+		for (;;)
+		{
+			if (m_Cancel) return finish(Phase::Ready, "Faltan " + std::to_string(waiting) +
+			                                              " archivos: se instalan la próxima vez.", true);
+			PollGame(true);
+			if (!m_GameRunning.load()) break;
+			std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		}
+		Set(Phase::Downloading, "Instalando lo que faltaba...");
+		po.gameRunning = false;
+		if (!BuildPlan(sources, po, index, plan, &err)) return finish(Phase::Failed, err, false);
+		InstallResult res;
+		io.part = InstallOptions::Part::All;
+		RunPlan(sources, plan, index, io, res);
+		total.deferred.clear();
+		add(res);
+		if (total.cancelled) return finish(Phase::Failed, "Cancelado.", installed);
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		m_Status.waitingForClose = 0;
+	}
+
 	const bool playable = FileExists(JoinPath(m_Root, m_Config.gameExe));
-	if (!ok)
-		return finish(Phase::Failed, "No se pudieron instalar " + std::to_string(res.failures.size()) + " archivos: " +
-		                                 (res.failures.empty() ? std::string() : res.failures.front()), playable && installed);
-	finish(Phase::Ready, "Actualizado: " + std::to_string(res.installed) + " archivos.", playable);
+	if (!total.failures.empty())
+	{
+		const std::string what = "No se pudieron instalar " + std::to_string(total.failures.size()) + " archivos: " + total.failures.front();
+		// Si lo que falló es opcional, igual se puede jugar.
+		if (!requiredFailed && playable)
+		{
+			{
+				std::lock_guard<std::mutex> lock(m_Mutex);
+				m_Status.notices.push_back(what);
+			}
+			return finish(Phase::Ready, "Actualizado: " + std::to_string(total.installed) + " archivos.", true);
+		}
+		return finish(Phase::Failed, what, playable && installed);
+	}
+	finish(Phase::Ready, "Actualizado: " + std::to_string(total.installed) + " archivos.", playable);
 }
 
 } // namespace Launcher

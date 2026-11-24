@@ -2,6 +2,7 @@
 
 #include "stdafx.h"
 #include "game/core/RenderFxSnapshots.h"
+#include "net/ContentSync.h"
 #include "globals.h"
 #include "functions.h"
 
@@ -20,6 +21,10 @@ void __cdecl OpenWorld(void) {
     BYTE  uVar1;
     CHAR  world_name[32];
     CHAR  local_40[64];
+
+    // DESVIACION (Fase 5, launcher): si el launcher instaló contenido mientras
+    // se jugaba (música, HD), las capas se vuelven a armar antes de cargar el mapa.
+    ContentSync::CheckLauncherRevision();
 
     DeleteObjects();             // DeleteObjects
     DeleteNpcs();             // DeleteNpcs

@@ -11,6 +11,7 @@
 #include "platform/ISocket.h"
 #include "platform/ITimer.h"
 #include "platform/Text.h"
+#include "platform/UserPath.h"
 
 #include <cstring>
 #include <filesystem>
@@ -288,6 +289,31 @@ void OnFile(const std::uint8_t* msg, int size)
     }
     ++s_Current;
     NextFile();
+}
+
+} // namespace ContentSync
+
+namespace ContentSync {
+
+void CheckLauncherRevision()
+{
+    static bool s_Seen = false;
+    static std::string s_Revision;
+    std::string revision;
+    {
+        std::ifstream file(std::string(Platform::UserDir()) + "Cache/content.rev", std::ios::binary);
+        if (file) std::getline(file, revision);
+    }
+    if (!s_Seen) {
+        s_Seen = true;
+        s_Revision = revision;
+        return;
+    }
+    if (revision == s_Revision) return;
+    s_Revision = revision;
+    Platform::ContentLayers::Init();
+    AssetList_ClearCache();
+    Log("el launcher agregó contenido: capas actualizadas");
 }
 
 } // namespace ContentSync

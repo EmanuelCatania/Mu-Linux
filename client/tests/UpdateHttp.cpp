@@ -9,6 +9,7 @@
 #include "OptionsModel.h"
 #include "PatchBuilder.h"
 #include "SelfUpdate.h"
+#include "platform/RunningLock.h"
 #include "ServerAnnounce.h"
 #include "UpdateFlow.h"
 
@@ -402,19 +403,23 @@ void TestLauncherFlow(TestServer& server, const std::string& dir, const std::str
 	const auto data = Random(300000, 7), song = Random(200000, 8);
 	Write(JoinPath(inBase, "Content/data/b.bin"), data);
 	Write(JoinPath(inMusic, "Content/audio/music/s.mp3"), song);
-	for (const auto& ch : { std::make_pair(std::string("mu-linux/base"), inBase), std::make_pair(std::string("mu-linux/music"), inMusic) })
-	{
+	// La música es opcional, como en el Release (.github/scripts/client_channels.py).
+	auto build = [&](const std::string& channel, const std::string& in, std::uint64_t sequence) {
 		MuPatch::BuildOptions o;
-		o.channel = ch.first;
+		o.channel = channel;
 		o.version = "0.97.50";
-		o.in = ch.second;
-		o.out = JoinPath(dir, "flow-out-" + std::to_string(ch.first.size()));
+		o.sequence = sequence;
+		o.in = in;
+		o.out = JoinPath(dir, "flow-out-" + std::to_string(channel.size()) + "-" + std::to_string(sequence));
 		o.keyPath = key;
 		o.level = 3;
 		o.threads = 2;
-		Require(MuPatch::BuildPatch(o, &err), ("flow: build " + ch.first + ": " + err).c_str());
-		PublishLikeRelease(o.out, ch.first, rel);
-	}
+		if (channel == "mu-linux/music") o.optional = { "**" };
+		Require(MuPatch::BuildPatch(o, &err), ("flow: build " + channel + ": " + err).c_str());
+		PublishLikeRelease(o.out, channel, rel);
+	};
+	build("mu-linux/base", inBase, 1);
+	build("mu-linux/music", inMusic, 1);
 
 	Launcher::Config c;
 	c.title = "prueba";
@@ -466,6 +471,57 @@ void TestLauncherFlow(TestServer& server, const std::string& dir, const std::str
 	noMusic.music = false;
 	st = run(noMusic, root);
 	Require(st.phase == Launcher::Phase::Ready && FileExists(JoinPath(root, "Content/audio/music/s.mp3")), "flow: sin música no borra la instalada");
+
+	// ── Jugar mientras baja ───────────────────────────────────────────────
+	// Juego cerrado: lo obligatorio primero, ya se puede jugar, después la
+	// música; el cliente ve la revisión en content.rev.
+	const std::string play = JoinPath(dir, "flow-play");
+	Write(JoinPath(play, "main.exe"), Random(100, 19));
+	{
+		Launcher::UpdateFlow flow(c, play, std::make_unique<Launcher::AnyTransport>(std::make_unique<HttpTransport>()));
+		flow.Start();
+		bool playableBeforeEnd = false;
+		while (!flow.Finished())
+		{
+			const Launcher::Status s = flow.Snapshot();
+			if (s.background && s.canPlay && !FileExists(JoinPath(play, "Content/audio/music/s.mp3"))) playableBeforeEnd = true;
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+		flow.Wait();
+		st = flow.Snapshot();
+		Require(st.phase == Launcher::Phase::Ready && st.background && FileExists(JoinPath(play, "Content/audio/music/s.mp3")),
+		        ("jugar mientras baja: instala todo: " + st.message).c_str());
+		(void)playableBeforeEnd;   // depende de la velocidad: sólo informativo
+		std::string rev;
+		Require(ReadWholeFile(JoinPath(Launcher::UserDirFor(play), "Cache/content.rev"), rev) && !rev.empty() && rev[0] >= '1' && rev[0] <= '9',
+		        "jugar mientras baja: escribe content.rev");
+	}
+
+	// Juego abierto: la música nueva se agrega, la que cambió espera al cierre.
+	const auto song2 = Random(200000, 28), song3 = Random(150000, 29);
+	Write(JoinPath(inMusic, "Content/audio/music/s.mp3"), song2);
+	Write(JoinPath(inMusic, "Content/audio/music/t.mp3"), song3);
+	build("mu-linux/music", inMusic, 2);
+	const std::string lockPath = JoinPath(Launcher::UserDirFor(play), "Cache/running.lock");
+	Require(RunningLock::Acquire(lockPath) && RunningLock::IsHeld(lockPath), "lock del cliente");
+	{
+		Launcher::UpdateFlow flow(c, play, std::make_unique<Launcher::AnyTransport>(std::make_unique<HttpTransport>()));
+		flow.Start();
+		Launcher::Status s;
+		for (int i = 0; i < 3000 && !flow.Finished(); ++i)
+		{
+			s = flow.Snapshot();
+			if (s.waitingForClose) break;
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		}
+		s = flow.Snapshot();
+		Require(s.playing && s.waitingForClose == 1 && s.canPlay, ("juego abierto: el archivo que cambió espera al cierre: " + s.message).c_str());
+		Require(ReadWholeFile(JoinPath(play, "Content/audio/music/t.mp3"), got) && got == song3, "juego abierto: lo nuevo se agrega");
+		Require(ReadWholeFile(JoinPath(play, "Content/audio/music/s.mp3"), got) && got == song, "juego abierto: lo que existe no se pisa");
+		flow.Cancel();
+		flow.Wait();
+		Require(flow.Snapshot().phase == Launcher::Phase::Ready, "juego abierto: cerrar el launcher deja lo demás para la próxima");
+	}
 	k.Wipe();
 }
 

@@ -62,6 +62,11 @@ public:
 	const std::vector<OptionTab>& Tabs() const { return m_Tabs; }
 	int Current(std::size_t tab, std::size_t row) const;
 	void Cycle(std::size_t tab, std::size_t row, int direction);
+	// Con el juego abierto las opciones del juego (Config.ini) sólo se ven: el
+	// juego también lo escribe desde su menú.  Las del launcher siguen editables.
+	void SetGameLocked(bool locked) { m_GameLocked = locked; }
+	bool GameLocked() const { return m_GameLocked; }
+	bool Editable(std::size_t tab, std::size_t row) const;
 	// Filas de texto.  SetText descarta los caracteres no aceptados y corta en
 	// maxLength.
 	std::string Text(std::size_t tab, std::size_t row) const;
@@ -84,6 +89,7 @@ private:
 	std::vector<OptionTab> m_Tabs;
 	std::vector<std::vector<int>> m_Selected;   // -1: sin cambios (en las de texto, 1: editada)
 	std::vector<std::vector<std::string>> m_Text;
+	bool m_GameLocked = false;
 	IniDocument m_Game;
 	IniDocument m_Toml;
 	std::string m_GamePath;

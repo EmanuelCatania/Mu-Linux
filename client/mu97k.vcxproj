@@ -188,6 +188,7 @@
     <ClInclude Include="src\platform\Win32\Win32Window.h" />
     <ClInclude Include="src\platform\IFileSystem.h" />
     <ClInclude Include="src\platform\ContentLayers.h" />
+    <ClInclude Include="src\platform\RunningLock.h" />
     <ClInclude Include="src\platform\UserPath.h" />
     <ClInclude Include="src\platform\SessionLog.h" />
     <ClInclude Include="src\platform\ISocket.h" />
@@ -314,6 +315,7 @@
     </ClCompile>
     <ClCompile Include="src\platform\ClientEntry.cpp" />
     <ClCompile Include="src\platform\ContentLayers.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
+    <ClCompile Include="src\platform\RunningLock.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader></ClCompile>
     <ClCompile Include="src\platform\GLFunctions.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>

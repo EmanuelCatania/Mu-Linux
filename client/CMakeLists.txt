@@ -48,6 +48,7 @@ set(MU_SOURCES
     src/stdafx.cpp
     src/platform/ClientEntry.cpp
     src/platform/ContentLayers.cpp
+    src/platform/RunningLock.cpp
     src/platform/GLFunctions.cpp
     src/assets/text/Text_Data.cpp
     src/scenes/Scene_Dispatch.cpp
@@ -500,6 +501,7 @@ set(MU_HEADERS
     src/platform/Win32/Win32Window.h
     src/platform/IFileSystem.h
     src/platform/ContentLayers.h
+    src/platform/RunningLock.h
     src/platform/UserPath.h
     src/platform/SessionLog.h
     src/platform/ISocket.h
@@ -728,7 +730,7 @@ target_compile_options(mu97k PRIVATE
 # target_precompile_headers porque ése fuerza un /FI propio; el .vcxproj
 # depende de que cada .cpp haga #include "stdafx.h".
 set(MU_PCH_USERS ${MU_SOURCES})
-list(REMOVE_ITEM MU_PCH_USERS src/net/SecureChannel.cpp src/net/ContentSyncCore.cpp src/net/ServerTrustCore.cpp src/net/crypto/monocypher.c src/rhi/GL/FragmentPipeline.cpp src/render/Gfx.cpp src/rhi/GL/GfxDevice.cpp src/rhi/Dispatch.cpp src/render/RenderState.cpp src/render/TerrainDraw.cpp src/rhi/GL/TerrainRenderer.cpp src/render/RenderProfile.cpp src/rhi/GL/ProfileQueries.cpp src/stdafx.cpp src/render/Texture/ImageCodec.cpp src/render/text/TextCore.cpp src/render/text/Utf8Proc.c src/render/text/UniBreak.c src/platform/GLFunctions.cpp src/rhi/GL/BufferedDraw.cpp src/render/GlyphAtlas.cpp src/render/BufferedDraw.cpp src/render/Skinning.cpp src/render/MeshTopology.cpp src/rhi/GL/MeshDraw.cpp src/rhi/GL/Skinning.cpp src/render/ResourceTables.cpp src/rhi/GL/ShadowMap.cpp src/render/ShadowLight.cpp src/platform/ContentLayers.cpp src/game/item/ItemOptionTable.cpp)
+list(REMOVE_ITEM MU_PCH_USERS src/net/SecureChannel.cpp src/net/ContentSyncCore.cpp src/net/ServerTrustCore.cpp src/net/crypto/monocypher.c src/rhi/GL/FragmentPipeline.cpp src/render/Gfx.cpp src/rhi/GL/GfxDevice.cpp src/rhi/Dispatch.cpp src/render/RenderState.cpp src/render/TerrainDraw.cpp src/rhi/GL/TerrainRenderer.cpp src/render/RenderProfile.cpp src/rhi/GL/ProfileQueries.cpp src/stdafx.cpp src/render/Texture/ImageCodec.cpp src/render/text/TextCore.cpp src/render/text/Utf8Proc.c src/render/text/UniBreak.c src/platform/GLFunctions.cpp src/rhi/GL/BufferedDraw.cpp src/render/GlyphAtlas.cpp src/render/BufferedDraw.cpp src/render/Skinning.cpp src/render/MeshTopology.cpp src/rhi/GL/MeshDraw.cpp src/rhi/GL/Skinning.cpp src/render/ResourceTables.cpp src/rhi/GL/ShadowMap.cpp src/render/ShadowLight.cpp src/platform/ContentLayers.cpp src/platform/RunningLock.cpp src/game/item/ItemOptionTable.cpp)
 set_source_files_properties(${MU_PCH_USERS} PROPERTIES
     COMPILE_OPTIONS "/Yustdafx.h")
 # La sonda gráfica compila el backend real sin depender del PCH del ejecutable.

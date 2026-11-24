@@ -214,6 +214,9 @@ std::vector<OptionTab> BuildOptionTabs()
 	dl.rows.push_back(LauncherRow("Límite de velocidad", "SpeedLimitKB",
 	                              { { "Sin límite", "0" }, { "256 KB/s", "256" }, { "512 KB/s", "512" }, { "1 MB/s", "1024" },
 	                                { "2 MB/s", "2048" }, { "5 MB/s", "5120" }, { "10 MB/s", "10240" } }, 0));
+	dl.rows.push_back(LauncherRow("Límite jugando", "PlayingSpeedLimitKB",
+	                              { { "Sin límite", "0" }, { "128 KB/s", "128" }, { "256 KB/s", "256" }, { "512 KB/s", "512" },
+	                                { "1 MB/s", "1024" }, { "2 MB/s", "2048" } }, 3));
 	tabs.push_back(dl);
 	return tabs;
 }
@@ -264,7 +267,7 @@ std::string OptionsEditor::Text(std::size_t tab, std::size_t row) const
 void OptionsEditor::SetText(std::size_t tab, std::size_t row, const std::string& value)
 {
 	const OptionRow& r = m_Tabs[tab].rows[row];
-	if (!r.text) return;
+	if (!r.text || !Editable(tab, row)) return;
 	std::string clean;
 	for (char c : value)
 		if (AllowedTextChar(c) && clean.size() < r.maxLength) clean.push_back(c);
@@ -305,10 +308,15 @@ int OptionsEditor::Current(std::size_t tab, std::size_t row) const
 	return sel >= 0 ? sel : Stored(r);
 }
 
+bool OptionsEditor::Editable(std::size_t tab, std::size_t row) const
+{
+	return !(m_GameLocked && m_Tabs[tab].rows[row].file == OptionFile::Game);
+}
+
 void OptionsEditor::Select(std::size_t tab, std::size_t row, int index)
 {
 	const OptionRow& r = m_Tabs[tab].rows[row];
-	if (r.text || index < 0 || index >= static_cast<int>(r.choices.size())) return;
+	if (!Editable(tab, row) || r.text || index < 0 || index >= static_cast<int>(r.choices.size())) return;
 	m_Selected[tab][row] = index == Stored(r) ? -1 : index;
 }
 
