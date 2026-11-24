@@ -5,6 +5,8 @@ encima, **los archivos de tu server**: tu ejecutable (que lleva la dirección y 
 clave de tu server), tu launcher y lo que agregues (modelos, texturas, mapas).
 Eso último lo publica el propio server desde `Data/Patches/`.
 
+Cómo elegir el diseño, armar el launcher y repartirlo: [launcher.md](launcher.md).
+
 ## Activarlo
 
 En `.env`:
