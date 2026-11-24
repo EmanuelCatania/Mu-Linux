@@ -147,3 +147,59 @@ contra esas versiones. Un zip que ya no usa ninguna de ellas se borra solo.
 `mu-web` sirve sólo el manifiesto, su firma y los zips de esa carpeta: nunca una
 carpeta de parche, ni `history/`, ni los datos del server. El volumen se monta de
 sólo lectura.
+
+## Pterodactyl
+
+Los eggs (`Pterodactyl eggs/`) traen las mismas opciones, como variables de
+Startup:
+
+- **Server**: `MU_UPDATE_ENABLED`, `MU_UPDATE_CHANNEL`, `MU_UPDATE_INTERVAL`,
+  `MU_UPDATE_URL`, `MU_LAUNCHER_CONNECT_SERVERS`, `MU_LAUNCHER_NEWS`,
+  `MU_LAUNCHER_WEB_URL`, `MU_LAUNCHER_BASE_SOURCE`, `MU_LAUNCHER_BASE_TAG`,
+  `MU_LAUNCHER_BASE_KEY` y `MU_LAUNCHER_REQUIRED`.
+- **Web**: `MU_UPDATE_ENABLED` (en 1 sirve `/updates/`), `UPDATES_DIR` (dónde
+  están los parches publicados) y
+  `UPDATES_RATE_LIMIT_PER_MINUTE`.
+
+Los parches se suben igual, con el administrador de archivos del panel, a
+`Data/Patches/DDMMAAAA-N/`.
+
+La diferencia con docker es que el server y la web son dos servers de
+Pterodactyl y no comparten archivos. Para que la web sirva lo que publica el
+server hace falta un **Mount**, y lo arma quien administra el panel:
+
+1. En el nodo, una carpeta del host para los parches publicados, de la que el
+   contenedor sea dueño (corre con el usuario 988) y cuyas carpetas de arriba
+   no lo sean ni las pueda escribir cualquiera (Wings rechaza el mount si no):
+
+   ```bash
+   sudo mkdir -p /srv/mu-updates
+   sudo chown 988:988 /srv/mu-updates
+   ```
+
+2. Agregarla a `allowed_mounts` en `/etc/pterodactyl/config.yml` y reiniciar
+   Wings:
+
+   ```yaml
+   allowed_mounts:
+     - /srv/mu-updates
+   ```
+
+3. En el panel, Admin > Mounts > Create: origen `/srv/mu-updates`, destino
+   `/home/container/Data/Patches/published`, sin "Read only". Un mount tiene un
+   solo destino para todos los servers donde se use: por eso la web lo ve en la
+   misma ruta, que es el valor por defecto de su `UPDATES_DIR`.
+4. En el mismo mount, agregar los dos eggs (server y web) y el nodo. Después, en
+   cada uno de los dos servers, Admin > Servers > Mounts y agregarlo.
+5. Reiniciar los dos.
+
+Sólo va `published/` en el mount, no `Data/Patches` entero: el administrador de
+archivos trabaja sobre el volumen del server y no ve lo que hay montado encima,
+así que las carpetas de los parches tienen que quedar en el volumen para poder
+subirlas.
+
+Sin el mount, todo lo demás funciona: el launcher recibe su configuración por el
+ConnectServer y "jugar sólo desde el launcher" no depende de la web. Los parches
+se publican igual en `Data/Patches/published`; para repartirlos hay que copiar
+esa carpeta a otro lado (un hosting, un CDN) y poner esa dirección en
+`MU_UPDATE_URL`.

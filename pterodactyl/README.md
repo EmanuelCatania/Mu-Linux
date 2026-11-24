@@ -15,3 +15,7 @@ Every release using these eggs includes:
 The `Release` workflow (`.github/workflows/release.yml`) builds and attaches them when a GitHub Release is published. To build them by hand, run `VERSION=<version> ./pterodactyl/package-release-assets.sh` on a Linux Docker host after publishing the server image. It creates the architecture-specific runtime archives, web archive and egg ZIP.
 
 `start.sh` handles `SIGINT` and `SIGTERM`, forwarding them to ConnectServer, JoinServer, DataServer and GameServer. The egg's `^C` stop command therefore shuts services down cleanly.
+
+## Launcher patches
+
+The server egg has the launcher variables (operator patches, launcher announce, "require launcher"). For the web egg to serve `/updates/`, both servers need a shared Pterodactyl Mount on `/home/container/Data/Patches/published`; see the Pterodactyl section of [docs/parches-del-launcher.md](../docs/parches-del-launcher.md).
