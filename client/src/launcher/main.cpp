@@ -60,6 +60,7 @@ struct Button
 {
 	SDL_FRect rect;
 	const char* label;
+	const ButtonStyle* style = nullptr;   // nullptr: el de los botones del tema
 	bool enabled = true;
 	bool hover = false;
 	bool pressed = false;
@@ -68,10 +69,24 @@ struct Button
 // Unidades de ventana por unidad lógica (la ventana se agranda con "Tamaño del
 // launcher"; el dibujo sigue en el tamaño del tema).
 float g_WindowScale = 1.0f;
+// La escala elegida y si se ven las opciones (en algunos temas la ventana
+// toma otro tamaño mientras tanto).
+float g_Scale = 1.0f;
+bool g_OptionsMode = false;
+
+int LogicalW() { return g_OptionsMode ? g_Theme.OptionsWidth() : g_Theme.width; }
+int LogicalH() { return g_OptionsMode ? g_Theme.OptionsHeight() : g_Theme.height; }
+
+SDL_FRect DragRect()
+{
+	return g_OptionsMode && g_Theme.optionsDrag.w > 0 ? g_Theme.optionsDrag : g_Theme.drag;
+}
 
 SDL_HitTestResult HitTest(SDL_Window*, const SDL_Point* p, void*)
 {
-	return p->y < g_Theme.dragHeight * g_WindowScale ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
+	const SDL_FRect d = DragRect();
+	const float x = static_cast<float>(p->x) / g_WindowScale, y = static_cast<float>(p->y) / g_WindowScale;
+	return x >= d.x && x < d.x + d.w && y >= d.y && y < d.y + d.h ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
 }
 
 // Escala de la ventana: la elegida (percent) o la de la pantalla (0), sin pasar
@@ -84,21 +99,32 @@ float ChooseScale(SDL_Window* window, int percent)
 	SDL_Rect area;
 	if (SDL_GetDisplayUsableBounds(display, &area))
 	{
-		const float fit = std::min(static_cast<float>(area.w) / g_Theme.width, static_cast<float>(area.h) / g_Theme.height) * 0.95f;
+		// Que entren las dos pantallas (principal y opciones).
+		const float w = static_cast<float>(std::max(g_Theme.width, g_Theme.OptionsWidth()));
+		const float h = static_cast<float>(std::max(g_Theme.height, g_Theme.OptionsHeight()));
+		const float fit = std::min(static_cast<float>(area.w) / w, static_cast<float>(area.h) / h) * 0.95f;
 		if (s > fit) s = std::max(1.0f, fit);
 	}
 	return s;
 }
 
-// Cambia el tamaño de la ventana y la centra.  Devuelve los píxeles por unidad
-// lógica, para rasterizar las fuentes a ese tamaño.
-float ApplyScale(SDL_Window* window, SDL_Renderer* renderer, int percent)
+// Ajusta la ventana a la pantalla actual (principal u opciones) y a g_Scale:
+// centrada en la pantalla, o en el mismo centro de antes.  Devuelve los píxeles
+// por unidad lógica, para rasterizar las fuentes a ese tamaño.
+float FitWindow(SDL_Window* window, SDL_Renderer* renderer, bool centerOnDisplay)
 {
-	const float s = ChooseScale(window, percent);
 	const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
-	const int w = g_Theme.width, h = g_Theme.height;
-	SDL_SetWindowSize(window, static_cast<int>(std::lround(w * s)), static_cast<int>(std::lround(h * s)));
-	SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(display), SDL_WINDOWPOS_CENTERED_DISPLAY(display));
+	const int w = LogicalW(), h = LogicalH();
+	int x = 0, y = 0, oldW = 0, oldH = 0;
+	SDL_GetWindowPosition(window, &x, &y);
+	SDL_GetWindowSize(window, &oldW, &oldH);
+	const int newW = static_cast<int>(std::lround(w * g_Scale)), newH = static_cast<int>(std::lround(h * g_Scale));
+	SDL_SetWindowSize(window, newW, newH);
+	if (centerOnDisplay)
+		SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(display), SDL_WINDOWPOS_CENTERED_DISPLAY(display));
+	else
+		SDL_SetWindowPosition(window, x + (oldW - newW) / 2, y + (oldH - newH) / 2);
+	SDL_SetRenderLogicalPresentation(renderer, w, h, SDL_LOGICAL_PRESENTATION_LETTERBOX);
 	SDL_SyncWindow(window);
 	int ww = w, wh = h, ow = w, oh = h;
 	SDL_GetWindowSize(window, &ww, &wh);
@@ -106,6 +132,81 @@ float ApplyScale(SDL_Window* window, SDL_Renderer* renderer, int percent)
 	g_WindowScale = std::min(static_cast<float>(ww) / w, static_cast<float>(wh) / h);
 	const float px = std::min(static_cast<float>(ow) / w, static_cast<float>(oh) / h);
 	return px > 1.0f ? px : 1.0f;
+}
+
+// Forma de la ventana (temas con ThemeSpec::shaped): lo transparente de la
+// imagen no se dibuja ni recibe clics.  shape nullptr: la ventana entera.
+//
+// En Windows es una región (SetWindowRgn) sobre una ventana normal: con
+// SDL_WINDOW_TRANSPARENT, que es lo que pide SDL_SetWindowShape, WebView2 no
+// dibuja el panel web.  La región es binaria, igual que el TransparencyKey del
+// original.  En el resto de los sistemas va por SDL.
+#ifdef _WIN32
+constexpr SDL_WindowFlags kShapedFlags = 0;
+
+void ApplyShape(SDL_Window* window, SDL_Surface* shape)
+{
+	HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+	if (!hwnd) return;
+	if (!shape)
+	{
+		SetWindowRgn(hwnd, nullptr, TRUE);
+		return;
+	}
+	int w = 0, h = 0;
+	SDL_GetWindowSizeInPixels(window, &w, &h);
+	SDL_Surface* s = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_RGBA32);
+	if (!s) return;
+	if (!SDL_StretchSurface(shape, nullptr, s, nullptr, SDL_SCALEMODE_LINEAR))
+	{
+		SDL_DestroySurface(s);
+		return;
+	}
+	// Una tira por fila con cada tramo opaco.
+	HRGN region = CreateRectRgn(0, 0, 0, 0);
+	const Uint8* px = static_cast<const Uint8*>(s->pixels);
+	for (int y = 0; y < h; ++y)
+	{
+		const Uint8* row = px + static_cast<std::size_t>(y) * static_cast<std::size_t>(s->pitch);
+		int start = -1;
+		for (int x = 0; x <= w; ++x)
+		{
+			const bool opaque = x < w && row[x * 4 + 3] >= 128;
+			if (opaque && start < 0) start = x;
+			else if (!opaque && start >= 0)
+			{
+				HRGN span = CreateRectRgn(start, y, x, y + 1);
+				CombineRgn(region, region, span, RGN_OR);
+				DeleteObject(span);
+				start = -1;
+			}
+		}
+	}
+	SDL_DestroySurface(s);
+	if (!SetWindowRgn(hwnd, region, TRUE)) DeleteObject(region);   // si sale bien, la región es de Windows
+}
+#else
+constexpr SDL_WindowFlags kShapedFlags = SDL_WINDOW_TRANSPARENT;
+
+void ApplyShape(SDL_Window* window, SDL_Surface* shape)
+{
+	// SDL no acepta nullptr: la ventana entera es una forma opaca de 1x1.
+	SDL_Surface* full = nullptr;
+	if (!shape)
+	{
+		full = SDL_CreateSurface(1, 1, SDL_PIXELFORMAT_RGBA32);
+		if (!full) return;
+		SDL_FillSurfaceRect(full, nullptr, SDL_MapSurfaceRGBA(full, 255, 255, 255, 255));
+	}
+	SDL_SetWindowShape(window, shape ? shape : full);   // SDL la vuelve a aplicar al cambiar el tamaño
+	if (full) SDL_DestroySurface(full);
+}
+#endif
+
+float ApplyScale(SDL_Window* window, SDL_Renderer* renderer, int percent)
+{
+	g_Scale = ChooseScale(window, percent);
+	return FitWindow(window, renderer, true);
 }
 
 std::string Utf8(const std::filesystem::path& p)
@@ -255,6 +356,8 @@ struct Ui
 	SDL_Renderer* r = nullptr;
 	std::map<std::string, SDL_Texture*> images;   // las del tema, por nombre
 	std::unique_ptr<Font> title, label, regular, tiny, notice;
+	std::map<float, std::unique_ptr<Font>> sized;   // la de los botones con fontSize
+	float fontScale = 1.0f;
 
 	// La imagen del tema con ese nombre; nullptr si el nombre está vacío o el
 	// tema no la trae.
@@ -278,6 +381,15 @@ struct Ui
 		regular = std::make_unique<Font>(r, FontRegular, FontRegularSize, 12.5f, scale);
 		tiny = std::make_unique<Font>(r, FontBold, FontBoldSize, 10.0f, scale);
 		notice = std::make_unique<Font>(r, FontRegular, FontRegularSize, 11.0f, scale);
+		sized.clear();
+		fontScale = scale;
+	}
+
+	Font& Bold(float size)
+	{
+		auto& f = sized[size];
+		if (!f) f = std::make_unique<Font>(r, LauncherRes::FontBold, LauncherRes::FontBoldSize, size, fontScale);
+		return *f;
 	}
 
 	void DrawImage(const std::string& name, const SDL_FRect* where)
@@ -287,13 +399,43 @@ struct Ui
 
 	void DrawButton(const Button& b)
 	{
-		const ButtonStyle& s = g_Theme.buttonStyle;
+		const ButtonStyle& s = b.style ? *b.style : g_Theme.buttonStyle;
 		SDL_Texture* t = Image(!b.enabled ? s.disabled : (b.hover ? s.hover : s.normal));
 		if (!t) t = Image(s.normal);
 		if (t) SDL_RenderTexture(r, t, nullptr, &b.rect);
+		if (!b.label || !*b.label) return;
+		Font& f = s.fontSize > 0 ? Bold(s.fontSize) : *label;
 		SDL_FRect box = b.rect;
+		if (s.textTop) box.h = f.Height() + 6;
 		if (b.pressed) box.y += 1;
-		label->DrawCentered(b.label, box, b.enabled ? s.text : s.textDisabled);
+		f.DrawCentered(b.label, box, b.enabled ? s.text : s.textDisabled);
+	}
+
+	// Barra de progreso: color o imagen recortada a frac.
+	void DrawBar(const ProgressBarSpec& bs, float frac, bool failed)
+	{
+		if (bs.rect.w <= 0) return;
+		if (bs.bevel) DrawBevel(r, bs.rect);
+		const float bb = bs.bevel ? 2.0f : 0.0f;
+		const SDL_FRect track{ bs.rect.x + bb, bs.rect.y + bb, bs.rect.w - 2 * bb, bs.rect.h - 2 * bb };
+		if (bs.track.a) Fill(r, track, bs.track);
+		frac = frac < 0 ? 0 : (frac > 1 ? 1 : frac);
+		if (frac > 0)
+		{
+			const SDL_FRect fill{ track.x, track.y, track.w * frac, track.h };
+			SDL_Texture* img = failed ? nullptr : Image(bs.image);
+			if (img)
+			{
+				float iw = 0, ih = 0;
+				SDL_GetTextureSize(img, &iw, &ih);
+				const SDL_FRect src{ 0, 0, iw * frac, ih };
+				SDL_RenderTexture(r, img, &src, &fill);
+			}
+			else
+				Fill(r, fill, failed ? bs.failed : bs.fill);
+		}
+		if (bs.percentPos.x > 0)
+			tiny->Draw(std::to_string(static_cast<int>(frac * 100.0f + 0.5f)) + "%", bs.percentPos.x, bs.percentPos.y, bs.percentColor);
 	}
 
 	~Ui()
@@ -316,20 +458,29 @@ struct OptionsScreen
 	Button verify{ { 0, 0, 150, 26 }, "Verificar archivos" };
 	Button web{ { 0, 0, 150, 26 }, "Ir a la web" };
 
-	// Todo relativo al panel del tema (en el V1: 9,33).
-	static constexpr float kTabY = 3, kTabH = 20, kTabW = 106, kRowY = 53, kRowH = 23;
+	// Todo relativo al panel del tema (en el V1: 9,33, 433 de ancho y cuatro
+	// pestañas por fila).
+	static constexpr float kTabY = 3, kTabH = 20, kRowH = 23;
 	const SDL_FRect& P() const { return g_Theme.optionsPanel; }
+	std::size_t PerRow() const { return static_cast<std::size_t>(std::max(1, g_Theme.tabsPerRow)); }
+	float TabW() const { return std::round((P().w - 6) / static_cast<float>(PerRow()) - 1); }
+	float RowY() const
+	{
+		const std::size_t rows = (editor.Tabs().size() + PerRow() - 1) / PerRow();
+		return kTabY + static_cast<float>(rows) * (kTabH + 2) + 6;
+	}
 
 	SDL_FRect TabRect(std::size_t i) const
 	{
-		return { P().x + 3 + static_cast<float>(i % 4) * (kTabW + 1), P().y + kTabY + static_cast<float>(i / 4) * (kTabH + 2), kTabW, kTabH };
+		return { P().x + 3 + static_cast<float>(i % PerRow()) * (TabW() + 1), P().y + kTabY + static_cast<float>(i / PerRow()) * (kTabH + 2),
+		         TabW(), kTabH };
 	}
-	SDL_FRect RowRect(std::size_t i) const { return { P().x + 5, P().y + kRowY + static_cast<float>(i) * kRowH, 422, kRowH - 2 }; }
-	float ValueX() const { return P().x + 253; }
+	SDL_FRect RowRect(std::size_t i) const { return { P().x + 5, P().y + RowY() + static_cast<float>(i) * kRowH, P().w - 11, kRowH - 2 }; }
+	float ValueX() const { return P().x + P().w - 180; }
 	SDL_FRect LeftArrow(std::size_t i) const { const SDL_FRect r = RowRect(i); return { ValueX(), r.y, 20, r.h }; }
 	SDL_FRect RightArrow(std::size_t i) const { const SDL_FRect r = RowRect(i); return { ValueX() + 150, r.y, 20, r.h }; }
 	SDL_FRect TextBox(std::size_t i) const { const SDL_FRect r = RowRect(i); return { ValueX(), r.y + 1, 170, r.h - 2 }; }
-	float BelowRows(std::size_t rows) const { return P().y + kRowY + static_cast<float>(rows) * kRowH + 10; }
+	float BelowRows(std::size_t rows) const { return P().y + RowY() + static_cast<float>(rows) * kRowH + 10; }
 	bool IsDownloads() const { return editor.Tabs()[tab].name == "Descargas"; }
 	bool IsGeneral() const { return editor.Tabs()[tab].name == "General"; }
 };
@@ -391,7 +542,8 @@ int main(int argc, char** argv)
 		return 1;
 	}
 	SDL_Window* window = SDL_CreateWindow(config.title.c_str(), g_Theme.width, g_Theme.height,
-	                                      SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
+	                                      SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN |
+	                                          (g_Theme.shaped ? kShapedFlags : 0));
 	SDL_Renderer* renderer = window ? SDL_CreateRenderer(window, nullptr) : nullptr;
 	if (!renderer)
 	{
@@ -402,8 +554,20 @@ int main(int argc, char** argv)
 	SDL_SetRenderLogicalPresentation(renderer, g_Theme.width, g_Theme.height, SDL_LOGICAL_PRESENTATION_LETTERBOX);
 	SDL_SetRenderVSync(renderer, 1);
 	SDL_SetWindowHitTest(window, HitTest, nullptr);
+	// Forma de la ventana: la del fondo en la principal, entera en las opciones.
+	SDL_Surface* shapeMain = nullptr;
+	if (g_Theme.shaped)
+	{
+		const unsigned char* data = nullptr;
+		std::size_t size = 0;
+		if (LauncherRes::FindImage(g_Theme.background, &data, &size)) shapeMain = LoadPngSurface(data, size);
+	}
+	auto reshape = [&] {
+		if (shapeMain) ApplyShape(window, g_OptionsMode ? nullptr : shapeMain);
+	};
 	int appliedScale = config.scale;
 	float fontScale = ApplyScale(window, renderer, appliedScale);
+	reshape();
 	SDL_ShowWindow(window);
 
 	{
@@ -415,8 +579,17 @@ int main(int argc, char** argv)
 		std::string webShownUrl;
 
 		Button options{ g_Theme.options, "Opciones" };
-		Button play{ g_Theme.play, "Jugar" };
+		Button play{ g_Theme.play, "Jugar", &g_Theme.PlayStyle() };
 		Button close{ g_Theme.close, "Cerrar" };
+		Button exitX{ g_Theme.exit, "", &g_Theme.exitStyle };
+		// Principal u opciones: en algunos temas la ventana cambia de tamaño.
+		auto setMode = [&](bool optionsMode) {
+			if (g_OptionsMode == optionsMode) return;
+			g_OptionsMode = optionsMode;
+			if (g_Theme.OptionsWidth() == g_Theme.width && g_Theme.OptionsHeight() == g_Theme.height) return;
+			FitWindow(window, renderer, false);
+			reshape();
+		};
 
 		auto startFlow = [&](const Config& c) {
 			auto f = std::make_unique<UpdateFlow>(c, root, std::make_unique<AnyTransport>(std::make_unique<Update::HttpTransport>()));
@@ -447,9 +620,11 @@ int main(int argc, char** argv)
 		auto closeOptions = [&] {
 			stopEditing();
 			opts.reset();
+			setMode(false);
 		};
 		auto openOptions = [&](std::size_t tab) {
 			opts = std::make_unique<OptionsScreen>();
+			setMode(true);
 			if (!opts->editor.Load(iniPath, iniTemplate, tomlPath)) opts->message = "No se pudo leer Config.ini.";
 			else if (RunningLock::IsHeld(lockPath))
 			{
@@ -488,7 +663,7 @@ int main(int argc, char** argv)
 			if (launched && flow->Finished() && st.phase == Phase::Ready) running = false;
 			const bool canPause = st.background && !flow->Finished() && st.waitingForClose == 0;
 			pause.label = st.paused ? "Seguir" : "Pausar";
-			Button* mainButtons[] = { &options, &play, &close };
+			Button* mainButtons[] = { &options, &play, &close, &exitX };
 			std::vector<Button*> buttons;
 			if (opts)
 			{
@@ -502,6 +677,7 @@ int main(int argc, char** argv)
 			else
 			{
 				buttons.assign(std::begin(mainButtons), std::end(mainButtons));
+				if (exitX.rect.w <= 0) buttons.pop_back();
 				if (canPause) buttons.push_back(&pause);
 			}
 
@@ -586,7 +762,7 @@ int main(int argc, char** argv)
 						b->pressed = false;
 					}
 					if (!clicked) continue;
-					if (clicked == &close) running = false;
+					if (clicked == &close || clicked == &exitX) running = false;
 					else if (clicked == &play && LaunchGame(root, config.gameExe, &launchError))
 					{
 						// Con descargas en curso el launcher sigue (más despacio) y se
@@ -618,6 +794,7 @@ int main(int argc, char** argv)
 								appliedScale = scale;
 								config.scale = scale;
 								fontScale = ApplyScale(window, renderer, scale);
+								reshape();
 								ui.MakeFonts(fontScale);
 							}
 							if (downloadsChanged)
@@ -672,12 +849,16 @@ int main(int argc, char** argv)
 				               webWanted);
 			}
 			const bool webShown = webWanted && webPanel.Loaded();
-			Fill(renderer, { 0, 0, static_cast<float>(th.width), static_cast<float>(th.height) }, { 224, 224, 224, 255 });
+			// Con forma, lo que no tapa el fondo queda transparente.
+			SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+			if (th.shaped && !opts) SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+			else SDL_SetRenderDrawColor(renderer, 224, 224, 224, 255);
+			SDL_RenderClear(renderer);
 			if (!opts)
 			{
 				// ── Pantalla principal ─────────────────────────────────────
 				ui.DrawImage(th.background, nullptr);
-				ui.title->Draw(config.title, th.titlePos.x, th.titlePos.y, th.titleColor);
+				if (th.showTitle) ui.title->Draw(config.title, th.titlePos.x, th.titlePos.y, th.titleColor);
 
 				if (th.imageBevel) DrawBevel(renderer, th.imagePanel);
 				ui.DrawImage(th.image, &inner);
@@ -712,32 +893,30 @@ int main(int argc, char** argv)
 					ui.notice->Draw(line, inner.x + 6, ny, kWhite);
 				}
 
-				// Barra de progreso.
-				const ProgressBarSpec& bs = th.bar;
-				if (bs.bevel) DrawBevel(renderer, bs.rect);
-				const float bb = bs.bevel ? 2.0f : 0.0f;
-				const SDL_FRect track{ bs.rect.x + bb, bs.rect.y + bb, bs.rect.w - 2 * bb, bs.rect.h - 2 * bb };
-				Fill(renderer, track, bs.track);
-				float frac = 0;
-				if (st.phase == Phase::Ready || st.phase == Phase::Offline) frac = 1;
-				else if (st.total) frac = static_cast<float>(static_cast<double>(st.done) / static_cast<double>(st.total));
-				if (frac > 0)
-					Fill(renderer, { track.x, track.y, track.w * (frac > 1 ? 1 : frac), track.h },
-					     st.phase == Phase::Failed ? bs.failed : bs.fill);
+				// Barras de progreso: lo bajado y, si el tema tiene dos, los archivos.
+				const bool done = st.phase == Phase::Ready || st.phase == Phase::Offline;
+				const bool failed = st.phase == Phase::Failed;
+				auto ratio = [&](std::uint64_t a, std::uint64_t b) {
+					return done ? 1.0f : (b ? static_cast<float>(static_cast<double>(a) / static_cast<double>(b)) : 0.0f);
+				};
+				ui.DrawBar(th.bar, ratio(st.done, st.total), failed);
+				ui.DrawBar(th.fileBar, ratio(st.filesDone, st.filesTotal), failed);
 				std::string status = launchError.empty() ? st.message : launchError;
 				if (launchError.empty() && st.paused) status = "En pausa. " + status;
 				else if (launchError.empty() && st.playing && !flow->Finished() && st.waitingForClose == 0)
 					status += " (jugando: más despacio)";
-				const float statusW = canPause ? pause.rect.x - th.status.x - 11 : th.status.w;
-				ui.tiny->Draw(ui.tiny->Fit(status, statusW), th.status.x, th.status.y,
-				              st.phase == Phase::Failed || !launchError.empty() ? th.statusError : th.statusColor);
+				const float statusW = canPause && !th.statusCentered ? pause.rect.x - th.status.x - 11 : th.status.w;
+				const std::string line = ui.tiny->Fit(status, statusW);
+				const float sx = th.statusCentered ? th.status.x + (th.status.w - ui.tiny->Width(line)) / 2 : th.status.x;
+				ui.tiny->Draw(line, sx, th.status.y, failed || !launchError.empty() ? th.statusError : th.statusColor);
 				if (canPause)
 				{
 					Fill(renderer, pause.rect, pause.hover ? th.pauseHover : th.pauseFill);
 					DrawBevel(renderer, pause.rect, pause.pressed);
 					ui.tiny->DrawCentered(pause.label, pause.rect, th.pauseText);
 				}
-				for (Button* b : mainButtons) ui.DrawButton(*b);
+				for (Button* b : mainButtons)
+					if (b->rect.w > 0) ui.DrawButton(*b);
 				ui.tiny->Draw("Diseño: kayito", th.credit.x, th.credit.y, th.creditColor);
 			}
 			else
@@ -745,7 +924,7 @@ int main(int argc, char** argv)
 				// ── Opciones ───────────────────────────────────────────────
 				const OptionsPalette& pal = th.palette;
 				ui.DrawImage(th.optionsBackground, nullptr);
-				ui.title->Draw("Opciones del juego", th.optionsTitlePos.x, th.optionsTitlePos.y, pal.title);
+				if (th.showOptionsTitle) ui.title->Draw("Opciones del juego", th.optionsTitlePos.x, th.optionsTitlePos.y, pal.title);
 				// El fondo trae recuadros fijos; las pestañas usan todo el marco.
 				Fill(renderer, th.optionsPanel, pal.panel);
 
@@ -813,6 +992,7 @@ int main(int argc, char** argv)
 		}
 		flow.reset();   // cancela y espera la descarga en curso
 	}   // texturas y fuentes antes que el renderer
+	if (shapeMain) SDL_DestroySurface(shapeMain);
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();

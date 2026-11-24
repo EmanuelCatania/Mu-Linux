@@ -70,6 +70,18 @@ SDL_Texture* LoadPng(SDL_Renderer* renderer, const unsigned char* data, std::siz
 	return t;
 }
 
+SDL_Surface* LoadPngSurface(const unsigned char* data, std::size_t size)
+{
+	int w = 0, h = 0, n = 0;
+	unsigned char* px = stbi_load_from_memory(data, static_cast<int>(size), &w, &h, &n, 4);
+	if (!px) return nullptr;
+	SDL_Surface* s = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_RGBA32, px, w * 4);
+	SDL_Surface* copy = s ? SDL_DuplicateSurface(s) : nullptr;
+	if (s) SDL_DestroySurface(s);
+	stbi_image_free(px);
+	return copy;
+}
+
 Font::Font(SDL_Renderer* renderer, const unsigned char* ttf, std::size_t, float pixelHeight, float scale)
 	: m_Renderer(renderer), m_PixelHeight(pixelHeight), m_Scale(scale < 1.0f ? 1.0f : scale),
 	  m_Chars(sizeof(stbtt_bakedchar) * kCount)

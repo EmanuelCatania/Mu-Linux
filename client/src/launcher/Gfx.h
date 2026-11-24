@@ -17,6 +17,9 @@
 namespace Launcher {
 
 SDL_Texture* LoadPng(SDL_Renderer* renderer, const unsigned char* data, std::size_t size);
+// La misma imagen como superficie RGBA (para SDL_SetWindowShape).  La libera
+// quien la pide, con SDL_DestroySurface.
+SDL_Surface* LoadPngSurface(const unsigned char* data, std::size_t size);
 
 class Font
 {

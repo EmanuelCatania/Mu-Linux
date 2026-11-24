@@ -406,6 +406,8 @@ void UpdateFlow::Run()
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		m_Status.done = s.downloaded;
 		m_Status.total = s.downloadTotal;
+		m_Status.filesDone = s.filesDone;
+		m_Status.filesTotal = s.filesTotal;
 		m_Status.message = std::string(m_Status.background ? "Ya podés jugar. Bajando " : "Bajando ") +
 		                   std::to_string(s.filesDone) + " de " + std::to_string(s.filesTotal) + " archivos (" +
 		                   Human(s.downloaded) + " de " + Human(s.downloadTotal) + ")...";
