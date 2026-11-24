@@ -38,6 +38,7 @@ const Entry kTable[] = {
 	{ "En pausa. {0}", "Paused. {0}", "Em pausa. {0}" },
 	{ "{0} (jugando: más despacio)", "{0} (playing: slower)", "{0} (jogando: mais devagar)" },
 	{ "No se pudo abrir {0}: {1}", "Could not start {0}: {1}", "Não foi possível abrir {0}: {1}" },
+	{ "No se pudo abrir {0} (error {1}).", "Could not start {0} (error {1}).", "Não foi possível abrir {0} (erro {1})." },
 	{ "No está {0}.", "{0} is missing.", "{0} não foi encontrado." },
 	{ "No se pudo abrir el navegador: {0}", "Could not open the browser: {0}", "Não foi possível abrir o navegador: {0}" },
 	{ "No se pudo leer Config.ini.", "Could not read Config.ini.", "Não foi possível ler o Config.ini." },

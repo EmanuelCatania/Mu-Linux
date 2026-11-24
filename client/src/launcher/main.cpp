@@ -268,6 +268,68 @@ std::string SelfPathIn(const std::string& root, const std::string& exe)
 	return r;
 }
 
+#ifdef _WIN32
+std::wstring WideOf(const std::string& utf8)
+{
+	const int n = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
+	std::wstring out(n > 0 ? static_cast<std::size_t>(n) : 1, L'\0');
+	if (n > 0) MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, &out[0], n);
+	out.resize(n > 0 ? static_cast<std::size_t>(n - 1) : 0);
+	return out;
+}
+
+// Un argumento como lo arma CommandLineToArgvW al revés.
+std::wstring QuoteArg(const std::wstring& a)
+{
+	if (!a.empty() && a.find_first_of(L" \t\n\v\"") == std::wstring::npos) return a;
+	std::wstring r = L"\"";
+	std::size_t slashes = 0;
+	for (wchar_t c : a)
+	{
+		if (c == L'\\')
+		{
+			++slashes;
+			continue;
+		}
+		r.append(c == L'"' ? slashes * 2 + 1 : slashes, L'\\');
+		r += c;
+		slashes = 0;
+	}
+	r.append(slashes * 2, L'\\');
+	r += L'"';
+	return r;
+}
+
+// En Windows sin SDL_CreateProcess: SDL crea el proceso heredando todos los
+// handles heredables, y el juego se quedaba con lo que el launcher tenía
+// abierto en ese momento (el .part que estaba bajando, conexiones).  El
+// launcher después no podía borrar el .part.  En Linux SDL cierra los
+// descriptores en el hijo, así que ahí sigue por SDL.
+bool LaunchProgram(const std::string& path, const std::vector<std::string>& extraArgs, const std::string* clientRoot,
+                   std::string* error)
+{
+	// El juego lo abrió el launcher: si el server pide jugar sólo desde el
+	// launcher, el cliente sigue (ver net/LauncherPolicy.h).  Se hereda del
+	// entorno del launcher.
+	if (clientRoot) SetEnvironmentVariableW(L"MU_STARTED_BY_LAUNCHER", L"1");
+	const std::wstring app = WideOf(path);
+	std::wstring cmd = QuoteArg(app);
+	for (const std::string& a : extraArgs) cmd += L" " + QuoteArg(WideOf(a));
+	const std::wstring dir = std::filesystem::path(app).parent_path().wstring();
+	STARTUPINFOW si{};
+	si.cb = sizeof(si);
+	PROCESS_INFORMATION pi{};
+	if (!CreateProcessW(app.c_str(), &cmd[0], nullptr, nullptr, FALSE, 0, nullptr, dir.empty() ? nullptr : dir.c_str(), &si, &pi))
+	{
+		const std::string code = std::to_string(GetLastError());
+		if (error) *error = Fmt("No se pudo abrir {0} (error {1}).", { path, code });
+		return false;
+	}
+	CloseHandle(pi.hThread);
+	CloseHandle(pi.hProcess);
+	return true;
+}
+#else
 bool LaunchProgram(const std::string& path, const std::vector<std::string>& extraArgs, const std::string* clientRoot,
                    std::string* error)
 {
@@ -278,20 +340,16 @@ bool LaunchProgram(const std::string& path, const std::vector<std::string>& extr
 	SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, const_cast<char**>(args.data()));
 	SDL_SetBooleanProperty(props, SDL_PROP_PROCESS_CREATE_BACKGROUND_BOOLEAN, true);
 	SDL_Environment* env = nullptr;
-#ifndef _WIN32
 	::chmod(path.c_str(), 0755);
-#endif
 	if (clientRoot)
 	{
 		env = SDL_CreateEnvironment(true);
 		// El juego lo abrió el launcher: si el server pide jugar sólo desde el
 		// launcher, el cliente sigue (ver net/LauncherPolicy.h).
 		SDL_SetEnvironmentVariable(env, "MU_STARTED_BY_LAUNCHER", "1", true);
-#ifndef _WIN32
 		// El cliente de Linux toma sus carpetas de acá (ver platform/UserPath.h).
 		SDL_SetEnvironmentVariable(env, "MU_CLIENT_ROOT", clientRoot->c_str(), true);
 		SDL_SetEnvironmentVariable(env, "MU_ASSET_ROOT", clientRoot->c_str(), true);
-#endif
 		SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ENVIRONMENT_POINTER, env);
 	}
 	SDL_Process* proc = SDL_CreateProcessWithProperties(props);
@@ -305,6 +363,7 @@ bool LaunchProgram(const std::string& path, const std::vector<std::string>& extr
 	SDL_DestroyProcess(proc);   // no lo cierra: sólo suelta el objeto
 	return true;
 }
+#endif
 
 bool LaunchGame(const std::string& root, const std::string& exe, std::string* error)
 {
