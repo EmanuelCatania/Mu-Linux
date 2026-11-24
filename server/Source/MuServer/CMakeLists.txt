@@ -118,6 +118,26 @@ else()
   endif()
 endif()
 
+# MU-Guard (Fase 5, doc-port/diseno-seguridad-fase5.md): mu-guard, el anuncio
+# en el ConnectServer y el ticket en el login del GameServer.  Con OFF no se
+# compila nada de eso y el server se comporta como antes.  mu-guard y la parte
+# del GameServer son sólo Linux, como mu-trace.
+option(MU_GUARD "MU-Guard: mu-guard y la verificacion del ticket en el login" ON)
+if(MU_GUARD)
+  target_sources(ConnectServer PRIVATE Common/GuardConfig.cpp)
+  target_compile_definitions(ConnectServer PRIVATE MU_GUARD)
+  if(NOT WIN32)
+    target_sources(GameServer PRIVATE Common/GuardConfig.cpp)
+    target_compile_definitions(GameServer PRIVATE MU_GUARD)
+    add_executable(mu-guard MuGuard/mu-guard.cpp Common/GuardConfig.cpp Common/SecureChannel.cpp
+      Common/ServerIdentity.cpp Common/monocypher/monocypher.c)
+    # MuGuard primero: Common/ServerIdentity.cpp toma de ahí su stdafx.h.
+    target_include_directories(mu-guard PRIVATE MuGuard Common)
+    target_compile_features(mu-guard PRIVATE cxx_std_17)
+    set_target_properties(mu-guard PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+  endif()
+endif()
+
 # Lector de la traza de paquetes del GameServer (Fase 5, sección 5c). Sólo Linux:
 # el anillo vive en /dev/shm.
 if(NOT WIN32)
