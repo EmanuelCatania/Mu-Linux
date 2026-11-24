@@ -18,13 +18,13 @@ namespace Launcher {
 
 namespace {
 
-bool IsHttp(const std::string& url)
+[[maybe_unused]] bool IsHttp(const std::string& url)
 {
 	return url.compare(0, 7, "http://") == 0 || url.compare(0, 8, "https://") == 0;
 }
 
 // "https://Mu.Ejemplo.com:8080/x" -> "mu.ejemplo.com"
-std::string HostOf(const std::string& url)
+[[maybe_unused]] std::string HostOf(const std::string& url)
 {
 	const std::size_t s = url.find("://");
 	if (s == std::string::npos) return std::string();
