@@ -105,7 +105,9 @@ normalmente o servidor anuncia) e `-DMU_BASE_KEY` (a sua própria base).
 - **O launcher vai em `Launcher/`**, dentro da pasta do jogo
   (`Launcher/launcher.exe` no Windows, `Launcher/launcher` no Linux). É onde o
   próprio patch o coloca, então é o único lugar em que ele se atualiza sozinho.
-  Para os jogadores, um atalho.
+  Na primeira vez que é aberto, o launcher oferece criar um atalho na área de
+  trabalho e no menu Iniciar (no Linux, o menu de aplicativos); também está em
+  Opções > Geral.
 - **Para atualizá-lo**, envie o novo num patch, em `Launcher/` (veja
   [parches-del-launcher.md](parches-del-launcher.md)). Ele é baixado antes de
   tudo e o launcher reinicia.

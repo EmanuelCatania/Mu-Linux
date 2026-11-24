@@ -864,7 +864,7 @@ void TestLanguage()
 
 	// Los textos que el código pasa por Tr y Fmt (y los de un ternario que sigue
 	// en la línea de abajo).
-	for (const char* file : { "main.cpp", "UpdateFlow.cpp", "CsClient.cpp", "ServerAnnounce.cpp", "LauncherConfig.cpp" })
+	for (const char* file : { "main.cpp", "UpdateFlow.cpp", "CsClient.cpp", "ServerAnnounce.cpp", "LauncherConfig.cpp", "Shortcuts.cpp" })
 	{
 		std::ifstream in(std::string(MU_LAUNCHER_SOURCE_DIR) + "/" + file);
 		Require(in.good(), (std::string("idioma: no se pudo leer ") + file).c_str());

@@ -18,4 +18,8 @@ extern const std::size_t FontRegularSize;
 extern const unsigned char FontBold[];
 extern const std::size_t FontBoldSize;
 
+// El ícono (packaging/mu-launcher.png) para los accesos directos de Linux.
+extern const unsigned char LauncherIcon[];
+extern const std::size_t LauncherIconSize;
+
 } // namespace LauncherRes
