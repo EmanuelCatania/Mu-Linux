@@ -204,7 +204,8 @@ bool PublishPatches(const PublishOptions& o, bool* published, std::string* error
 	}
 	if (ec) return Fail(error, "no se puede leer " + o.patches + ": " + ec.message());
 	std::sort(folders.begin(), folders.end());
-	if (folders.empty()) return Fail(error, "no hay parches en " + o.patches);
+	// Sin parches se publica igual una versión vacía (ver BuildOptions::allowEmpty).
+	if (folders.empty()) Say(o.log, "no hay parches en " + o.patches + ": se publica una versión sin archivos");
 
 	fs::remove_all(P(staging), ec);
 	if (!MakeDirs(staging)) return Fail(error, "no se puede crear " + staging);
@@ -251,6 +252,7 @@ bool PublishPatches(const PublishOptions& o, bool* published, std::string* error
 	b.keyPath = o.keyPath;
 	b.deleted.assign(deleted.begin(), deleted.end());
 	b.reuseInPlace = true;
+	b.allowEmpty = true;
 	b.level = o.level;
 	b.threads = o.threads;
 	b.log = o.log;

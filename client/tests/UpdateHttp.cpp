@@ -8,6 +8,7 @@
 #include "LauncherConfig.h"
 #include "OptionsModel.h"
 #include "PatchBuilder.h"
+#include "Publish.h"
 #include "SelfUpdate.h"
 #include "ServerAnnounce.h"
 #include "UpdateFlow.h"
@@ -888,6 +889,12 @@ void TestSelfUpdateFlow(TestServer& server, const std::string& dir, const std::s
 	c.overlayKey = ToHex(k.publicKey, kKeySize);
 	c.gameExe = "main.exe";
 	c.selfPath = "Launcher/launcher.exe";
+	auto run3 = [&](const Launcher::Config& cfg, const std::string& where) {
+		Launcher::UpdateFlow flow(cfg, where, std::make_unique<Launcher::AnyTransport>(std::make_unique<HttpTransport>()));
+		flow.Start();
+		flow.Wait();
+		return flow.Snapshot();
+	};
 	auto run = [&](const Launcher::Config& cfg) {
 		Launcher::UpdateFlow flow(cfg, root, std::make_unique<Launcher::AnyTransport>(std::make_unique<HttpTransport>()));
 		flow.Start();
@@ -942,6 +949,27 @@ void TestSelfUpdateFlow(TestServer& server, const std::string& dir, const std::s
 	st = flow2.Snapshot();
 	Require(st.phase == Launcher::Phase::Ready && FileExists(JoinPath(root2, "Launcher/launcher.exe")) &&
 	            FileExists(JoinPath(root2, "Content/admin/a.bin")), "self: sin selfPath, todo junto y sin reiniciar");
+
+	// El server activó los parches pero todavía no subió ninguno: publica una
+	// versión vacía y el launcher deja jugar (antes: 404 y Jugar deshabilitado).
+	const std::string none = JoinPath(dir, "self-sin-parches");
+	MakeDirs(none);
+	MuPatch::PublishOptions po;
+	po.patches = none;
+	po.out = JoinPath(www, "self-vacio");
+	po.channel = "prueba/overlay";
+	po.keyPath = key;
+	po.level = 3;
+	po.threads = 2;
+	bool published = false;
+	Require(MuPatch::PublishPatches(po, &published, &err) && published, ("self: publish sin parches: " + err).c_str());
+	const std::string root3 = JoinPath(dir, "self-client3");
+	Write(JoinPath(root3, "main.exe"), Random(100, 56));
+	Launcher::Config c3 = c;
+	c3.overlayUrl = server.Url("/self-vacio");
+	c3.selfPath.clear();
+	st = run3(c3, root3);
+	Require(st.phase == Launcher::Phase::Ready && st.canPlay, ("self: sin parches se puede jugar: " + st.message).c_str());
 	k.Wipe();
 }
 

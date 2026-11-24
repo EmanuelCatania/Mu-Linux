@@ -1035,6 +1035,25 @@ void TestPublish(const std::string& dir)
 	ob.patches = bad;
 	Require(!MuPatch::PublishPatches(ob, &published, &err), "publish: rechaza rutas fuera de la carpeta");
 
+	// Sin parches se publica una versión vacía firmada: el launcher la encuentra
+	// y sabe que el server todavía no tiene nada (antes no había manifiesto).
+	const std::string none = JoinPath(dir, "PatchesVacios");
+	MakeDirs(none);
+	MuPatch::PublishOptions oe = o;
+	oe.patches = none;
+	Require(MuPatch::PublishPatches(oe, &published, &err) && published, ("publish vacío: " + err).c_str());
+	Manifest me;
+	const std::string outE = JoinPath(none, "published");
+	Require(ReadWholeFile(JoinPath(outE, "manifest.json"), text) && ParseManifest(text, me, &err), ("publish vacío: manifiesto: " + err).c_str());
+	Require(me.sequence == 1 && me.files.empty() && me.bundles.empty() && me.requiresBase.empty(), "publish vacío: sin archivos ni base");
+	v.in = outE;
+	Require(MuPatch::VerifyPatch(v, &err), ("publish vacío: verify: " + err).c_str());
+	Require(MuPatch::PublishPatches(oe, &published, &err) && !published, "publish vacío: sin cambios la segunda vez");
+	Write(JoinPath(none, "24112026-1/main.exe"), exe);
+	Require(MuPatch::PublishPatches(oe, &published, &err) && published, ("publish vacío: el primer parche: " + err).c_str());
+	Require(ReadWholeFile(JoinPath(outE, "manifest.json"), text) && ParseManifest(text, me, &err) &&
+	        me.sequence == 2 && me.files.size() == 1, "publish vacío: el primer parche sigue la secuencia");
+
 	// Snapshot: cambia si cambia un archivo e ignora published/.
 	const std::string s1 = MuPatch::SnapshotPatches(patches, out);
 	Write(JoinPath(out, "otra-cosa.txt"), std::string("y"));
