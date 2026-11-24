@@ -325,6 +325,17 @@ void Serve(int in, int out, GuardConnection& guard)
 	}
 }
 
+#ifdef _WIN32
+struct ServeArgs { HANDLE in, out; GuardConnection* guard; };
+
+DWORD WINAPI ServeThread(LPVOID p)
+{
+	ServeArgs* a = static_cast<ServeArgs*>(p);
+	Serve(a->in, a->out, *a->guard);
+	return 0;
+}
+#endif
+
 // ── Rol JUEGO ────────────────────────────────────────────────────────────────
 
 std::mutex s_GameLock;
@@ -545,7 +556,10 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	}
 	CloseHandle(pi.hThread);
 
-	std::thread server([&]() { Serve(fromGameRead, toGameWrite, guard); });
+	// Hilo de Win32 y no std::thread: hace falta su HANDLE para cortarle la
+	// lectura (con MinGW, native_handle() no es un HANDLE).
+	ServeArgs args{ fromGameRead, toGameWrite, &guard };
+	const HANDLE thread = CreateThread(nullptr, 0, ServeThread, &args, 0, nullptr);
 	WaitForSingleObject(pi.hProcess, INFINITE);
 	DWORD code = 0;
 	GetExitCodeProcess(pi.hProcess, &code);
@@ -554,14 +568,13 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	// haya abierto puede tener heredada una copia de su extremo.  Se corta la
 	// lectura bloqueada de Serve.
 	Log("MU-Guard: el juego termino (%lu)", code);
-	const HANDLE thread = static_cast<HANDLE>(server.native_handle());
-	for (int i = 0; i < 50 && WaitForSingleObject(thread, 0) == WAIT_TIMEOUT; i++)
+	for (int i = 0; thread && i < 50 && WaitForSingleObject(thread, 0) == WAIT_TIMEOUT; i++)
 	{
 		CancelSynchronousIo(thread);
 		Sleep(20);
 	}
-	if (WaitForSingleObject(thread, 0) != WAIT_OBJECT_0) ExitProcess(code);
-	server.join();
+	if (thread && WaitForSingleObject(thread, 0) != WAIT_OBJECT_0) ExitProcess(code);
+	if (thread) CloseHandle(thread);
 	CloseHandle(toGameWrite);
 	CloseHandle(fromGameRead);
 	*exitCode = static_cast<int>(code);
