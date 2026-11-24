@@ -25,7 +25,6 @@ struct ButtonStyle
 	bool bold = true;                      // con fontSize: negrita o regular
 	bool textTop = false;                  // texto arriba (TopCenter del original) en vez de centrado
 	bool noLabel = false;                  // botón con ícono: la imagen sola
-	bool system = false;                   // botón gris de Windows, sin imágenes
 };
 
 // Una imagen fija sobre el fondo (logo, ícono de la cabecera).
@@ -45,7 +44,6 @@ struct ProgressBarSpec
 	std::string image;                     // relleno con imagen en vez de color
 	SDL_FPoint percentPos{};               // "37%"; x 0: no se muestra
 	SDL_Color percentColor{ 0, 0, 0, 255 };
-	bool segmented = false;                // en bloques, como la ProgressBar clásica de Windows
 };
 
 // Colores de la pantalla de opciones.
@@ -67,7 +65,6 @@ struct ThemeSpec
 	const char* name = "";
 	int width = 0, height = 0;
 	SDL_FRect drag{};                      // lo que arrastra la ventana
-	bool nativeFrame = false;              // ventana con la barra de título del sistema
 	// La ventana toma la forma del fondo: lo transparente de MainBackground no
 	// se dibuja ni recibe clics (el TransparencyKey del original).
 	bool shaped = false;
@@ -80,7 +77,7 @@ struct ThemeSpec
 	SDL_FPoint titlePos{};
 	SDL_Color titleColor{ 0, 0, 0, 255 };
 	SDL_FRect imagePanel{};                // la imagen, las noticias y la web del server
-	bool webPanel = true;                  // false: el tema no muestra la web ahí
+	bool webPanel = true;                  // false: ahí va sólo la imagen; la web se abre desde Opciones
 	bool imageBevel = true;
 	std::string image;                     // vacío: se ve el fondo
 	ProgressBarSpec bar;                   // lo bajado en bytes
@@ -95,7 +92,6 @@ struct ThemeSpec
 	ButtonStyle playStyle;                 // normal vacío: la de los demás
 	ButtonStyle optionsStyle;              // ídem (en algunos temas es un ícono)
 	SDL_FRect options{}, play{}, close{};  // ancho 0: no hay ese botón (close)
-	SDL_FRect web{};                       // botón "Web" en la principal (ancho 0: está en Opciones)
 	SDL_FRect exit{};                      // la X de cerrar (ancho 0: no hay)
 	ButtonStyle exitStyle;
 	SDL_FPoint credit{};                   // "Diseño: kayito"
