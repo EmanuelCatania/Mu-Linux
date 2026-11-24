@@ -458,7 +458,9 @@ namespace
 			// builds aceptados llegan con el desafío de memoria (paso 4).
 			c.greeted = result == Ok;
 
-			this->Reply(c, HelloResult, &result, 1);
+			const std::uint8_t reply[2] = { result, static_cast<std::uint8_t>(this->m_Settings.MemScanCloses ? MemScanCloses : 0) };
+
+			this->Reply(c, HelloResult, reply, sizeof(reply));
 
 			if (!c.greeted)
 			{

@@ -61,7 +61,7 @@ enum Type : std::uint8_t
 	Report = 0x03,          // detección (1) | cerró el juego (1) | detalle (texto UTF-8, hasta MaxDetail)
 
 	// mu-guard -> guardián
-	HelloResult = 0x81,     // resultado (1)
+	HelloResult = 0x81,     // resultado (1) | opciones (1, HelloOption)
 	Ticket = 0x82,          // resultado (1) | id (16) | clave (32)
 
 	// GameServer -> mu-guard (socket local)
@@ -79,6 +79,12 @@ enum Result : std::uint8_t
 	Ok = 0,
 	BadVersion = 1,   // el guardián habla otra versión de este protocolo
 	NotReady = 2,     // falta el saludo, o mu-guard no pudo armar el ticket
+};
+
+// Opciones del server para el guardián (Data/Guard/Guard.toml), en HelloResult.
+enum HelloOption : std::uint8_t
+{
+	MemScanCloses = 0x01,   // MEMSCAN cierra el juego (si no, sólo se registra)
 };
 
 // Resultado de Verify.

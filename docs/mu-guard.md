@@ -41,14 +41,27 @@ El guardián revisa el juego cada 2 segundos desde afuera, con prioridad baja.
 | `DEBUGGER` | un depurador sobre el juego o el guardián | cierra el juego |
 | `MEMEDIT` | el driver de Cheat Engine (Windows) u otro programa con la memoria del juego abierta (Linux) | cierra el juego |
 | `INJECT` | módulos de Cheat Engine, o las funciones de tiempo del sistema reescritas dentro del juego (speedhack) | cierra el juego |
-| `MEMSCAN` | alguien leyó las páginas señuelo que el guardián deja en el juego (el escaneo de un editor de memoria) | sólo se registra |
+| `MEMSCAN` | alguien leyó las páginas señuelo que el guardián deja en el juego (el escaneo de un editor de memoria) | cierra el juego (`MemScanCloses`) |
 | `INJECT` | otros módulos fuera del juego y del sistema | sólo se registra |
 
 Al cerrar, el guardián muestra el banner rojo de MU-Guard con lo que detectó y
 una cuenta regresiva. Todo queda en el log de `mu-guard` con la IP del
-jugador. `MEMSCAN` y los módulos desconocidos sólo se registran hasta tener
-datos de más PCs y antivirus (un falso positivo no puede cerrarle el juego a un
-jugador limpio) y las listas por server.
+jugador. Los módulos desconocidos sólo se registran hasta tener las listas por
+server.
+
+Editar valores de la memoria (vida, zen...) no se puede ver de forma confiable
+desde afuera, porque el juego los cambia todo el tiempo. La defensa es que un
+editor no llegue a encontrarlos (`MEMSCAN` cierra el juego en su primer
+escaneo) y que esos valores los decida el server.
+
+Si un antivirus lee la memoria del juego puede dar `MEMSCAN` a un jugador
+limpio. Si pasa, en `Data/Guard/Guard.toml`:
+
+```toml
+MemScanCloses = false   # MEMSCAN sólo se registra
+```
+
+Se aplica a los guardianes que se conecten después del cambio.
 
 ## Activarlo
 
@@ -81,6 +94,7 @@ Enabled = true
 Required = false
 Port = 28980
 Socket = ""   # vacío = Data/Guard/mu-guard.sock
+MemScanCloses = true
 ```
 
 El ConnectServer y el GameServer lo releen cuando cambia, sin reiniciar. Hay que

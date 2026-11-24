@@ -13,9 +13,11 @@
 //             funciones de tiempo del sistema reescritas dentro del juego: el
 //             speedhack de Cheat Engine no aparece como módulo, pero tiene que
 //             engancharlas (Windows)
-// Lo que sólo se reporta, hasta probarlo contra Cheat Engine y antivirus y
-// tener las listas del server (paso 5):
-//   MEMSCAN   páginas señuelo leídas (Windows)
+//   MEMSCAN   páginas señuelo leídas: un editor escaneando la memoria del
+//             juego (Windows).  Lo decide el server (Guard.toml MemScanCloses,
+//             encendido por defecto): si un antivirus da falsos positivos, se
+//             apaga y sólo se registra.
+// Lo que sólo se reporta, hasta tener las listas del server (paso 5):
 //   INJECT    otros módulos fuera del juego y del sistema (overlays de Discord,
 //             Steam, OBS... son legítimos)
 
@@ -44,6 +46,9 @@ public:
 	// Linux nullptr).  pid: el del juego.  gameDir: su carpeta.  Antes de
 	// reanudar el juego: planta las páginas señuelo.
 	void Attach(void* process, void* mainThread, unsigned long pid, const std::string& gameDir);
+
+	// Si MEMSCAN cierra el juego (lo dice el server en el saludo).
+	void SetMemScanCloses(bool closes);
 
 	// Una pasada.  Lo nuevo desde la anterior va a `found` (un módulo o una
 	// página ya reportados no se repiten).

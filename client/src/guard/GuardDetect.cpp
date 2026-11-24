@@ -127,6 +127,7 @@ constexpr SIZE_T kDecoyRegion = 64 * 1024;
 struct Detector::State
 {
 	int passes = 0;
+	bool memScanCloses = true;
 	std::string gameDir;   // en minúsculas, con barra final
 	std::set<std::string> reported;
 	unsigned long pid = 0;
@@ -259,8 +260,8 @@ struct Detector::State
 			decoyReported = true;
 			char detail[96];
 			std::snprintf(detail, sizeof(detail), "%d de %u paginas senuelo leidas", touched, static_cast<unsigned>(info.size()));
-			// Sólo se reporta hasta probarlo contra Cheat Engine y antivirus (diseño 3.1).
-			Add(found, GuardProto::MemScan, false, detail);
+			// Cierra salvo que el server lo haya apagado (Guard.toml MemScanCloses).
+			Add(found, GuardProto::MemScan, memScanCloses, detail);
 		}
 	}
 
@@ -445,6 +446,11 @@ void Detector::Attach(void* process, void* mainThread, unsigned long pid, const 
 	(void)process;
 	(void)mainThread;
 #endif
+}
+
+void Detector::SetMemScanCloses(bool closes)
+{
+	m->memScanCloses = closes;
 }
 
 void Detector::Scan(std::vector<Finding>& found)

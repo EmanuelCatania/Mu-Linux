@@ -116,14 +116,18 @@ public:
 		std::memcpy(hello + 2, this->m_MainHash, GuardProto::HashSize);
 
 		std::vector<std::uint8_t> reply;
-		if (!this->Exchange(GuardProto::Hello, hello, sizeof(hello), GuardProto::HelloResult, reply) || reply.size() != 1 || reply[0] != GuardProto::Ok)
+		if (!this->Exchange(GuardProto::Hello, hello, sizeof(hello), GuardProto::HelloResult, reply) || reply.empty() || reply[0] != GuardProto::Ok)
 		{
 			Log("MU-Guard: mu-guard no acepto el saludo");
 			this->m_Socket.Close();
 			return false;
 		}
+		this->m_Options = reply.size() >= 2 ? reply[1] : 0;
 		return true;
 	}
+
+	// Opciones del server (GuardProto::HelloOption), del último saludo.
+	std::uint8_t Options() const { return this->m_Options.load(); }
 
 	bool Ticket(std::uint8_t out[kTicketReply])
 	{
@@ -184,6 +188,7 @@ private:
 	}
 
 	std::recursive_mutex m_Lock;   // tickets (hilo del pipe) y reportes (vigilancia)
+	std::atomic<std::uint8_t> m_Options{ 0 };
 	std::string m_Host;
 	std::uint16_t m_Port = 0;
 	std::uint8_t m_MainHash[GuardProto::HashSize] = {};
@@ -360,7 +365,8 @@ std::string ThreatName(const Guard::Finding& finding, int language)
 	switch (finding.code)
 	{
 	case GuardProto::Debugger: return kNames[lang][0];
-	case GuardProto::MemEdit: return kNames[lang][1];
+	case GuardProto::MemEdit:
+	case GuardProto::MemScan: return kNames[lang][1];
 	default: return kNames[lang][2];
 	}
 }
@@ -745,6 +751,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	// Se creó suspendido: ya tiene su DACL, el guardián lo puede atender y las
 	// páginas señuelo quedan puestas antes de que corra.
 	Guard::Detector detector;
+	detector.SetMemScanCloses((guard.Options() & GuardProto::MemScanCloses) != 0);
 	detector.Attach(pi.hProcess, pi.hThread, pi.dwProcessId, gameDir);
 	ResumeThread(pi.hThread);
 
@@ -829,6 +836,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 
 	std::thread server([&]() { Serve(pair[0], pair[0], guard); });
 	Guard::Detector detector;
+	detector.SetMemScanCloses((guard.Options() & GuardProto::MemScanCloses) != 0);
 	detector.Attach(nullptr, nullptr, static_cast<unsigned long>(pid), gameDir);
 	banner.Wait([]() { return true; }, 1200);
 	banner.Close();
