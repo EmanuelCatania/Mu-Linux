@@ -1,6 +1,6 @@
-// Launcher del cliente (Fase 5).  Ventana con el tema WebzenOldSchoolV1 de
-// kayito: actualiza el cliente al abrir, "Opciones" edita User/Config.ini y
-// User/launcher.toml, y "Jugar" arranca el cliente.
+// Launcher del cliente (Fase 5).  Ventana con uno de los temas de kayito
+// (ThemeSpec.h): actualiza el cliente al abrir, "Opciones" edita
+// User/Config.ini y User/launcher.toml, y "Jugar" arranca el cliente.
 //
 // Uso: launcher [--root=<carpeta del cliente>] [--options[=<pestaña>]]
 // (--updated y --rolled-back los pone el propio launcher al reiniciarse)
@@ -13,6 +13,7 @@
 #include "OptionsModel.h"
 #include "SelfUpdate.h"
 #include "Resources.h"
+#include "ThemeSpec.h"
 #include "UpdateFlow.h"
 
 #include "platform/RunningLock.h"
@@ -28,6 +29,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <string>
 
@@ -43,15 +45,10 @@ using namespace Launcher;
 
 namespace {
 
-constexpr int kWidth = 450;
-constexpr int kHeight = 458;
-constexpr float kHeaderHeight = 26;
+// El tema compilado: medidas de la ventana y de todo lo que se dibuja.
+const ThemeSpec g_Theme = MakeTheme();
 
-const SDL_Color kBlack{ 0, 0, 0, 255 };
-const SDL_Color kGray{ 70, 70, 70, 255 };
-const SDL_Color kLightGray{ 120, 120, 120, 255 };
 const SDL_Color kWhite{ 255, 255, 255, 255 };
-const SDL_Color kRed{ 150, 0, 0, 255 };
 
 bool Inside(const SDL_FRect& r, float x, float y)
 {
@@ -68,12 +65,12 @@ struct Button
 };
 
 // Unidades de ventana por unidad lógica (la ventana se agranda con "Tamaño del
-// launcher"; el dibujo sigue en 450x458).
+// launcher"; el dibujo sigue en el tamaño del tema).
 float g_WindowScale = 1.0f;
 
 SDL_HitTestResult HitTest(SDL_Window*, const SDL_Point* p, void*)
 {
-	return p->y < kHeaderHeight * g_WindowScale ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
+	return p->y < g_Theme.dragHeight * g_WindowScale ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
 }
 
 // Escala de la ventana: la elegida (percent) o la de la pantalla (0), sin pasar
@@ -86,7 +83,7 @@ float ChooseScale(SDL_Window* window, int percent)
 	SDL_Rect area;
 	if (SDL_GetDisplayUsableBounds(display, &area))
 	{
-		const float fit = std::min(static_cast<float>(area.w) / kWidth, static_cast<float>(area.h) / kHeight) * 0.95f;
+		const float fit = std::min(static_cast<float>(area.w) / g_Theme.width, static_cast<float>(area.h) / g_Theme.height) * 0.95f;
 		if (s > fit) s = std::max(1.0f, fit);
 	}
 	return s;
@@ -98,14 +95,15 @@ float ApplyScale(SDL_Window* window, SDL_Renderer* renderer, int percent)
 {
 	const float s = ChooseScale(window, percent);
 	const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
-	SDL_SetWindowSize(window, static_cast<int>(std::lround(kWidth * s)), static_cast<int>(std::lround(kHeight * s)));
+	const int w = g_Theme.width, h = g_Theme.height;
+	SDL_SetWindowSize(window, static_cast<int>(std::lround(w * s)), static_cast<int>(std::lround(h * s)));
 	SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED_DISPLAY(display), SDL_WINDOWPOS_CENTERED_DISPLAY(display));
 	SDL_SyncWindow(window);
-	int ww = kWidth, wh = kHeight, ow = kWidth, oh = kHeight;
+	int ww = w, wh = h, ow = w, oh = h;
 	SDL_GetWindowSize(window, &ww, &wh);
 	SDL_GetRenderOutputSize(renderer, &ow, &oh);
-	g_WindowScale = std::min(static_cast<float>(ww) / kWidth, static_cast<float>(wh) / kHeight);
-	const float px = std::min(static_cast<float>(ow) / kWidth, static_cast<float>(oh) / kHeight);
+	g_WindowScale = std::min(static_cast<float>(ww) / w, static_cast<float>(wh) / h);
+	const float px = std::min(static_cast<float>(ow) / w, static_cast<float>(oh) / h);
 	return px > 1.0f ? px : 1.0f;
 }
 
@@ -244,22 +242,32 @@ void DrawBevel(SDL_Renderer* r, const SDL_FRect& box, bool sunken = true)
 	SDL_RenderLine(r, box.x, box.y + box.h - 1, box.x + box.w - 1, box.y + box.h - 1);
 }
 
-void Fill(SDL_Renderer* r, const SDL_FRect& box, Uint8 gray)
+void Fill(SDL_Renderer* r, const SDL_FRect& box, SDL_Color c)
 {
-	SDL_SetRenderDrawColor(r, gray, gray, gray, 255);
+	SDL_SetRenderDrawBlendMode(r, c.a == 255 ? SDL_BLENDMODE_NONE : SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawColor(r, c.r, c.g, c.b, c.a);
 	SDL_RenderFillRect(r, &box);
 }
 
 struct Ui
 {
 	SDL_Renderer* r = nullptr;
-	SDL_Texture* background = nullptr;
-	SDL_Texture* optionsBackground = nullptr;
-	SDL_Texture* image = nullptr;
-	SDL_Texture* btnNormal = nullptr;
-	SDL_Texture* btnHover = nullptr;
-	SDL_Texture* btnDisabled = nullptr;
+	std::map<std::string, SDL_Texture*> images;   // las del tema, por nombre
 	std::unique_ptr<Font> title, label, regular, tiny, notice;
+
+	// La imagen del tema con ese nombre; nullptr si el nombre está vacío o el
+	// tema no la trae.
+	SDL_Texture* Image(const std::string& name)
+	{
+		if (name.empty()) return nullptr;
+		auto it = images.find(name);
+		if (it != images.end()) return it->second;
+		const unsigned char* data = nullptr;
+		std::size_t size = 0;
+		SDL_Texture* t = LauncherRes::FindImage(name, &data, &size) ? LoadPng(r, data, size) : nullptr;
+		images[name] = t;
+		return t;
+	}
 
 	void MakeFonts(float scale)
 	{
@@ -271,19 +279,26 @@ struct Ui
 		notice = std::make_unique<Font>(r, FontRegular, FontRegularSize, 11.0f, scale);
 	}
 
-	void DrawButton(const Button& b) const
+	void DrawImage(const std::string& name, const SDL_FRect* where)
 	{
-		SDL_Texture* t = !b.enabled ? btnDisabled : (b.hover ? btnHover : btnNormal);
+		if (SDL_Texture* t = Image(name)) SDL_RenderTexture(r, t, nullptr, where);
+	}
+
+	void DrawButton(const Button& b)
+	{
+		const ButtonStyle& s = g_Theme.buttonStyle;
+		SDL_Texture* t = Image(!b.enabled ? s.disabled : (b.hover ? s.hover : s.normal));
+		if (!t) t = Image(s.normal);
 		if (t) SDL_RenderTexture(r, t, nullptr, &b.rect);
 		SDL_FRect box = b.rect;
 		if (b.pressed) box.y += 1;
-		label->DrawCentered(b.label, box, b.enabled ? kBlack : kGray);
+		label->DrawCentered(b.label, box, b.enabled ? s.text : s.textDisabled);
 	}
 
 	~Ui()
 	{
-		for (SDL_Texture* t : { background, optionsBackground, image, btnNormal, btnHover, btnDisabled })
-			if (t) SDL_DestroyTexture(t);
+		for (auto& i : images)
+			if (i.second) SDL_DestroyTexture(i.second);
 	}
 };
 
@@ -295,21 +310,25 @@ struct OptionsScreen
 	std::size_t tab = 0;
 	int editing = -1;         // fila de texto que se está escribiendo (de la pestaña actual)
 	std::string message;
-	Button save{ { 150, 417, 67, 31 }, "Guardar" };
-	Button back{ { 233, 417, 67, 31 }, "Volver" };
-	Button verify{ { 20, 0, 150, 26 }, "Verificar archivos" };
-	Button web{ { 20, 0, 150, 26 }, "Ir a la web" };
+	Button save{ g_Theme.save, "Guardar" };
+	Button back{ g_Theme.back, "Volver" };
+	Button verify{ { 0, 0, 150, 26 }, "Verificar archivos" };
+	Button web{ { 0, 0, 150, 26 }, "Ir a la web" };
 
-	static constexpr float kTabY = 36, kTabH = 20, kTabW = 106, kRowY = 86, kRowH = 23;
+	// Todo relativo al panel del tema (en el V1: 9,33).
+	static constexpr float kTabY = 3, kTabH = 20, kTabW = 106, kRowY = 53, kRowH = 23;
+	const SDL_FRect& P() const { return g_Theme.optionsPanel; }
 
 	SDL_FRect TabRect(std::size_t i) const
 	{
-		return { 12 + static_cast<float>(i % 4) * (kTabW + 1), kTabY + static_cast<float>(i / 4) * (kTabH + 2), kTabW, kTabH };
+		return { P().x + 3 + static_cast<float>(i % 4) * (kTabW + 1), P().y + kTabY + static_cast<float>(i / 4) * (kTabH + 2), kTabW, kTabH };
 	}
-	SDL_FRect RowRect(std::size_t i) const { return { 14, kRowY + static_cast<float>(i) * kRowH, 422, kRowH - 2 }; }
-	SDL_FRect LeftArrow(std::size_t i) const { const SDL_FRect r = RowRect(i); return { 262, r.y, 20, r.h }; }
-	SDL_FRect RightArrow(std::size_t i) const { const SDL_FRect r = RowRect(i); return { 412, r.y, 20, r.h }; }
-	SDL_FRect TextBox(std::size_t i) const { const SDL_FRect r = RowRect(i); return { 262, r.y + 1, 170, r.h - 2 }; }
+	SDL_FRect RowRect(std::size_t i) const { return { P().x + 5, P().y + kRowY + static_cast<float>(i) * kRowH, 422, kRowH - 2 }; }
+	float ValueX() const { return P().x + 253; }
+	SDL_FRect LeftArrow(std::size_t i) const { const SDL_FRect r = RowRect(i); return { ValueX(), r.y, 20, r.h }; }
+	SDL_FRect RightArrow(std::size_t i) const { const SDL_FRect r = RowRect(i); return { ValueX() + 150, r.y, 20, r.h }; }
+	SDL_FRect TextBox(std::size_t i) const { const SDL_FRect r = RowRect(i); return { ValueX(), r.y + 1, 170, r.h - 2 }; }
+	float BelowRows(std::size_t rows) const { return P().y + kRowY + static_cast<float>(rows) * kRowH + 10; }
 	bool IsDownloads() const { return editor.Tabs()[tab].name == "Descargas"; }
 	bool IsGeneral() const { return editor.Tabs()[tab].name == "General"; }
 };
@@ -370,7 +389,7 @@ int main(int argc, char** argv)
 		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Launcher", SDL_GetError(), nullptr);
 		return 1;
 	}
-	SDL_Window* window = SDL_CreateWindow(config.title.c_str(), kWidth, kHeight,
+	SDL_Window* window = SDL_CreateWindow(config.title.c_str(), g_Theme.width, g_Theme.height,
 	                                      SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
 	SDL_Renderer* renderer = window ? SDL_CreateRenderer(window, nullptr) : nullptr;
 	if (!renderer)
@@ -379,7 +398,7 @@ int main(int argc, char** argv)
 		SDL_Quit();
 		return 1;
 	}
-	SDL_SetRenderLogicalPresentation(renderer, kWidth, kHeight, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+	SDL_SetRenderLogicalPresentation(renderer, g_Theme.width, g_Theme.height, SDL_LOGICAL_PRESENTATION_LETTERBOX);
 	SDL_SetRenderVSync(renderer, 1);
 	SDL_SetWindowHitTest(window, HitTest, nullptr);
 	int appliedScale = config.scale;
@@ -387,21 +406,13 @@ int main(int argc, char** argv)
 	SDL_ShowWindow(window);
 
 	{
-		using namespace LauncherRes;
 		Ui ui;
 		ui.r = renderer;
-		ui.background = LoadPng(renderer, MainBackground, MainBackgroundSize);
-		ui.optionsBackground = LoadPng(renderer, OptionsBackground, OptionsBackgroundSize);
-		ui.image = LoadPng(renderer, MainImage, MainImageSize);
-		ui.btnNormal = LoadPng(renderer, ButtonNormal, ButtonNormalSize);
-		ui.btnHover = LoadPng(renderer, ButtonHover, ButtonHoverSize);
-		ui.btnDisabled = LoadPng(renderer, ButtonDisabled, ButtonDisabledSize);
 		ui.MakeFonts(fontScale);
 
-		// Botones en la posición del original (panel en 96,412 + cada botón).
-		Button options{ { 110, 417, 67, 31 }, "Opciones" };
-		Button play{ { 191, 417, 67, 31 }, "Jugar" };
-		Button close{ { 272, 417, 67, 31 }, "Cerrar" };
+		Button options{ g_Theme.options, "Opciones" };
+		Button play{ g_Theme.play, "Jugar" };
+		Button close{ g_Theme.close, "Cerrar" };
 
 		auto startFlow = [&](const Config& c) {
 			auto f = std::make_unique<UpdateFlow>(c, root, std::make_unique<AnyTransport>(std::make_unique<Update::HttpTransport>()));
@@ -411,7 +422,7 @@ int main(int argc, char** argv)
 		std::unique_ptr<UpdateFlow> flow = startFlow(config);
 		std::string launchError;
 		bool launched = false;   // se arrancó el juego con descargas en curso: el launcher sigue
-		Button pause{ { 373, 386, 70, 15 }, "Pausar" };
+		Button pause{ g_Theme.pause, "Pausar" };
 		const std::string lockPath = Update::JoinPath(Update::JoinPath(userDir, "Cache"), "running.lock");
 
 		std::unique_ptr<OptionsScreen> opts;
@@ -547,7 +558,7 @@ int main(int argc, char** argv)
 								if (Inside(opts->RowRect(i), x, y) && opts->editor.Editable(opts->tab, i)) textRow = static_cast<int>(i);
 							}
 							else if (Inside(opts->LeftArrow(i), x, y)) opts->editor.Cycle(opts->tab, i, -1);
-							else if (Inside(opts->RowRect(i), x, y) && x >= 262) opts->editor.Cycle(opts->tab, i, +1);
+							else if (Inside(opts->RowRect(i), x, y) && x >= opts->ValueX()) opts->editor.Cycle(opts->tab, i, +1);
 						}
 						if (textRow >= 0) startEditing(textRow);
 						else stopEditing();
@@ -634,17 +645,19 @@ int main(int argc, char** argv)
 				}
 			}
 
-			Fill(renderer, { 0, 0, kWidth, kHeight }, 224);
+			const ThemeSpec& th = g_Theme;
+			Fill(renderer, { 0, 0, static_cast<float>(th.width), static_cast<float>(th.height) }, { 224, 224, 224, 255 });
 			if (!opts)
 			{
 				// ── Pantalla principal ─────────────────────────────────────
-				if (ui.background) SDL_RenderTexture(renderer, ui.background, nullptr, nullptr);
-				ui.title->Draw(config.title, 5, 6, kBlack);
+				ui.DrawImage(th.background, nullptr);
+				ui.title->Draw(config.title, th.titlePos.x, th.titlePos.y, th.titleColor);
 
-				const SDL_FRect panel{ 6, 31, 437, 327 };
-				DrawBevel(renderer, panel);
-				const SDL_FRect inner{ panel.x + 2, panel.y + 2, panel.w - 4, panel.h - 4 };
-				if (ui.image) SDL_RenderTexture(renderer, ui.image, nullptr, &inner);
+				const SDL_FRect panel = th.imagePanel;
+				if (th.imageBevel) DrawBevel(renderer, panel);
+				const float pb = th.imageBevel ? 2.0f : 0.0f;
+				const SDL_FRect inner{ panel.x + pb, panel.y + pb, panel.w - 2 * pb, panel.h - 2 * pb };
+				ui.DrawImage(th.image, &inner);
 
 				// Noticias del server, arriba de la imagen (hasta 6 líneas).
 				if (!st.news.empty())
@@ -680,101 +693,99 @@ int main(int argc, char** argv)
 				}
 
 				// Barra de progreso.
-				const SDL_FRect bar{ 6, 362, 437, 22 };
-				DrawBevel(renderer, bar);
-				const SDL_FRect track{ bar.x + 2, bar.y + 2, bar.w - 4, bar.h - 4 };
-				Fill(renderer, track, 240);
+				const ProgressBarSpec& bs = th.bar;
+				if (bs.bevel) DrawBevel(renderer, bs.rect);
+				const float bb = bs.bevel ? 2.0f : 0.0f;
+				const SDL_FRect track{ bs.rect.x + bb, bs.rect.y + bb, bs.rect.w - 2 * bb, bs.rect.h - 2 * bb };
+				Fill(renderer, track, bs.track);
 				float frac = 0;
 				if (st.phase == Phase::Ready || st.phase == Phase::Offline) frac = 1;
 				else if (st.total) frac = static_cast<float>(static_cast<double>(st.done) / static_cast<double>(st.total));
 				if (frac > 0)
-				{
-					const SDL_FRect fill{ track.x, track.y, track.w * (frac > 1 ? 1 : frac), track.h };
-					if (st.phase == Phase::Failed) SDL_SetRenderDrawColor(renderer, 190, 40, 40, 255);
-					else SDL_SetRenderDrawColor(renderer, 0, 120, 215, 255);
-					SDL_RenderFillRect(renderer, &fill);
-				}
+					Fill(renderer, { track.x, track.y, track.w * (frac > 1 ? 1 : frac), track.h },
+					     st.phase == Phase::Failed ? bs.failed : bs.fill);
 				std::string status = launchError.empty() ? st.message : launchError;
 				if (launchError.empty() && st.paused) status = "En pausa. " + status;
 				else if (launchError.empty() && st.playing && !flow->Finished() && st.waitingForClose == 0)
 					status += " (jugando: más despacio)";
-				ui.tiny->Draw(ui.tiny->Fit(status, canPause ? 362.0f : 437.0f), 6, 388,
-				              st.phase == Phase::Failed || !launchError.empty() ? kRed : kBlack);
+				const float statusW = canPause ? pause.rect.x - th.status.x - 11 : th.status.w;
+				ui.tiny->Draw(ui.tiny->Fit(status, statusW), th.status.x, th.status.y,
+				              st.phase == Phase::Failed || !launchError.empty() ? th.statusError : th.statusColor);
 				if (canPause)
 				{
-					Fill(renderer, pause.rect, pause.hover ? 250 : 225);
+					Fill(renderer, pause.rect, pause.hover ? th.pauseHover : th.pauseFill);
 					DrawBevel(renderer, pause.rect, pause.pressed);
-					ui.tiny->DrawCentered(pause.label, pause.rect, kBlack);
+					ui.tiny->DrawCentered(pause.label, pause.rect, th.pauseText);
 				}
 				for (Button* b : mainButtons) ui.DrawButton(*b);
-				ui.tiny->Draw("Diseño: kayito", 350, 442, kGray);
+				ui.tiny->Draw("Diseño: kayito", th.credit.x, th.credit.y, th.creditColor);
 			}
 			else
 			{
 				// ── Opciones ───────────────────────────────────────────────
-				if (ui.optionsBackground) SDL_RenderTexture(renderer, ui.optionsBackground, nullptr, nullptr);
-				ui.title->Draw("Opciones del juego", 6, 6, kBlack);
-				// El fondo trae cuatro recuadros fijos; las pestañas usan todo el marco.
-				Fill(renderer, { 9, 33, 433, 364 }, 224);
+				const OptionsPalette& pal = th.palette;
+				ui.DrawImage(th.optionsBackground, nullptr);
+				ui.title->Draw("Opciones del juego", th.optionsTitlePos.x, th.optionsTitlePos.y, pal.title);
+				// El fondo trae recuadros fijos; las pestañas usan todo el marco.
+				Fill(renderer, th.optionsPanel, pal.panel);
 
 				const auto& tabs = opts->editor.Tabs();
 				for (std::size_t i = 0; i < tabs.size(); ++i)
 				{
 					const SDL_FRect t = opts->TabRect(i);
 					const bool on = i == opts->tab;
-					Fill(renderer, t, on ? 250 : 205);
+					Fill(renderer, t, on ? pal.tabOn : pal.tabOff);
 					DrawBevel(renderer, t, !on);
-					ui.tiny->DrawCentered(tabs[i].name, t, on ? kBlack : kGray);
+					ui.tiny->DrawCentered(tabs[i].name, t, on ? pal.text : pal.dim);
 				}
 				const auto& rows = tabs[opts->tab].rows;
 				for (std::size_t i = 0; i < rows.size(); ++i)
 				{
 					const SDL_FRect row = opts->RowRect(i);
-					if (i % 2) Fill(renderer, row, 232);
-					ui.regular->Draw(rows[i].label, row.x + 6, row.y + (row.h - ui.regular->Height()) / 2, kBlack);
+					if (i % 2) Fill(renderer, row, pal.rowAlt);
+					ui.regular->Draw(rows[i].label, row.x + 6, row.y + (row.h - ui.regular->Height()) / 2, pal.text);
 					if (rows[i].text)
 					{
 						const SDL_FRect box = opts->TextBox(i);
 						const bool editing = opts->editing == static_cast<int>(i);
-						Fill(renderer, box, 255);
+						Fill(renderer, box, pal.box);
 						DrawBevel(renderer, box);
 						const std::string t = opts->editor.Text(opts->tab, i);
-						ui.regular->Draw(t, box.x + 5, box.y + (box.h - ui.regular->Height()) / 2, kBlack);
+						ui.regular->Draw(t, box.x + 5, box.y + (box.h - ui.regular->Height()) / 2, pal.text);
 						if (editing && (SDL_GetTicks() / 500) % 2 == 0)
 						{
 							const float cx = box.x + 5 + ui.regular->Width(t) + 1;
-							SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+							SDL_SetRenderDrawColor(renderer, pal.text.r, pal.text.g, pal.text.b, 255);
 							SDL_RenderLine(renderer, cx, box.y + 3, cx, box.y + box.h - 4);
 						}
 						else if (t.empty() && !editing)
-							ui.notice->Draw("(ninguno)", box.x + 5, box.y + (box.h - ui.notice->Height()) / 2, kLightGray);
+							ui.notice->Draw("(ninguno)", box.x + 5, box.y + (box.h - ui.notice->Height()) / 2, pal.faint);
 						continue;
 					}
 					const int cur = opts->editor.Current(opts->tab, i);
-					const SDL_FRect value{ 282, row.y, 130, row.h };
+					const SDL_FRect value{ opts->ValueX() + 20, row.y, 130, row.h };
 					const bool editable = opts->editor.Editable(opts->tab, i);
-					ui.label->DrawCentered(rows[i].choices[static_cast<std::size_t>(cur)].label, value, editable ? kBlack : kGray);
+					ui.label->DrawCentered(rows[i].choices[static_cast<std::size_t>(cur)].label, value, editable ? pal.text : pal.dim);
 					if (editable)
 					{
-						ui.label->DrawCentered("<", opts->LeftArrow(i), kLightGray);
-						ui.label->DrawCentered(">", opts->RightArrow(i), kLightGray);
+						ui.label->DrawCentered("<", opts->LeftArrow(i), pal.faint);
+						ui.label->DrawCentered(">", opts->RightArrow(i), pal.faint);
 					}
 				}
-				if (opts->IsDownloads())
-				{
-					opts->verify.rect.y = OptionsScreen::kRowY + static_cast<float>(rows.size()) * OptionsScreen::kRowH + 10;
-					ui.DrawButton(opts->verify);
-					ui.notice->Draw("Vuelve a revisar todos los archivos instalados.", 180,
-					                opts->verify.rect.y + (opts->verify.rect.h - ui.notice->Height()) / 2, kGray);
-				}
+				// Un botón debajo de las filas, con su explicación al lado.
+				auto drawExtra = [&](Button& b, const std::string& text) {
+					b.rect.x = th.optionsPanel.x + 11;
+					b.rect.y = opts->BelowRows(rows.size());
+					ui.DrawButton(b);
+					const float tx = b.rect.x + b.rect.w + 10;
+					ui.notice->Draw(ui.notice->Fit(text, th.optionsPanel.x + th.optionsPanel.w - tx - 8), tx,
+					                b.rect.y + (b.rect.h - ui.notice->Height()) / 2, pal.dim);
+				};
+				if (opts->IsDownloads()) drawExtra(opts->verify, "Vuelve a revisar todos los archivos instalados.");
 				if (opts->IsGeneral())
-				{
-					opts->web.rect.y = OptionsScreen::kRowY + static_cast<float>(rows.size()) * OptionsScreen::kRowH + 10;
-					ui.DrawButton(opts->web);
-					const std::string where = st.webUrl.empty() ? std::string("El server no tiene sitio configurado.") : st.webUrl;
-					ui.notice->Draw(ui.notice->Fit(where, 245), 180, opts->web.rect.y + (opts->web.rect.h - ui.notice->Height()) / 2, kGray);
-				}
-				if (!opts->message.empty()) ui.tiny->Draw(ui.tiny->Fit(opts->message, 430), 12, 402, kBlack);
+					drawExtra(opts->web, st.webUrl.empty() ? std::string("El server no tiene sitio configurado.") : st.webUrl);
+				if (!opts->message.empty())
+					ui.tiny->Draw(ui.tiny->Fit(opts->message, th.optionsPanel.w - 6), th.optionsPanel.x + 3, th.messageY, pal.text);
 				ui.DrawButton(opts->save);
 				ui.DrawButton(opts->back);
 			}
