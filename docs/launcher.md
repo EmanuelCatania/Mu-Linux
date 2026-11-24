@@ -62,7 +62,9 @@ No hace falta instalar nada:
 2. Actions > **Launcher para tu server** > **Run workflow**.
 3. Elegí el diseño y completá el ConnectServer, la clave del server y el título.
 4. Al terminar (unos minutos), bajá de los artefactos del run
-   `launcher-<diseño>-Windows` y `launcher-<diseño>-Linux`.
+   `launcher-<diseño>-Windows` y `launcher-<diseño>-Linux`. El de Linux es un
+   AppImage: un solo archivo, con OpenSSL adentro, que corre en cualquier
+   distro.
 
 Los artefactos se borran a los 90 días: guardá los ejecutables.
 
@@ -86,7 +88,12 @@ Linux: lo mismo, con estas dependencias (Debian/Ubuntu), `-DCMAKE_BUILD_TYPE=Rel
 sudo apt-get install libssl-dev libx11-dev libx11-xcb-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libegl-dev libasound2-dev libpulse-dev libwayland-dev libxkbcommon-dev libdecor-0-dev wayland-protocols pkg-config cmake g++
 ```
 
-Queda en `build/launcher/launcher`.
+Queda en `build/launcher/launcher`. Ese binario usa el OpenSSL 3 de la distro;
+para un AppImage que corra en cualquiera (baja la herramienta linuxdeploy):
+
+```bash
+bash client/src/launcher/packaging/appimage.sh build/launcher/launcher launcher "Mi Server"
+```
 
 Otras opciones: `-DMU_OVERLAY_CHANNEL`, `-DMU_OVERLAY_URL`, `-DMU_WEB_URL` (las
 que normalmente anuncia el server) y `-DMU_BASE_KEY` (tu propia base).
@@ -107,8 +114,9 @@ que normalmente anuncia el server) y `-DMU_BASE_KEY` (tu propia base).
   (`MU_LAUNCHER_REQUIRED`, ver [parches-del-launcher.md](parches-del-launcher.md)).
 - **Windows**: el ejecutable no está firmado con un certificado de código, así
   que SmartScreen puede avisar la primera vez.
-- **Linux**: necesita una sesión gráfica (X11 o Wayland). Si el archivo perdió el
-  permiso de ejecución, `chmod +x Launcher/launcher`.
+- **Linux**: el AppImage va igual, como `Launcher/launcher`. Necesita una sesión
+  gráfica (X11 o Wayland). Si el archivo perdió el permiso de ejecución,
+  `chmod +x Launcher/launcher`.
 
 Las preferencias del jugador quedan en `launcher.toml` (descargas, tamaño de la
 ventana) y en `Config.ini` (las del juego), dentro de `User/` en Windows y en la

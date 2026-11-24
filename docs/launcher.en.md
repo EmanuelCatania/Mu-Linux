@@ -62,7 +62,8 @@ Nothing to install:
 2. Actions > **Launcher para tu server** > **Run workflow**.
 3. Pick the design and fill in the ConnectServer, the server key and the title.
 4. When it finishes (a few minutes), download `launcher-<design>-Windows` and
-   `launcher-<design>-Linux` from the run's artifacts.
+   `launcher-<design>-Linux` from the run's artifacts. The Linux one is an
+   AppImage: a single file, with OpenSSL inside, that runs on any distro.
 
 Artifacts are deleted after 90 days: keep the executables.
 
@@ -87,7 +88,12 @@ in the first command and no `--config` in the second:
 sudo apt-get install libssl-dev libx11-dev libx11-xcb-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libegl-dev libasound2-dev libpulse-dev libwayland-dev libxkbcommon-dev libdecor-0-dev wayland-protocols pkg-config cmake g++
 ```
 
-The result is `build/launcher/launcher`.
+The result is `build/launcher/launcher`. That binary uses the distro's
+OpenSSL 3; for an AppImage that runs anywhere (it downloads the linuxdeploy tool):
+
+```bash
+bash client/src/launcher/packaging/appimage.sh build/launcher/launcher launcher "My Server"
+```
 
 Other options: `-DMU_OVERLAY_CHANNEL`, `-DMU_OVERLAY_URL`, `-DMU_WEB_URL` (normally
 announced by the server) and `-DMU_BASE_KEY` (your own base).
@@ -108,8 +114,9 @@ announced by the server) and `-DMU_BASE_KEY` (your own base).
   (`MU_LAUNCHER_REQUIRED`, see [parches-del-launcher.md](parches-del-launcher.md)).
 - **Windows**: the executable is not signed with a code-signing certificate, so
   SmartScreen may warn the first time.
-- **Linux**: it needs a graphical session (X11 or Wayland). If the file lost its
-  execute permission, `chmod +x Launcher/launcher`.
+- **Linux**: the AppImage goes the same way, as `Launcher/launcher`. It needs a
+  graphical session (X11 or Wayland). If the file lost its execute permission,
+  `chmod +x Launcher/launcher`.
 
 The player's preferences are stored in `launcher.toml` (downloads, window size)
 and `Config.ini` (the game's), inside `User/` on Windows and in the game folder

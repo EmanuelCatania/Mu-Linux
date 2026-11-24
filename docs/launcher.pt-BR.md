@@ -64,7 +64,8 @@ Não é preciso instalar nada:
 2. Actions > **Launcher para tu server** > **Run workflow**.
 3. Escolha o design e preencha o ConnectServer, a chave do servidor e o título.
 4. Ao terminar (alguns minutos), baixe dos artefatos da execução
-   `launcher-<design>-Windows` e `launcher-<design>-Linux`.
+   `launcher-<design>-Windows` e `launcher-<design>-Linux`. O de Linux é um
+   AppImage: um só arquivo, com o OpenSSL dentro, que roda em qualquer distro.
 
 Os artefatos são apagados depois de 90 dias: guarde os executáveis.
 
@@ -89,7 +90,12 @@ no primeiro comando e sem `--config` no segundo:
 sudo apt-get install libssl-dev libx11-dev libx11-xcb-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libegl-dev libasound2-dev libpulse-dev libwayland-dev libxkbcommon-dev libdecor-0-dev wayland-protocols pkg-config cmake g++
 ```
 
-Fica em `build/launcher/launcher`.
+Fica em `build/launcher/launcher`. Esse binário usa o OpenSSL 3 da distro; para
+um AppImage que rode em qualquer uma (baixa a ferramenta linuxdeploy):
+
+```bash
+bash client/src/launcher/packaging/appimage.sh build/launcher/launcher launcher "Meu Servidor"
+```
 
 Outras opções: `-DMU_OVERLAY_CHANNEL`, `-DMU_OVERLAY_URL`, `-DMU_WEB_URL` (as que
 normalmente o servidor anuncia) e `-DMU_BASE_KEY` (a sua própria base).
@@ -110,8 +116,9 @@ normalmente o servidor anuncia) e `-DMU_BASE_KEY` (a sua própria base).
   (`MU_LAUNCHER_REQUIRED`, veja [parches-del-launcher.md](parches-del-launcher.md)).
 - **Windows**: o executável não é assinado com um certificado de código, então o
   SmartScreen pode avisar na primeira vez.
-- **Linux**: precisa de uma sessão gráfica (X11 ou Wayland). Se o arquivo perdeu a
-  permissão de execução, `chmod +x Launcher/launcher`.
+- **Linux**: o AppImage vai igual, como `Launcher/launcher`. Precisa de uma
+  sessão gráfica (X11 ou Wayland). Se o arquivo perdeu a permissão de execução,
+  `chmod +x Launcher/launcher`.
 
 As preferências do jogador ficam em `launcher.toml` (downloads, tamanho da janela)
 e em `Config.ini` (as do jogo), dentro de `User/` no Windows e na pasta do jogo no
