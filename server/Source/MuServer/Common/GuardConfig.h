@@ -13,6 +13,9 @@
 //   MemScanCloses = true  # MEMSCAN (un editor escaneando la memoria del
 //                         # juego) cierra el juego; false = sólo se registra,
 //                         # por si un antivirus da falsos positivos
+//   AcceptUnknownBuilds = true  # un main.exe que no está en Data/Guard/Builds
+//                               # entra igual, sin desafío de memoria; false =
+//                               # sólo los builds publicados
 //
 // Sin el archivo MU-Guard queda apagado: Data/ es un volumen y las
 // instalaciones anteriores no lo tienen (lo crea el entrypoint).
@@ -27,6 +30,7 @@ struct GuardSettings
 	std::uint16_t Port = 28980;
 	std::string Socket;   // ruta completa
 	bool MemScanCloses = true;
+	bool AcceptUnknownBuilds = true;
 };
 
 // dataPath: la carpeta Data con la barra final (GetDataPath()).

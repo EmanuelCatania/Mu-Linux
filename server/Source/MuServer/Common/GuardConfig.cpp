@@ -53,6 +53,7 @@ GuardSettings ReadGuardSettings(const std::string& dataPath)
 			settings.Enabled = table["Enabled"].value_or(false);
 			settings.Required = table["Required"].value_or(false);
 			settings.MemScanCloses = table["MemScanCloses"].value_or(true);
+			settings.AcceptUnknownBuilds = table["AcceptUnknownBuilds"].value_or(true);
 
 			const std::int64_t port = table["Port"].value_or(std::int64_t(28980));
 
