@@ -40,6 +40,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/launcher-build.yml"
+      - "client/src/launcher/packaging/**"
 permissions:
   contents: read
 jobs:
@@ -98,8 +99,9 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then
             cp build/launcher/Release/launcher.exe out/
           else
-            cp build/launcher/launcher out/
-            chmod +x out/launcher
+            # AppImage: un solo archivo, con OpenSSL adentro, que corre en
+            # cualquier distro.  Va igual en Launcher/launcher.
+            bash client/src/launcher/packaging/appimage.sh build/launcher/launcher out/launcher "$TITLE"
           fi
       - uses: actions/upload-artifact@v4
         with:
