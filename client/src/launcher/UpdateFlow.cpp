@@ -1,5 +1,7 @@
 #include "UpdateFlow.h"
 
+#include "Lang.h"
+
 #include "update/ChannelFetch.h"
 #include "update/FileUtil.h"
 #include "update/InstallIndex.h"
@@ -82,7 +84,7 @@ UpdateFlow::UpdateFlow(Config config, std::string root, std::unique_ptr<Transpor
 	m_LockPath = JoinPath(JoinPath(UserDirFor(m_Root), "Cache"), "running.lock");
 	m_MaxConnections = std::max(1, m_Config.connections);
 	m_Status.webUrl = m_Config.webUrl;
-	for (const std::string& o : m_Config.overrides) m_Status.notices.push_back("Configuración de prueba: " + o);
+	for (const std::string& o : m_Config.overrides) m_Status.notices.push_back(Fmt("Configuración de prueba: {0}", { o }));
 }
 
 UpdateFlow::~UpdateFlow()
@@ -184,7 +186,7 @@ void UpdateFlow::Run()
 	};
 	auto unreachable = [&](const std::string& why) {
 		if (installed)
-			finish(Phase::Offline, "No se pudo buscar actualizaciones (" + why + "). Podés jugar con lo instalado.", true);
+			finish(Phase::Offline, Fmt("No se pudo buscar actualizaciones ({0}). Podés jugar con lo instalado.", { why }), true);
 		else
 			finish(Phase::Failed, why, false);
 	};
@@ -206,14 +208,14 @@ void UpdateFlow::Run()
 	if (!m_Config.overlayKey.empty() && (!m_Config.connectServers.empty() || !m_Config.overlayUrl.empty() ||
 	                                     FileExists(JoinPath(cache, "launcher.json"))))
 	{
-		Set(Phase::Checking, "Buscando la configuración del server...");
+		Set(Phase::Checking, Tr("Buscando la configuración del server..."));
 		SocketCsFetcher cs(4000, &m_Cancel);
 		AnnounceSeed seed;
 		seed.rootKey = m_Config.overlayKey;
 		seed.connectServers = m_Config.connectServers;
 		if (!m_Config.overlayUrl.empty()) seed.urls.push_back(m_Config.overlayUrl);
 		const AnnounceResult a = ResolveAnnounce(seed, cache, cs, *m_Transport, &m_Cancel);
-		if (m_Cancel) return finish(Phase::Failed, "Cancelado.", installed);
+		if (m_Cancel) return finish(Phase::Failed, Tr("Cancelado."), installed);
 		// La identidad vigente (si rotó, la nueva) verifica el manifiesto del overlay.
 		if (a.haveIdentity) m_Config.overlayKey = HexKey(a.identity);
 		if (a.have)
@@ -246,7 +248,7 @@ void UpdateFlow::Run()
 		std::uint8_t key[kKeySize];
 		if (!parseKey(m_Config.baseKey, key))
 		{
-			finish(Phase::Failed, "La clave de la base no es válida (64 dígitos hex).", false);
+			finish(Phase::Failed, Tr("La clave de la base no es válida (64 dígitos hex)."), false);
 			return;
 		}
 		const std::string url = m_Config.baseUrl.empty() ? GithubReleaseUrl(m_Config.baseRepo, m_Config.baseTag) : m_Config.baseUrl;
@@ -277,7 +279,7 @@ void UpdateFlow::Run()
 		Wanted w;
 		if (!parseKey(m_Config.overlayKey, w.spec.publicKey) || m_Config.overlayChannel.empty())
 		{
-			finish(Phase::Failed, "Falta la clave o el canal de los parches del server.", false);
+			finish(Phase::Failed, Tr("Falta la clave o el canal de los parches del server."), false);
 			return;
 		}
 		w.spec.channel = m_Config.overlayChannel;
@@ -288,16 +290,16 @@ void UpdateFlow::Run()
 	if (wanted.empty())
 	{
 		finish(gameThere ? Phase::Ready : Phase::Failed,
-		       gameThere ? "No hay nada configurado para actualizar." : "No hay de dónde bajar el cliente.", gameThere);
+		       Tr(gameThere ? "No hay nada configurado para actualizar." : "No hay de dónde bajar el cliente."), gameThere);
 		return;
 	}
 
-	Set(Phase::Checking, m_Config.fullVerify ? "Verificando los archivos..." : "Buscando actualizaciones...");
+	Set(Phase::Checking, Tr(m_Config.fullVerify ? "Verificando los archivos..." : "Buscando actualizaciones..."));
 	std::vector<FetchedChannel> fetched(wanted.size());
 	std::vector<bool> have(wanted.size(), false);
 	for (std::size_t i = 0; i < wanted.size(); ++i)
 	{
-		if (m_Cancel) return finish(Phase::Failed, "Cancelado.", installed);
+		if (m_Cancel) return finish(Phase::Failed, Tr("Cancelado."), installed);
 		std::string why;
 		if (FetchChannel(*m_Transport, wanted[i].spec, sequences, fetched[i], &why))
 		{
@@ -305,10 +307,10 @@ void UpdateFlow::Run()
 			continue;
 		}
 		if (fetched[i].unknownFormat)
-			return finish(Phase::Failed, "Hay una versión nueva del launcher que esta no sabe instalar: bajala del sitio del server.", installed);
+			return finish(Phase::Failed, Tr("Hay una versión nueva del launcher que esta no sabe instalar: bajala del sitio del server."), installed);
 		if (!wanted[i].optional) return unreachable(why);
 		std::lock_guard<std::mutex> lock(m_Mutex);
-		m_Status.notices.push_back("No se pudo bajar " + wanted[i].spec.channel + ": " + why);
+		m_Status.notices.push_back(Fmt("No se pudo bajar {0}: {1}", { wanted[i].spec.channel, why }));
 	}
 	sequences.Save(seqPath);
 
@@ -353,7 +355,7 @@ void UpdateFlow::Run()
 			// instala junto con el resto, que la pisaría sin reiniciar).
 			{
 				std::lock_guard<std::mutex> lock(m_Mutex);
-				m_Status.notices.push_back("La versión nueva del launcher no arranca en este equipo; se sigue con la actual.");
+				m_Status.notices.push_back(Tr("La versión nueva del launcher no arranca en este equipo; se sigue con la actual."));
 			}
 			po.includeSelf = false;
 			if (!BuildPlan(sources, po, index, plan, &err)) return finish(Phase::Failed, err, false);
@@ -363,7 +365,7 @@ void UpdateFlow::Run()
 	}
 	if (ownUpdate)
 	{
-		Set(Phase::Downloading, "Actualizando el launcher...");
+		Set(Phase::Downloading, Tr("Actualizando el launcher..."));
 		InstallOptions so;
 		so.root = m_Root;
 		so.downloadDir = JoinPath(cache, "downloads");
@@ -375,20 +377,20 @@ void UpdateFlow::Run()
 		InstallResult sr;
 		if (!RunPlan(sources, plan, index, so, sr))
 			return finish(installed ? Phase::Offline : Phase::Failed,
-			              "No se pudo actualizar el launcher: " + (sr.failures.empty() ? std::string("cancelado") : sr.failures.front()),
+			              Fmt("No se pudo actualizar el launcher: {0}", { sr.failures.empty() ? std::string(Tr("cancelado")) : sr.failures.front() }),
 			              installed);
 		if (!MarkPending(SelfPathsFor(JoinPath(m_Root, m_Config.selfPath), cache)))
-			return finish(Phase::Failed, "No se pudo escribir en " + cache, installed);
-		return finish(Phase::Restart, "Launcher actualizado. Reiniciando...", false);
+			return finish(Phase::Failed, Fmt("No se pudo escribir en {0}", { cache }), installed);
+		return finish(Phase::Restart, Tr("Launcher actualizado. Reiniciando..."), false);
 	}
 
 	const std::size_t heldForGame = plan.heldForGame;
 	if (plan.files.empty() && plan.remove.empty() && heldForGame == 0)
 	{
 		SaveIndex(indexPath, index);
-		return finish(Phase::Ready, "El cliente está al día.", FileExists(JoinPath(m_Root, m_Config.gameExe)));
+		return finish(Phase::Ready, Tr("El cliente está al día."), FileExists(JoinPath(m_Root, m_Config.gameExe)));
 	}
-	Set(Phase::Downloading, "Bajando " + std::to_string(plan.files.size()) + " archivos (" + Human(plan.downloadBytes) + ")...");
+	Set(Phase::Downloading, Fmt("Bajando {0} archivos ({1})...", { std::to_string(plan.files.size()), Human(plan.downloadBytes) }));
 
 	InstallOptions io;
 	io.root = m_Root;
@@ -408,9 +410,9 @@ void UpdateFlow::Run()
 		m_Status.total = s.downloadTotal;
 		m_Status.filesDone = s.filesDone;
 		m_Status.filesTotal = s.filesTotal;
-		m_Status.message = std::string(m_Status.background ? "Ya podés jugar. Bajando " : "Bajando ") +
-		                   std::to_string(s.filesDone) + " de " + std::to_string(s.filesTotal) + " archivos (" +
-		                   Human(s.downloaded) + " de " + Human(s.downloadTotal) + ")...";
+		m_Status.message = Fmt(m_Status.background ? "Ya podés jugar. Bajando {0} de {1} archivos ({2} de {3})..."
+		                                           : "Bajando {0} de {1} archivos ({2} de {3})...",
+		                       { std::to_string(s.filesDone), std::to_string(s.filesTotal), Human(s.downloaded), Human(s.downloadTotal) });
 	};
 
 	InstallResult total;
@@ -430,7 +432,7 @@ void UpdateFlow::Run()
 		io.part = InstallOptions::Part::Required;
 		RunPlan(sources, plan, index, io, res);
 		add(res);
-		if (total.cancelled) return finish(Phase::Failed, "Cancelado.", installed);
+		if (total.cancelled) return finish(Phase::Failed, Tr("Cancelado."), installed);
 		requiredFailed = !res.failures.empty();
 		// ...y ya se puede jugar mientras baja el resto.
 		if (!requiredFailed)
@@ -451,7 +453,7 @@ void UpdateFlow::Run()
 		add(res);
 		requiredFailed = !total.failures.empty();
 	}
-	if (total.cancelled) return finish(Phase::Failed, "Cancelado.", installed);
+	if (total.cancelled) return finish(Phase::Failed, Tr("Cancelado."), installed);
 
 	// Lo que no se pudo pisar con el juego abierto (o el plan dejó afuera por
 	// eso): al cerrarlo.
@@ -463,17 +465,16 @@ void UpdateFlow::Run()
 			m_Status.background = true;
 			m_Status.waitingForClose = waiting;
 			m_Status.canPlay = FileExists(JoinPath(m_Root, m_Config.gameExe));
-			m_Status.message = std::to_string(waiting) + " archivos se instalan cuando cierres el juego.";
+			m_Status.message = Fmt("{0} archivos se instalan cuando cierres el juego.", { std::to_string(waiting) });
 		}
 		for (;;)
 		{
-			if (m_Cancel) return finish(Phase::Ready, "Faltan " + std::to_string(waiting) +
-			                                              " archivos: se instalan la próxima vez.", true);
+			if (m_Cancel) return finish(Phase::Ready, Fmt("Faltan {0} archivos: se instalan la próxima vez.", { std::to_string(waiting) }), true);
 			PollGame(true);
 			if (!m_GameRunning.load()) break;
 			std::this_thread::sleep_for(std::chrono::milliseconds(500));
 		}
-		Set(Phase::Downloading, "Instalando lo que faltaba...");
+		Set(Phase::Downloading, Tr("Instalando lo que faltaba..."));
 		po.gameRunning = false;
 		if (!BuildPlan(sources, po, index, plan, &err)) return finish(Phase::Failed, err, false);
 		InstallResult res;
@@ -481,7 +482,7 @@ void UpdateFlow::Run()
 		RunPlan(sources, plan, index, io, res);
 		total.deferred.clear();
 		add(res);
-		if (total.cancelled) return finish(Phase::Failed, "Cancelado.", installed);
+		if (total.cancelled) return finish(Phase::Failed, Tr("Cancelado."), installed);
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		m_Status.waitingForClose = 0;
 	}
@@ -489,7 +490,7 @@ void UpdateFlow::Run()
 	const bool playable = FileExists(JoinPath(m_Root, m_Config.gameExe));
 	if (!total.failures.empty())
 	{
-		const std::string what = "No se pudieron instalar " + std::to_string(total.failures.size()) + " archivos: " + total.failures.front();
+		const std::string what = Fmt("No se pudieron instalar {0} archivos: {1}", { std::to_string(total.failures.size()), total.failures.front() });
 		// Si lo que falló es opcional, igual se puede jugar.
 		if (!requiredFailed && playable)
 		{
@@ -497,11 +498,11 @@ void UpdateFlow::Run()
 				std::lock_guard<std::mutex> lock(m_Mutex);
 				m_Status.notices.push_back(what);
 			}
-			return finish(Phase::Ready, "Actualizado: " + std::to_string(total.installed) + " archivos.", true);
+			return finish(Phase::Ready, Fmt("Actualizado: {0} archivos.", { std::to_string(total.installed) }), true);
 		}
 		return finish(Phase::Failed, what, playable && installed);
 	}
-	finish(Phase::Ready, "Actualizado: " + std::to_string(total.installed) + " archivos.", playable);
+	finish(Phase::Ready, Fmt("Actualizado: {0} archivos.", { std::to_string(total.installed) }), playable);
 }
 
 } // namespace Launcher

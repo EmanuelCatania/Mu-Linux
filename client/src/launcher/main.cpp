@@ -9,6 +9,7 @@
 // la pantalla de opciones (0 = General ... 7 = Descargas).
 
 #include "Gfx.h"
+#include "Lang.h"
 #include "LauncherConfig.h"
 #include "OptionsModel.h"
 #include "SelfUpdate.h"
@@ -290,7 +291,7 @@ bool LaunchProgram(const std::string& path, const std::vector<std::string>& extr
 	if (env) SDL_DestroyEnvironment(env);
 	if (!proc)
 	{
-		if (error) *error = std::string("No se pudo abrir ") + path + ": " + SDL_GetError();
+		if (error) *error = Fmt("No se pudo abrir {0}: {1}", { path, SDL_GetError() });
 		return false;
 	}
 	SDL_DestroyProcess(proc);   // no lo cierra: sólo suelta el objeto
@@ -302,7 +303,7 @@ bool LaunchGame(const std::string& root, const std::string& exe, std::string* er
 	const std::string path = Update::JoinPath(root, exe);
 	if (!Update::FileExists(path))
 	{
-		*error = "No está " + exe + ".";
+		*error = Fmt("No está {0}.", { exe });
 		return false;
 	}
 	return LaunchProgram(path, {}, &root, error);
@@ -420,7 +421,7 @@ struct Ui
 		SDL_FRect box = b.rect;
 		if (s.textTop) box.h = f.Height() + 6;
 		if (b.pressed) box.y += 1;
-		f.DrawCentered(b.label, box, b.enabled ? s.text : s.textDisabled);
+		f.DrawCentered(Tr(b.label), box, b.enabled ? s.text : s.textDisabled);
 	}
 
 	// Barra de progreso: color o imagen recortada a frac.
@@ -542,11 +543,16 @@ int main(int argc, char** argv)
 		if (!c.hdSet) c.hd = HDTexturesEnabled(Update::FileExists(iniPath) ? iniPath : iniTemplate);
 		return c;
 	};
+	// El idioma del juego es también el del launcher.
+	auto loadLanguage = [&] {
+		SetLanguage(LanguageFromSetting(LanguageSetting(Update::FileExists(iniPath) ? iniPath : iniTemplate)));
+	};
+	loadLanguage();
 	std::vector<std::string> warnings;
 	Config config = loadConfig(&warnings);
 	config.selfPath = selfPath;
-	if (rolledBack) warnings.push_back("La versión nueva del launcher no arrancó; se volvió a la anterior.");
-	if (startup == StartupCheck::RollbackFailed) warnings.push_back("La versión nueva del launcher no arrancó y no se pudo volver a la anterior.");
+	if (rolledBack) warnings.push_back(Tr("La versión nueva del launcher no arrancó; se volvió a la anterior."));
+	if (startup == StartupCheck::RollbackFailed) warnings.push_back(Tr("La versión nueva del launcher no arrancó y no se pudo volver a la anterior."));
 
 	if (!SDL_Init(SDL_INIT_VIDEO))
 	{
@@ -637,12 +643,12 @@ int main(int argc, char** argv)
 		auto openOptions = [&](std::size_t tab) {
 			opts = std::make_unique<OptionsScreen>();
 			setMode(true);
-			if (!opts->editor.Load(iniPath, iniTemplate, tomlPath)) opts->message = "No se pudo leer Config.ini.";
+			if (!opts->editor.Load(iniPath, iniTemplate, tomlPath)) opts->message = Tr("No se pudo leer Config.ini.");
 			else if (RunningLock::IsHeld(lockPath))
 			{
 				// El juego también escribe Config.ini desde su menú.
 				opts->editor.SetGameLocked(true);
-				opts->message = "El juego está abierto: sus opciones se ven pero se cambian al cerrarlo.";
+				opts->message = Tr("El juego está abierto: sus opciones se ven pero se cambian al cerrarlo.");
 			}
 			if (tab < opts->editor.Tabs().size()) opts->tab = tab;
 		};
@@ -796,10 +802,14 @@ int main(int argc, char** argv)
 					{
 						bool downloadsChanged = false;
 						if (!opts->editor.Save(&downloadsChanged))
-							opts->message = "No se pudo guardar (¿el archivo es de sólo lectura?).";
+							opts->message = Tr("No se pudo guardar (¿el archivo es de sólo lectura?).");
 						else
 						{
-							opts->message = "Guardado. El juego lo usa la próxima vez que arranque.";
+							// El idioma cambia en el momento.
+							const Language before = CurrentLanguage();
+							loadLanguage();
+							const bool languageChanged = CurrentLanguage() != before;
+							opts->message = Tr("Guardado. El juego lo usa la próxima vez que arranque.");
 							// El tamaño de la ventana se aplica en el momento.
 							std::vector<std::string> ignored;
 							const int scale = loadConfig(&ignored).scale;
@@ -811,9 +821,11 @@ int main(int argc, char** argv)
 								reshape();
 								ui.MakeFonts(fontScale);
 							}
-							if (downloadsChanged)
+							// Lo que se baja cambió, o el idioma con el flujo ya
+							// terminado (su mensaje quedó en el anterior): se
+							// vuelve a planear.
+							if (downloadsChanged || (languageChanged && flow->Finished()))
 							{
-								// Lo que se baja cambió: se vuelve a planear.
 								flow.reset();
 								warnings.clear();
 								config = loadConfig(&warnings);
@@ -827,7 +839,7 @@ int main(int argc, char** argv)
 						// Sólo http(s): la URL la anuncia el server o viene compilada.
 						if ((st.webUrl.compare(0, 7, "http://") == 0 || st.webUrl.compare(0, 8, "https://") == 0) &&
 						    !SDL_OpenURL(st.webUrl.c_str()))
-							opts->message = std::string("No se pudo abrir el navegador: ") + SDL_GetError();
+							opts->message = Fmt("No se pudo abrir el navegador: {0}", { SDL_GetError() });
 					}
 					else if (opts && clicked == &opts->verify)
 					{
@@ -917,9 +929,9 @@ int main(int argc, char** argv)
 				ui.DrawBar(th.bar, ratio(st.done, st.total), failed);
 				ui.DrawBar(th.fileBar, ratio(st.filesDone, st.filesTotal), failed);
 				std::string status = launchError.empty() ? st.message : launchError;
-				if (launchError.empty() && st.paused) status = "En pausa. " + status;
+				if (launchError.empty() && st.paused) status = Fmt("En pausa. {0}", { status });
 				else if (launchError.empty() && st.playing && !flow->Finished() && st.waitingForClose == 0)
-					status += " (jugando: más despacio)";
+					status = Fmt("{0} (jugando: más despacio)", { status });
 				const float statusW = canPause && !th.statusCentered ? pause.rect.x - th.status.x - 11 : th.status.w;
 				const std::string line = ui.tiny->Fit(status, statusW);
 				const float sx = th.statusCentered ? th.status.x + (th.status.w - ui.tiny->Width(line)) / 2 : th.status.x;
@@ -928,17 +940,17 @@ int main(int argc, char** argv)
 				{
 					Fill(renderer, pause.rect, pause.hover ? th.pauseHover : th.pauseFill);
 					DrawBevel(renderer, pause.rect, pause.pressed);
-					ui.tiny->DrawCentered(pause.label, pause.rect, th.pauseText);
+					ui.tiny->DrawCentered(Tr(pause.label), pause.rect, th.pauseText);
 				}
 				for (Button* b : mainButtons) ui.DrawButton(*b);
-				ui.tiny->Draw("Diseño: kayito", th.credit.x, th.credit.y, th.creditColor);
+				ui.tiny->Draw(Tr("Diseño: kayito"), th.credit.x, th.credit.y, th.creditColor);
 			}
 			else
 			{
 				// ── Opciones ───────────────────────────────────────────────
 				const OptionsPalette& pal = th.palette;
 				ui.DrawImage(th.optionsBackground, nullptr);
-				if (th.showOptionsTitle) ui.title->Draw("Opciones del juego", th.optionsTitlePos.x, th.optionsTitlePos.y, pal.title);
+				if (th.showOptionsTitle) ui.title->Draw(Tr("Opciones del juego"), th.optionsTitlePos.x, th.optionsTitlePos.y, pal.title);
 				// El fondo trae recuadros fijos; las pestañas usan todo el marco.
 				Fill(renderer, th.optionsPanel, pal.panel);
 
@@ -949,14 +961,14 @@ int main(int argc, char** argv)
 					const bool on = i == opts->tab;
 					Fill(renderer, t, on ? pal.tabOn : pal.tabOff);
 					DrawBevel(renderer, t, !on);
-					ui.tiny->DrawCentered(tabs[i].name, t, on ? pal.text : pal.dim);
+					ui.tiny->DrawCentered(Tr(tabs[i].name), t, on ? pal.text : pal.dim);
 				}
 				const auto& rows = tabs[opts->tab].rows;
 				for (std::size_t i = 0; i < rows.size(); ++i)
 				{
 					const SDL_FRect row = opts->RowRect(i);
 					if (i % 2) Fill(renderer, row, pal.rowAlt);
-					ui.regular->Draw(rows[i].label, row.x + 6, row.y + (row.h - ui.regular->Height()) / 2, pal.text);
+					ui.regular->Draw(Tr(rows[i].label), row.x + 6, row.y + (row.h - ui.regular->Height()) / 2, pal.text);
 					if (rows[i].text)
 					{
 						const SDL_FRect box = opts->TextBox(i);
@@ -972,13 +984,13 @@ int main(int argc, char** argv)
 							SDL_RenderLine(renderer, cx, box.y + 3, cx, box.y + box.h - 4);
 						}
 						else if (t.empty() && !editing)
-							ui.notice->Draw("(ninguno)", box.x + 5, box.y + (box.h - ui.notice->Height()) / 2, pal.faint);
+							ui.notice->Draw(Tr("(ninguno)"), box.x + 5, box.y + (box.h - ui.notice->Height()) / 2, pal.faint);
 						continue;
 					}
 					const int cur = opts->editor.Current(opts->tab, i);
 					const SDL_FRect value{ opts->ValueX() + 20, row.y, 130, row.h };
 					const bool editable = opts->editor.Editable(opts->tab, i);
-					ui.label->DrawCentered(rows[i].choices[static_cast<std::size_t>(cur)].label, value, editable ? pal.text : pal.dim);
+					ui.label->DrawCentered(Tr(rows[i].choices[static_cast<std::size_t>(cur)].label), value, editable ? pal.text : pal.dim);
 					if (editable)
 					{
 						ui.label->DrawCentered("<", opts->LeftArrow(i), pal.faint);
@@ -994,9 +1006,9 @@ int main(int argc, char** argv)
 					ui.notice->Draw(ui.notice->Fit(text, th.optionsPanel.x + th.optionsPanel.w - tx - 8), tx,
 					                b.rect.y + (b.rect.h - ui.notice->Height()) / 2, pal.dim);
 				};
-				if (opts->IsDownloads()) drawExtra(opts->verify, "Vuelve a revisar todos los archivos instalados.");
+				if (opts->IsDownloads()) drawExtra(opts->verify, Tr("Vuelve a revisar todos los archivos instalados."));
 				if (opts->IsGeneral())
-					drawExtra(opts->web, st.webUrl.empty() ? std::string("El server no tiene sitio configurado.") : st.webUrl);
+					drawExtra(opts->web, st.webUrl.empty() ? std::string(Tr("El server no tiene sitio configurado.")) : st.webUrl);
 				if (!opts->message.empty())
 					ui.tiny->Draw(ui.tiny->Fit(opts->message, th.optionsPanel.w - 6), th.optionsPanel.x + 3, th.messageY, pal.text);
 				ui.DrawButton(opts->save);

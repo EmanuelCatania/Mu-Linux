@@ -1,6 +1,7 @@
 #include "LauncherConfig.h"
 
 #include "IniDocument.h"
+#include "Lang.h"
 #include "ServerAnnounce.h"
 
 #include "app/config/OptionTable.h"
@@ -133,7 +134,7 @@ void ApplyLauncherToml(const std::string& path, Config& config, std::vector<std:
 		std::string value;
 		if (eq == std::string::npos || !ParseValue(line.substr(eq + 1), value))
 		{
-			warn("línea " + std::to_string(lineNo) + " no se entiende");
+			warn(Fmt("línea {0} no se entiende", { std::to_string(lineNo) }));
 			continue;
 		}
 		const std::string key = Trim(line.substr(0, eq));
@@ -161,20 +162,20 @@ void ApplyLauncherToml(const std::string& path, Config& config, std::vector<std:
 				config.baseRepo = value;
 				config.baseUrl.clear();
 			}
-			config.overrides.push_back("origen de la base: " + value);
+			config.overrides.push_back(Fmt("origen de la base: {0}", { value }));
 		}
 		else if (key == "BaseTag")
 		{
 			config.baseTag = value;
-			config.overrides.push_back("tag de la base: " + value);
+			config.overrides.push_back(Fmt("tag de la base: {0}", { value }));
 		}
 		else if (key == "BaseKey")
 		{
 			config.baseKey = value;
-			config.overrides.push_back("clave de la base cambiada");
+			config.overrides.push_back(Tr("clave de la base cambiada"));
 		}
 		else
-			warn("clave o valor no válido en la línea " + std::to_string(lineNo) + " (" + key + ")");
+			warn(Fmt("clave o valor no válido en la línea {0} ({1})", { std::to_string(lineNo), key }));
 	}
 }
 
@@ -184,6 +185,13 @@ bool HDTexturesEnabled(const std::string& configIni)
 	std::string v;
 	const auto& o = UserOptionTable::kHDTextures;
 	return ini.Load(configIni) && ini.Get(o.section, o.key, v) && v == "1";
+}
+
+std::string LanguageSetting(const std::string& configIni)
+{
+	IniDocument ini;
+	std::string v;
+	return ini.Load(configIni) && ini.Get("Language", "LangSelection", v) ? v : std::string();
 }
 
 std::string UserDirFor(const std::string& root)
