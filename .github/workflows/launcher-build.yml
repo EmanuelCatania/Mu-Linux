@@ -1,0 +1,108 @@
+name: Launcher para tu server
+# Arma el launcher de un server, para Windows y Linux, sin instalar nada: en tu
+# fork, Actions > "Launcher para tu server" > Run workflow, completás los datos
+# de tu server y bajás los ejecutables de los artefactos del run.
+# Guía completa: docs/launcher.md.
+#
+# Los datos que se cargan van por variables de entorno (nunca pegados en los
+# comandos) y se validan antes de compilar.
+on:
+  workflow_dispatch:
+    inputs:
+      theme:
+        description: "Diseño (ver docs/launcher.md)"
+        type: choice
+        options: [ WebzenOldSchoolV1, WebzenOldSchoolV2, WebzenClassicV1, WebzenClassicV2, WebzenModern ]
+        default: WebzenOldSchoolV1
+      title:
+        description: "Título de la ventana"
+        default: "Mu Online"
+      connect_server:
+        description: "ConnectServer de tu server: host:puerto (varios separados por coma)"
+        required: true
+      server_key:
+        description: "Clave pública de tu server (64 hex, la que muestra el GameServer al arrancar)"
+        required: true
+      channel:
+        description: "Canal de tus parches, ej. miserver/overlay (vacío: lo anuncia el server)"
+        required: false
+      updates_url:
+        description: "URL pública de /updates/ (vacío: la anuncia el server)"
+        required: false
+      web_url:
+        description: "Sitio de tu server, https://... (vacío: lo anuncia el server)"
+        required: false
+      base_key:
+        description: "Sólo si publicás tu propia base: su clave pública (vacío: la del proyecto)"
+        required: false
+  # En un PR que lo toca, corre con datos de ejemplo para que no se rompa sin
+  # que se note.
+  pull_request:
+    paths:
+      - ".github/workflows/launcher-build.yml"
+permissions:
+  contents: read
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-2022, ubuntu-24.04 ]
+    env:
+      THEME: ${{ inputs.theme || 'WebzenOldSchoolV1' }}
+      TITLE: ${{ inputs.title || 'Mu Online' }}
+      CONNECT_SERVER: ${{ inputs.connect_server || 'mu.ejemplo.com:44405' }}
+      SERVER_KEY: ${{ inputs.server_key || '0000000000000000000000000000000000000000000000000000000000000000' }}
+      CHANNEL: ${{ inputs.channel }}
+      UPDATES_URL: ${{ inputs.updates_url }}
+      WEB_URL: ${{ inputs.web_url }}
+      BASE_KEY: ${{ inputs.base_key }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Revisar los datos
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          # Comillas y barras invertidas romperían el texto que se compila.
+          unsafe='["\\]'
+          url='^https?://[^[:space:]]+$'
+          [[ "$SERVER_KEY" =~ ^[0-9a-fA-F]{64}$ ]] || fail "La clave del server tiene que ser de 64 dígitos hex."
+          [[ "$CONNECT_SERVER" =~ ^[A-Za-z0-9.-]+:[0-9]{1,5}(,[A-Za-z0-9.-]+:[0-9]{1,5})*$ ]] || fail "ConnectServer: host:puerto, varios separados por coma."
+          [ ${#TITLE} -le 60 ] && [[ ! "$TITLE" =~ $unsafe ]] || fail "El título: hasta 60 caracteres, sin comillas ni barras invertidas."
+          [ -z "$CHANNEL" ] || [[ "$CHANNEL" =~ ^[a-z0-9._-]+/[a-z0-9._-]+$ ]] || fail "El canal: dueño/nombre, en minúsculas."
+          for u in "$UPDATES_URL" "$WEB_URL"; do
+            [ -z "$u" ] || { [[ "$u" =~ $url ]] && [[ ! "$u" =~ $unsafe ]]; } || fail "Las URL tienen que empezar con http:// o https://, sin espacios, comillas ni barras invertidas."
+          done
+          [ -z "$BASE_KEY" ] || [[ "$BASE_KEY" =~ ^[0-9a-fA-F]{64}$ ]] || fail "La clave de la base tiene que ser de 64 dígitos hex."
+      - name: Dependencias de sistema Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev libx11-dev libx11-xcb-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev libegl-dev libasound2-dev libpulse-dev libwayland-dev libxkbcommon-dev libdecor-0-dev wayland-protocols pkg-config
+      - name: Compilar
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(-DCMAKE_BUILD_TYPE=Release -DMU_LAUNCHER_THEME="$THEME" -DMU_LAUNCHER_TITLE="$TITLE"
+                -DMU_CONNECT_SERVER="$CONNECT_SERVER" -DMU_OVERLAY_KEY="$SERVER_KEY")
+          [ -z "$CHANNEL" ] || args+=(-DMU_OVERLAY_CHANNEL="$CHANNEL")
+          [ -z "$UPDATES_URL" ] || args+=(-DMU_OVERLAY_URL="$UPDATES_URL")
+          [ -z "$WEB_URL" ] || args+=(-DMU_WEB_URL="$WEB_URL")
+          [ -z "$BASE_KEY" ] || args+=(-DMU_BASE_KEY="$BASE_KEY")
+          cmake -S client/src/launcher -B build/launcher "${args[@]}"
+          cmake --build build/launcher --config Release --target launcher --parallel 4
+          mkdir -p out
+          if [ "$RUNNER_OS" = Windows ]; then
+            cp build/launcher/Release/launcher.exe out/
+          else
+            cp build/launcher/launcher out/
+            chmod +x out/launcher
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher-${{ env.THEME }}-${{ runner.os }}
+          path: out/
+          if-no-files-found: error
