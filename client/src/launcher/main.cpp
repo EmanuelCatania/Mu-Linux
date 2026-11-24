@@ -356,7 +356,7 @@ struct Ui
 	SDL_Renderer* r = nullptr;
 	std::map<std::string, SDL_Texture*> images;   // las del tema, por nombre
 	std::unique_ptr<Font> title, label, regular, tiny, notice;
-	std::map<float, std::unique_ptr<Font>> sized;   // la de los botones con fontSize
+	std::map<std::pair<float, bool>, std::unique_ptr<Font>> sized;   // la de los botones con fontSize
 	float fontScale = 1.0f;
 
 	// La imagen del tema con ese nombre; nullptr si el nombre está vacío o el
@@ -385,10 +385,12 @@ struct Ui
 		fontScale = scale;
 	}
 
-	Font& Bold(float size)
+	Font& Sized(float size, bool bold)
 	{
-		auto& f = sized[size];
-		if (!f) f = std::make_unique<Font>(r, LauncherRes::FontBold, LauncherRes::FontBoldSize, size, fontScale);
+		auto& f = sized[{ size, bold }];
+		if (!f)
+			f = bold ? std::make_unique<Font>(r, LauncherRes::FontBold, LauncherRes::FontBoldSize, size, fontScale)
+			         : std::make_unique<Font>(r, LauncherRes::FontRegular, LauncherRes::FontRegularSize, size, fontScale);
 		return *f;
 	}
 
@@ -400,11 +402,19 @@ struct Ui
 	void DrawButton(const Button& b)
 	{
 		const ButtonStyle& s = b.style ? *b.style : g_Theme.buttonStyle;
-		SDL_Texture* t = Image(!b.enabled ? s.disabled : (b.hover ? s.hover : s.normal));
-		if (!t) t = Image(s.normal);
+		if (s.system)
+		{
+			// El gris de Windows: relieve, y hundido mientras se aprieta.
+			Fill(r, b.rect, !b.enabled ? SDL_Color{ 220, 220, 220, 255 }
+			                           : (b.hover ? SDL_Color{ 229, 241, 251, 255 } : SDL_Color{ 225, 225, 225, 255 }));
+			DrawBevel(r, b.rect, b.pressed);
+		}
+		SDL_Texture* t = s.system ? nullptr : Image(!b.enabled ? s.disabled : (b.pressed ? s.pressed : (b.hover ? s.hover : s.normal)));
+		if (!t && b.pressed) t = Image(s.hover);
+		if (!t && !s.system) t = Image(s.normal);
 		if (t) SDL_RenderTexture(r, t, nullptr, &b.rect);
-		if (!b.label || !*b.label) return;
-		Font& f = s.fontSize > 0 ? Bold(s.fontSize) : *label;
+		if (s.noLabel || !b.label || !*b.label) return;
+		Font& f = s.fontSize > 0 ? Sized(s.fontSize, s.bold) : *label;
 		SDL_FRect box = b.rect;
 		if (s.textTop) box.h = f.Height() + 6;
 		if (b.pressed) box.y += 1;
@@ -424,7 +434,13 @@ struct Ui
 		{
 			const SDL_FRect fill{ track.x, track.y, track.w * frac, track.h };
 			SDL_Texture* img = failed ? nullptr : Image(bs.image);
-			if (img)
+			if (bs.segmented)
+			{
+				// Bloques de 8 con 2 de separación, como la ProgressBar de Windows.
+				for (float x = fill.x + 1; x < fill.x + fill.w; x += 10)
+					Fill(r, { x, fill.y + 1, std::min(8.0f, fill.x + fill.w - x), fill.h - 2 }, failed ? bs.failed : bs.fill);
+			}
+			else if (img)
 			{
 				float iw = 0, ih = 0;
 				SDL_GetTextureSize(img, &iw, &ih);
@@ -453,8 +469,8 @@ struct OptionsScreen
 	std::size_t tab = 0;
 	int editing = -1;         // fila de texto que se está escribiendo (de la pestaña actual)
 	std::string message;
-	Button save{ g_Theme.save, "Guardar" };
-	Button back{ g_Theme.back, "Volver" };
+	Button save{ g_Theme.save, "Guardar", &g_Theme.Or(g_Theme.saveStyle) };
+	Button back{ g_Theme.back, "Volver", &g_Theme.Or(g_Theme.backStyle) };
 	Button verify{ { 0, 0, 150, 26 }, "Verificar archivos" };
 	Button web{ { 0, 0, 150, 26 }, "Ir a la web" };
 
@@ -542,7 +558,8 @@ int main(int argc, char** argv)
 		return 1;
 	}
 	SDL_Window* window = SDL_CreateWindow(config.title.c_str(), g_Theme.width, g_Theme.height,
-	                                      SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN |
+	                                      SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN |
+	                                          (g_Theme.nativeFrame ? 0 : SDL_WINDOW_BORDERLESS) |
 	                                          (g_Theme.shaped ? kShapedFlags : 0));
 	SDL_Renderer* renderer = window ? SDL_CreateRenderer(window, nullptr) : nullptr;
 	if (!renderer)
@@ -578,10 +595,11 @@ int main(int argc, char** argv)
 		WebPanel webPanel(window, Update::JoinPath(Update::JoinPath(userDir, "Cache"), "WebView2"));
 		std::string webShownUrl;
 
-		Button options{ g_Theme.options, "Opciones" };
+		Button options{ g_Theme.options, "Opciones", &g_Theme.Or(g_Theme.optionsStyle) };
 		Button play{ g_Theme.play, "Jugar", &g_Theme.PlayStyle() };
 		Button close{ g_Theme.close, "Cerrar" };
 		Button exitX{ g_Theme.exit, "", &g_Theme.exitStyle };
+		Button webMain{ g_Theme.web, "Web" };
 		// Principal u opciones: en algunos temas la ventana cambia de tamaño.
 		auto setMode = [&](bool optionsMode) {
 			if (g_OptionsMode == optionsMode) return;
@@ -663,7 +681,11 @@ int main(int argc, char** argv)
 			if (launched && flow->Finished() && st.phase == Phase::Ready) running = false;
 			const bool canPause = st.background && !flow->Finished() && st.waitingForClose == 0;
 			pause.label = st.paused ? "Seguir" : "Pausar";
-			Button* mainButtons[] = { &options, &play, &close, &exitX };
+			// Los que el tema no tiene (ancho 0) no se dibujan ni se pueden apretar.
+			std::vector<Button*> mainButtons;
+			for (Button* b : { &options, &play, &close, &webMain, &exitX })
+				if (b->rect.w > 0) mainButtons.push_back(b);
+			webMain.enabled = !st.webUrl.empty();
 			std::vector<Button*> buttons;
 			if (opts)
 			{
@@ -676,8 +698,7 @@ int main(int argc, char** argv)
 			}
 			else
 			{
-				buttons.assign(std::begin(mainButtons), std::end(mainButtons));
-				if (exitX.rect.w <= 0) buttons.pop_back();
+				buttons = mainButtons;
 				if (canPause) buttons.push_back(&pause);
 			}
 
@@ -808,12 +829,12 @@ int main(int argc, char** argv)
 							}
 						}
 					}
-					else if (opts && clicked == &opts->web)
+					else if ((opts && clicked == &opts->web) || clicked == &webMain)
 					{
 						// Sólo http(s): la URL la anuncia el server o viene compilada.
 						if ((st.webUrl.compare(0, 7, "http://") == 0 || st.webUrl.compare(0, 8, "https://") == 0) &&
 						    !SDL_OpenURL(st.webUrl.c_str()))
-							opts->message = std::string("No se pudo abrir el navegador: ") + SDL_GetError();
+							(opts ? opts->message : launchError) = std::string("No se pudo abrir el navegador: ") + SDL_GetError();
 					}
 					else if (opts && clicked == &opts->verify)
 					{
@@ -834,12 +855,12 @@ int main(int argc, char** argv)
 			const SDL_FRect inner{ th.imagePanel.x + pb, th.imagePanel.y + pb, th.imagePanel.w - 2 * pb, th.imagePanel.h - 2 * pb };
 			// La web tapa la imagen: sólo en la pantalla principal y sin avisos que
 			// mostrar.  Mientras carga (o si no carga) queda la imagen.
-			if (!st.webUrl.empty() && st.webUrl != webShownUrl)
+			if (th.webPanel && !st.webUrl.empty() && st.webUrl != webShownUrl)
 			{
 				webPanel.Navigate(st.webUrl);
 				webShownUrl = st.webUrl;
 			}
-			const bool webWanted = !opts && notes.empty();
+			const bool webWanted = th.webPanel && !opts && notes.empty();
 			{
 				int pw = th.width, ph = th.height;
 				SDL_GetWindowSizeInPixels(window, &pw, &ph);
@@ -852,12 +873,13 @@ int main(int argc, char** argv)
 			// Con forma, lo que no tapa el fondo queda transparente.
 			SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 			if (th.shaped && !opts) SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-			else SDL_SetRenderDrawColor(renderer, 224, 224, 224, 255);
+			else SDL_SetRenderDrawColor(renderer, th.clearColor.r, th.clearColor.g, th.clearColor.b, 255);
 			SDL_RenderClear(renderer);
 			if (!opts)
 			{
 				// ── Pantalla principal ─────────────────────────────────────
 				ui.DrawImage(th.background, nullptr);
+				for (const ThemeImage& d : th.decor) ui.DrawImage(d.name, &d.rect);
 				if (th.showTitle) ui.title->Draw(config.title, th.titlePos.x, th.titlePos.y, th.titleColor);
 
 				if (th.imageBevel) DrawBevel(renderer, th.imagePanel);
@@ -915,8 +937,7 @@ int main(int argc, char** argv)
 					DrawBevel(renderer, pause.rect, pause.pressed);
 					ui.tiny->DrawCentered(pause.label, pause.rect, th.pauseText);
 				}
-				for (Button* b : mainButtons)
-					if (b->rect.w > 0) ui.DrawButton(*b);
+				for (Button* b : mainButtons) ui.DrawButton(*b);
 				ui.tiny->Draw("Diseño: kayito", th.credit.x, th.credit.y, th.creditColor);
 			}
 			else

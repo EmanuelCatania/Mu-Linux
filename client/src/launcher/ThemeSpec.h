@@ -12,16 +12,27 @@
 #include <SDL3/SDL.h>
 
 #include <string>
+#include <vector>
 
 namespace Launcher {
 
 struct ButtonStyle
 {
-	std::string normal, hover, disabled;   // la de hover y la de deshabilitado caen en normal si faltan
+	std::string normal, hover, disabled, pressed;   // las que faltan caen en normal
 	SDL_Color text{ 0, 0, 0, 255 };
 	SDL_Color textDisabled{ 70, 70, 70, 255 };
 	float fontSize = 0;                    // 0: la del resto de los botones
+	bool bold = true;                      // con fontSize: negrita o regular
 	bool textTop = false;                  // texto arriba (TopCenter del original) en vez de centrado
+	bool noLabel = false;                  // botón con ícono: la imagen sola
+	bool system = false;                   // botón gris de Windows, sin imágenes
+};
+
+// Una imagen fija sobre el fondo (logo, ícono de la cabecera).
+struct ThemeImage
+{
+	std::string name;
+	SDL_FRect rect{};
 };
 
 struct ProgressBarSpec
@@ -34,6 +45,7 @@ struct ProgressBarSpec
 	std::string image;                     // relleno con imagen en vez de color
 	SDL_FPoint percentPos{};               // "37%"; x 0: no se muestra
 	SDL_Color percentColor{ 0, 0, 0, 255 };
+	bool segmented = false;                // en bloques, como la ProgressBar clásica de Windows
 };
 
 // Colores de la pantalla de opciones.
@@ -55,16 +67,20 @@ struct ThemeSpec
 	const char* name = "";
 	int width = 0, height = 0;
 	SDL_FRect drag{};                      // lo que arrastra la ventana
+	bool nativeFrame = false;              // ventana con la barra de título del sistema
 	// La ventana toma la forma del fondo: lo transparente de MainBackground no
 	// se dibuja ni recibe clics (el TransparencyKey del original).
 	bool shaped = false;
 
 	// Pantalla principal.
 	std::string background;                // estirada a toda la ventana
+	SDL_Color clearColor{ 224, 224, 224, 255 };   // donde no hay fondo
+	std::vector<ThemeImage> decor;         // encima del fondo
 	bool showTitle = true;
 	SDL_FPoint titlePos{};
 	SDL_Color titleColor{ 0, 0, 0, 255 };
 	SDL_FRect imagePanel{};                // la imagen, las noticias y la web del server
+	bool webPanel = true;                  // false: el tema no muestra la web ahí
 	bool imageBevel = true;
 	std::string image;                     // vacío: se ve el fondo
 	ProgressBarSpec bar;                   // lo bajado en bytes
@@ -77,7 +93,9 @@ struct ThemeSpec
 	SDL_Color pauseFill{ 225, 225, 225, 255 }, pauseHover{ 250, 250, 250, 255 }, pauseText{ 0, 0, 0, 255 };
 	ButtonStyle buttonStyle;
 	ButtonStyle playStyle;                 // normal vacío: la de los demás
-	SDL_FRect options{}, play{}, close{};
+	ButtonStyle optionsStyle;              // ídem (en algunos temas es un ícono)
+	SDL_FRect options{}, play{}, close{};  // ancho 0: no hay ese botón (close)
+	SDL_FRect web{};                       // botón "Web" en la principal (ancho 0: está en Opciones)
 	SDL_FRect exit{};                      // la X de cerrar (ancho 0: no hay)
 	ButtonStyle exitStyle;
 	SDL_FPoint credit{};                   // "Diseño: kayito"
@@ -94,9 +112,11 @@ struct ThemeSpec
 	int tabsPerRow = 4;
 	float messageY = 0;
 	SDL_FRect save{}, back{};
+	ButtonStyle saveStyle, backStyle;      // normal vacío: la de los demás
 	OptionsPalette palette;
 
-	const ButtonStyle& PlayStyle() const { return playStyle.normal.empty() ? buttonStyle : playStyle; }
+	const ButtonStyle& Or(const ButtonStyle& s) const { return s.normal.empty() ? buttonStyle : s; }
+	const ButtonStyle& PlayStyle() const { return Or(playStyle); }
 	int OptionsWidth() const { return optionsWidth ? optionsWidth : width; }
 	int OptionsHeight() const { return optionsHeight ? optionsHeight : height; }
 };
