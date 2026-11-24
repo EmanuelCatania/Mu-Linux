@@ -96,7 +96,8 @@ const char* const English[] = {
     "Underwater: %s",
     "No wobble",
     "Improved water",
-    "This server is played from the launcher, and it was not found in the game folder. Download it from the server website."
+    "This server is played from the launcher, and it was not found in the game folder. Download it from the server website.",
+    "MU-Guard protection is not active. Close the game and open it again."
 };
 constexpr size_t Count = (size_t)ClientTextId::Count;
 static_assert(sizeof(English) / sizeof(English[0]) == Count, "Faltan textos en ingl\xC3\xA9s");
@@ -168,6 +169,8 @@ const char* MenuFallback(ClientTextId id, int language)
         { ClientTextId::RenderVSyncUnavailable, "VSync no disponible", "VSync indispon\xC3\xAD" "vel" },
         { ClientTextId::LauncherRequired, "Este server se juega desde el launcher, y no se encontr\xC3\xB3 en la carpeta del juego. Bajalo del sitio del server.",
           "Este servidor \xC3\xA9 jogado pelo launcher, e ele n\xC3\xA3o foi encontrado na pasta do jogo. Baixe-o do site do servidor." },
+        { ClientTextId::GuardRequired, "La protecci\xC3\xB3n MU-Guard no est\xC3\xA1 activa. Cerr\xC3\xA1 el juego y volv\xC3\xA9 a abrirlo.",
+          "A prote\xC3\xA7\xC3\xA3o MU-Guard n\xC3\xA3o est\xC3\xA1 ativa. Feche o jogo e abra-o novamente." },
     };
     for (const Entry& entry : entries) {
         if (entry.id != id) continue;

@@ -821,6 +821,16 @@ if(MU_RENDER_WEBGPU)
     target_link_libraries(mu97k PRIVATE dawn::webgpu_dawn)
     target_compile_definitions(mu97k PRIVATE MU_RENDER_WEBGPU)
 endif()
+# MU-Guard (Fase 5, doc-port/diseno-seguridad-fase5.md): rol guardián y ticket
+# en el login (src/guard).  Con OFF no se compila nada de eso y el cliente no le
+# pregunta nada al server.  Va fuera de MU_SOURCES como WebGPU: el .vcxproj
+# (Win32) no lo tiene.
+option(MU_GUARD "MU-Guard: guardian del cliente y ticket en el login" ON)
+if(MU_GUARD)
+    target_sources(mu97k PRIVATE src/guard/Guardian.cpp src/guard/GuardSocket.cpp
+        src/guard/Guardian.h src/guard/GuardSocket.h src/guard/GuardProtocol.h)
+    target_compile_definitions(mu97k PRIVATE MU_GUARD)
+endif()
 enable_testing()
 add_executable(mu_resource_tables_test EXCLUDE_FROM_ALL
     tests/ResourceTables.cpp src/render/ResourceTables.cpp)

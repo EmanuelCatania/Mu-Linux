@@ -99,9 +99,9 @@ void Request()
 
 void OnPolicy(const std::uint8_t* msg, int size)
 {
-    Proto::PMSG_CLIENT_POLICY_SEND head;
-    if (!Supported() || s_Handled || !msg || size < (int)sizeof(head)) return;
-    std::memcpy(&head, msg, sizeof(head));
+    Proto::PMSG_CLIENT_POLICY_SEND head{};
+    if (!Supported() || s_Handled || !msg || size < Proto::kClientPolicyBaseSize) return;
+    std::memcpy(&head, msg, size < (int)sizeof(head) ? (std::size_t)size : sizeof(head));
     // Sólo lo que llega por el canal cifrado es del server.
     if (head.result != Proto::CONTENT_OK || !NetChannel::IsSecure()) return;
     if (!(head.flags & Proto::CLIENT_POLICY_REQUIRE_LAUNCHER) || StartedByLauncher()) return;

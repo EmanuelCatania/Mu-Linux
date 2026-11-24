@@ -126,6 +126,8 @@ static_assert(sizeof(PMSG_CLIENT_POLICY_RECV) == 4, "F4:16");
 
 enum ClientPolicy : std::uint8_t {
     CLIENT_POLICY_REQUIRE_LAUNCHER = 0x01,   // abrir el juego sólo desde el launcher
+    CLIENT_POLICY_GUARD = 0x02,              // hay un mu-guard en guardPort (guard/Guardian.h)
+    CLIENT_POLICY_GUARD_REQUIRED = 0x04,     // sin su ticket no se entra (informativo)
 };
 
 struct PMSG_CLIENT_POLICY_SEND
@@ -133,8 +135,10 @@ struct PMSG_CLIENT_POLICY_SEND
     PSBMSG_HEAD header;     // C1:F4:17
     std::uint8_t result;    // CONTENT_OK o CONTENT_NOT_SECURE
     std::uint8_t flags;
+    std::uint8_t guardPort[2];   // little-endian; no viene de un server anterior a MU-Guard
 };
-static_assert(sizeof(PMSG_CLIENT_POLICY_SEND) == 6, "F4:17");
+static_assert(sizeof(PMSG_CLIENT_POLICY_SEND) == 8, "F4:17");
+constexpr int kClientPolicyBaseSize = 6;   // sin guardPort
 
 #pragma pack(pop)
 

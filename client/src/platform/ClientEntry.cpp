@@ -54,6 +54,9 @@
 #include "scenes/Scene.h"
 #include "audio/SoundManager.h"
 #include "app/config/UserSettings.h"
+#ifdef MU_GUARD
+#include "guard/Guardian.h"
+#endif
 #if defined(_DEBUG) && defined(_WIN32)
 #  define _CRTDBG_MAP_ALLOC
 #  include <crtdbg.h>
@@ -503,7 +506,7 @@ void Client_ClosePortable() {
     for (int buffer = 0; buffer < 420; ++buffer) Sound_ReleaseBuffer(buffer);
     OpenGL_Release();
 }
-int main(int, char**)
+int main(int, [[maybe_unused]] char** argv)
 #endif
 {
 #ifndef _WIN32
@@ -602,6 +605,23 @@ int main(int, char**)
             g_ServerPort = cfgPort;
         }
     }
+
+#ifdef MU_GUARD
+    // MU-Guard (Fase 5): si el server lo tiene, este proceso pasa a ser el
+    // guardián y el juego corre en un hijo (guard/Guardian.h).  Antes de la
+    // ventana y del sonido: el guardián no los usa.
+    if (Guardian::IsGameRole()) {
+        Guardian::StartGameRole();
+    } else {
+#ifdef _WIN32
+        char** guardArgv = nullptr;
+#else
+        char** guardArgv = argv;
+#endif
+        const int guardianExit = Guardian::Run(szServerIpAddress, g_ServerPort, guardArgv);
+        if (guardianExit >= 0) return guardianExit;
+    }
+#endif
 
     // 7-8: single instance check
     // HWND hExisting = FindWindowA("Dialog", windowTitle);
