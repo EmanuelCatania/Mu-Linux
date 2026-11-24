@@ -618,8 +618,8 @@ int main(int, [[maybe_unused]] char** argv)
 #else
         char** guardArgv = argv;
 #endif
-        const int guardianExit = Guardian::Run(szServerIpAddress, g_ServerPort, guardArgv);
-        if (guardianExit >= 0) return guardianExit;
+        int guardianExit = 0;
+        if (Guardian::Run(szServerIpAddress, g_ServerPort, guardArgv, &guardianExit)) return guardianExit;
     }
 #endif
 

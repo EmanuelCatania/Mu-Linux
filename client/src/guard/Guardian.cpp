@@ -390,6 +390,9 @@ void StartGameRole()
 	{
 		s_FromGuardian = reinterpret_cast<HANDLE>(static_cast<std::uintptr_t>(read));
 		s_ToGuardian = reinterpret_cast<HANDLE>(static_cast<std::uintptr_t>(write));
+		// Lo que abra el juego (el launcher, por ejemplo) no los tiene que heredar.
+		SetHandleInformation(s_FromGuardian, HANDLE_FLAG_INHERIT, 0);
+		SetHandleInformation(s_ToGuardian, HANDLE_FLAG_INHERIT, 0);
 	}
 	SetEnvironmentVariableA(kPipeVar, nullptr);
 	SetEnvironmentVariableA(kParentVar, nullptr);
@@ -460,22 +463,22 @@ bool FetchTicket(const std::uint8_t transcript[32], std::uint8_t id[16], std::ui
 	return true;
 }
 
-int Run(const char* host, unsigned short port, char** argv)
+bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 {
 	(void)argv;
-	if (IsGameRole() || host == nullptr || *host == '\0') return -1;
+	if (IsGameRole() || host == nullptr || *host == '\0') return false;
 
 	ServerTrust::SetServer(std::string(Platform::UserDir()) + "Cache/" + CContentCatalog::CacheId(host, port));
 
 	const std::uint16_t guardPort = AskConnectServer(host, port);
-	if (guardPort == 0) return -1;
+	if (guardPort == 0) return false;
 
 	const std::string exe = ExecutablePath();
 	std::uint8_t mainHash[GuardProto::HashSize] = {};
 	if (exe.empty() || !HashFile(exe, mainHash))
 	{
 		Log("MU-Guard: no se pudo leer el ejecutable; sigue sin guardian");
-		return -1;
+		return false;
 	}
 
 	GuardConnection guard;
@@ -484,7 +487,7 @@ int Run(const char* host, unsigned short port, char** argv)
 	{
 		// Puede estar caído: lo decide el GameServer en el login (4c).
 		Log("MU-Guard: no responde mu-guard en %s:%u; sigue sin guardian", host, guardPort);
-		return -1;
+		return false;
 	}
 	Log("MU-Guard: guardian activo (mu-guard en %s:%u); se lanza el juego", host, guardPort);
 
@@ -494,7 +497,7 @@ int Run(const char* host, unsigned short port, char** argv)
 	if (!CreatePipe(&toGameRead, &toGameWrite, &sa, 0) || !CreatePipe(&fromGameRead, &fromGameWrite, &sa, 0))
 	{
 		Log("MU-Guard: no se pudo crear el pipe (%lu)", GetLastError());
-		return -1;
+		return false;
 	}
 	// Los extremos del guardián no se heredan.
 	SetHandleInformation(toGameWrite, HANDLE_FLAG_INHERIT, 0);
@@ -533,7 +536,7 @@ int Run(const char* host, unsigned short port, char** argv)
 		Log("MU-Guard: no se pudo lanzar el juego (%lu)", error);
 		CloseHandle(toGameWrite);
 		CloseHandle(fromGameRead);
-		return -1;
+		return false;
 	}
 	CloseHandle(pi.hThread);
 
@@ -542,18 +545,28 @@ int Run(const char* host, unsigned short port, char** argv)
 	DWORD code = 0;
 	GetExitCodeProcess(pi.hProcess, &code);
 	CloseHandle(pi.hProcess);
-	// El juego terminó: su extremo del pipe ya está cerrado y Serve sale solo.
+	// El juego terminó.  No se espera el fin del pipe: otro proceso que el juego
+	// haya abierto puede tener heredada una copia de su extremo.  Se corta la
+	// lectura bloqueada de Serve.
+	Log("MU-Guard: el juego termino (%lu)", code);
+	const HANDLE thread = static_cast<HANDLE>(server.native_handle());
+	for (int i = 0; i < 50 && WaitForSingleObject(thread, 0) == WAIT_TIMEOUT; i++)
+	{
+		CancelSynchronousIo(thread);
+		Sleep(20);
+	}
+	if (WaitForSingleObject(thread, 0) != WAIT_OBJECT_0) ExitProcess(code);
 	server.join();
 	CloseHandle(toGameWrite);
 	CloseHandle(fromGameRead);
-	Log("MU-Guard: el juego termino (%lu)", code);
-	return static_cast<int>(code);
+	*exitCode = static_cast<int>(code);
+	return true;
 #else
 	int pair[2];
 	if (::socketpair(AF_UNIX, SOCK_STREAM, 0, pair) != 0)
 	{
 		Log("MU-Guard: no se pudo crear el pipe (%d)", errno);
-		return -1;
+		return false;
 	}
 	// El extremo del guardián no se hereda; el del juego sí.
 	::fcntl(pair[0], F_SETFD, FD_CLOEXEC);
@@ -570,17 +583,21 @@ int Run(const char* host, unsigned short port, char** argv)
 	{
 		Log("MU-Guard: no se pudo lanzar el juego (%d)", spawned);
 		::close(pair[0]);
-		return -1;
+		return false;
 	}
 
 	std::thread server([&]() { Serve(pair[0], pair[0], guard); });
 	int status = 0;
 	while (::waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+	// Otro proceso que haya abierto el juego puede tener heredado su extremo: se
+	// corta la lectura en vez de esperar el fin del pipe.
+	::shutdown(pair[0], SHUT_RDWR);
 	server.join();
 	::close(pair[0]);
 	const int code = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 	Log("MU-Guard: el juego termino (%d)", code);
-	return code;
+	*exitCode = code;
+	return true;
 #endif
 }
 

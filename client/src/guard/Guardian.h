@@ -25,10 +25,11 @@ namespace Guardian {
 bool IsGameRole();
 
 // Rol GUARDIÁN: antes de crear la ventana, con la dirección del ConnectServer.
-// Devuelve -1 si este proceso sigue como el juego; si no, el código de salida
-// del juego, que el guardián lanzó y esperó.  argv: el de main() (en Windows se
-// usa la línea de comandos del proceso).
-int Run(const char* host, unsigned short port, char** argv);
+// false si este proceso sigue como el juego.  true si fue el guardián: lanzó el
+// juego, lo esperó y deja en *exitCode su código de salida (cualquier valor,
+// también negativo).  argv: el de main() (en Windows se usa la línea de
+// comandos del proceso).
+bool Run(const char* host, unsigned short port, char** argv, int* exitCode);
 
 // Rol JUEGO: lee el pipe heredado y vigila al guardián.  Llamarlo una vez, al
 // arrancar.
