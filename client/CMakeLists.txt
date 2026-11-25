@@ -815,6 +815,7 @@ elseif(EMSCRIPTEN)
         -sMAX_WEBGL_VERSION=2
         -sFORCE_FILESYSTEM=1 -lidbfs.js
         -sEXIT_RUNTIME=0
+        --profiling-funcs
         -sENVIRONMENT=web,worker
         -sEXPORTED_RUNTIME_METHODS=FS,ENV,IDBFS,addRunDependency,removeRunDependency
         "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/src/platform/Web/shell.html")

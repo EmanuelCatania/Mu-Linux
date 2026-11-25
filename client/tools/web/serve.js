@@ -4,6 +4,9 @@
 // las cabeceras que piden los hilos del wasm (COOP/COEP) y rangos (Range), que
 // usan los archivos perezosos para bajar por partes.
 //
+// Con MU_WEB_GATEWAY_KEY en el entorno también hace de puente WebSocket <-> TCP
+// (el mismo de mu-web, web/lib/play-gateway.js) contra MU_WEB_SERVER_HOST.
+//
 // Uso: node tools/web/serve.js <carpeta del build> <carpeta del cliente> [puerto]
 'use strict';
 const http = require('http');
@@ -27,7 +30,7 @@ function resolve(urlPath) {
   return full.startsWith(path.resolve(base)) ? full : null;
 }
 
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
   res.setHeader('Accept-Ranges', 'bytes');
@@ -49,4 +52,6 @@ http.createServer((req, res) => {
   res.setHeader('Content-Length', stat.size);
   if (req.method === 'HEAD') return res.end();
   fs.createReadStream(file).pipe(res);
-}).listen(port, '127.0.0.1', () => console.log(`http://127.0.0.1:${port}/`));
+});
+require(path.join(__dirname, '../../../web/lib/play-gateway.js')).attach(server);
+server.listen(port, '127.0.0.1', () => console.log(`http://127.0.0.1:${port}/`));

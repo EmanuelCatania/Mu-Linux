@@ -399,8 +399,8 @@ void __cdecl Chat_InputTick(void)
                     if (obj && *(int*)obj) {
                         void** vt = ChatWidget_GetVTable(obj);
                         typedef int (__fastcall *FnScroll)(DWORD*, int, int);
-                        typedef int (__fastcall *FnRows)(DWORD*, int);
-                        int rows = ((FnRows)vt[13])(obj, 0);   // IDA: vtable +52
+                        typedef int (__fastcall *FnRows)(DWORD*);
+                        int rows = ((FnRows)vt[13])(obj);   // IDA: vtable +52
                         ((FnScroll)vt[12])(obj, 0, -rows);
                     }
                 }
@@ -421,8 +421,8 @@ void __cdecl Chat_InputTick(void)
                     if (obj && *(int*)obj) {
                         void** vt = ChatWidget_GetVTable(obj);
                         typedef int (__fastcall *FnScroll)(DWORD*, int, int);
-                        typedef int (__fastcall *FnRows)(DWORD*, int);
-                        int rows = ((FnRows)vt[13])(obj, 0);   // IDA: vtable +52
+                        typedef int (__fastcall *FnRows)(DWORD*);
+                        int rows = ((FnRows)vt[13])(obj);   // IDA: vtable +52
                         ((FnScroll)vt[12])(obj, 0, rows);
                     }
                 }

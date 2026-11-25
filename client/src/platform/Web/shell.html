@@ -6,7 +6,10 @@
 <title>Mu Online</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
-  #canvas { display: block; width: 100vw; height: 100vh; outline: none; touch-action: none; }
+  body { display: flex; align-items: center; justify-content: center; }
+  /* El tamaño lo fija el cliente (SDL) con la resolución del juego: estirarlo
+     por CSS desacomoda el mouse. */
+  #canvas { display: block; outline: none; touch-action: none; }
   #status { position: fixed; left: 0; right: 0; bottom: 24px; text-align: center;
             font: 14px sans-serif; color: #c8b27a; pointer-events: none; }
 </style>
@@ -30,6 +33,22 @@ const ROOT = '/mu';
 const BASE = new URL('game/', document.baseURI).href;
 
 function setStatus(text) { document.getElementById('status').textContent = text || ''; }
+
+// Red: el cliente abre sockets TCP comunes y Emscripten los convierte en
+// WebSocket a ws://<host>:<puerto>/.  Acá se mandan todos al puente de mu-web
+// (/play/ws, web/lib/play-gateway.js), que sólo deja pasar los puertos del
+// server.  ?gw=<url> usa otro puente (pruebas).
+const GATEWAY = new URLSearchParams(location.search).get('gw')
+  || (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/play/ws';
+{
+  const NativeWebSocket = window.WebSocket;
+  window.WebSocket = class extends NativeWebSocket {
+    constructor(url, protocols) {
+      const port = new URL(url).port;
+      super(GATEWAY + (GATEWAY.includes('?') ? '&' : '?') + 'port=' + encodeURIComponent(port), protocols);
+    }
+  };
+}
 
 var Module = {
   canvas: document.getElementById('canvas'),

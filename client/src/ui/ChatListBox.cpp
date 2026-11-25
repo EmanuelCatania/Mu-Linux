@@ -511,12 +511,13 @@ static void __fastcall ChatLB_renderScroll(DWORD* self)
         self[12] = (DWORD)Ui::ClassicChatY;
     }
     typedef void (__fastcall *FnVoid)(DWORD*);
+    typedef int  (__fastcall *FnIntSelf)(DWORD*);
     typedef int  (__fastcall *FnRow )(DWORD*, int /*edx*/, int row);
 
     void** vt = ChatWidget_GetVTable(self);
 
-    ((FnVoid)vt[22])(self);  // *this+88 — render BG
-    ((FnVoid)vt[20])(self);  // *this+80 — render header
+    ((FnIntSelf)vt[22])(self);  // *this+88 — render BG
+    ((FnIntSelf)vt[20])(self);  // *this+80 — render header
 
     Gfx::Color3f(1.0f, 1.0f, 1.0f);
     if (gFont.GetTextDC()) gFont.SelectFont(gFont.GetTextDC(), gFont.GetFont(FONT_BOLD));  // we don't have plain g_hFont; bold is closest
@@ -630,8 +631,8 @@ static int __fastcall ChatLB_handleScrollIn(DWORD* self)
     typedef int  (__fastcall *FnRow )(DWORD*, int, int);
     typedef int  (__fastcall *FnInt )(DWORD*);
     typedef int  (__fastcall *FnIntI)(DWORD*, int /*edx*/, int);
-    typedef void (__fastcall *FnVoid)(DWORD*);
-    typedef void (__fastcall *FnVoidI)(DWORD*, int /*edx*/, int);
+    typedef int (__fastcall *FnVoid)(DWORD*);
+    typedef int (__fastcall *FnVoidI)(DWORD*, int /*edx*/, int);
 
     void** vt = ChatWidget_GetVTable(self);
     int  v17 = 0;
@@ -1559,7 +1560,7 @@ static int __fastcall ChatLB_lineHover(DWORD* self, int, int row)
 // soft-stubbed.
 static int __fastcall ChatLB_perFrameInput(DWORD* self)
 {
-    typedef void (__fastcall *FnInt2)(DWORD*, int, int);
+    typedef int (__fastcall *FnInt2)(DWORD*, int, int);
     void** vt = ChatWidget_GetVTable(self);
 
     if (FUN_0040c490((int)self[11], (int)self[12] - (int)self[14],
@@ -1645,7 +1646,7 @@ static void __fastcall ChatLB_AddText(DWORD* self, int /*edx*/,
 {
     typedef int  (__fastcall *FnRow )(DWORD*, int, int);
     typedef int  (__fastcall *FnInt )(DWORD*);
-    typedef void (__fastcall *FnVoid)(DWORD*);
+    typedef int (__fastcall *FnVoid)(DWORD*);
 
     if (!src || !msg) return;
 
@@ -2060,7 +2061,7 @@ static void __fastcall GuildLB_AddMember(DWORD* self, int /*edx*/,
                                          const char* Source, char a3, char a4)
 {
     typedef int  (__fastcall *FnInt )(DWORD*);
-    typedef void (__fastcall *FnVoid)(DWORD*);
+    typedef int (__fastcall *FnVoid)(DWORD*);
     void** vt = ChatWidget_GetVTable(self);
 
     if (!Source || !*Source) return;
@@ -2126,11 +2127,12 @@ static void GuildLB_teardown(DWORD* self)
 }
 
 // slot 0 — IDA: sub_40EAC0 (0x0040EAC0) — dtor: sub_40EAE0 + delete si flag&1.
-static void* __fastcall GuildLB_dtor(DWORD* self, int /*edx*/, char flag)
+// Devuelve void como el slot 0 del chat (ChatLB_dtor): los llamadores son los
+// mismos y en wasm la firma de la llamada indirecta tiene que coincidir.
+static void __fastcall GuildLB_dtor(DWORD* self, int /*edx*/, char flag)
 {
     GuildLB_teardown(self);
     if (flag & 1) ChatWidget_Free(self);
-    return self;
 }
 
 // ── slot 29 — IDA: sub_4125F0 — deleting-dtor: sub_412610 + delete si flag&1.
