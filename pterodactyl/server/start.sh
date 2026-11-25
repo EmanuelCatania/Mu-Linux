@@ -63,6 +63,39 @@ MemScanCloses = true
 AcceptUnknownBuilds = true
 # Cada cuántos segundos se desafía la memoria del juego (5..300).
 ChallengeSeconds = 30
+
+# Avisos (los cuenta mu-guard en la base): una detección que cierra el juego
+# suma uno.  A los `limit` avisos dentro de `window_days` se banea.
+[warnings]
+limit = 3              # 0 = nunca banear
+window_days = 30
+codes = ["DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH"]
+
+[ban]
+account_days = 7       # 0 = permanente, -1 = no banear la cuenta
+machine_days = 7
+ip_hours = 24          # nunca IP privadas ni loopback
+exempt_accounts = []   # staff: se registran pero no se banean
+exempt_ips = []
+EOF
+fi
+# Avisos y bans (paso 5): un Guard.toml de antes no tiene las secciones.
+if ! grep -q '^\[warnings\]' "$guard_toml"; then
+  cat >> "$guard_toml" <<'EOF'
+
+# Avisos (los cuenta mu-guard en la base): una detección que cierra el juego
+# suma uno.  A los `limit` avisos dentro de `window_days` se banea.
+[warnings]
+limit = 3              # 0 = nunca banear
+window_days = 30
+codes = ["DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH"]
+
+[ban]
+account_days = 7       # 0 = permanente, -1 = no banear la cuenta
+machine_days = 7
+ip_hours = 24          # nunca IP privadas ni loopback
+exempt_accounts = []   # staff: se registran pero no se banean
+exempt_ips = []
 EOF
 fi
 guard_bool() { [ "${1:-0}" = "1" ] && echo true || echo false; }

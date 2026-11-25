@@ -104,6 +104,70 @@ El intervalo se ajusta con `ChallengeSeconds` (30 por defecto, de 5 a 300): más
 corto revisa todo el código antes y le cuesta más CPU a `mu-guard` (hashear
 512 KB por jugador en cada desafío).
 
+## Avisos y bans
+
+Cada detección que cierra el juego (y cada desafío de memoria fallado) suma un
+**aviso**: uno por arranque del guardián, aunque se detecte varias veces. Al
+llegar a `limit` avisos dentro de `window_days`, se banea:
+
+- **la cuenta**: con el bloqueo de siempre (`MEMB_INFO.bloc_code`), así que el
+  JoinServer lo levanta solo al vencer y el GameServer la rechaza con "cuenta
+  bloqueada";
+- **la máquina**: un hash de la PC que calcula el guardián (UUID del SMBIOS,
+  serie del disco del sistema y MAC en Windows; `machine-id` en Linux).
+  `mu-guard` lo guarda mezclado con una clave propia del server
+  (`Data/Guard/MachineSalt.key`), así no sirve para cruzar jugadores entre
+  servers. Una máquina baneada ve el banner "ACCESO BLOQUEADO" y el juego no
+  se abre;
+- **la IP** de ese último aviso, sólo junto con el ban de cuenta o de máquina.
+  Nunca se banean IP privadas, loopback ni CGNAT: detrás de un proxy o de
+  algunos Docker todos llegan con la misma. Una IP baneada no pasa el saludo y
+  tampoco entra sin ticket aunque no se exija.
+
+La cuenta cuenta sólo si la detección fue con la sesión iniciada (la informa el
+GameServer, nunca el cliente); la máquina, siempre. Cuando un ban vence, sus
+avisos anteriores dejan de contar. El banner rojo muestra qué aviso fue ("Aviso
+2 de 3") o hasta cuándo quedó bloqueado. Perder el contacto con el guardián
+desconecta pero **no** suma aviso: un corte de internet no banea a nadie.
+
+`Data/Guard/Guard.toml`:
+
+```toml
+[warnings]
+limit = 3              # 0 = nunca banear
+window_days = 30
+codes = ["DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH"]
+
+[ban]
+account_days = 7       # 0 = permanente, -1 = no banear la cuenta
+machine_days = 7
+ip_hours = 24
+exempt_accounts = []   # staff: se registran pero no se banean
+exempt_ips = []
+```
+
+Todo queda en la base, en dos tablas que crea `mu-guard` al arrancar:
+
+- `MuGuardWarning`: fecha, detección, detalle, cuenta, personaje, máquina, IP,
+  build, número de aviso y si se anuló (`voided`);
+- `MuGuardBan`: tipo (`account`, `machine`, `ip`), valor, motivo, vencimiento
+  (`NULL` = permanente) y si se levantó (`lifted`).
+
+Y en el log de `mu-guard`, una línea por aviso:
+
+```
+[MU-Guard] MEMSCAN cuenta=... pj=... ip=... maquina=... aviso=2/3 -> BANEADO
+```
+
+`mu-guard` se conecta con los datos de `JoinServer/JoinServer.ini` (junto a su
+ejecutable, o el de `MU_GUARD_DB_INI`); `DB_HOST`, `DB_PORT`, `DB_USER`,
+`DB_PASS` y `DB_NAME` los pisan. Sin base sigue funcionando: la detección
+cierra igual el juego y el aviso queda sólo en el log.
+
+Para levantar un ban a mano (hasta que esté el panel de `mu-web`): poner
+`lifted = 1` en `MuGuardBan` y, para la cuenta, `bloc_code = 0` en `MEMB_INFO`.
+`mu-guard` relee los bans cada 30 segundos.
+
 ## Activarlo
 
 ### Docker
@@ -138,6 +202,18 @@ Socket = ""   # vacío = Data/Guard/mu-guard.sock
 MemScanCloses = true
 AcceptUnknownBuilds = true
 ChallengeSeconds = 30
+
+[warnings]
+limit = 3
+window_days = 30
+codes = ["DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH"]
+
+[ban]
+account_days = 7
+machine_days = 7
+ip_hours = 24
+exempt_accounts = []
+exempt_ips = []
 ```
 
 El ConnectServer y el GameServer lo releen cuando cambia, sin reiniciar. Hay que
@@ -155,6 +231,10 @@ server se comporta como antes.
 - `mu-guard` y la verificación en el GameServer son sólo Linux (Docker y
   Pterodactyl).
 - La versión web no tiene guardián: con `MU_GUARD_REQUIRED=1` no puede entrar.
+- El hash de la máquina se puede falsificar: el ban de máquina le sube el costo
+  a quien vuelve, el firme es el de cuenta.
+- Quien mata al guardián antes de que llegue el reporte evita el aviso (pero no
+  sigue jugando).
 - Con administrador se saltea la DACL. Para eso están las detecciones y el
   desafío de memoria. Un programa que se haga pasar por el guardián tiene que
   contestar los desafíos con el código de un `main.exe` sin tocar: eso lo deja
