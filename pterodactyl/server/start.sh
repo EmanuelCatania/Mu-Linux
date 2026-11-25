@@ -71,7 +71,9 @@ ToolCloses = true
 [warnings]
 limit = 3              # 0 = nunca banear
 window_days = 30
-codes = ["DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH"]
+# MEMSCAN no suma por defecto: un antivirus que lee la memoria del juego
+# lo dispara igual que un editor, y no tiene que terminar en ban.
+codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH"]
 
 [ban]
 account_days = 7       # 0 = permanente, -1 = no banear la cuenta
@@ -106,8 +108,16 @@ windows = []
 [modules]
 # Parte del nombre de un módulo cargado en el juego: lo cierra (INJECT).
 block = []
-# Parte de la ruta de un módulo que no hace falta registrar (overlays).
-allow = ["obs-studio-hook", "discord", "gameoverlayrenderer"]
+# Parte de la ruta de un módulo que no hace falta registrar (overlays, antivirus).
+allow = [
+  "obs-studio-hook", "discord", "gameoverlayrenderer",
+  # Capa de Microsoft para OpenGL/Vulkan (tienda de Windows).
+  "microsoft.d3dmappinglayers",
+  # Antivirus que meten su DLL en los programas.
+  'windows defender', 'avast software', 'avg\antivirus', 'bitdefender', 'kaspersky lab',
+  '\eset\', 'malwarebytes', 'norton', 'mcafee', 'trend micro', 'sophos', 'panda security',
+  'f-secure', 'webroot', 'comodo', 'avira', '360total security', '360safe',
+]
 EOF
 fi
 if [ ! -f "$guard_dir/Messages.toml" ]; then
@@ -134,7 +144,9 @@ if ! grep -q '^\[warnings\]' "$guard_toml"; then
 [warnings]
 limit = 3              # 0 = nunca banear
 window_days = 30
-codes = ["DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH"]
+# MEMSCAN no suma por defecto: un antivirus que lee la memoria del juego
+# lo dispara igual que un editor, y no tiene que terminar en ban.
+codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH"]
 
 [ban]
 account_days = 7       # 0 = permanente, -1 = no banear la cuenta

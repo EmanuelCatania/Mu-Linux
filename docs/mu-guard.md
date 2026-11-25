@@ -60,8 +60,11 @@ desde afuera, porque el juego los cambia todo el tiempo. La defensa es que un
 editor no llegue a encontrarlos (`MEMSCAN` cierra el juego en su primer
 escaneo) y que esos valores los decida el server.
 
-Si un antivirus lee la memoria del juego puede dar `MEMSCAN` a un jugador
-limpio. Si pasa, en `Data/Guard/Guard.toml`:
+Un antivirus que lee la memoria del juego puede dar `MEMSCAN` a un jugador
+limpio. Por eso `MEMSCAN` cierra el juego pero **no suma aviso** salvo que se
+agregue a `[warnings] codes`: en el peor caso el antivirus le cierra el juego,
+nunca lo banea. Si en el log aparecen `MEMSCAN` de jugadores que no deberían, en
+`Data/Guard/Guard.toml`:
 
 ```toml
 MemScanCloses = false   # MEMSCAN sólo se registra
@@ -84,8 +87,16 @@ windows = []
 [modules]
 # Parte del nombre de un módulo cargado en el juego: lo cierra.
 block = []
-# Parte de la ruta de un módulo que no hace falta registrar (overlays).
-allow = ["obs-studio-hook", "discord", "gameoverlayrenderer"]
+# Parte de la ruta de un módulo que no hace falta registrar (overlays, antivirus).
+allow = [
+  "obs-studio-hook", "discord", "gameoverlayrenderer",
+  # Capa de Microsoft para OpenGL/Vulkan (tienda de Windows).
+  "microsoft.d3dmappinglayers",
+  # Antivirus que meten su DLL en los programas.
+  'windows defender', 'avast software', 'avg\antivirus', 'bitdefender', 'kaspersky lab',
+  '\eset\', 'malwarebytes', 'norton', 'mcafee', 'trend micro', 'sophos', 'panda security',
+  'f-secure', 'webroot', 'comodo', 'avira', '360total security', '360safe',
+]
 ```
 
 La lista de fábrica trae Cheat Engine, ArtMoney, x64dbg, OllyDbg, WPE Pro,
@@ -183,7 +194,7 @@ desconecta pero **no** suma aviso: un corte de internet no banea a nadie.
 [warnings]
 limit = 3              # 0 = nunca banear
 window_days = 30
-codes = ["DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH"]
+codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH"]
 
 [ban]
 account_days = 7       # 0 = permanente, -1 = no banear la cuenta
@@ -258,7 +269,7 @@ ToolCloses = true
 [warnings]
 limit = 3
 window_days = 30
-codes = ["DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH"]
+codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH"]
 
 [ban]
 account_days = 7

@@ -24,7 +24,8 @@ aplicalas con `sudo nft -f /etc/nftables.d/mu-linux.nft`.
 
 ```nft
 #!/usr/sbin/nft -f
-# Límites de conexión para el ConnectServer (44405) y el GameServer (55901).
+# Límites de conexión para el ConnectServer (44405), el GameServer (55901) y
+# mu-guard (28980).
 
 table inet mu_linux
 delete table inet mu_linux
@@ -32,7 +33,7 @@ delete table inet mu_linux
 table inet mu_linux {
 	set ports {
 		type inet_service
-		elements = { 44405, 55901 }
+		elements = { 44405, 55901, 28980 }
 	}
 
 	# Conexiones abiertas por IP (ct count necesita un set sin timeout).
@@ -80,6 +81,9 @@ Cuidado con los valores:
 - **5 conexiones nuevas por segundo, con ráfagas de 10.** Entrar al juego abre una
   conexión al ConnectServer y otra al GameServer, y cambiar de personaje o de
   server abre más. Eso entra con margen.
+- **mu-guard (28980).** Cada jugador abre una conexión mientras juega, y otra
+  corta para cada ticket. Además `mu-guard` corta solo a partir de 8 conexiones
+  por IP. Si cambiaste `MU_GUARD_PORT`, poné ese.
 - **Puertos.** Si en el compose publicaste el server en otros puertos del host
   (por ejemplo `"7000:55901"`), en la cadena `forward` el puerto ya es el del
   contenedor (55901), pero en `input` es el del host. Poné los dos en `ports`.
