@@ -992,6 +992,28 @@ namespace
 			}
 		}
 
+		// Juegos abiertos en esa máquina: los guardianes conectados con su hash,
+		// sin contar a este (puede ser una reconexión).
+		if (result == Ok && this->m_Settings.MaxPerMachine > 0)
+		{
+			const std::string id((const char*)payload.data() + 2 + HashSize, GuardianIdSize);
+
+			int open = 0;
+
+			for (const auto& entry : this->m_Guardians)
+			{
+				if (entry.first != id && entry.second.connections > 0 && entry.second.machine == machine)
+				{
+					open++;
+				}
+			}
+
+			if (open >= this->m_Settings.MaxPerMachine)
+			{
+				result = TooMany;
+			}
+		}
+
 		const std::uint8_t options = static_cast<std::uint8_t>((this->m_Settings.MemScanCloses ? MemScanCloses : 0) | (this->m_Settings.ToolCloses ? ToolCloses : 0));
 
 		std::uint8_t reply[HelloResultBannedSize] = { result, options };
@@ -1003,7 +1025,19 @@ namespace
 			PutLe64(reply + 3, (std::uint64_t)until);
 		}
 
-		this->Reply(c, HelloResult, reply, result == Banned ? sizeof(reply) : 2);
+		if (result == TooMany)
+		{
+			reply[2] = (std::uint8_t)this->m_Settings.MaxPerMachine;
+		}
+
+		this->Reply(c, HelloResult, reply, result == Banned ? sizeof(reply) : (result == TooMany ? HelloResultTooManySize : 2));
+
+		if (result == TooMany)
+		{
+			LogAdd(LOG_RED, "[MU-Guard] [%s] maquina=%s ya tiene %d juegos abiertos: no se abre otro", c.ip.c_str(), machine.c_str(), this->m_Settings.MaxPerMachine);
+
+			return;
+		}
 
 		if (result == BadVersion)
 		{

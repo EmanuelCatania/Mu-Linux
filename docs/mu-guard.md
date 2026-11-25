@@ -271,6 +271,7 @@ MemScanCloses = true
 AcceptUnknownBuilds = true
 ChallengeSeconds = 30
 ToolCloses = true
+MaxPerMachine = 0   # juegos abiertos a la vez en una misma PC (0 = sin límite)
 
 [warnings]
 limit = 3

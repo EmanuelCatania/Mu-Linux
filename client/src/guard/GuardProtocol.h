@@ -117,6 +117,7 @@ enum Result : std::uint8_t
 	NotReady = 2,     // falta el saludo, o mu-guard no pudo armar el ticket
 	UnknownBuild = 3, // el ejecutable no está entre los builds aceptados (Data/Guard/Builds)
 	Banned = 4,       // la máquina o la IP están baneadas
+	TooMany = 5,      // ya hay MaxPerMachine juegos abiertos en esa máquina
 };
 
 // Qué quedó baneado (HelloResult y Notice).  "Hasta" en segundos Unix; 0 =
@@ -180,6 +181,7 @@ constexpr std::size_t MaxDetail = 512;
 // Largos de los datos de cada mensaje.
 constexpr std::size_t HelloSize = 2 + HashSize + GuardianIdSize + MachineSize;
 constexpr std::size_t HelloResultBannedSize = 2 + 1 + 8;
+constexpr std::size_t HelloResultTooManySize = 2 + 1;   // | el máximo (1)
 constexpr std::size_t NoticeSize = 1 + 1 + 1 + 8;
 constexpr std::size_t IdentifySize = TicketIdSize + AccountSize + AccountSize;
 constexpr std::size_t ChallengeAnswerSize = 4 + 8 + HashSize;

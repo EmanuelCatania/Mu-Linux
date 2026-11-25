@@ -34,6 +34,8 @@
 //
 //   ToolCloses = true       # una herramienta de Lists.toml abierta cierra el
 //                           # juego (false: sólo se registra)
+//   MaxPerMachine = 0       # juegos abiertos a la vez en una misma PC (0 = sin
+//                           # límite); el que se pasa no se abre
 //
 // Lists.toml y Messages.toml (paso 5c) los lee sólo mu-guard (ReadGuardRules).
 //
@@ -53,6 +55,7 @@ struct GuardSettings
 	bool MemScanCloses = true;
 	bool AcceptUnknownBuilds = true;
 	bool ToolCloses = true;
+	int MaxPerMachine = 0;   // 0 = sin límite
 	int ChallengeSeconds = 30;
 
 	// [warnings]
