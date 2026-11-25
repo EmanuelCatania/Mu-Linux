@@ -545,13 +545,16 @@ void Serve(int in, int out, GuardConnection& guard)
 	}
 }
 
-// Qué se detectó, para el banner (el detalle técnico va al server).
-std::string ThreatName(const Guard::Finding& finding, int language)
+// Qué se detectó, para el banner (el detalle técnico va al server).  El server
+// puede cambiar cada nombre (Data/Guard/Messages.toml).
+std::string ThreatName(const Guard::Detector& detector, const Guard::Finding& finding, int language)
 {
-	static const char* const kNames[3][4] = {
-		{ "un depurador", "un editor de memoria", "Cheat Engine", "el juego modificado" },
-		{ "A debugger", "A memory editor", "Cheat Engine", "A modified game" },
-		{ "Um depurador", "Um editor de mem\xC3\xB3ria", "Cheat Engine", "O jogo modificado" },
+	const std::string custom = detector.Name(finding.code, language);
+	if (!custom.empty()) return custom;
+	static const char* const kNames[3][5] = {
+		{ "un depurador", "un editor de memoria", "Cheat Engine", "el juego modificado", "una herramienta prohibida" },
+		{ "A debugger", "A memory editor", "Cheat Engine", "A modified game", "A forbidden tool" },
+		{ "Um depurador", "Um editor de mem\xC3\xB3ria", "Cheat Engine", "O jogo modificado", "Uma ferramenta proibida" },
 	};
 	const int lang = (language >= 0 && language < 3) ? language : 0;
 	switch (finding.code)
@@ -560,6 +563,7 @@ std::string ThreatName(const Guard::Finding& finding, int language)
 	case GuardProto::MemEdit:
 	case GuardProto::MemScan: return kNames[lang][1];
 	case GuardProto::Patch: return kNames[lang][3];
+	case GuardProto::Tool: return kNames[lang][4];
 	default: return kNames[lang][2];
 	}
 }
@@ -652,7 +656,11 @@ bool Watch(Guard::Detector& detector, GuardConnection& guard, Vigil& vigil, Guar
 	guard.Poll(pushes);
 	for (const Push& push : pushes)
 	{
-		if (push.type == GuardProto::Challenge)
+		if (push.type == GuardProto::Rules && !push.payload.empty())
+		{
+			detector.Rule(push.payload[0], std::string(push.payload.begin() + 1, push.payload.end()));
+		}
+		else if (push.type == GuardProto::Challenge)
 		{
 			vigil.pending = true;
 			vigil.challenge = push.payload;
@@ -1054,6 +1062,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	// páginas señuelo quedan puestas antes de que corra.
 	Guard::Detector detector;
 	detector.SetMemScanCloses((guard.Options() & GuardProto::MemScanCloses) != 0);
+	detector.SetToolCloses((guard.Options() & GuardProto::ToolCloses) != 0);
 	detector.Attach(pi.hProcess, pi.hThread, pi.dwProcessId, gameDir);
 	Vigil vigil;
 	ResumeThread(pi.hThread);
@@ -1091,7 +1100,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 		GuardNotice notice;
 		if (guard.AwaitNotice(notice, 2000))
 			Log("MU-Guard: aviso %d de %d (baneado %u)", notice.number, notice.limit, static_cast<unsigned>(notice.banned));
-		banner.Threat(language, ThreatName(closing, language), NoticeText(notice, language));
+		banner.Threat(language, ThreatName(detector, closing, language), NoticeText(notice, language));
 		code = 1;
 	}
 	// El juego terminó.  No se espera el fin del pipe: otro proceso que el juego
@@ -1143,6 +1152,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	std::thread server([&]() { Serve(pair[0], pair[0], guard); });
 	Guard::Detector detector;
 	detector.SetMemScanCloses((guard.Options() & GuardProto::MemScanCloses) != 0);
+	detector.SetToolCloses((guard.Options() & GuardProto::ToolCloses) != 0);
 	detector.Attach(nullptr, nullptr, static_cast<unsigned long>(pid), gameDir);
 	Vigil vigil;
 	banner.Wait([]() { return true; }, 1200);
@@ -1179,7 +1189,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 		GuardNotice notice;
 		if (guard.AwaitNotice(notice, 2000))
 			Log("MU-Guard: aviso %d de %d (baneado %u)", notice.number, notice.limit, static_cast<unsigned>(notice.banned));
-		banner.Threat(language, ThreatName(closing, language), NoticeText(notice, language));
+		banner.Threat(language, ThreatName(detector, closing, language), NoticeText(notice, language));
 		code = 1;
 	}
 	Log("MU-Guard: el juego termino (%d)", code);

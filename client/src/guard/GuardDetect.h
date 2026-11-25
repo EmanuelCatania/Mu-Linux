@@ -17,9 +17,13 @@
 //             juego (Windows).  Lo decide el server (Guard.toml MemScanCloses,
 //             encendido por defecto): si un antivirus da falsos positivos, se
 //             apaga y sólo se registra.
-// Lo que sólo se reporta, hasta tener las listas del server (paso 5):
+//   TOOL      una herramienta de las listas del server abierta (procesos o
+//             ventanas, Data/Guard/Lists.toml); lo decide el server
+//             (Guard.toml ToolCloses, encendido por defecto)
+//   INJECT    un módulo de la lista de bloqueados del server
+// Lo que sólo se reporta:
 //   INJECT    otros módulos fuera del juego y del sistema (overlays de Discord,
-//             Steam, OBS... son legítimos)
+//             Steam, OBS... son legítimos), salvo los de la lista de permitidos
 
 #include <cstdint>
 #include <string>
@@ -49,6 +53,18 @@ public:
 
 	// Si MEMSCAN cierra el juego (lo dice el server en el saludo).
 	void SetMemScanCloses(bool closes);
+
+	// Si TOOL cierra el juego (también del saludo).
+	void SetToolCloses(bool closes);
+
+	// Una entrada de las listas del server (GuardProto::RuleKind; RuleReset
+	// las borra).
+	void Rule(std::uint8_t kind, const std::string& text);
+
+	// Nombre de una detección para el banner según Messages.toml del server;
+	// vacío si el server no lo cambió.  language: 0 castellano, 1 inglés, 2
+	// portugués.
+	std::string Name(std::uint8_t code, int language) const;
 
 	// Una pasada.  Lo nuevo desde la anterior va a `found` (un módulo o una
 	// página ya reportados no se repiten).
