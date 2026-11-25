@@ -5,6 +5,14 @@ set(MINIAUDIO_NO_EXTRA_NODES ON CACHE BOOL "" FORCE)
 FetchContent_Declare(mu_miniaudio
     URL https://github.com/mackron/miniaudio/archive/9634bedb5b5a2ca38c1ee7108a9358a4e233f14d.tar.gz)
 FetchContent_MakeAvailable(mu_miniaudio)
+if(EMSCRIPTEN)
+    # Navegador: el audio corre en un AudioWorklet, fuera del hilo del juego y
+    # con bloques de 128 muestras.  Sin esto miniaudio usa ScriptProcessorNode,
+    # que corre en el hilo principal con búferes de 1024 y el sonido llegaba
+    # tarde.  Lo necesitan la biblioteca y quien incluye miniaudio.h (cambia
+    # la estructura del dispositivo).
+    target_compile_definitions(miniaudio PUBLIC MA_ENABLE_AUDIO_WORKLETS)
+endif()
 # SDL enlaza la biblioteca miniaudio; Win32 conserva la implementación de CSound.
 set(MU_MINIAUDIO_INCLUDE_DIR "${mu_miniaudio_SOURCE_DIR}")
 

@@ -2,6 +2,10 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/threading.h>
+#include <emscripten/em_asm.h>
+#include <sys/stat.h>
+#include <chrono>
+#include <thread>
 
 // Module.muPending (lo arma la página): ruta absoluta en el FS -> URL.  Lo que
 // ya se bajó sale del mapa; Module.muFetch lo baja.  Un archivo que falla queda vacío y se reintenta la
@@ -27,8 +31,22 @@ EM_ASYNC_JS(int, mu_web_fetch, (const char* rawPath), {
 
 namespace Platform::WebFiles {
 bool Ensure(const std::string& path) {
-    if (path.empty() || !emscripten_is_main_runtime_thread()) return true;
-    return mu_web_fetch(path.c_str()) != 0;
+    if (path.empty()) return true;
+    if (emscripten_is_main_runtime_thread()) return mu_web_fetch(path.c_str()) != 0;
+    // Un hilo (las texturas HD se leen en hilos) no puede esperar una promesa:
+    // le pide la bajada al hilo principal, que la atiende entre cuadros, y
+    // espera a que el archivo tenga contenido.  Un archivo perezoso nace vacío
+    // y sólo se escribe completo.
+    const int started = MAIN_THREAD_EM_ASM_INT({
+        return Module.muFetchStart ? Module.muFetchStart(UTF8ToString($0)) : 0;
+    }, path.c_str());
+    if (!started) return true;
+    for (int i = 0; i < 600; ++i) {   // hasta 30 s
+        struct stat st;
+        if (stat(path.c_str(), &st) == 0 && st.st_size > 0) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return false;
 }
 }
 #endif

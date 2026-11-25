@@ -7,8 +7,7 @@
 // hay que llamar a Ensure: si todavía no se bajó, lo baja (el juego espera, con
 // ASYNCIFY) y lo escribe en su lugar.  Fuera del navegador no hace nada.
 //
-// Sólo desde el hilo principal: los hilos del wasm no ven el sistema de
-// archivos de la página.
+// Desde un hilo, le pide la bajada al hilo principal y espera el contenido.
 namespace Platform::WebFiles {
 #ifdef __EMSCRIPTEN__
 bool Ensure(const std::string& path);

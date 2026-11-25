@@ -607,7 +607,12 @@ bool COptionsMenu::UpdateAdvanced()
     return true;
 }
 
-#ifdef MU_RENDER_WEBGPU
+// En el navegador el render es siempre WebGPU (el navegador elige Vulkan,
+// D3D o Metal por debajo): no hay backend que elegir.
+#if defined(MU_RENDER_WEBGPU) && !defined(__EMSCRIPTEN__)
+#define MU_BACKEND_SELECTOR 1
+#endif
+#ifdef MU_BACKEND_SELECTOR
 namespace {
 // Siguiente backend disponible en la dirección `step` (+1/-1); -1 si no hay.
 int NextRenderBackend(int from, int step)
@@ -627,7 +632,7 @@ void COptionsMenu::RenderGraphics()
     int row = 0;
     char text[96];
     RenderButton((float)RowY(row++), gClientText.Get(ClientTextId::OptionsGraphics), true);
-#ifdef MU_RENDER_WEBGPU
+#ifdef MU_BACKEND_SELECTOR
     // Backend de render (OpenGL o WebGPU sobre D3D12/D3D11/Vulkan).
     const auto backend = gUserSettings.GetRenderBackend();
     Platform::TextFormatSecure(text, gClientText.Get(ClientTextId::RenderBackend), CUserSettings::RenderBackendName(backend));
@@ -711,7 +716,7 @@ bool COptionsMenu::UpdateGraphics()
 {
     int row = 1;
     bool clicked;
-#ifdef MU_RENDER_WEBGPU
+#ifdef MU_BACKEND_SELECTOR
     const int backend = static_cast<int>(gUserSettings.GetRenderBackend());
     const int backendStep = UpdateSelector(RowY(row++), NextRenderBackend(backend, -1) >= 0, NextRenderBackend(backend, 1) >= 0);
     if (backendStep != INT_MIN) {

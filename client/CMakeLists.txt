@@ -828,6 +828,7 @@ elseif(EMSCRIPTEN)
     endif()
     target_link_options(mu97k PRIVATE
         -pthread
+        -sAUDIO_WORKLET=1 -sWASM_WORKERS=1
         -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=268435456 -sMAXIMUM_MEMORY=4294967296
         -sSTACK_SIZE=8388608
         -sPTHREAD_POOL_SIZE=8
