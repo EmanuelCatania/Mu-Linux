@@ -22,6 +22,12 @@
 #include "assets/text/ClientText.h"
 #include "platform/IWindow.h"
 #include "net/Protocol/ProtocolVersion.h"
+#ifdef MU_GUARD
+#include "guard/Guardian.h"
+#include "guard/GuardProtocol.h"
+#include "net/NetChannel.h"
+#include "net/Network.h"
+#endif
 
 // IDA: FUN_00433A80 ReceiveGGAuth. Pertenece al flujo de protocolo/autenticación,
 // no a Party: un 0x73 sin cifrar solicita la respuesta cifrada F1/03/00/F1,
@@ -347,6 +353,35 @@ void Recv_BackToConnecting(void)
     LoginSubState = 1;
 }
 
+#ifdef MU_GUARD
+// F1:07: estado de mu-guard que manda el GameServer cada 5 s (diseño 4c).  No
+// cambia nada de lo que vigila el guardián: sólo se registra, y si la sesión
+// entró con mu-guard caído se manda un ticket nuevo (F1:08) para no quedar
+// desconectado cuando vuelve.
+static void Recv_GuardStatus(const BYTE* Msg, int Size)
+{
+    if (Size < (int)GuardProto::GameStatusSize) return;
+    static int s_State = -1;
+    static std::uint32_t s_Revalidated = 0xFFFFFFFFu;
+    const int state = Msg[4];
+    const std::uint32_t epoch = GuardProto::GetLe32(Msg + 6);
+    if (state != s_State) {
+        if (s_State != -1 || state != GuardProto::GuardUp)
+            NetLog("MU-Guard: el GameServer informa mu-guard %s", state == GuardProto::GuardUp ? "ARRIBA" : "CAIDO");
+        s_State = state;
+    }
+    if (!(Msg[5] & GuardProto::NeedTicket) || epoch == s_Revalidated || !Guardian::IsGameRole()) return;
+    s_Revalidated = epoch;
+    BYTE pkt[GuardProto::GameRevalidateSize] = { 0xC1, (BYTE)GuardProto::GameRevalidateSize, 0xF1, GuardProto::GameRevalidateSub };
+    if (!Guardian::FetchTicket(NetChannel::TranscriptHash(), pkt + 4, pkt + 4 + GuardProto::TicketIdSize)) {
+        NetLog("MU-Guard: el GameServer pide validar la sesion y no hay ticket del guardian");
+        return;
+    }
+    NetLog("MU-Guard: se valida la sesion con un ticket nuevo");
+    gNetwork.Send(pkt, sizeof(pkt));
+}
+#endif
+
 // 0xF1
 void NetRecv_F1(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
 {
@@ -364,6 +399,11 @@ void NetRecv_F1(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
             NetLog("NET:  → F1/02 LogOut sub=%02X", Msg[4]);
             Recv_LogOut(Msg);
             break;
+#ifdef MU_GUARD
+        case GuardProto::GameStatusSub:
+            Recv_GuardStatus(Msg, Size);
+            break;
+#endif
         default:
             NetLog("NET:  → F1/%02X unhandled", sub);
             break;

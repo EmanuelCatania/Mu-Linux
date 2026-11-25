@@ -169,6 +169,8 @@ void CALLBACK QueueTimerCallback(PVOID lpParameter, BOOLEAN TimerOrWaitFired)
 
 #if defined(MU_GUARD) && !defined(_WIN32)
 			gGuardLink.ProcessKicks();
+
+			gGuardLink.Tick();
 #endif
 
 			break;

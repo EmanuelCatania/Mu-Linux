@@ -241,4 +241,32 @@ inline std::uint64_t GetLe64(const std::uint8_t* p)
 // bytes de los rangos, en orden).
 constexpr char ChallengeContext[] = "MuChallenge1";
 
+// ── GameServer <-> juego ────────────────────────────────────────────────────
+// Van por la conexión del juego con el GameServer, dentro de su canal cifrado
+// (diseño 4c).  No pasan por mu-guard.
+//
+// Estado (GS -> juego, cada 5 s, siempre del mismo tamaño):
+//   C1 10 F1 07 | estado(1) | banderas(1) | época(4 LE) | relleno(6)
+// Revalidar (juego -> GS, cuando la bandera NeedTicket lo pide):
+//   C1 34 F1 08 | ticket(16) | mac(32)
+constexpr std::uint8_t GameStatusSub = 0x07;
+constexpr std::uint8_t GameRevalidateSub = 0x08;
+constexpr std::size_t GameStatusSize = 16;
+constexpr std::size_t GameRevalidateSize = 4 + TicketIdSize + MacSize;
+
+enum GameGuardState : std::uint8_t
+{
+	GuardUp = 0,     // mu-guard contesta
+	GuardDown = 1,   // mu-guard caído: se juega sin validar
+};
+
+enum GameStatusFlag : std::uint8_t
+{
+	NeedTicket = 0x01,   // esta sesión entró sin validar: mandar un ticket nuevo
+};
+
+// Segundos que tiene una sesión que entró con mu-guard caído para presentar un
+// ticket cuando vuelve.  Después se la desconecta.
+constexpr int RevalidateSeconds = 60;
+
 } // namespace GuardProto

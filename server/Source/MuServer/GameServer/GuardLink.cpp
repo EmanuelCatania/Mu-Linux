@@ -5,6 +5,7 @@
 
 #include "GuardConfig.h"
 #include "GuardProtocol.h"
+#include "SecureLink.h"
 #include "User.h"
 #include "Util.h"
 
@@ -29,6 +30,7 @@ namespace
 	constexpr int kStartupSeconds = 10;
 	constexpr int kVerifyTimeoutMs = 300;
 	constexpr std::size_t kMaxSessions = 20000;
+	constexpr int kStatusSeconds = 5;
 
 	// Socket local conectado y con plazo de lectura/escritura; -1 si no se pudo.
 	int ConnectLocal(const std::string& path, int timeoutMs)
@@ -239,6 +241,11 @@ void CGuardLink::Run()
 			{
 				LogAdd(LOG_BLUE, "[MU-Guard] mu-guard ARRIBA");
 
+				if (this->m_State == Down)
+				{
+					this->m_Epoch++;
+				}
+
 				this->m_State = Up;
 			}
 		}
@@ -404,6 +411,8 @@ void CGuardLink::Identify(int aIndex)
 
 void CGuardLink::Unbind(int aIndex)
 {
+	this->m_Pending.erase(aIndex);
+
 	std::lock_guard<std::mutex> lock(this->m_Lock);
 
 	auto bound = this->m_Bound.find(aIndex);
@@ -416,6 +425,138 @@ void CGuardLink::Unbind(int aIndex)
 	this->m_Sessions.erase(bound->second);
 
 	this->m_Bound.erase(bound);
+}
+
+void CGuardLink::MarkPending(int aIndex)
+{
+	if (OBJECT_USER_RANGE(aIndex))
+	{
+		this->m_Pending[aIndex] = { (std::uint64_t)gObj[aIndex].Socket, false, {} };
+	}
+}
+
+void CGuardLink::Revalidate(int aIndex, const std::uint8_t* ticket, const std::uint8_t* mac)
+{
+	auto it = this->m_Pending.find(aIndex);
+
+	// Sólo la pide una sesión que entró sin validar, y una sola vez.
+	if (it == this->m_Pending.end() || !it->second.Armed)
+	{
+		return;
+	}
+
+	this->m_Pending.erase(it);
+
+	const LPOBJ lpObj = &gObj[aIndex];
+
+	const std::uint8_t* transcript = gSecureLink.Transcript(aIndex);
+
+	const int result = transcript != nullptr ? this->Verify(lpObj->IpAddr, ticket, mac, transcript) : -1;
+
+	if (result == GuardProto::Valid)
+	{
+		this->Bind(ticket, aIndex);
+
+		this->Identify(aIndex);
+
+		LogAdd(LOG_BLUE, "[MU-Guard] [%s][%s] Sesion validada al volver mu-guard", lpObj->IpAddr, lpObj->Account);
+
+		return;
+	}
+
+	LogAdd(LOG_RED, "[MU-Guard] [%s][%s] Desconectado: ticket invalido al volver mu-guard (%d)", lpObj->IpAddr, lpObj->Account, result);
+
+	CloseClient(aIndex);
+}
+
+void CGuardLink::Tick()
+{
+	const GuardSettings settings = ReadGuardSettings(this->m_Data);
+
+	if (!settings.Enabled)
+	{
+		this->m_Pending.clear();
+
+		return;
+	}
+
+	const auto now = Clock::now();
+
+	const bool up = this->m_State == Up;
+
+	bool armed = false;
+
+	for (auto it = this->m_Pending.begin(); it != this->m_Pending.end();)
+	{
+		if (!SameConnection(it->first, it->second.Socket) || !settings.Required)
+		{
+			it = this->m_Pending.erase(it);
+
+			continue;
+		}
+
+		PendingSession& pending = it->second;
+
+		if (!up)
+		{
+			// Se volvió a caer: el plazo arranca de nuevo cuando vuelva.
+			pending.Armed = false;
+		}
+		else if (!pending.Armed)
+		{
+			pending.Armed = true;
+
+			pending.Deadline = now + std::chrono::seconds(GuardProto::RevalidateSeconds);
+
+			armed = true;
+		}
+		else if (now >= pending.Deadline)
+		{
+			const LPOBJ lpObj = &gObj[it->first];
+
+			LogAdd(LOG_RED, "[MU-Guard] [%s][%s] Desconectado: no valido en %d s al volver mu-guard", lpObj->IpAddr, lpObj->Account, GuardProto::RevalidateSeconds);
+
+			const int index = it->first;
+
+			it = this->m_Pending.erase(it);
+
+			CloseClient(index);
+
+			continue;
+		}
+
+		++it;
+	}
+
+	// El estado va cada 5 s, y enseguida si alguien tiene que mandar un ticket.
+	if (!armed && now - this->m_LastStatus < std::chrono::seconds(kStatusSeconds))
+	{
+		return;
+	}
+
+	this->m_LastStatus = now;
+
+	const std::uint32_t epoch = this->m_Epoch;
+
+	for (int n = OBJECT_START_USER; n < MAX_OBJECT; n++)
+	{
+		if (gObj[n].Connected < OBJECT_LOGGED || gSecureLink.Transcript(n) == nullptr)
+		{
+			continue;
+		}
+
+		std::uint8_t packet[GuardProto::GameStatusSize] = { 0xC1, (std::uint8_t)GuardProto::GameStatusSize, 0xF1, GuardProto::GameStatusSub };
+
+		packet[4] = up ? GuardProto::GuardUp : GuardProto::GuardDown;
+
+		auto pending = this->m_Pending.find(n);
+
+		packet[5] = (pending != this->m_Pending.end() && pending->second.Armed) ? GuardProto::NeedTicket : 0;
+
+		GuardProto::PutLe32(packet + 6, epoch);
+
+		DataSend(n, packet, sizeof(packet));
+	}
 }
 
 void CGuardLink::ProcessKicks()
@@ -478,11 +619,12 @@ GuardLogin CGuardLink::CheckLogin(const char* ip, const std::uint8_t* ticket, co
 	}
 
 	// Caído (lo decide este GameServer, no el cliente): se entra sin validar.
+	// Si se exige el ticket, la sesión valida cuando vuelve (Tick).
 	if (this->m_State == Down)
 	{
 		LogAdd(LOG_RED, "[MU-Guard] [%s] Login sin validar: mu-guard caido", ip);
 
-		return GuardLogin::Unvalidated;
+		return settings.Required ? GuardLogin::Pending : GuardLogin::Unvalidated;
 	}
 
 	int result = -1;
