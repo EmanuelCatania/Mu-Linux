@@ -20,11 +20,24 @@
 //                           # (5..300; más corto revisa todo el código antes
 //                           # y le cuesta más CPU a mu-guard)
 //
+//   [warnings]              # avisos (sólo los lee mu-guard)
+//   limit = 3               # avisos para banear; 0 = nunca banear
+//   window_days = 30        # los avisos más viejos no cuentan
+//   codes = ["DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH"]
+//
+//   [ban]
+//   account_days = 7        # 0 = permanente, -1 = no banear la cuenta
+//   machine_days = 7        # igual, para la máquina
+//   ip_hours = 24           # igual, en horas; nunca IP privadas ni loopback
+//   exempt_accounts = []    # se registran pero no se banean (staff)
+//   exempt_ips = []
+//
 // Sin el archivo MU-Guard queda apagado: Data/ es un volumen y las
 // instalaciones anteriores no lo tienen (lo crea el entrypoint).
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 struct GuardSettings
 {
@@ -35,7 +48,22 @@ struct GuardSettings
 	bool MemScanCloses = true;
 	bool AcceptUnknownBuilds = true;
 	int ChallengeSeconds = 30;
+
+	// [warnings]
+	int WarningLimit = 3;
+	int WarningWindowDays = 30;
+	std::uint32_t WarningCodes = 0;   // bit (1 << GuardProto::Detection); se llena al leer
+
+	// [ban]
+	int BanAccountDays = 7;
+	int BanMachineDays = 7;
+	int BanIpHours = 24;
+	std::vector<std::string> ExemptAccounts;   // en minúsculas
+	std::vector<std::string> ExemptIps;
 };
+
+// Nombre de una detección (GuardProto::Detection), o "?".
+const char* GuardDetectionName(int code);
 
 // dataPath: la carpeta Data con la barra final (GetDataPath()).
 GuardSettings ReadGuardSettings(const std::string& dataPath);

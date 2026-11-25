@@ -11,6 +11,7 @@
 #include "GoldenArcherBingo.h"
 #include "GameMain.h"
 #include "Guild.h"
+#include "GuardLink.h"
 #include "InvasionManager.h"
 #include "ItemBagManager.h"
 #include "ItemStack.h"
@@ -686,6 +687,10 @@ void DGCharacterInfoRecv(SDHP_CHARACTER_INFO_RECV* lpMsg)
 
 		return;
 	}
+
+#if defined(MU_GUARD) && !defined(_WIN32)
+	gGuardLink.Identify(lpMsg->index);
+#endif
 
 	LPOBJ lpObj = &gObj[lpMsg->index];
 

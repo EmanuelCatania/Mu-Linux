@@ -6,6 +6,8 @@
 #define TOML_EXCEPTIONS 0
 #include "tomlplusplus/toml.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <mutex>
 
@@ -16,6 +18,53 @@ namespace
 	std::filesystem::file_time_type s_Time;
 	bool s_Exists = false;
 	GuardSettings s_Settings;
+
+	const char* const kDetectionNames[] = { "?", "DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH", "FILES", "TOOL" };
+
+	constexpr int kDetections = (int)(sizeof(kDetectionNames) / sizeof(kDetectionNames[0]));
+
+	std::uint32_t DefaultWarningCodes()
+	{
+		return (1u << 1) | (1u << 2) | (1u << 3) | (1u << 4) | (1u << 5);
+	}
+
+	int ClampInt(std::int64_t value, int low, int high)
+	{
+		return (int)(value < low ? low : (value > high ? high : value));
+	}
+
+	std::vector<std::string> Strings(const toml::node_view<const toml::node>& node, bool lower)
+	{
+		std::vector<std::string> out;
+
+		if (const toml::array* list = node.as_array())
+		{
+			for (const toml::node& item : *list)
+			{
+				if (auto text = item.value<std::string>())
+				{
+					std::string value = *text;
+
+					if (lower)
+					{
+						std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+					}
+
+					if (!value.empty())
+					{
+						out.push_back(value);
+					}
+				}
+			}
+		}
+
+		return out;
+	}
+}
+
+const char* GuardDetectionName(int code)
+{
+	return (code > 0 && code < kDetections) ? kDetectionNames[code] : kDetectionNames[0];
 }
 
 GuardSettings ReadGuardSettings(const std::string& dataPath)
@@ -40,6 +89,7 @@ GuardSettings ReadGuardSettings(const std::string& dataPath)
 
 	GuardSettings settings;
 	settings.Socket = folder + "mu-guard.sock";
+	settings.WarningCodes = DefaultWarningCodes();
 
 	if (exists)
 	{
@@ -72,6 +122,44 @@ GuardSettings ReadGuardSettings(const std::string& dataPath)
 			{
 				settings.Socket = socket;
 			}
+
+			const toml::node_view<const toml::node> warnings = table["warnings"];
+
+			settings.WarningLimit = ClampInt(warnings["limit"].value_or(std::int64_t(3)), 0, 1000);
+
+			settings.WarningWindowDays = ClampInt(warnings["window_days"].value_or(std::int64_t(30)), 1, 3650);
+
+			if (warnings["codes"].as_array() != nullptr)
+			{
+				settings.WarningCodes = 0;
+
+				for (const std::string& name : Strings(warnings["codes"], false))
+				{
+					for (int code = 1; code < kDetections; code++)
+					{
+						std::string upper = name;
+
+						std::transform(upper.begin(), upper.end(), upper.begin(), [](unsigned char c) { return (char)std::toupper(c); });
+
+						if (upper == kDetectionNames[code])
+						{
+							settings.WarningCodes |= 1u << code;
+						}
+					}
+				}
+			}
+
+			const toml::node_view<const toml::node> ban = table["ban"];
+
+			settings.BanAccountDays = ClampInt(ban["account_days"].value_or(std::int64_t(7)), -1, 36500);
+
+			settings.BanMachineDays = ClampInt(ban["machine_days"].value_or(std::int64_t(7)), -1, 36500);
+
+			settings.BanIpHours = ClampInt(ban["ip_hours"].value_or(std::int64_t(24)), -1, 876000);
+
+			settings.ExemptAccounts = Strings(ban["exempt_accounts"], true);
+
+			settings.ExemptIps = Strings(ban["exempt_ips"], false);
 		}
 	}
 

@@ -13,6 +13,11 @@
 //   guardián falló el desafío de memoria o desapareció).  Se aplican en el hilo
 //   del juego (QUEUE_TIMER_CLOSE), sólo si la conexión sigue siendo la que entró
 //   con ese ticket.
+// - Cuando la cuenta entra y cuando elige personaje, se le cuenta a mu-guard
+//   quién entró con cada ticket (para los avisos).  Va por el hilo del latido:
+//   el del juego no espera.
+// - Un login sin ticket también se le consulta, sólo por la IP: una IP baneada
+//   no entra aunque no se exija el ticket.
 //
 // Sin MU_GUARD (o en Windows) todo esto no existe y el login es el de siempre.
 
@@ -22,7 +27,8 @@ enum class GuardLogin
 {
 	Accept,        // ticket válido, o MU-Guard apagado
 	Unvalidated,   // entra sin validar: mu-guard caído, o no se exige el ticket
-	Reject         // se exige y el ticket no es válido (o no vino)
+	Reject,        // se exige y el ticket no es válido (o no vino)
+	Banned         // la IP está baneada por MU-Guard (aunque no se exija el ticket)
 };
 
 #if defined(MU_GUARD) && !defined(_WIN32)
@@ -52,6 +58,10 @@ public:
 
 	// La conexión se cerró (gObjDel): su ticket ya no la identifica.
 	void Unbind(int aIndex);
+
+	// La cuenta (y el personaje, si ya eligió) de esa conexión, para mu-guard.
+	// Hilo del juego; lo manda el hilo del latido.
+	void Identify(int aIndex);
 
 	// Desconecta a los jugadores que pidió mu-guard.  Hilo del juego.
 	void ProcessKicks();
@@ -83,6 +93,8 @@ private:
 	std::mutex m_Lock;   // m_Kicks (latido), m_Sessions y m_Bound
 
 	std::vector<std::string> m_Kicks;
+
+	std::vector<std::vector<std::uint8_t>> m_Identities;   // mensajes Identify pendientes
 
 	std::map<std::string, Session> m_Sessions;   // id del ticket
 

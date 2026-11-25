@@ -27,6 +27,13 @@
 //      (SecureChannel::TranscriptHash);
 //   4. el GameServer le pasa a mu-guard el id, el MAC, el hash del saludo de esa
 //      conexión y la IP (Verify).  Un MAC calculado en otra conexión no verifica.
+//
+// Avisos y bans (paso 5): el guardián manda en el saludo el hash de su máquina
+// (MachineContext); mu-guard lo guarda con una sal propia del server.  El
+// GameServer le cuenta qué cuenta y qué personaje entraron con cada ticket
+// (Identify).  Una detección que cierra el juego suma un aviso (uno por
+// guardián); a los X avisos se banea cuenta, máquina e IP.  Notice le dice al
+// guardián qué aviso fue, para el banner.
 
 #include <cstddef>
 #include <cstdint>
@@ -35,7 +42,7 @@
 
 namespace GuardProto {
 
-constexpr std::uint16_t Version = 3;   // 2: Report; 3: desafío de memoria
+constexpr std::uint16_t Version = 4;   // 2: Report; 3: desafío de memoria; 4: avisos y bans
 
 constexpr std::uint16_t DefaultPort = 28980;   // fuera de los puertos del server y del rango efímero
 
@@ -47,6 +54,8 @@ constexpr std::size_t HashSize = 32;
 constexpr std::size_t IpSize = 46;   // texto, terminado en cero (entra una IPv6)
 constexpr std::size_t GuardianIdSize = 16;   // al azar, uno por guardián (sobrevive a reconectar)
 constexpr std::size_t NonceSize = 16;
+constexpr std::size_t MachineSize = 32;   // hash de la máquina (MachineContext)
+constexpr std::size_t AccountSize = 10;   // cuenta y personaje, sin el cero final
 
 constexpr unsigned TicketSeconds = 60;
 
@@ -62,26 +71,33 @@ constexpr std::uint32_t MaxChallengeRange = 64 * 1024;
 
 constexpr char TicketContext[] = "MuTicket1";
 
+// Hash de la máquina: BLAKE2b-256(MachineContext + lo que la identifica).
+constexpr char MachineContext[] = "MuMachine1";
+
 // Tope de un mensaje (tipo + datos).
 constexpr std::size_t MaxMessage = 4096;
 
 enum Type : std::uint8_t
 {
 	// Guardián -> mu-guard
-	Hello = 0x01,           // versión (2, LE) | hash del main en disco (32) | id del guardián (16)
+	Hello = 0x01,           // versión (2, LE) | hash del main en disco (32) | id del guardián (16) | máquina (32)
 	TicketRequest = 0x02,   // sin datos
 	Report = 0x03,          // detección (1) | cerró el juego (1) | detalle (texto UTF-8, hasta MaxDetail)
 	ChallengeAnswer = 0x04, // desafío (4, LE) | base del ejecutable en el juego (8, LE) | hash (32)
 
 	// mu-guard -> guardián
-	HelloResult = 0x81,     // resultado (1) | opciones (1, HelloOption)
+	HelloResult = 0x81,     // resultado (1) | opciones (1, HelloOption) [| Banned: qué (1, BanFlag) | hasta (8, LE)]
 	Ticket = 0x82,          // resultado (1) | id (16) | clave (32)
 	Challenge = 0x83,       // desafío (4, LE) | nonce (16) | rangos (1) | rangos x (rva (4, LE) | largo (4, LE))
 	Verdict = 0x84,         // detección (1) | detalle (texto): cerrar el juego por orden del server
+	Notice = 0x85,          // aviso (1) | límite (1, 0 = no se banea) | baneado (1, BanFlag) | hasta (8, LE):
+	                        // respuesta a una detección que cierra el juego
 
 	// GameServer -> mu-guard (socket local)
 	Ping = 0x10,            // sin datos
 	Verify = 0x11,          // pedido (4, LE) | id (16) | MAC (32) | hash del saludo (32) | IP (46)
+	                        // (id en ceros: login sin ticket; sólo se mira si la IP está baneada)
+	Identify = 0x12,        // id (16) | cuenta (10) | personaje (10): quién entró con ese ticket
 
 	// mu-guard -> GameServer
 	Pong = 0x90,            // jugadores a desconectar (2, LE) | ids de sus tickets (16 cada uno)
@@ -95,6 +111,16 @@ enum Result : std::uint8_t
 	BadVersion = 1,   // el guardián habla otra versión de este protocolo
 	NotReady = 2,     // falta el saludo, o mu-guard no pudo armar el ticket
 	UnknownBuild = 3, // el ejecutable no está entre los builds aceptados (Data/Guard/Builds)
+	Banned = 4,       // la máquina o la IP están baneadas
+};
+
+// Qué quedó baneado (HelloResult y Notice).  "Hasta" en segundos Unix; 0 =
+// permanente.
+enum BanFlag : std::uint8_t
+{
+	BanAccount = 0x01,
+	BanMachine = 0x02,
+	BanIp = 0x04,
 };
 
 // Opciones del server para el guardián (Data/Guard/Guard.toml), en HelloResult.
@@ -113,6 +139,7 @@ enum VerifyCode : std::uint8_t
 	WrongIp = 4,
 	WrongMac = 5,
 	Malformed = 6,
+	BannedIp = 7,     // la IP está baneada (también sin ticket)
 };
 
 // Lo que detectó el guardián (diseño, sección 3).  Los que cierran el juego
@@ -131,7 +158,10 @@ enum Detection : std::uint8_t
 constexpr std::size_t MaxDetail = 512;
 
 // Largos de los datos de cada mensaje.
-constexpr std::size_t HelloSize = 2 + HashSize + GuardianIdSize;
+constexpr std::size_t HelloSize = 2 + HashSize + GuardianIdSize + MachineSize;
+constexpr std::size_t HelloResultBannedSize = 2 + 1 + 8;
+constexpr std::size_t NoticeSize = 1 + 1 + 1 + 8;
+constexpr std::size_t IdentifySize = TicketIdSize + AccountSize + AccountSize;
 constexpr std::size_t ChallengeAnswerSize = 4 + 8 + HashSize;
 constexpr std::size_t TicketSize = 1 + TicketIdSize + TicketKeySize;
 constexpr std::size_t VerifySize = 4 + TicketIdSize + MacSize + TranscriptSize + IpSize;

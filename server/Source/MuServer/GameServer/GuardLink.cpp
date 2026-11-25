@@ -185,6 +185,18 @@ void CGuardLink::Run()
 		{
 			std::vector<std::uint8_t> ping;
 
+			{
+				// Lo que se juntó de Identify sale antes del latido, en el mismo envío.
+				std::lock_guard<std::mutex> lock(this->m_Lock);
+
+				for (const std::vector<std::uint8_t>& body : this->m_Identities)
+				{
+					GuardProto::Append(ping, GuardProto::Identify, body.data(), body.size());
+				}
+
+				this->m_Identities.clear();
+			}
+
 			GuardProto::Append(ping, GuardProto::Ping, nullptr, 0);
 
 			std::uint8_t type = 0;
@@ -358,6 +370,38 @@ void CGuardLink::Bind(const std::uint8_t* ticket, int aIndex)
 	this->m_Bound[aIndex] = id;
 }
 
+void CGuardLink::Identify(int aIndex)
+{
+	if (!OBJECT_USER_RANGE(aIndex))
+	{
+		return;
+	}
+
+	const LPOBJ lpObj = &gObj[aIndex];
+
+	std::lock_guard<std::mutex> lock(this->m_Lock);
+
+	auto bound = this->m_Bound.find(aIndex);
+
+	if (bound == this->m_Bound.end() || this->m_Identities.size() >= 4096)
+	{
+		return;
+	}
+
+	std::vector<std::uint8_t> body(GuardProto::IdentifySize, 0);
+
+	std::memcpy(body.data(), bound->second.data(), GuardProto::TicketIdSize);
+
+	std::strncpy((char*)body.data() + GuardProto::TicketIdSize, lpObj->Account, GuardProto::AccountSize);
+
+	if (lpObj->Connected == OBJECT_ONLINE)
+	{
+		std::strncpy((char*)body.data() + GuardProto::TicketIdSize + GuardProto::AccountSize, lpObj->Name, GuardProto::AccountSize);
+	}
+
+	this->m_Identities.push_back(std::move(body));
+}
+
 void CGuardLink::Unbind(int aIndex)
 {
 	std::lock_guard<std::mutex> lock(this->m_Lock);
@@ -447,10 +491,22 @@ GuardLogin CGuardLink::CheckLogin(const char* ip, const std::uint8_t* ticket, co
 	{
 		result = this->Verify(ip, ticket, mac, transcript);
 	}
+	else
+	{
+		// Sin ticket: igual se pregunta por la IP (id en ceros).
+		const std::uint8_t none[GuardProto::TicketIdSize + GuardProto::MacSize + GuardProto::TranscriptSize] = {};
+
+		result = this->Verify(ip, none, none + GuardProto::TicketIdSize, none + GuardProto::TicketIdSize + GuardProto::MacSize);
+	}
 
 	if (result == GuardProto::Valid)
 	{
 		return GuardLogin::Accept;
+	}
+
+	if (result == GuardProto::BannedIp)
+	{
+		return GuardLogin::Banned;
 	}
 
 	if (!settings.Required)

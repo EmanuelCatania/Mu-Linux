@@ -55,15 +55,20 @@ struct Texts
 	const char* threat;
 	const char* detail;    // {0}: lo que se detectó
 	const char* closing;   // {0}: segundos
+	const char* faseBlocked;
+	const char* blocked;
 };
 
 const Texts kTexts[] = {
 	{ "Iniciando protecci\xC3\xB3n...", "Validando conexi\xC3\xB3n con el servidor...", "Abriendo main.exe",
-	  "Se cerr\xC3\xB3 el juego", "AMENAZA DETECTADA", "Se detect\xC3\xB3 {0}. El cliente se va a cerrar.", "Cerrando en {0}..." },
+	  "Se cerr\xC3\xB3 el juego", "AMENAZA DETECTADA", "Se detect\xC3\xB3 {0}. El cliente se va a cerrar.", "Cerrando en {0}...",
+	  "No se abri\xC3\xB3 el juego", "ACCESO BLOQUEADO" },
 	{ "Initializing protection...", "Validating server connection...", "Launching main.exe",
-	  "The game was closed", "THREAT DETECTED", "{0} was detected. The client will close.", "Closing in {0}..." },
+	  "The game was closed", "THREAT DETECTED", "{0} was detected. The client will close.", "Closing in {0}...",
+	  "The game was not opened", "ACCESS BLOCKED" },
 	{ "Iniciando prote\xC3\xA7\xC3\xA3o...", "Validando conex\xC3\xA3o com o servidor...", "Abrindo main.exe",
-	  "O jogo foi fechado", "AMEA\xC3\x87" "A DETECTADA", "{0} foi detectado. O cliente ser\xC3\xA1 fechado.", "Fechando em {0}..." },
+	  "O jogo foi fechado", "AMEA\xC3\x87" "A DETECTADA", "{0} foi detectado. O cliente ser\xC3\xA1 fechado.", "Fechando em {0}...",
+	  "O jogo n\xC3\xA3o foi aberto", "ACESSO BLOQUEADO" },
 };
 
 std::string Fill(const char* text, const std::string& value)
@@ -218,6 +223,7 @@ struct Banner::State
 	std::string current;    // texto que entra
 	bool videoStarted = false;
 	bool threat = false;    // AMENAZA: paleta roja
+	const char* faseText = nullptr;   // texto de fase del estado rojo
 
 	float Seconds() const
 	{
@@ -267,7 +273,7 @@ struct Banner::State
 		else
 			HorizontalGradient(r, left, ruleY, wTitle, 2,
 				{ { 0, Rgba(0x4A, 0xA3, 0xE8) }, { 0.55f, Rgba(120, 180, 230, 0.45f) }, { 1, Rgba(120, 180, 230, 0) } });
-		fase->Draw(threat ? kTexts[language].faseThreat : kTexts[language].faseInit, left, ruleY + 2 + 14,
+		fase->Draw(threat ? (this->faseText ? this->faseText : kTexts[language].faseThreat) : kTexts[language].faseInit, left, ruleY + 2 + 14,
 			threat ? SDL_Color{ 0xB8, 0x44, 0x2F, 255 } : SDL_Color{ 0x4A, 0x7F, 0xB0, 255 });
 
 		// Pie (.pie): el paso actual y el hilo con su destello.
@@ -437,23 +443,41 @@ void Banner::Close()
 	m->Destroy();
 }
 
-void Banner::Threat(int language, const std::string& what)
+void Banner::Threat(int language, const std::string& what, const std::string& notice)
 {
 	const int lang = (language >= 0 && language < 3) ? language : 0;
 	const Texts& t = kTexts[lang];
-	if (!this->IsOpen() && !this->Open(lang))
+	std::vector<std::string> lines{ Fill(t.detail, what) };
+	if (!notice.empty()) lines.push_back(notice);
+	// El aviso sigue a la vista con la cuenta regresiva: si no, dura 2 s.
+	this->Alert(lang, t.faseThreat, t.threat, lines, !notice.empty());
+}
+
+void Banner::Blocked(int language, const std::string& detail)
+{
+	const int lang = (language >= 0 && language < 3) ? language : 0;
+	const Texts& t = kTexts[lang];
+	this->Alert(lang, t.faseBlocked, t.blocked, { detail }, true);
+}
+
+void Banner::Alert(int language, const char* faseText, const char* headline, const std::vector<std::string>& lines, bool keepLast)
+{
+	const Texts& t = kTexts[language];
+	if (!this->IsOpen() && !this->Open(language))
 	{
-		const std::string text = std::string(t.threat) + "\n\n" + Fill(t.detail, what);
+		std::string text = headline;
+		for (const std::string& line : lines) text += "\n\n" + line;
 		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "MU-Guard", text.c_str(), nullptr);
 		return;
 	}
 	m->threat = true;
+	m->faseText = faseText;
 	m->current.clear();
 	this->Step(BannerStep::Network);   // sólo para la transición; el texto se pisa abajo
-	m->current = t.threat;
+	m->current = headline;
 	SDL_RaiseWindow(m->window);
 	// Como amenazaDetectada() del template: el aviso, el detalle a los 1,1 s y
-	// la cuenta regresiva desde los 2,6 s.
+	// la cuenta regresiva desde los 2,6 s.  Cada línea extra, 2 s más.
 	auto show = [&](const std::string& text, int ms) {
 		m->previous = m->current;
 		m->current = text;
@@ -461,8 +485,9 @@ void Banner::Threat(int language, const std::string& what)
 		this->Wait([]() { return true; }, ms);
 	};
 	this->Wait([]() { return true; }, 1100);
-	show(Fill(t.detail, what), 1500);
-	for (int left = 5; left > 0; --left) show(Fill(t.closing, std::to_string(left)), 1000);
+	for (std::size_t i = 0; i < lines.size(); ++i) show(lines[i], i == 0 ? 1500 : 2500);
+	const std::string before = (keepLast && !lines.empty()) ? lines.back() + "  " : std::string();
+	for (int left = 5; left > 0; --left) show(before + Fill(t.closing, std::to_string(left)), 1000);
 }
 
 #else // sin MU_GUARD_BANNER: no hay ventana, Wait() sólo espera.
@@ -475,7 +500,9 @@ bool Banner::Open(int) { return false; }
 bool Banner::IsOpen() const { return false; }
 void Banner::Step(BannerStep) {}
 void Banner::Close() {}
-void Banner::Threat(int, const std::string&) {}
+void Banner::Threat(int, const std::string&, const std::string&) {}
+void Banner::Blocked(int, const std::string&) {}
+void Banner::Alert(int, const char*, const char*, const std::vector<std::string>&, bool) {}
 
 bool Banner::Wait(const std::function<bool()>& done, int)
 {
