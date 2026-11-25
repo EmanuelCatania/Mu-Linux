@@ -1107,7 +1107,7 @@ namespace
 
 		c.condemned = true;
 
-		const char detail[] = "codigo del juego modificado en memoria";
+		const char detail[] = "código del juego modificado en memoria";
 
 		std::vector<std::uint8_t> verdict{ Patch };
 

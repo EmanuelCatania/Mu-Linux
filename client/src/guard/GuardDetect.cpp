@@ -155,7 +155,7 @@ struct Detector::State
 	{
 		if (IsDebuggerPresent())
 		{
-			if (Once("debugger:self")) Add(found, GuardProto::Debugger, true, "depurador sobre el guardian");
+			if (Once("debugger:self")) Add(found, GuardProto::Debugger, true, "depurador sobre el guardi\xC3\xA1n");
 			return;
 		}
 		BOOL remote = FALSE;
@@ -169,20 +169,20 @@ struct Detector::State
 			ULONG_PTR port = 0;
 			if (queryProcess(process, kProcessDebugPort, &port, sizeof(port), nullptr) >= 0 && port != 0)
 			{
-				if (Once("debugger:port")) Add(found, GuardProto::Debugger, true, "puerto de depuracion del juego");
+				if (Once("debugger:port")) Add(found, GuardProto::Debugger, true, "puerto de depuraci\xC3\xB3n del juego");
 				return;
 			}
 			HANDLE object = nullptr;
 			if (queryProcess(process, kProcessDebugObjectHandle, &object, sizeof(object), nullptr) >= 0 && object)
 			{
 				CloseHandle(object);
-				if (Once("debugger:object")) Add(found, GuardProto::Debugger, true, "objeto de depuracion del juego");
+				if (Once("debugger:object")) Add(found, GuardProto::Debugger, true, "objeto de depuraci\xC3\xB3n del juego");
 				return;
 			}
 			ULONG flags = 1;
 			if (queryProcess(process, kProcessDebugFlags, &flags, sizeof(flags), nullptr) >= 0 && flags == 0)
 			{
-				if (Once("debugger:flags")) Add(found, GuardProto::Debugger, true, "banderas de depuracion del juego");
+				if (Once("debugger:flags")) Add(found, GuardProto::Debugger, true, "banderas de depuraci\xC3\xB3n del juego");
 				return;
 			}
 		}
@@ -206,7 +206,7 @@ struct Detector::State
 			if (thread != mainThread) CloseHandle(thread);
 			if (hardware)
 			{
-				if (Once("debugger:hardware")) Add(found, GuardProto::Debugger, true, "registros de depuracion en un hilo del juego");
+				if (Once("debugger:hardware")) Add(found, GuardProto::Debugger, true, "registros de depuraci\xC3\xB3n en un hilo del juego");
 				break;
 			}
 		}
@@ -260,7 +260,7 @@ struct Detector::State
 		{
 			decoyReported = true;
 			char detail[96];
-			std::snprintf(detail, sizeof(detail), "%d de %u paginas senuelo leidas", touched, static_cast<unsigned>(info.size()));
+			std::snprintf(detail, sizeof(detail), "%d de %u p\xC3\xA1ginas se\xC3\xB1uelo le\xC3\xAD" "das", touched, static_cast<unsigned>(info.size()));
 			// Cierra salvo que el server lo haya apagado (Guard.toml MemScanCloses).
 			Add(found, GuardProto::MemScan, memScanCloses, detail);
 		}
@@ -294,7 +294,7 @@ struct Detector::State
 			if (std::memcmp(mine, theirs, kBytes) != 0)
 			{
 				const std::string name = Narrow(entry.module) + "!" + entry.function;
-				if (Once("hook:" + name)) Add(found, GuardProto::Inject, true, "funcion de tiempo enganchada (speedhack): " + name);
+				if (Once("hook:" + name)) Add(found, GuardProto::Inject, true, "funci\xC3\xB3n de tiempo enganchada (speedhack): " + name);
 			}
 		}
 	}
@@ -313,11 +313,11 @@ struct Detector::State
 			const std::string path = Lower(Narrow(wide));
 			if (IsKnownBadModule(path))
 			{
-				if (Once("module:" + path)) Add(found, GuardProto::Inject, true, "modulo de Cheat Engine: " + BaseName(path));
+				if (Once("module:" + path)) Add(found, GuardProto::Inject, true, "m\xC3\xB3" "dulo de Cheat Engine: " + BaseName(path));
 			}
 			else if (!StartsWith(path, windowsDir) && !StartsWith(path, gameDir) && Once("module:" + path))
 			{
-				Add(found, GuardProto::Inject, false, "modulo fuera del juego y del sistema: " + path);
+				Add(found, GuardProto::Inject, false, "m\xC3\xB3" "dulo fuera del juego y del sistema: " + path);
 			}
 		}
 	}
@@ -339,7 +339,7 @@ struct Detector::State
 	{
 		if (TracerPid("/proc/self/status") != 0)
 		{
-			if (Once("debugger:self")) Add(found, GuardProto::Debugger, true, "depurador sobre el guardian");
+			if (Once("debugger:self")) Add(found, GuardProto::Debugger, true, "depurador sobre el guardi\xC3\xA1n");
 			return;
 		}
 		const long tracer = TracerPid("/proc/" + std::to_string(pid) + "/status");
@@ -394,11 +394,11 @@ struct Detector::State
 			const std::string lower = Lower(path);
 			if (IsKnownBadModule(lower))
 			{
-				if (Once("module:" + path)) Add(found, GuardProto::Inject, true, "modulo de Cheat Engine: " + BaseName(path));
+				if (Once("module:" + path)) Add(found, GuardProto::Inject, true, "m\xC3\xB3" "dulo de Cheat Engine: " + BaseName(path));
 			}
 			else if (!StartsWith(lower, "/usr/") && !StartsWith(lower, "/lib") && !StartsWith(lower, gameDir) && Once("module:" + path))
 			{
-				Add(found, GuardProto::Inject, false, "modulo fuera del juego y del sistema: " + path);
+				Add(found, GuardProto::Inject, false, "m\xC3\xB3" "dulo fuera del juego y del sistema: " + path);
 			}
 		}
 		// LD_PRELOAD: lo usan herramientas legítimas (MangoHud, gamemode); se
