@@ -32,6 +32,37 @@ inyección) llegan en las próximas versiones.
 Todo viaja por el mismo canal cifrado que el juego y con la misma identidad del
 server (`Data/Keys/ServerIdentity.key`).
 
+## Detecciones
+
+El guardián revisa el juego cada 2 segundos desde afuera, con prioridad baja.
+
+| Detección | Qué ve | Qué hace |
+|---|---|---|
+| `DEBUGGER` | un depurador sobre el juego o el guardián | cierra el juego |
+| `MEMEDIT` | el driver de Cheat Engine (Windows) u otro programa con la memoria del juego abierta (Linux) | cierra el juego |
+| `INJECT` | módulos de Cheat Engine, o las funciones de tiempo del sistema reescritas dentro del juego (speedhack) | cierra el juego |
+| `MEMSCAN` | alguien leyó las páginas señuelo que el guardián deja en el juego (el escaneo de un editor de memoria) | cierra el juego (`MemScanCloses`) |
+| `INJECT` | otros módulos fuera del juego y del sistema | sólo se registra |
+
+Al cerrar, el guardián muestra el banner rojo de MU-Guard con lo que detectó y
+una cuenta regresiva. Todo queda en el log de `mu-guard` con la IP del
+jugador. Los módulos desconocidos sólo se registran hasta tener las listas por
+server.
+
+Editar valores de la memoria (vida, zen...) no se puede ver de forma confiable
+desde afuera, porque el juego los cambia todo el tiempo. La defensa es que un
+editor no llegue a encontrarlos (`MEMSCAN` cierra el juego en su primer
+escaneo) y que esos valores los decida el server.
+
+Si un antivirus lee la memoria del juego puede dar `MEMSCAN` a un jugador
+limpio. Si pasa, en `Data/Guard/Guard.toml`:
+
+```toml
+MemScanCloses = false   # MEMSCAN sólo se registra
+```
+
+Se aplica a los guardianes que se conecten después del cambio.
+
 ## Activarlo
 
 ### Docker
@@ -63,6 +94,7 @@ Enabled = true
 Required = false
 Port = 28980
 Socket = ""   # vacío = Data/Guard/mu-guard.sock
+MemScanCloses = true
 ```
 
 El ConnectServer y el GameServer lo releen cuando cambia, sin reiniciar. Hay que
@@ -80,8 +112,8 @@ server se comporta como antes.
 - `mu-guard` y la verificación en el GameServer son sólo Linux (Docker y
   Pterodactyl).
 - La versión web no tiene guardián: con `MU_GUARD_REQUIRED=1` no puede entrar.
-- Todavía no hay detecciones: un programa que se haga pasar por el guardián
-  puede pedir tickets, y con administrador se saltea la DACL. Eso lo cierran
-  las próximas versiones (detecciones, desafío de memoria y builds aceptados).
+- Con administrador se saltea la DACL. Para eso están las detecciones (ver
+  abajo); un programa que se haga pasar por el guardián todavía puede pedir
+  tickets, y eso lo cierran el desafío de memoria y los builds aceptados.
 - En Linux con `ptrace_scope` 0 no hay bloqueo de lectura de la memoria del
   juego, sólo la detección que llega después.

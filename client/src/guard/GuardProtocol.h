@@ -35,7 +35,7 @@
 
 namespace GuardProto {
 
-constexpr std::uint16_t Version = 1;
+constexpr std::uint16_t Version = 2;   // 2: Report
 
 constexpr std::uint16_t DefaultPort = 28980;   // fuera de los puertos del server y del rango efímero
 
@@ -58,9 +58,10 @@ enum Type : std::uint8_t
 	// Guardián -> mu-guard
 	Hello = 0x01,           // versión (2, LE) | hash del main en disco (32)
 	TicketRequest = 0x02,   // sin datos
+	Report = 0x03,          // detección (1) | cerró el juego (1) | detalle (texto UTF-8, hasta MaxDetail)
 
 	// mu-guard -> guardián
-	HelloResult = 0x81,     // resultado (1)
+	HelloResult = 0x81,     // resultado (1) | opciones (1, HelloOption)
 	Ticket = 0x82,          // resultado (1) | id (16) | clave (32)
 
 	// GameServer -> mu-guard (socket local)
@@ -80,6 +81,12 @@ enum Result : std::uint8_t
 	NotReady = 2,     // falta el saludo, o mu-guard no pudo armar el ticket
 };
 
+// Opciones del server para el guardián (Data/Guard/Guard.toml), en HelloResult.
+enum HelloOption : std::uint8_t
+{
+	MemScanCloses = 0x01,   // MEMSCAN cierra el juego (si no, sólo se registra)
+};
+
 // Resultado de Verify.
 enum VerifyCode : std::uint8_t
 {
@@ -91,6 +98,21 @@ enum VerifyCode : std::uint8_t
 	WrongMac = 5,
 	Malformed = 6,
 };
+
+// Lo que detectó el guardián (diseño, sección 3).  Los que cierran el juego
+// dejan un aviso en el server (paso 5); el resto sólo se registra.
+enum Detection : std::uint8_t
+{
+	Debugger = 1,   // depurador sobre el juego o el guardián
+	Inject = 2,     // módulo cargado en el juego que no es del juego ni del sistema
+	MemEdit = 3,    // editor de memoria enganchado al juego (su driver, o /proc/<pid>/mem)
+	MemScan = 4,    // alguien leyó las páginas señuelo del juego
+	Patch = 5,      // código del juego modificado en memoria (desafío, paso 4)
+	Files = 6,      // archivos del cliente que no coinciden
+	Tool = 7,       // proceso o ventana de las listas
+};
+
+constexpr std::size_t MaxDetail = 512;
 
 // Largos de los datos de cada mensaje.
 constexpr std::size_t HelloSize = 2 + HashSize;

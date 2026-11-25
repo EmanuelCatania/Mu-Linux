@@ -45,6 +45,9 @@ Required = false
 Port = 28980
 # Socket local GameServer <-> mu-guard; vacío = Data/Guard/mu-guard.sock
 Socket = ""
+# true: un editor escaneando la memoria del juego (MEMSCAN) lo cierra.
+# false: sólo se registra (por si un antivirus da falsos positivos).
+MemScanCloses = true
 EOF
 fi
 guard_bool() { [ "${1:-0}" = "1" ] && echo true || echo false; }

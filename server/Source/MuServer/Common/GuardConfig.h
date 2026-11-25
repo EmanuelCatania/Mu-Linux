@@ -10,6 +10,9 @@
 //   Port = 28980        # puerto público de mu-guard (MU_GUARD_PORT)
 //   Socket = ""         # socket local GameServer <-> mu-guard;
 //                       # vacío = Data/Guard/mu-guard.sock
+//   MemScanCloses = true  # MEMSCAN (un editor escaneando la memoria del
+//                         # juego) cierra el juego; false = sólo se registra,
+//                         # por si un antivirus da falsos positivos
 //
 // Sin el archivo MU-Guard queda apagado: Data/ es un volumen y las
 // instalaciones anteriores no lo tienen (lo crea el entrypoint).
@@ -23,6 +26,7 @@ struct GuardSettings
 	bool Required = false;
 	std::uint16_t Port = 28980;
 	std::string Socket;   // ruta completa
+	bool MemScanCloses = true;
 };
 
 // dataPath: la carpeta Data con la barra final (GetDataPath()).

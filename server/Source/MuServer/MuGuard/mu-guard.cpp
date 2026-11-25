@@ -458,7 +458,9 @@ namespace
 			// builds aceptados llegan con el desafío de memoria (paso 4).
 			c.greeted = result == Ok;
 
-			this->Reply(c, HelloResult, &result, 1);
+			const std::uint8_t reply[2] = { result, static_cast<std::uint8_t>(this->m_Settings.MemScanCloses ? MemScanCloses : 0) };
+
+			this->Reply(c, HelloResult, reply, sizeof(reply));
 
 			if (!c.greeted)
 			{
@@ -510,6 +512,27 @@ namespace
 			this->Reply(c, GuardProto::Ticket, reply, sizeof(reply));
 
 			crypto_wipe(reply, sizeof(reply));
+
+			return;
+		}
+
+		if (type == Report && c.greeted && payload.size() >= 2 && payload.size() <= 2 + MaxDetail)
+		{
+			// Por ahora sólo se registra; los avisos y bans son del paso 5.
+			static const char* const kNames[] = { "?", "DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH", "FILES", "TOOL" };
+			const char* name = payload[0] < sizeof(kNames) / sizeof(kNames[0]) ? kNames[payload[0]] : "?";
+			std::string detail(payload.begin() + 2, payload.end());
+
+			for (char& ch : detail)
+			{
+				if ((unsigned char)ch < 0x20)
+				{
+					ch = ' ';   // el detalle lo escribe el cliente: sin saltos de línea en el log
+				}
+			}
+
+			LogAdd(payload[1] ? LOG_RED : LOG_BLUE, "[MU-Guard] [%s] %s %s: %s", c.ip.c_str(), name,
+				payload[1] ? "(cerro el juego)" : "(registrado)", detail.c_str());
 
 			return;
 		}
