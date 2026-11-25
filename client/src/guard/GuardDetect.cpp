@@ -19,6 +19,7 @@
 #include <tlhelp32.h>
 #else
 #include <dirent.h>
+#include <fcntl.h>
 #include <fstream>
 #include <unistd.h>
 #endif
@@ -445,6 +446,59 @@ void Detector::Attach(void* process, void* mainThread, unsigned long pid, const 
 #else
 	(void)process;
 	(void)mainThread;
+#endif
+}
+
+bool Detector::ImageBase(std::uint64_t& base)
+{
+#ifdef _WIN32
+	// El primer módulo del proceso es el ejecutable.
+	HMODULE first = nullptr;
+	DWORD needed = 0;
+	if (!m->enumModules || !m->enumModules(m->process, &first, sizeof(first), &needed, LIST_MODULES_DEFAULT) || needed == 0) return false;
+	base = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(first));
+	return true;
+#else
+	// La primera región del ejecutable (desplazamiento 0) en /proc/<pid>/maps.
+	char exe[4096];
+	const ssize_t n = ::readlink(("/proc/" + std::to_string(m->pid) + "/exe").c_str(), exe, sizeof(exe) - 1);
+	if (n <= 0) return false;
+	const std::string path(exe, static_cast<std::size_t>(n));
+	std::ifstream maps("/proc/" + std::to_string(m->pid) + "/maps");
+	std::string line;
+	while (std::getline(maps, line))
+	{
+		unsigned long long start = 0, end = 0, offset = 0;
+		char perms[8] = {};
+		int consumed = 0;
+		if (std::sscanf(line.c_str(), "%llx-%llx %7s %llx %*s %*s %n", &start, &end, perms, &offset, &consumed) < 4 || consumed == 0) continue;
+		if (offset == 0 && line.compare(static_cast<std::size_t>(consumed), std::string::npos, path) == 0)
+		{
+			base = start;
+			return true;
+		}
+	}
+	return false;
+#endif
+}
+
+bool Detector::Read(std::uint64_t address, void* data, std::size_t size)
+{
+#ifdef _WIN32
+	SIZE_T read = 0;
+	return ReadProcessMemory(m->process, reinterpret_cast<LPCVOID>(static_cast<std::uintptr_t>(address)), data, size, &read) && read == size;
+#else
+	const int fd = ::open(("/proc/" + std::to_string(m->pid) + "/mem").c_str(), O_RDONLY | O_CLOEXEC);
+	if (fd < 0) return false;
+	std::size_t done = 0;
+	while (done < size)
+	{
+		const ssize_t got = ::pread(fd, static_cast<char*>(data) + done, size - done, static_cast<off_t>(address + done));
+		if (got <= 0) break;
+		done += static_cast<std::size_t>(got);
+	}
+	::close(fd);
+	return done == size;
 #endif
 }
 

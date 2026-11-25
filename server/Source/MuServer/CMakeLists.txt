@@ -129,7 +129,7 @@ if(MU_GUARD)
   if(NOT WIN32)
     target_sources(GameServer PRIVATE Common/GuardConfig.cpp)
     target_compile_definitions(GameServer PRIVATE MU_GUARD)
-    add_executable(mu-guard MuGuard/mu-guard.cpp Common/GuardConfig.cpp Common/SecureChannel.cpp
+    add_executable(mu-guard MuGuard/mu-guard.cpp Common/GuardBuild.cpp Common/GuardConfig.cpp Common/SecureChannel.cpp
       Common/ServerIdentity.cpp Common/monocypher/monocypher.c)
     # MuGuard primero: Common/ServerIdentity.cpp toma de ahí su stdafx.h.
     target_include_directories(mu-guard PRIVATE MuGuard Common)

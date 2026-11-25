@@ -15,6 +15,7 @@
 
 #include "assets/data/ContentCatalog.h"
 #include "net/ServerTrust.h"
+#include "net/crypto/SecureRandom.h"
 #include "platform/UserPath.h"
 
 extern "C" {
@@ -92,6 +93,13 @@ bool Trust(const std::uint8_t* id, const std::uint8_t* previous, const std::uint
 
 // ── Mensajes con mu-guard ────────────────────────────────────────────────────
 
+// Lo que manda mu-guard sin que se le pida (desafíos, veredictos).
+struct Push
+{
+	std::uint8_t type = 0;
+	std::vector<std::uint8_t> payload;
+};
+
 class GuardConnection
 {
 public:
@@ -100,6 +108,8 @@ public:
 		this->m_Host = host;
 		this->m_Port = port;
 		std::memcpy(this->m_MainHash, mainHash, sizeof(this->m_MainHash));
+		// Un id por guardián: mu-guard lo sigue aunque se reconecte.
+		if (!SecureRandomBytes(this->m_Id, sizeof(this->m_Id))) std::memset(this->m_Id, 0, sizeof(this->m_Id));
 	}
 
 	// Conecta y saluda si hace falta.
@@ -108,17 +118,22 @@ public:
 		std::lock_guard<std::recursive_mutex> lock(this->m_Lock);
 		if (this->m_Socket.IsOpen()) return true;
 		this->m_Pending.clear();
+		this->m_Inbox.clear();   // desafíos de una conexión anterior: ya no valen
 		if (!this->m_Socket.Open(this->m_Host, this->m_Port, 3000, Trust)) return false;
 
 		std::uint8_t hello[GuardProto::HelloSize];
 		hello[0] = static_cast<std::uint8_t>(GuardProto::Version & 0xFF);
 		hello[1] = static_cast<std::uint8_t>(GuardProto::Version >> 8);
 		std::memcpy(hello + 2, this->m_MainHash, GuardProto::HashSize);
+		std::memcpy(hello + 2 + GuardProto::HashSize, this->m_Id, GuardProto::GuardianIdSize);
 
 		std::vector<std::uint8_t> reply;
 		if (!this->Exchange(GuardProto::Hello, hello, sizeof(hello), GuardProto::HelloResult, reply) || reply.empty() || reply[0] != GuardProto::Ok)
 		{
-			Log("MU-Guard: mu-guard no acepto el saludo");
+			if (!reply.empty() && reply[0] == GuardProto::UnknownBuild)
+				Log("MU-Guard: el server no acepta este build del cliente (no esta en Data/Guard/Builds)");
+			else
+				Log("MU-Guard: mu-guard no acepto el saludo");
 			this->m_Socket.Close();
 			return false;
 		}
@@ -146,6 +161,36 @@ public:
 			this->m_Socket.Close();
 		}
 		return false;
+	}
+
+	// Reconecta si hace falta y junta lo que mandó mu-guard por su cuenta.
+	// false si no hay conexión.
+	bool Poll(std::vector<Push>& out)
+	{
+		std::lock_guard<std::recursive_mutex> lock(this->m_Lock);
+		if (!this->Ensure()) return false;
+		while (this->m_Socket.Receive(this->m_Pending, 0)) {}
+		if (!this->m_Socket.IsOpen()) return false;
+		Push push;
+		int popped;
+		while ((popped = GuardProto::Pop(this->m_Pending, push.type, push.payload)) > 0) this->m_Inbox.push_back(push);
+		if (popped < 0)
+		{
+			this->m_Socket.Close();
+			return false;
+		}
+		out.insert(out.end(), this->m_Inbox.begin(), this->m_Inbox.end());
+		this->m_Inbox.clear();
+		return true;
+	}
+
+	// Respuesta a un desafío (no tiene respuesta).
+	bool Answer(const std::uint8_t answer[GuardProto::ChallengeAnswerSize])
+	{
+		std::lock_guard<std::recursive_mutex> lock(this->m_Lock);
+		std::vector<std::uint8_t> message;
+		GuardProto::Append(message, GuardProto::ChallengeAnswer, answer, GuardProto::ChallengeAnswerSize);
+		return this->m_Socket.IsOpen() && this->m_Socket.Send(message.data(), message.size(), 3000);
 	}
 
 	// Le cuenta a mu-guard lo que se detectó (no tiene respuesta).
@@ -180,7 +225,8 @@ private:
 			if (popped > 0)
 			{
 				if (got == expect) return true;
-				continue;   // otro mensaje: no es la respuesta
+				this->m_Inbox.push_back({ got, payload });   // un desafío o un veredicto: para la vigilancia
+				continue;
 			}
 			const int left = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count());
 			if (left <= 0 || !this->m_Socket.Receive(this->m_Pending, left)) return false;
@@ -192,8 +238,10 @@ private:
 	std::string m_Host;
 	std::uint16_t m_Port = 0;
 	std::uint8_t m_MainHash[GuardProto::HashSize] = {};
+	std::uint8_t m_Id[GuardProto::GuardianIdSize] = {};
 	Guard::SecureSocket m_Socket;
 	std::vector<std::uint8_t> m_Pending;
+	std::vector<Push> m_Inbox;
 };
 
 // Pregunta al ConnectServer si hay MU-Guard (F4:16).  Devuelve el puerto de
@@ -356,10 +404,10 @@ void Serve(int in, int out, GuardConnection& guard)
 // Qué se detectó, para el banner (el detalle técnico va al server).
 std::string ThreatName(const Guard::Finding& finding, int language)
 {
-	static const char* const kNames[3][3] = {
-		{ "un depurador", "un editor de memoria", "Cheat Engine" },
-		{ "A debugger", "A memory editor", "Cheat Engine" },
-		{ "Um depurador", "Um editor de mem\xC3\xB3ria", "Cheat Engine" },
+	static const char* const kNames[3][4] = {
+		{ "un depurador", "un editor de memoria", "Cheat Engine", "el juego modificado" },
+		{ "A debugger", "A memory editor", "Cheat Engine", "A modified game" },
+		{ "Um depurador", "Um editor de mem\xC3\xB3ria", "Cheat Engine", "O jogo modificado" },
 	};
 	const int lang = (language >= 0 && language < 3) ? language : 0;
 	switch (finding.code)
@@ -367,14 +415,77 @@ std::string ThreatName(const Guard::Finding& finding, int language)
 	case GuardProto::Debugger: return kNames[lang][0];
 	case GuardProto::MemEdit:
 	case GuardProto::MemScan: return kNames[lang][1];
+	case GuardProto::Patch: return kNames[lang][3];
 	default: return kNames[lang][2];
 	}
 }
 
-// Una pasada de los detectores: todo se reporta; si algo cierra el juego, lo
-// devuelve.
-bool Watch(Guard::Detector& detector, GuardConnection& guard, Guard::Finding& closing)
+// Desafío de memoria (paso 4): el hash de los rangos pedidos del código del
+// juego, tal como está cargado.  Se guarda hasta poder contestarlo (el juego
+// puede no haber terminado de cargar).
+struct Vigil
 {
+	bool pending = false;
+	std::vector<std::uint8_t> challenge;   // el payload del Challenge
+};
+
+bool AnswerChallenge(Guard::Detector& detector, GuardConnection& guard, const std::vector<std::uint8_t>& challenge)
+{
+	using namespace GuardProto;
+	if (challenge.size() < 4 + NonceSize + 1) return true;   // mal formado: se descarta
+	const std::size_t count = challenge[4 + NonceSize];
+	if (count == 0 || count > MaxChallengeRanges || challenge.size() != 5 + NonceSize + count * 8) return true;
+
+	std::uint64_t base = 0;
+	if (!detector.ImageBase(base)) return false;
+
+	crypto_blake2b_ctx ctx;
+	crypto_blake2b_keyed_init(&ctx, HashSize, challenge.data() + 4, NonceSize);
+	crypto_blake2b_update(&ctx, reinterpret_cast<const std::uint8_t*>(ChallengeContext), sizeof(ChallengeContext) - 1);
+	std::vector<std::uint8_t> bytes;
+	for (std::size_t i = 0; i < count; i++)
+	{
+		const std::uint32_t rva = GetLe32(challenge.data() + 5 + NonceSize + i * 8);
+		const std::uint32_t size = GetLe32(challenge.data() + 9 + NonceSize + i * 8);
+		if (size == 0 || size > MaxChallengeRange) return true;
+		bytes.resize(size);
+		// Lo que no se puede leer va en ceros: el server lo da por mal.
+		if (!detector.Read(base + rva, bytes.data(), size)) std::fill(bytes.begin(), bytes.end(), 0);
+		crypto_blake2b_update(&ctx, bytes.data(), size);
+	}
+	std::uint8_t answer[ChallengeAnswerSize];
+	std::memcpy(answer, challenge.data(), 4);
+	PutLe64(answer + 4, base);
+	crypto_blake2b_final(&ctx, answer + 12);
+	guard.Answer(answer);
+	return true;
+}
+
+// Una pasada de los detectores: todo se reporta; si algo cierra el juego, lo
+// devuelve.  También atiende lo que manda mu-guard.
+bool Watch(Guard::Detector& detector, GuardConnection& guard, Vigil& vigil, Guard::Finding& closing)
+{
+	std::vector<Push> pushes;
+	guard.Poll(pushes);
+	for (const Push& push : pushes)
+	{
+		if (push.type == GuardProto::Challenge)
+		{
+			vigil.pending = true;
+			vigil.challenge = push.payload;
+		}
+		else if (push.type == GuardProto::Verdict && !push.payload.empty())
+		{
+			// Orden del server: el juego se cierra.
+			closing.code = push.payload[0];
+			closing.closes = true;
+			closing.detail.assign(push.payload.begin() + 1, push.payload.end());
+			Log("MU-Guard: mu-guard ordeno cerrar el juego (%u): %s", static_cast<unsigned>(closing.code), closing.detail.c_str());
+			return true;
+		}
+	}
+	if (vigil.pending && AnswerChallenge(detector, guard, vigil.challenge)) vigil.pending = false;
+
 	std::vector<Guard::Finding> found;
 	detector.Scan(found);
 	bool close = false;
@@ -753,6 +864,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	Guard::Detector detector;
 	detector.SetMemScanCloses((guard.Options() & GuardProto::MemScanCloses) != 0);
 	detector.Attach(pi.hProcess, pi.hThread, pi.dwProcessId, gameDir);
+	Vigil vigil;
 	ResumeThread(pi.hThread);
 
 	// El banner se va cuando el juego muestra su ventana (o termina): así no
@@ -770,7 +882,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	bool threat = false;
 	while (WaitForSingleObject(pi.hProcess, kWatchMs) == WAIT_TIMEOUT)
 	{
-		if (Watch(detector, guard, closing))
+		if (Watch(detector, guard, vigil, closing))
 		{
 			threat = true;
 			TerminateProcess(pi.hProcess, 1);
@@ -838,6 +950,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	Guard::Detector detector;
 	detector.SetMemScanCloses((guard.Options() & GuardProto::MemScanCloses) != 0);
 	detector.Attach(nullptr, nullptr, static_cast<unsigned long>(pid), gameDir);
+	Vigil vigil;
 	banner.Wait([]() { return true; }, 1200);
 	banner.Close();
 
@@ -852,7 +965,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 		if (done == pid || (done < 0 && errno != EINTR)) break;
 		std::this_thread::sleep_for(std::chrono::milliseconds(kWatchMs));
 		if (::waitpid(pid, &status, WNOHANG) == pid) break;
-		if (Watch(detector, guard, closing))
+		if (Watch(detector, guard, vigil, closing))
 		{
 			threat = true;
 			::kill(pid, SIGKILL);

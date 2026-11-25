@@ -5,6 +5,7 @@
 
 #include "GuardConfig.h"
 #include "GuardProtocol.h"
+#include "User.h"
 #include "Util.h"
 
 #include <cerrno>
@@ -27,6 +28,7 @@ namespace
 	constexpr int kOkForUp = 3;
 	constexpr int kStartupSeconds = 10;
 	constexpr int kVerifyTimeoutMs = 300;
+	constexpr std::size_t kMaxSessions = 20000;
 
 	// Socket local conectado y con plazo de lectura/escritura; -1 si no se pudo.
 	int ConnectLocal(const std::string& path, int timeoutMs)
@@ -197,6 +199,22 @@ void CGuardLink::Run()
 
 				fd = -1;
 			}
+			else if (payload.size() >= 2)
+			{
+				const std::size_t count = payload[0] | (payload[1] << 8);
+
+				if (payload.size() == 2 + count * GuardProto::TicketIdSize && count > 0)
+				{
+					std::lock_guard<std::mutex> lock(this->m_Lock);
+
+					for (std::size_t i = 0; i < count; i++)
+					{
+						const char* id = (const char*)payload.data() + 2 + i * GuardProto::TicketIdSize;
+
+						this->m_Kicks.emplace_back(id, GuardProto::TicketIdSize);
+					}
+				}
+			}
 		}
 
 		if (alive)
@@ -278,6 +296,131 @@ int CGuardLink::Verify(const char* ip, const std::uint8_t* ticket, const std::ui
 	::close(fd);
 
 	return result;
+}
+
+namespace
+{
+	bool SameConnection(int index, std::uint64_t socket)
+	{
+		if (!OBJECT_USER_RANGE(index))
+		{
+			return false;
+		}
+
+		const LPOBJ lpObj = &gObj[index];
+
+		return lpObj->Connected != OBJECT_OFFLINE && (std::uint64_t)lpObj->Socket == socket;
+	}
+}
+
+void CGuardLink::Bind(const std::uint8_t* ticket, int aIndex)
+{
+	std::lock_guard<std::mutex> lock(this->m_Lock);
+
+	// Un segundo login por la misma conexión reemplaza al anterior.
+	auto bound = this->m_Bound.find(aIndex);
+
+	if (bound != this->m_Bound.end())
+	{
+		this->m_Sessions.erase(bound->second);
+
+		this->m_Bound.erase(bound);
+	}
+
+	if (this->m_Sessions.size() >= kMaxSessions)
+	{
+		// Se van las de conexiones que ya no son las que entraron (no debería
+		// haber: gObjDel las saca).
+		for (auto it = this->m_Sessions.begin(); it != this->m_Sessions.end();)
+		{
+			if (SameConnection(it->second.Index, it->second.Socket))
+			{
+				++it;
+
+				continue;
+			}
+
+			this->m_Bound.erase(it->second.Index);
+
+			it = this->m_Sessions.erase(it);
+		}
+
+		if (this->m_Sessions.size() >= kMaxSessions)
+		{
+			return;
+		}
+	}
+
+	const std::string id((const char*)ticket, GuardProto::TicketIdSize);
+
+	this->m_Sessions[id] = { aIndex, (std::uint64_t)gObj[aIndex].Socket };
+
+	this->m_Bound[aIndex] = id;
+}
+
+void CGuardLink::Unbind(int aIndex)
+{
+	std::lock_guard<std::mutex> lock(this->m_Lock);
+
+	auto bound = this->m_Bound.find(aIndex);
+
+	if (bound == this->m_Bound.end())
+	{
+		return;
+	}
+
+	this->m_Sessions.erase(bound->second);
+
+	this->m_Bound.erase(bound);
+}
+
+void CGuardLink::ProcessKicks()
+{
+	std::vector<std::string> kicks;
+
+	{
+		std::lock_guard<std::mutex> lock(this->m_Lock);
+
+		if (this->m_Kicks.empty())
+		{
+			return;
+		}
+
+		kicks.swap(this->m_Kicks);
+	}
+
+	for (const std::string& ticket : kicks)
+	{
+		Session session;
+
+		{
+			std::lock_guard<std::mutex> lock(this->m_Lock);
+
+			auto it = this->m_Sessions.find(ticket);
+
+			if (it == this->m_Sessions.end())
+			{
+				continue;
+			}
+
+			session = it->second;
+
+			this->m_Bound.erase(session.Index);
+
+			this->m_Sessions.erase(it);
+		}
+
+		if (!SameConnection(session.Index, session.Socket))
+		{
+			continue;
+		}
+
+		const LPOBJ lpObj = &gObj[session.Index];
+
+		LogAdd(LOG_RED, "[MU-Guard] [%s][%s] Desconectado por mu-guard", lpObj->IpAddr, lpObj->Account);
+
+		CloseClient(session.Index);
+	}
 }
 
 GuardLogin CGuardLink::CheckLogin(const char* ip, const std::uint8_t* ticket, const std::uint8_t* mac,

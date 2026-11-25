@@ -7,12 +7,22 @@
 //     misma identidad del server (Data/Keys/ServerIdentity.key, la genera el
 //     GameServer; acá sólo se lee).  Saluda y pide tickets.
 //   - Socket Unix local (Guard.toml Socket): el GameServer.  Latido y
-//     verificación de los tickets que llegan en el login.
+//     verificación de los tickets que llegan en el login.  El latido lleva de
+//     vuelta los jugadores a desconectar.
+//
+// Desafío de memoria (paso 4): con el build del cliente en Data/Guard/Builds
+// (lo arma `mu-guard build <ejecutable>`), cada ~30 s se le pide al guardián el
+// hash de bloques del código del juego (una recorrida de todo el código en
+// orden al azar).  Distinto del esperado: se le ordena cerrar el juego
+// (Verdict PATCH) y se desconecta a sus jugadores.  Sin
+// respuesta a tiempo, o con el guardián desconectado más de la gracia, se
+// desconecta a sus jugadores.
 //
 // Un solo hilo con poll(): son pocas conexiones y cada mensaje se atiende en
 // microsegundos.  Sólo Linux, como mu-trace.
 
 #include "stdafx.h"
+#include "GuardBuild.h"
 #include "GuardConfig.h"
 #include "GuardProtocol.h"
 #include "SecureChannel.h"
@@ -31,8 +41,11 @@ extern "C"
 #include <cstdarg>
 #include <cstring>
 #include <ctime>
+#include <deque>
 #include <fcntl.h>
+#include <filesystem>
 #include <map>
+#include <set>
 #include <memory>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -75,6 +88,38 @@ namespace
 	constexpr int kHandshakeSeconds = 10;   // saludo del canal + Hello
 	constexpr std::size_t kMaxTickets = 100000;
 	constexpr std::size_t kMaxBuffered = 64 * 1024;
+	// Cada desafío pide los próximos bloques de una recorrida al azar de todo el
+	// código: 8 x 64 KB cada ~30 s cubren 16 MB en unos 16 minutos, así que un
+	// parche que se queda en memoria cae seguro.
+	constexpr std::size_t kChallengeRanges = GuardProto::MaxChallengeRanges;
+	constexpr std::size_t kMaxSessionsPerGuardian = 64;
+	constexpr std::size_t kMaxKicksPerPong = 256;
+	constexpr int kKickSeconds = 15;   // lo que dura una orden de desconectar para un latido que se reconecta
+
+	std::string Hex(const std::uint8_t* data, std::size_t size)
+	{
+		static const char kDigits[] = "0123456789abcdef";
+
+		std::string text;
+
+		for (std::size_t i = 0; i < size; i++)
+		{
+			text += kDigits[data[i] >> 4];
+			text += kDigits[data[i] & 15];
+		}
+
+		return text;
+	}
+
+	// Un número al azar en [low, high].
+	int RandomBetween(int low, int high)
+	{
+		std::uint8_t b[4] = {};
+
+		SecureRandomBytes(b, sizeof(b));
+
+		return low + (int)(GuardProto::GetLe32(b) % (std::uint32_t)(high - low + 1));
+	}
 
 	std::string DataPath()
 	{
@@ -99,7 +144,24 @@ namespace
 	{
 		std::uint8_t key[GuardProto::TicketKeySize];
 		std::string ip;
+		std::string guardian;   // id del guardián que lo pidió
 		Clock::time_point expires;
+	};
+
+	// Un guardián (puede reconectarse: se lo sigue por su id).  Sus sesiones son
+	// los tickets que ya entraron al juego.
+	struct GuardianState
+	{
+		int connections = 0;
+		Clock::time_point lastSeen;
+		std::set<std::string> sessions;
+	};
+
+	struct Kick
+	{
+		std::uint64_t serial;
+		std::string ticket;
+		Clock::time_point when;
 	};
 
 	struct Connection
@@ -109,6 +171,19 @@ namespace
 		std::string ip;
 		Clock::time_point opened;
 		bool greeted = false;         // el guardián mandó un Hello válido
+		std::string guardian;         // su id (vacío hasta el Hello)
+		std::shared_ptr<const CGuardBuild> build;   // nullptr: build desconocido, sin desafío
+		bool condemned = false;       // falló un desafío: no se le piden más
+		bool challenging = false;     // hay un desafío sin contestar
+		std::uint32_t challenge = 0;
+		std::uint8_t nonce[GuardProto::NonceSize] = {};
+		std::vector<GuardBuildRange> ranges;
+		std::vector<GuardBuildRange> tour;   // bloques del código en orden al azar
+		std::size_t tourAt = 0;
+		Clock::time_point deadline;   // del desafío en curso
+		Clock::time_point nextChallenge;
+		bool heartbeat = false;       // el GameServer mandó Ping por esta conexión
+		std::uint64_t kickSerial = 0; // última orden de desconectar entregada
 		std::unique_ptr<SecureChannel> channel;
 		std::vector<std::uint8_t> in;  // texto claro sin procesar
 		std::vector<std::uint8_t> out; // bytes para el socket
@@ -137,6 +212,21 @@ namespace
 
 		void HandleVerify(Connection& c, const std::vector<std::uint8_t>& payload);
 
+		void HandleHello(Connection& c, const std::vector<std::uint8_t>& payload);
+
+		void HandleAnswer(Connection& c, const std::vector<std::uint8_t>& payload);
+
+		void SendChallenge(Connection& c);
+
+		void SendPong(Connection& c);
+
+		// Desconecta a los jugadores que entraron con un ticket de ese guardián.
+		void KickGuardian(const std::string& guardian, const char* reason, const std::string& ip);
+
+		void Drop(Connection& c);
+
+		void LoadBuilds();
+
 		void Tick();
 
 		int ConnectionsFrom(const std::string& ip) const;
@@ -155,8 +245,66 @@ namespace
 
 		std::map<std::string, std::vector<Clock::time_point>> m_Issued;   // IP -> tickets del último minuto
 
+		std::map<std::string, GuardianState> m_Guardians;   // id del guardián
+
+		std::map<std::string, std::shared_ptr<const CGuardBuild>> m_Builds;   // hash del ejecutable
+
+		std::map<std::string, std::filesystem::file_time_type> m_BuildFiles;   // para releer si cambian
+
+		std::deque<Kick> m_Kicks;
+
+		std::uint64_t m_KickSerial = 0;
+
+		std::uint32_t m_ChallengeSerial = 0;
+
 		Clock::time_point m_NextTick;
+
+		Clock::time_point m_NextBuildScan;
 	};
+
+	void Guard::LoadBuilds()
+	{
+		const std::string folder = this->m_Data + "Guard/Builds";
+
+		std::map<std::string, std::filesystem::file_time_type> files;
+
+		std::error_code error;
+
+		for (std::filesystem::directory_iterator it(folder, error), end; !error && it != end; it.increment(error))
+		{
+			if (it->path().extension() == ".guardbuild")
+			{
+				files[it->path().string()] = it->last_write_time(error);
+			}
+		}
+
+		if (files == this->m_BuildFiles)
+		{
+			return;
+		}
+
+		this->m_BuildFiles = files;
+
+		std::map<std::string, std::shared_ptr<const CGuardBuild>> builds;
+
+		for (const auto& file : files)
+		{
+			auto build = std::make_shared<CGuardBuild>();
+
+			if (!build->Load(file.first))
+			{
+				LogAdd(LOG_RED, "[MU-Guard] Build ilegible: %s", file.first.c_str());
+
+				continue;
+			}
+
+			builds[std::string((const char*)build->Hash(), GuardProto::HashSize)] = build;
+		}
+
+		this->m_Builds = builds;
+
+		LogAdd(LOG_BLUE, "[MU-Guard] Builds aceptados: %d (Data/Guard/Builds)", (int)builds.size());
+	}
 
 	bool Guard::Start()
 	{
@@ -225,7 +373,11 @@ namespace
 		LogAdd(LOG_BLUE, "[MU-Guard] Escuchando en el puerto %d y en %s (%s)", (int)this->m_Settings.Port, path.c_str(),
 			this->m_Settings.Required ? "exige el ticket" : "no lo exige");
 
+		this->LoadBuilds();
+
 		this->m_NextTick = Clock::now();
+
+		this->m_NextBuildScan = Clock::now() + std::chrono::seconds(10);
 
 		return true;
 	}
@@ -431,7 +583,9 @@ namespace
 		{
 			if (type == Ping)
 			{
-				this->Reply(c, Pong, nullptr, 0);
+				c.heartbeat = true;
+
+				this->SendPong(c);
 			}
 			else if (type == Verify)
 			{
@@ -445,27 +599,16 @@ namespace
 			return;
 		}
 
-		if (type == Hello)
+		if (type == Hello && !c.greeted)
 		{
-			std::uint8_t result = Ok;
+			this->HandleHello(c, payload);
 
-			if (payload.size() != HelloSize || (payload[0] | (payload[1] << 8)) != Version)
-			{
-				result = BadVersion;
-			}
+			return;
+		}
 
-			// El hash del main en disco (payload + 2) todavía no se compara: los
-			// builds aceptados llegan con el desafío de memoria (paso 4).
-			c.greeted = result == Ok;
-
-			const std::uint8_t reply[2] = { result, static_cast<std::uint8_t>(this->m_Settings.MemScanCloses ? MemScanCloses : 0) };
-
-			this->Reply(c, HelloResult, reply, sizeof(reply));
-
-			if (!c.greeted)
-			{
-				LogAdd(LOG_RED, "[MU-Guard] [%s] Guardian de otra version: rechazado", c.ip.c_str());
-			}
+		if (type == ChallengeAnswer && c.greeted)
+		{
+			this->HandleAnswer(c, payload);
 
 			return;
 		}
@@ -494,6 +637,8 @@ namespace
 				if (SecureRandomBytes(id, sizeof(id)) && SecureRandomBytes(ticket.key, sizeof(ticket.key)))
 				{
 					ticket.ip = c.ip;
+
+					ticket.guardian = c.guardian;
 
 					ticket.expires = now + std::chrono::seconds(TicketSeconds);
 
@@ -609,6 +754,20 @@ namespace
 			else
 			{
 				reply[4] = Valid;
+
+				// Desde acá el jugador queda atado a su guardián: si el guardián falla
+				// un desafío o desaparece, se lo desconecta.
+				GuardianState& guardian = this->m_Guardians[ticket.guardian];
+
+				if (guardian.connections == 0 && guardian.sessions.empty())
+				{
+					guardian.lastSeen = Clock::now();
+				}
+
+				if (guardian.sessions.size() < kMaxSessionsPerGuardian)
+				{
+					guardian.sessions.insert(id);
+				}
 			}
 
 			crypto_wipe(expected, sizeof(expected));
@@ -620,6 +779,245 @@ namespace
 		}
 
 		this->Reply(c, VerifyResult, reply, sizeof(reply));
+	}
+
+	void Guard::HandleHello(Connection& c, const std::vector<std::uint8_t>& payload)
+	{
+		using namespace GuardProto;
+
+		std::uint8_t result = Ok;
+
+		std::shared_ptr<const CGuardBuild> build;
+
+		if (payload.size() != HelloSize || (payload[0] | (payload[1] << 8)) != Version)
+		{
+			result = BadVersion;
+		}
+		else
+		{
+			auto it = this->m_Builds.find(std::string((const char*)payload.data() + 2, HashSize));
+
+			if (it != this->m_Builds.end())
+			{
+				build = it->second;
+			}
+			else if (!this->m_Settings.AcceptUnknownBuilds)
+			{
+				result = UnknownBuild;
+			}
+		}
+
+		const std::uint8_t reply[2] = { result, static_cast<std::uint8_t>(this->m_Settings.MemScanCloses ? MemScanCloses : 0) };
+
+		this->Reply(c, HelloResult, reply, sizeof(reply));
+
+		if (result == BadVersion)
+		{
+			LogAdd(LOG_RED, "[MU-Guard] [%s] Guardian de otra version: rechazado", c.ip.c_str());
+
+			return;
+		}
+
+		const std::string hash = Hex(payload.data() + 2, 8);
+
+		if (result == UnknownBuild)
+		{
+			LogAdd(LOG_RED, "[MU-Guard] [%s] Cliente %s... no esta entre los builds aceptados: rechazado", c.ip.c_str(), hash.c_str());
+
+			return;
+		}
+
+		c.greeted = true;
+
+		c.guardian.assign((const char*)payload.data() + 2 + HashSize, GuardianIdSize);
+
+		c.build = build;
+
+		GuardianState& guardian = this->m_Guardians[c.guardian];
+
+		guardian.connections++;
+
+		guardian.lastSeen = Clock::now();
+
+		if (build)
+		{
+			// El primero cuando el juego ya está andando.
+			c.nextChallenge = Clock::now() + std::chrono::seconds(RandomBetween(15, 30));
+		}
+		else
+		{
+			LogAdd(LOG_BLUE, "[MU-Guard] [%s] Cliente %s... sin build registrado: entra sin desafio de memoria", c.ip.c_str(), hash.c_str());
+		}
+	}
+
+	void Guard::SendChallenge(Connection& c)
+	{
+		using namespace GuardProto;
+
+		if (!SecureRandomBytes(c.nonce, sizeof(c.nonce)))
+		{
+			return;
+		}
+
+		c.ranges.clear();
+
+		while (c.ranges.size() < kChallengeRanges)
+		{
+			if (c.tourAt >= c.tour.size())
+			{
+				// Una recorrida nueva, en otro orden.
+				c.tour = c.build->Chunks(MaxChallengeRange);
+
+				for (std::size_t i = c.tour.size(); i > 1; i--)
+				{
+					std::swap(c.tour[i - 1], c.tour[(std::size_t)RandomBetween(0, (int)i - 1)]);
+				}
+
+				c.tourAt = 0;
+
+				if (c.tour.empty())
+				{
+					return;
+				}
+			}
+
+			c.ranges.push_back(c.tour[c.tourAt++]);
+		}
+
+		c.challenge = ++this->m_ChallengeSerial;
+
+		c.challenging = true;
+
+		c.deadline = Clock::now() + std::chrono::seconds(ChallengeTimeoutSeconds);
+
+		std::vector<std::uint8_t> body(4 + NonceSize + 1 + c.ranges.size() * 8);
+
+		PutLe32(body.data(), c.challenge);
+
+		std::memcpy(body.data() + 4, c.nonce, NonceSize);
+
+		body[4 + NonceSize] = (std::uint8_t)c.ranges.size();
+
+		for (std::size_t i = 0; i < c.ranges.size(); i++)
+		{
+			PutLe32(body.data() + 5 + NonceSize + i * 8, c.ranges[i].Rva);
+
+			PutLe32(body.data() + 9 + NonceSize + i * 8, c.ranges[i].Size);
+		}
+
+		this->Reply(c, Challenge, body.data(), body.size());
+	}
+
+	void Guard::HandleAnswer(Connection& c, const std::vector<std::uint8_t>& payload)
+	{
+		using namespace GuardProto;
+
+		if (payload.size() != ChallengeAnswerSize)
+		{
+			c.closing = true;
+
+			return;
+		}
+
+		// Respuesta tardía de un desafío ya vencido, o sin desafío en curso.
+		if (!c.challenging || GetLe32(payload.data()) != c.challenge)
+		{
+			return;
+		}
+
+		c.challenging = false;
+
+		const std::uint64_t base = GetLe64(payload.data() + 4);
+
+		std::uint8_t expected[HashSize];
+
+		const bool known = c.build->Expected(c.nonce, c.ranges, base, expected);
+
+		if (known && crypto_verify32(expected, payload.data() + 12) == 0)
+		{
+			const int every = this->m_Settings.ChallengeSeconds;
+
+			c.nextChallenge = Clock::now() + std::chrono::seconds(RandomBetween(every - every / 3, every + every / 3));
+
+			return;
+		}
+
+		c.condemned = true;
+
+		const char detail[] = "codigo del juego modificado en memoria";
+
+		std::vector<std::uint8_t> verdict{ Patch };
+
+		verdict.insert(verdict.end(), detail, detail + sizeof(detail) - 1);
+
+		this->Reply(c, Verdict, verdict.data(), verdict.size());
+
+		this->KickGuardian(c.guardian, "PATCH (fallo el desafio de memoria)", c.ip);
+	}
+
+	void Guard::KickGuardian(const std::string& guardian, const char* reason, const std::string& ip)
+	{
+		auto it = this->m_Guardians.find(guardian);
+
+		const int count = it == this->m_Guardians.end() ? 0 : (int)it->second.sessions.size();
+
+		LogAdd(LOG_RED, "[MU-Guard] [%s] %s: se desconecta a %d jugador(es)", ip.c_str(), reason, count);
+
+		if (it == this->m_Guardians.end())
+		{
+			return;
+		}
+
+		for (const std::string& ticket : it->second.sessions)
+		{
+			this->m_Kicks.push_back({ ++this->m_KickSerial, ticket, Clock::now() });
+		}
+
+		it->second.sessions.clear();
+	}
+
+	void Guard::SendPong(Connection& c)
+	{
+		std::vector<std::uint8_t> body(2);
+
+		std::uint16_t count = 0;
+
+		for (const Kick& kick : this->m_Kicks)
+		{
+			if (kick.serial <= c.kickSerial || count >= kMaxKicksPerPong)
+			{
+				continue;
+			}
+
+			body.insert(body.end(), kick.ticket.begin(), kick.ticket.end());
+
+			c.kickSerial = kick.serial;
+
+			count++;
+		}
+
+		body[0] = (std::uint8_t)(count & 0xFF);
+
+		body[1] = (std::uint8_t)(count >> 8);
+
+		this->Reply(c, GuardProto::Pong, body.data(), body.size());
+	}
+
+	void Guard::Drop(Connection& c)
+	{
+		if (c.local || !c.greeted)
+		{
+			return;
+		}
+
+		auto it = this->m_Guardians.find(c.guardian);
+
+		if (it != this->m_Guardians.end())
+		{
+			it->second.connections--;
+
+			it->second.lastSeen = Clock::now();
+		}
 	}
 
 	void Guard::Write(Connection& c)
@@ -670,6 +1068,62 @@ namespace
 			{
 				c->closing = true;
 			}
+		}
+
+		// Desafíos: vencidos y nuevos.
+		for (const auto& c : this->m_Connections)
+		{
+			if (c->local || !c->greeted || !c->build || c->condemned || c->closing)
+			{
+				continue;
+			}
+
+			if (c->challenging && now > c->deadline)
+			{
+				c->challenging = false;
+
+				c->condemned = true;
+
+				c->closing = true;
+
+				this->KickGuardian(c->guardian, "El guardian no contesto el desafio de memoria", c->ip);
+			}
+			else if (!c->challenging && now >= c->nextChallenge)
+			{
+				this->SendChallenge(*c);
+			}
+		}
+
+		// Guardianes que se fueron: pasada la gracia, sus jugadores afuera.
+		for (auto it = this->m_Guardians.begin(); it != this->m_Guardians.end();)
+		{
+			GuardianState& guardian = it->second;
+
+			if (guardian.connections > 0 || now - guardian.lastSeen < std::chrono::seconds(GuardProto::GuardianGraceSeconds))
+			{
+				++it;
+
+				continue;
+			}
+
+			if (!guardian.sessions.empty())
+			{
+				this->KickGuardian(it->first, "El guardian se desconecto", "-");
+			}
+
+			it = this->m_Guardians.erase(it);
+		}
+
+		while (!this->m_Kicks.empty() && now - this->m_Kicks.front().when > std::chrono::seconds(kKickSeconds))
+		{
+			this->m_Kicks.pop_front();
+		}
+
+		if (now >= this->m_NextBuildScan)
+		{
+			this->LoadBuilds();
+
+			this->m_NextBuildScan = now + std::chrono::seconds(10);
 		}
 
 		// La clave la rota el GameServer: se relee si cambió.
@@ -735,6 +1189,8 @@ namespace
 			{
 				if ((*it)->closing)
 				{
+					this->Drop(**it);
+
 					::close((*it)->fd);
 
 					it = this->m_Connections.erase(it);
@@ -748,8 +1204,49 @@ namespace
 	}
 }
 
-int main()
+int main(int argc, char** argv)
 {
+	// mu-guard build <ejecutable> [salida]: el manifiesto de un build del
+	// cliente, para Data/Guard/Builds.
+	if (argc >= 3 && std::strcmp(argv[1], "build") == 0)
+	{
+		CGuardBuild build;
+
+		std::string error;
+
+		if (!build.FromExecutable(argv[2], &error))
+		{
+			std::fprintf(stderr, "%s: %s\n", argv[2], error.c_str());
+
+			return 1;
+		}
+
+		std::string out = argc >= 4 ? argv[3] : std::string();
+
+		if (out.empty())
+		{
+			out = std::filesystem::path(argv[2]).filename().string() + ".guardbuild";
+		}
+
+		if (!build.Save(out))
+		{
+			std::fprintf(stderr, "No se pudo escribir %s\n", out.c_str());
+
+			return 1;
+		}
+
+		std::size_t code = 0;
+
+		for (const GuardBuildSection& s : build.Sections())
+		{
+			code += s.Bytes.size();
+		}
+
+		std::printf("%s  %s (%zu bytes de codigo)\n", Hex(build.Hash(), GuardProto::HashSize).c_str(), out.c_str(), code);
+
+		return 0;
+	}
+
 	std::signal(SIGPIPE, SIG_IGN);
 
 	Guard guard;

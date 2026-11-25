@@ -56,6 +56,12 @@ jobs:
       - name: Verificar paquete de mass teleport
         if: matrix.config == 'release'
         run: python -B tests/recall_packet_layout.py --architecture ${{ matrix.target.preset == 'windows-x64' && 'x64' || 'Win32' }}
+      - name: Verificar el manifiesto de MU-Guard (mu-guard build)
+        if: runner.os == 'Linux' && matrix.config == 'release'
+        run: |
+          bin=out/build/${{ matrix.target.preset }}-${{ matrix.config }}/bin
+          "$bin/mu-guard" build "$bin/ConnectServer" "$RUNNER_TEMP/cs.guardbuild"
+          test "$(head -c 5 "$RUNNER_TEMP/cs.guardbuild")" = MUGB1
 
   # Windows con MinGW-w64 (issue #23), en compilación cruzada desde Linux.
   # Los .exe salen estáticos: no tienen que pedir las DLL del toolchain.

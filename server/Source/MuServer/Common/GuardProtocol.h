@@ -35,7 +35,7 @@
 
 namespace GuardProto {
 
-constexpr std::uint16_t Version = 2;   // 2: Report
+constexpr std::uint16_t Version = 3;   // 2: Report; 3: desafío de memoria
 
 constexpr std::uint16_t DefaultPort = 28980;   // fuera de los puertos del server y del rango efímero
 
@@ -45,8 +45,20 @@ constexpr std::size_t MacSize = 32;
 constexpr std::size_t TranscriptSize = 32;
 constexpr std::size_t HashSize = 32;
 constexpr std::size_t IpSize = 46;   // texto, terminado en cero (entra una IPv6)
+constexpr std::size_t GuardianIdSize = 16;   // al azar, uno por guardián (sobrevive a reconectar)
+constexpr std::size_t NonceSize = 16;
 
 constexpr unsigned TicketSeconds = 60;
+
+// Desafío de memoria (diseño, punto 6 del flujo): cada ChallengeSeconds (con
+// algo de azar) mu-guard pide el hash de rangos del código del juego.  Sin
+// respuesta en ChallengeTimeoutSeconds, o con el guardián desconectado más de
+// GuardianGraceSeconds, se desconecta al jugador.
+constexpr unsigned ChallengeSeconds = 30;
+constexpr unsigned ChallengeTimeoutSeconds = 20;
+constexpr unsigned GuardianGraceSeconds = 30;
+constexpr std::size_t MaxChallengeRanges = 8;
+constexpr std::uint32_t MaxChallengeRange = 64 * 1024;
 
 constexpr char TicketContext[] = "MuTicket1";
 
@@ -56,20 +68,23 @@ constexpr std::size_t MaxMessage = 4096;
 enum Type : std::uint8_t
 {
 	// Guardián -> mu-guard
-	Hello = 0x01,           // versión (2, LE) | hash del main en disco (32)
+	Hello = 0x01,           // versión (2, LE) | hash del main en disco (32) | id del guardián (16)
 	TicketRequest = 0x02,   // sin datos
 	Report = 0x03,          // detección (1) | cerró el juego (1) | detalle (texto UTF-8, hasta MaxDetail)
+	ChallengeAnswer = 0x04, // desafío (4, LE) | base del ejecutable en el juego (8, LE) | hash (32)
 
 	// mu-guard -> guardián
 	HelloResult = 0x81,     // resultado (1) | opciones (1, HelloOption)
 	Ticket = 0x82,          // resultado (1) | id (16) | clave (32)
+	Challenge = 0x83,       // desafío (4, LE) | nonce (16) | rangos (1) | rangos x (rva (4, LE) | largo (4, LE))
+	Verdict = 0x84,         // detección (1) | detalle (texto): cerrar el juego por orden del server
 
 	// GameServer -> mu-guard (socket local)
 	Ping = 0x10,            // sin datos
 	Verify = 0x11,          // pedido (4, LE) | id (16) | MAC (32) | hash del saludo (32) | IP (46)
 
 	// mu-guard -> GameServer
-	Pong = 0x90,            // sin datos
+	Pong = 0x90,            // jugadores a desconectar (2, LE) | ids de sus tickets (16 cada uno)
 	VerifyResult = 0x91,    // pedido (4, LE) | resultado (1)
 };
 
@@ -79,6 +94,7 @@ enum Result : std::uint8_t
 	Ok = 0,
 	BadVersion = 1,   // el guardián habla otra versión de este protocolo
 	NotReady = 2,     // falta el saludo, o mu-guard no pudo armar el ticket
+	UnknownBuild = 3, // el ejecutable no está entre los builds aceptados (Data/Guard/Builds)
 };
 
 // Opciones del server para el guardián (Data/Guard/Guard.toml), en HelloResult.
@@ -115,7 +131,8 @@ enum Detection : std::uint8_t
 constexpr std::size_t MaxDetail = 512;
 
 // Largos de los datos de cada mensaje.
-constexpr std::size_t HelloSize = 2 + HashSize;
+constexpr std::size_t HelloSize = 2 + HashSize + GuardianIdSize;
+constexpr std::size_t ChallengeAnswerSize = 4 + 8 + HashSize;
 constexpr std::size_t TicketSize = 1 + TicketIdSize + TicketKeySize;
 constexpr std::size_t VerifySize = 4 + TicketIdSize + MacSize + TranscriptSize + IpSize;
 constexpr std::size_t VerifyResultSize = 4 + 1;
@@ -158,5 +175,20 @@ inline std::uint32_t GetLe32(const std::uint8_t* p)
 	return static_cast<std::uint32_t>(p[0]) | static_cast<std::uint32_t>(p[1]) << 8 |
 	       static_cast<std::uint32_t>(p[2]) << 16 | static_cast<std::uint32_t>(p[3]) << 24;
 }
+
+inline void PutLe64(std::uint8_t* p, std::uint64_t v)
+{
+	PutLe32(p, static_cast<std::uint32_t>(v));
+	PutLe32(p + 4, static_cast<std::uint32_t>(v >> 32));
+}
+
+inline std::uint64_t GetLe64(const std::uint8_t* p)
+{
+	return static_cast<std::uint64_t>(GetLe32(p)) | static_cast<std::uint64_t>(GetLe32(p + 4)) << 32;
+}
+
+// Contexto del hash del desafío: BLAKE2b-256(clave = nonce, mensaje = los
+// bytes de los rangos, en orden).
+constexpr char ChallengeContext[] = "MuChallenge1";
 
 } // namespace GuardProto

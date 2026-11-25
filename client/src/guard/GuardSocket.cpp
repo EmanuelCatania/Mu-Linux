@@ -56,7 +56,7 @@ Socket ToSocket(std::intptr_t s) { return static_cast<Socket>(s); }
 int WaitFor(Socket s, bool write, Clock::time_point deadline)
 {
 	const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count();
-	if (left <= 0) return 0;
+	if (left < 0) return 0;   // 0: se mira sin esperar
 	fd_set set;
 	FD_ZERO(&set);
 	FD_SET(s, &set);

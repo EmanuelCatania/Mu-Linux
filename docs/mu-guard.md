@@ -1,9 +1,8 @@
 # MU-Guard
 
-MU-Guard es la protección propia del cliente de Mu-Linux. Por ahora cierra dos
-caminos: **abrir el juego sin pasar por su guardián** y **abrir su memoria desde
-otro programa** (Windows). Las detecciones (editores de memoria, depuradores,
-inyección) llegan en las próximas versiones.
+MU-Guard es la protección propia del cliente de Mu-Linux: que el juego sólo se
+abra a través de su guardián, que ningún otro programa lea o edite su memoria y
+que su código no esté modificado.
 
 ## Cómo funciona
 
@@ -63,6 +62,48 @@ MemScanCloses = false   # MEMSCAN sólo se registra
 
 Se aplica a los guardianes que se conecten después del cambio.
 
+## Desafío de memoria y builds aceptados
+
+Cada unos 30 segundos `mu-guard` le pide al guardián el hash de 8 bloques de
+64 KB del código del juego, tal como está cargado en memoria, con una clave
+nueva cada vez. Los bloques salen de una recorrida en orden aleatorio de todo
+el código: en unos 16 minutos (para un `main.exe` de 16 MB de código) se
+revisó entero, y vuelve a empezar en otro orden. Lo compara con el hash que
+calcula él mismo a partir del `main.exe` publicado:
+
+- si no coincide (el código del juego fue modificado), le ordena al guardián
+  cerrar el juego (banner rojo `PATCH`) y desconecta del GameServer a los
+  jugadores que entraron con ese guardián;
+- si el guardián no contesta en 20 segundos, o se desconecta y no vuelve en 30,
+  también los desconecta.
+
+Para eso `mu-guard` necesita el **manifiesto** de cada `main.exe` que reparte
+el server, en `Data/Guard/Builds/`. Las Releases no traen ejecutables (cada
+server compila el suyo), así que el manifiesto lo arma quien compila:
+
+```sh
+# en Docker, con el main.exe copiado a la carpeta Data del server
+docker compose exec mu-server /opt/mu/mu-guard build     /opt/mu/Data/main.exe /opt/mu/Data/Guard/Builds/main.exe.guardbuild
+```
+
+Sirve igual para el `main` de Linux. Se puede tener uno por cada versión del
+cliente que todavía se use; `mu-guard` relee la carpeta cada 10 segundos.
+
+Un cliente que no está en `Data/Guard/Builds` entra sin desafío de memoria (y
+queda en el log como `sin build registrado`). Para aceptar sólo los builds
+publicados:
+
+```toml
+AcceptUnknownBuilds = false
+```
+
+El cliente que no está en la lista no consigue tickets, así que con
+`MU_GUARD_REQUIRED=1` no entra.
+
+El intervalo se ajusta con `ChallengeSeconds` (30 por defecto, de 5 a 300): más
+corto revisa todo el código antes y le cuesta más CPU a `mu-guard` (hashear
+512 KB por jugador en cada desafío).
+
 ## Activarlo
 
 ### Docker
@@ -95,6 +136,8 @@ Required = false
 Port = 28980
 Socket = ""   # vacío = Data/Guard/mu-guard.sock
 MemScanCloses = true
+AcceptUnknownBuilds = true
+ChallengeSeconds = 30
 ```
 
 El ConnectServer y el GameServer lo releen cuando cambia, sin reiniciar. Hay que
@@ -112,8 +155,9 @@ server se comporta como antes.
 - `mu-guard` y la verificación en el GameServer son sólo Linux (Docker y
   Pterodactyl).
 - La versión web no tiene guardián: con `MU_GUARD_REQUIRED=1` no puede entrar.
-- Con administrador se saltea la DACL. Para eso están las detecciones (ver
-  abajo); un programa que se haga pasar por el guardián todavía puede pedir
-  tickets, y eso lo cierran el desafío de memoria y los builds aceptados.
+- Con administrador se saltea la DACL. Para eso están las detecciones y el
+  desafío de memoria. Un programa que se haga pasar por el guardián tiene que
+  contestar los desafíos con el código de un `main.exe` sin tocar: eso lo deja
+  afuera si modifica el código del juego, pero no si edita sólo datos.
 - En Linux con `ptrace_scope` 0 no hay bloqueo de lectura de la memoria del
   juego, sólo la detección que llega después.

@@ -9,6 +9,10 @@
 // - En el login (CGConnectAccountRecv) se le consulta el ticket que trae el
 //   F1:01.  Con mu-guard CAIDO no se le pregunta nada: se deja entrar y se
 //   anota la sesión como "sin validar".
+// - El latido trae de vuelta los tickets de los jugadores a desconectar (el
+//   guardián falló el desafío de memoria o desapareció).  Se aplican en el hilo
+//   del juego (QUEUE_TIMER_CLOSE), sólo si la conexión sigue siendo la que entró
+//   con ese ticket.
 //
 // Sin MU_GUARD (o en Windows) todo esto no existe y el login es el de siempre.
 
@@ -23,9 +27,13 @@ enum class GuardLogin
 
 #if defined(MU_GUARD) && !defined(_WIN32)
 
+#include <array>
 #include <atomic>
+#include <map>
+#include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 class CGuardLink
 {
@@ -38,6 +46,15 @@ public:
 	// del canal de esta conexión (nullptr si no hay canal).
 	GuardLogin CheckLogin(const char* ip, const std::uint8_t* ticket, const std::uint8_t* mac,
 	                      const std::uint8_t* transcript);
+
+	// Ata el ticket a la conexión que entró con él.
+	void Bind(const std::uint8_t* ticket, int aIndex);
+
+	// La conexión se cerró (gObjDel): su ticket ya no la identifica.
+	void Unbind(int aIndex);
+
+	// Desconecta a los jugadores que pidió mu-guard.  Hilo del juego.
+	void ProcessKicks();
 
 private:
 
@@ -54,6 +71,22 @@ private:
 	std::atomic<std::uint32_t> m_Request { 0 };
 
 	std::thread m_Thread;
+
+	// La conexión se reconoce por índice + socket.  ConnectTickCount no sirve:
+	// el keep-alive lo reescribe (CGLiveClientRecv).
+	struct Session
+	{
+		int Index;
+		std::uint64_t Socket;
+	};
+
+	std::mutex m_Lock;   // m_Kicks (latido), m_Sessions y m_Bound
+
+	std::vector<std::string> m_Kicks;
+
+	std::map<std::string, Session> m_Sessions;   // id del ticket
+
+	std::map<int, std::string> m_Bound;   // índice -> id del ticket
 };
 
 extern CGuardLink gGuardLink;

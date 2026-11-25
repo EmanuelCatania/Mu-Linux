@@ -2,6 +2,7 @@
 #include "GameMain.h"
 #include "BattleSoccerManager.h"
 #include "DSProtocol.h"
+#include "GuardLink.h"
 #include "HackCheck.h"
 #include "JSProtocol.h"
 #include "MonsterManager.h"
@@ -165,6 +166,10 @@ void CALLBACK QueueTimerCallback(PVOID lpParameter, BOOLEAN TimerOrWaitFired)
 		case QUEUE_TIMER_CLOSE:
 		{
 			gObjCloseProc();
+
+#if defined(MU_GUARD) && !defined(_WIN32)
+			gGuardLink.ProcessKicks();
+#endif
 
 			break;
 		}

@@ -54,6 +54,12 @@ public:
 	// página ya reportados no se repiten).
 	void Scan(std::vector<Finding>& found);
 
+	// Desafío de memoria (paso 4): dónde quedó cargado el ejecutable del juego
+	// y la lectura de su memoria.  false si todavía no se puede.
+	bool ImageBase(std::uint64_t& base);
+
+	bool Read(std::uint64_t address, void* data, std::size_t size);
+
 private:
 	struct State;
 	State* m;

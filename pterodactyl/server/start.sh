@@ -44,7 +44,8 @@ fi
 # MU-Guard (ver server/docker/entrypoint.sh y docs/mu-guard.md).
 guard_dir="$MU_ROOT/Data/Guard"
 guard_toml="$guard_dir/Guard.toml"
-mkdir -p "$guard_dir"
+# Builds/: los manifiestos de los main.exe aceptados (mu-guard build).
+mkdir -p "$guard_dir/Builds"
 if [ ! -f "$guard_toml" ]; then
   cat > "$guard_toml" <<'EOF'
 # MU-Guard (docs/mu-guard.md).  Enabled y Required los pisa start.sh con
@@ -57,6 +58,11 @@ Socket = ""
 # true: un editor escaneando la memoria del juego (MEMSCAN) lo cierra.
 # false: sólo se registra (por si un antivirus da falsos positivos).
 MemScanCloses = true
+# true: un cliente que no está en Data/Guard/Builds entra igual, sin desafío
+# de memoria.  false: sólo los builds de Data/Guard/Builds.
+AcceptUnknownBuilds = true
+# Cada cuántos segundos se desafía la memoria del juego (5..300).
+ChallengeSeconds = 30
 EOF
 fi
 guard_bool() { [ "${1:-0}" = "1" ] && echo true || echo false; }
