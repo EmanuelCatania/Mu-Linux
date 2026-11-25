@@ -129,11 +129,13 @@ if(MU_GUARD)
   if(NOT WIN32)
     target_sources(GameServer PRIVATE Common/GuardConfig.cpp)
     target_compile_definitions(GameServer PRIVATE MU_GUARD)
-    add_executable(mu-guard MuGuard/mu-guard.cpp Common/GuardBuild.cpp Common/GuardConfig.cpp Common/SecureChannel.cpp
+    add_executable(mu-guard MuGuard/mu-guard.cpp MuGuard/GuardStore.cpp Common/GuardBuild.cpp Common/GuardConfig.cpp Common/SecureChannel.cpp
       Common/ServerIdentity.cpp Common/monocypher/monocypher.c)
     # MuGuard primero: Common/ServerIdentity.cpp toma de ahí su stdafx.h.
     target_include_directories(mu-guard PRIVATE MuGuard Common)
     target_compile_features(mu-guard PRIVATE cxx_std_17)
+    # Avisos y bans (paso 5) en la base del server.
+    mu_link_mysql(mu-guard)
     set_target_properties(mu-guard PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
   endif()
 endif()

@@ -18,13 +18,20 @@
 // respuesta a tiempo, o con el guardián desconectado más de la gracia, se
 // desconecta a sus jugadores.
 //
+// Avisos y bans (paso 5): una detección que cierra el juego (o un desafío
+// fallado) suma un aviso en la base, uno por guardián; a los X avisos se banea
+// cuenta, máquina e IP (GuardStore.h).  Una máquina o una IP baneadas no pasan
+// el saludo.
+//
 // Un solo hilo con poll(): son pocas conexiones y cada mensaje se atiende en
-// microsegundos.  Sólo Linux, como mu-trace.
+// microsegundos (las consultas a la base son pocas: un aviso es raro y los bans
+// se leen de una caché).  Sólo Linux, como mu-trace.
 
 #include "stdafx.h"
 #include "GuardBuild.h"
 #include "GuardConfig.h"
 #include "GuardProtocol.h"
+#include "GuardStore.h"
 #include "SecureChannel.h"
 #include "SecureRandom.h"
 #include "ServerIdentity.h"
@@ -34,6 +41,7 @@ extern "C"
 #include "monocypher/monocypher.h"
 }
 
+#include <algorithm>
 #include <arpa/inet.h>
 #include <cerrno>
 #include <chrono>
@@ -155,6 +163,13 @@ namespace
 		int connections = 0;
 		Clock::time_point lastSeen;
 		std::set<std::string> sessions;
+		std::string machine;     // hash de la máquina con la sal del server, en hex
+		std::string ip;
+		std::string build;       // primeros bytes del hash del ejecutable, en hex
+		std::string account;     // los informa el GameServer (Identify)
+		std::string character;
+		bool warned = false;     // ya sumó su aviso (uno por guardián)
+		std::vector<std::uint8_t> notice;   // la respuesta Notice de ese aviso
 	};
 
 	struct Kick
@@ -223,6 +238,16 @@ namespace
 		// Desconecta a los jugadores que entraron con un ticket de ese guardián.
 		void KickGuardian(const std::string& guardian, const char* reason, const std::string& ip);
 
+		// Una detección que cierra el juego: suma el aviso (si corresponde) y le
+		// contesta al guardián con Notice.
+		void Warn(Connection& c, int code, const std::string& detail);
+
+		void HandleIdentify(const std::vector<std::uint8_t>& payload);
+
+		// Sal del hash de las máquinas (Data/Guard/MachineSalt.key): así el hash
+		// guardado no sirve para cruzar jugadores entre servers.
+		bool LoadSalt();
+
 		void Drop(Connection& c);
 
 		void LoadBuilds();
@@ -246,6 +271,12 @@ namespace
 		std::map<std::string, std::vector<Clock::time_point>> m_Issued;   // IP -> tickets del último minuto
 
 		std::map<std::string, GuardianState> m_Guardians;   // id del guardián
+
+		std::map<std::string, std::string> m_SessionOwner;   // id del ticket -> id del guardián
+
+		CGuardStore m_Store;
+
+		std::uint8_t m_Salt[32] = {};
 
 		std::map<std::string, std::shared_ptr<const CGuardBuild>> m_Builds;   // hash del ejecutable
 
@@ -306,11 +337,59 @@ namespace
 		LogAdd(LOG_BLUE, "[MU-Guard] Builds aceptados: %d (Data/Guard/Builds)", (int)builds.size());
 	}
 
+	bool Guard::LoadSalt()
+	{
+		const std::string path = this->m_Data + "Guard/MachineSalt.key";
+
+		if (FILE* file = std::fopen(path.c_str(), "rb"))
+		{
+			const std::size_t n = std::fread(this->m_Salt, 1, sizeof(this->m_Salt), file);
+
+			std::fclose(file);
+
+			if (n == sizeof(this->m_Salt))
+			{
+				return true;
+			}
+		}
+
+		if (!SecureRandomBytes(this->m_Salt, sizeof(this->m_Salt)))
+		{
+			return false;
+		}
+
+		FILE* file = std::fopen(path.c_str(), "wb");
+
+		if (file == nullptr)
+		{
+			LogAdd(LOG_RED, "[MU-Guard] No se pudo crear %s", path.c_str());
+
+			return false;
+		}
+
+		const bool ok = std::fwrite(this->m_Salt, 1, sizeof(this->m_Salt), file) == sizeof(this->m_Salt);
+
+		std::fclose(file);
+
+		::chmod(path.c_str(), 0600);
+
+		return ok;
+	}
+
 	bool Guard::Start()
 	{
 		this->m_Data = DataPath();
 
 		this->m_Settings = ReadGuardSettings(this->m_Data);
+
+		if (!this->LoadSalt())
+		{
+			LogAdd(LOG_RED, "[MU-Guard] Sin sal para las maquinas: no se puede arrancar");
+
+			return false;
+		}
+
+		this->m_Store.Tick();
 
 		gServerIdentity.Reload((this->m_Data + "Keys").c_str());
 
@@ -591,6 +670,10 @@ namespace
 			{
 				this->HandleVerify(c, payload);
 			}
+			else if (type == Identify)
+			{
+				this->HandleIdentify(payload);
+			}
 			else
 			{
 				c.closing = true;
@@ -663,9 +746,8 @@ namespace
 
 		if (type == Report && c.greeted && payload.size() >= 2 && payload.size() <= 2 + MaxDetail)
 		{
-			// Por ahora sólo se registra; los avisos y bans son del paso 5.
-			static const char* const kNames[] = { "?", "DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH", "FILES", "TOOL" };
-			const char* name = payload[0] < sizeof(kNames) / sizeof(kNames[0]) ? kNames[payload[0]] : "?";
+			// Todo se registra; lo que cerró el juego suma además un aviso.
+			const char* name = GuardDetectionName(payload[0]);
 			std::string detail(payload.begin() + 2, payload.end());
 
 			for (char& ch : detail)
@@ -678,6 +760,11 @@ namespace
 
 			LogAdd(payload[1] ? LOG_RED : LOG_BLUE, "[MU-Guard] [%s] %s %s: %s", c.ip.c_str(), name,
 				payload[1] ? "(cerro el juego)" : "(registrado)", detail.c_str());
+
+			if (payload[1])
+			{
+				this->Warn(c, payload[0], detail);
+			}
 
 			return;
 		}
@@ -717,9 +804,21 @@ namespace
 
 		auto it = this->m_Tickets.find(id);
 
-		if (it == this->m_Tickets.end())
+		std::int64_t until = 0;
+
+		if (this->m_Store.IsBanned("ip", ip, until))
 		{
-			// Un id ya usado tampoco está: se borra al presentarlo.
+			if (it != this->m_Tickets.end())
+			{
+				this->m_Tickets.erase(it);
+			}
+
+			reply[4] = BannedIp;
+		}
+		else if (it == this->m_Tickets.end())
+		{
+			// Un id ya usado tampoco está: se borra al presentarlo.  Un id en ceros
+			// es un login sin ticket: sólo se preguntaba por la IP.
 			reply[4] = UnknownTicket;
 		}
 		else
@@ -767,13 +866,19 @@ namespace
 				if (guardian.sessions.size() < kMaxSessionsPerGuardian)
 				{
 					guardian.sessions.insert(id);
+
+					this->m_SessionOwner[id] = ticket.guardian;
 				}
 			}
 
 			crypto_wipe(expected, sizeof(expected));
 		}
 
-		if (reply[4] != Valid)
+		if (reply[4] == BannedIp)
+		{
+			LogAdd(LOG_RED, "[MU-Guard] [%s] Login rechazado: IP baneada", ip);
+		}
+		else if (reply[4] != Valid && std::any_of(id.begin(), id.end(), [](char ch) { return ch != 0; }))
 		{
 			LogAdd(LOG_RED, "[MU-Guard] [%s] Ticket rechazado en el login (motivo %d)", ip, (int)reply[4]);
 		}
@@ -807,13 +912,65 @@ namespace
 			}
 		}
 
-		const std::uint8_t reply[2] = { result, static_cast<std::uint8_t>(this->m_Settings.MemScanCloses ? MemScanCloses : 0) };
+		// La máquina: el hash del guardián con la sal del server.
+		std::string machine;
 
-		this->Reply(c, HelloResult, reply, sizeof(reply));
+		std::uint8_t banned = 0;
+
+		std::int64_t until = 0;
+
+		if (result != BadVersion)
+		{
+			std::uint8_t salted[16];
+
+			crypto_blake2b_keyed(salted, sizeof(salted), this->m_Salt, sizeof(this->m_Salt), payload.data() + 2 + HashSize + GuardianIdSize, MachineSize);
+
+			machine = Hex(salted, sizeof(salted));
+
+			std::int64_t when = 0;
+
+			if (this->m_Store.IsBanned("machine", machine, when))
+			{
+				banned |= BanMachine;
+
+				until = when;
+			}
+
+			if (this->m_Store.IsBanned("ip", c.ip, when))
+			{
+				banned |= BanIp;
+
+				until = (until == 0 && (banned & BanMachine)) ? 0 : (when == 0 || when > until ? when : until);
+			}
+
+			if (banned != 0)
+			{
+				result = Banned;
+			}
+		}
+
+		std::uint8_t reply[HelloResultBannedSize] = { result, static_cast<std::uint8_t>(this->m_Settings.MemScanCloses ? MemScanCloses : 0) };
+
+		if (result == Banned)
+		{
+			reply[2] = banned;
+
+			PutLe64(reply + 3, (std::uint64_t)until);
+		}
+
+		this->Reply(c, HelloResult, reply, result == Banned ? sizeof(reply) : 2);
 
 		if (result == BadVersion)
 		{
 			LogAdd(LOG_RED, "[MU-Guard] [%s] Guardian de otra version: rechazado", c.ip.c_str());
+
+			return;
+		}
+
+		if (result == Banned)
+		{
+			LogAdd(LOG_RED, "[MU-Guard] [%s] maquina=%s baneada (%s%s): no se abre el juego", c.ip.c_str(), machine.c_str(),
+				(banned & BanMachine) ? "maquina" : "", (banned & BanIp) ? ((banned & BanMachine) ? " e IP" : "IP") : "");
 
 			return;
 		}
@@ -838,6 +995,12 @@ namespace
 		guardian.connections++;
 
 		guardian.lastSeen = Clock::now();
+
+		guardian.machine = machine;
+
+		guardian.ip = c.ip;
+
+		guardian.build = Hex(payload.data() + 2, 8);
 
 		if (build)
 		{
@@ -952,7 +1115,100 @@ namespace
 
 		this->Reply(c, Verdict, verdict.data(), verdict.size());
 
+		this->Warn(c, Patch, detail);
+
 		this->KickGuardian(c.guardian, "PATCH (fallo el desafio de memoria)", c.ip);
+	}
+
+	void Guard::Warn(Connection& c, int code, const std::string& detail)
+	{
+		using namespace GuardProto;
+
+		GuardianState& guardian = this->m_Guardians[c.guardian];
+
+		if (!guardian.warned)
+		{
+			guardian.warned = true;
+
+			std::uint8_t notice[NoticeSize] = {};
+
+			if ((this->m_Settings.WarningCodes & (1u << code)) != 0)
+			{
+				GuardWarning warning;
+				warning.code = code;
+				warning.detail = detail;
+				warning.account = guardian.account;
+				warning.character = guardian.character;
+				warning.machine = guardian.machine;
+				warning.ip = c.ip;
+				warning.build = guardian.build;
+
+				const GuardWarningResult result = this->m_Store.AddWarning(warning, this->m_Settings);
+
+				const int limit = this->m_Settings.WarningLimit;
+
+				LogAdd(LOG_RED, "[MU-Guard] %s cuenta=%s pj=%s ip=%s maquina=%s aviso=%d/%d%s%s", GuardDetectionName(code),
+					warning.account.empty() ? "-" : warning.account.c_str(), warning.character.empty() ? "-" : warning.character.c_str(),
+					c.ip.c_str(), warning.machine.c_str(), result.number, limit,
+					result.stored ? "" : " (sin base: no quedo guardado)",
+					result.banned != 0 ? " -> BANEADO" : "");
+
+				if (result.stored)
+				{
+					notice[0] = (std::uint8_t)(result.number > 255 ? 255 : result.number);
+
+					notice[1] = (std::uint8_t)(limit > 255 ? 255 : limit);
+
+					notice[2] = result.banned;
+
+					PutLe64(notice + 3, (std::uint64_t)result.until);
+				}
+			}
+
+			guardian.notice.assign(notice, notice + sizeof(notice));
+		}
+
+		this->Reply(c, Notice, guardian.notice.data(), guardian.notice.size());
+	}
+
+	void Guard::HandleIdentify(const std::vector<std::uint8_t>& payload)
+	{
+		using namespace GuardProto;
+
+		if (payload.size() != IdentifySize)
+		{
+			return;
+		}
+
+		auto owner = this->m_SessionOwner.find(std::string((const char*)payload.data(), TicketIdSize));
+
+		if (owner == this->m_SessionOwner.end())
+		{
+			return;
+		}
+
+		auto it = this->m_Guardians.find(owner->second);
+
+		if (it == this->m_Guardians.end())
+		{
+			return;
+		}
+
+		const auto field = [&](std::size_t at) {
+			const char* p = (const char*)payload.data() + at;
+			return std::string(p, strnlen(p, AccountSize));
+		};
+
+		const std::string account = field(TicketIdSize);
+
+		const std::string character = field(TicketIdSize + AccountSize);
+
+		if (!account.empty())
+		{
+			it->second.account = account;
+		}
+
+		it->second.character = character;
 	}
 
 	void Guard::KickGuardian(const std::string& guardian, const char* reason, const std::string& ip)
@@ -971,6 +1227,8 @@ namespace
 		for (const std::string& ticket : it->second.sessions)
 		{
 			this->m_Kicks.push_back({ ++this->m_KickSerial, ticket, Clock::now() });
+
+			this->m_SessionOwner.erase(ticket);
 		}
 
 		it->second.sessions.clear();
@@ -1108,7 +1366,7 @@ namespace
 
 			if (!guardian.sessions.empty())
 			{
-				this->KickGuardian(it->first, "El guardian se desconecto", "-");
+				this->KickGuardian(it->first, "El guardian se desconecto", guardian.ip.empty() ? "-" : guardian.ip);
 			}
 
 			it = this->m_Guardians.erase(it);
@@ -1133,6 +1391,8 @@ namespace
 		}
 
 		this->m_Settings = ReadGuardSettings(this->m_Data);
+
+		this->m_Store.Tick();
 	}
 
 	void Guard::Run()
