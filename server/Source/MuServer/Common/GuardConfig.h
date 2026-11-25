@@ -23,7 +23,7 @@
 //   [warnings]              # avisos (sólo los lee mu-guard)
 //   limit = 3               # avisos para banear; 0 = nunca banear
 //   window_days = 30        # los avisos más viejos no cuentan
-//   codes = ["DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH"]
+//   codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH"]   # MEMSCAN no suma por defecto
 //
 //   [ban]
 //   account_days = 7        # 0 = permanente, -1 = no banear la cuenta

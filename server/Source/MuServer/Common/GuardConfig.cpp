@@ -27,7 +27,9 @@ namespace
 
 	std::uint32_t DefaultWarningCodes()
 	{
-		return (1u << 1) | (1u << 2) | (1u << 3) | (1u << 4) | (1u << 5);
+		// DEBUGGER, INJECT, MEMEDIT y PATCH.  MEMSCAN no: un antivirus que lee la
+		// memoria del juego lo dispara igual que un editor.
+		return (1u << 1) | (1u << 2) | (1u << 3) | (1u << 5);
 	}
 
 	int ClampInt(std::int64_t value, int low, int high)
