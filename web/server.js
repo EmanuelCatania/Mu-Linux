@@ -1816,7 +1816,7 @@ app.get('/admin/mu-guard', requireAdmin, requireAdminPasswordChange, async (req,
 app.post('/admin/mu-guard/bans/:id/lift', requireAdmin, requireAdminPasswordChange, async (req, res) => {
   const id = Number.parseInt(req.params.id, 10);
   const back = `/admin/mu-guard${req.body.q ? `?q=${encodeURIComponent(String(req.body.q))}&` : '?'}`;
-  if (!Number.isInteger(id) || id <= 0) return res.redirect(`${back}err=${encodeURIComponent('Ban invalido.')}`);
+  if (!Number.isInteger(id) || id <= 0) return res.redirect(`${back}err=${encodeURIComponent('Ban inválido.')}`);
   const [rows] = await pool.query('SELECT kind, value, lifted FROM MuGuardBan WHERE id = ? LIMIT 1', [id]);
   if (rows.length === 0) return res.redirect(`${back}err=${encodeURIComponent('Ban no encontrado.')}`);
   await pool.query('UPDATE MuGuardBan SET lifted = 1 WHERE id = ?', [id]);
@@ -1829,7 +1829,7 @@ app.post('/admin/mu-guard/bans/:id/lift', requireAdmin, requireAdminPasswordChan
 app.post('/admin/mu-guard/warnings/:id/void', requireAdmin, requireAdminPasswordChange, async (req, res) => {
   const id = Number.parseInt(req.params.id, 10);
   const back = `/admin/mu-guard${req.body.q ? `?q=${encodeURIComponent(String(req.body.q))}&` : '?'}`;
-  if (!Number.isInteger(id) || id <= 0) return res.redirect(`${back}err=${encodeURIComponent('Aviso invalido.')}`);
+  if (!Number.isInteger(id) || id <= 0) return res.redirect(`${back}err=${encodeURIComponent('Aviso inválido.')}`);
   const voided = req.body.voided === '0' ? 0 : 1;
   await pool.query('UPDATE MuGuardWarning SET voided = ? WHERE id = ?', [voided, id]);
   return res.redirect(`${back}ok=${encodeURIComponent(voided ? 'Aviso anulado: ya no cuenta.' : 'Aviso restaurado.')}`);
