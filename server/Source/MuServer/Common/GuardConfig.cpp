@@ -165,15 +165,15 @@ namespace
 		}
 	}
 
-	const char* const kDetectionNames[] = { "?", "DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH", "FILES", "TOOL" };
+	const char* const kDetectionNames[] = { "?", "DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH", "FILES", "TOOL", "KILLED" };
 
 	constexpr int kDetections = (int)(sizeof(kDetectionNames) / sizeof(kDetectionNames[0]));
 
 	std::uint32_t DefaultWarningCodes()
 	{
-		// DEBUGGER, INJECT, MEMEDIT y PATCH.  MEMSCAN no: un antivirus que lee la
-		// memoria del juego lo dispara igual que un editor.
-		return (1u << 1) | (1u << 2) | (1u << 3) | (1u << 5);
+		// DEBUGGER, INJECT, MEMEDIT, PATCH y KILLED.  MEMSCAN no: un antivirus que
+		// lee la memoria del juego lo dispara igual que un editor.
+		return (1u << 1) | (1u << 2) | (1u << 3) | (1u << 5) | (1u << 8);
 	}
 
 	int ClampInt(std::int64_t value, int low, int high)

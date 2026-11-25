@@ -29,6 +29,8 @@
 //   INJECT    otros módulos fuera del juego y del sistema (overlays de Discord,
 //             Steam, OBS... son legítimos), salvo los de la lista de permitidos
 
+#include "guard/GuardProtocol.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -54,6 +56,13 @@ public:
 	// Linux nullptr).  pid: el del juego.  gameDir: su carpeta.  Antes de
 	// reanudar el juego: planta las páginas señuelo.
 	void Attach(void* process, void* mainThread, unsigned long pid, const std::string& gameDir);
+
+	// La DACL de los hilos del juego (Windows): se la pone a los que el juego
+	// crea después de arrancar.  Tiene que vivir mientras se use el detector.
+	void SetThreadDacl(void* dacl);
+
+	// Contadores de vida (KILLED): cuántas veces corrió cada detector.
+	void Life(std::uint32_t out[GuardProto::LifeCounters]) const;
 
 	// Si MEMSCAN cierra el juego (lo dice el server en el saludo).
 	void SetMemScanCloses(bool closes);

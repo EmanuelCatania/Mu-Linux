@@ -13,6 +13,7 @@
 #include "guard/GuardProtocol.h"
 #include "guard/GuardSocket.h"
 
+#include "app/config/ServerConfig.h"
 #include "assets/data/ContentCatalog.h"
 #include "net/ServerTrust.h"
 #include "net/crypto/SecureRandom.h"
@@ -572,10 +573,12 @@ std::string ThreatName(const Guard::Detector& detector, const Guard::Finding& fi
 {
 	const std::string custom = detector.Name(finding.code, language);
 	if (!custom.empty()) return custom;
-	static const char* const kNames[3][6] = {
-		{ "un depurador", "un editor de memoria", "Cheat Engine", "el juego modificado", "una herramienta prohibida", "un archivo del juego modificado" },
-		{ "A debugger", "A memory editor", "Cheat Engine", "A modified game", "A forbidden tool", "A modified game file" },
-		{ "Um depurador", "Um editor de mem\xC3\xB3ria", "Cheat Engine", "O jogo modificado", "Uma ferramenta proibida", "Um arquivo do jogo modificado" },
+	static const char* const kNames[3][7] = {
+		{ "un depurador", "un editor de memoria", "Cheat Engine", "el juego modificado", "una herramienta prohibida", "un archivo del juego modificado",
+		  "MU-Guard detenido" },
+		{ "A debugger", "A memory editor", "Cheat Engine", "A modified game", "A forbidden tool", "A modified game file", "A stopped MU-Guard" },
+		{ "Um depurador", "Um editor de mem\xC3\xB3ria", "Cheat Engine", "O jogo modificado", "Uma ferramenta proibida", "Um arquivo do jogo modificado",
+		  "O MU-Guard parado" },
 	};
 	const int lang = (language >= 0 && language < 3) ? language : 0;
 	switch (finding.code)
@@ -586,6 +589,7 @@ std::string ThreatName(const Guard::Detector& detector, const Guard::Finding& fi
 	case GuardProto::Patch: return kNames[lang][3];
 	case GuardProto::Tool: return kNames[lang][4];
 	case GuardProto::Files: return kNames[lang][5];
+	case GuardProto::Killed: return kNames[lang][6];
 	default: return kNames[lang][2];
 	}
 }
@@ -652,6 +656,14 @@ struct Vigil
 	std::vector<std::uint8_t> challenge;   // el payload del Challenge
 };
 
+// Marca que lee mu-patch: un build con MU-Guard y sin la clave del server
+// compilada (ServerConfig::ServerPublicKey) no se publica, porque sin esa clave
+// un proxy puede hacerse pasar por el server y el ticket no protege nada.  Sólo
+// queda en el ejecutable la del caso que corresponde.
+template <bool NoKey> struct KeyMark { static constexpr char text[] = "MuGuardKey1:ok"; };
+template <> struct KeyMark<true> { static constexpr char text[] = "MuGuardKey1:none"; };
+constexpr bool kNoServerKey = ServerConfig::ServerPublicKey[0] == '\0';
+
 bool AnswerChallenge(Guard::Detector& detector, GuardConnection& guard, const std::vector<std::uint8_t>& challenge)
 {
 	using namespace GuardProto;
@@ -680,6 +692,9 @@ bool AnswerChallenge(Guard::Detector& detector, GuardConnection& guard, const st
 	std::memcpy(answer, challenge.data(), 4);
 	PutLe64(answer + 4, base);
 	crypto_blake2b_final(&ctx, answer + 12);
+	std::uint32_t life[LifeCounters];
+	detector.Life(life);
+	for (std::size_t i = 0; i < LifeCounters; i++) PutLe32(answer + 12 + HashSize + i * 4, life[i]);
 	guard.Answer(answer);
 	return true;
 }
@@ -1028,6 +1043,11 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	if (IsGameRole() || host == nullptr || *host == '\0') return false;
 
 	ServerTrust::SetServer(std::string(Platform::UserDir()) + "Cache/" + CContentCatalog::CacheId(host, port));
+	if (kNoServerKey)
+		Log("MU-Guard: este build no tiene la clave del server compilada (%s); sirve para probar, "
+		    "pero mu-patch no lo publica", KeyMark<kNoServerKey>::text);
+	else
+		Log("MU-Guard: clave del server compilada (%s)", KeyMark<kNoServerKey>::text);
 
 	const std::uint16_t guardPort = AskConnectServer(host, port);
 	if (guardPort == 0) return false;
@@ -1158,6 +1178,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	detector.SetToolCloses((guard.Options() & GuardProto::ToolCloses) != 0);
 	detector.SetFilesCloses((guard.Options() & GuardProto::FilesCloses) != 0);
 	detector.Attach(pi.hProcess, pi.hThread, pi.dwProcessId, gameDir);
+	detector.SetThreadDacl(threadSd.Dacl());
 	Vigil vigil;
 	ResumeThread(pi.hThread);
 

@@ -77,7 +77,7 @@ limit = 3              # 0 = nunca banear
 window_days = 30
 # MEMSCAN no suma por defecto: un antivirus que lee la memoria del juego
 # lo dispara igual que un editor, y no tiene que terminar en ban.
-codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH"]
+codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH", "KILLED"]
 
 [ban]
 account_days = 7       # 0 = permanente, -1 = no banear la cuenta
@@ -147,7 +147,7 @@ if [ ! -f "$guard_dir/Messages.toml" ]; then
   cat > "$guard_dir/Messages.toml" <<'EOF'
 # MU-Guard: cómo se nombra cada detección en el banner (docs/mu-guard.md).
 # Sin una entrada se usa el texto del cliente.  Detecciones: DEBUGGER, INJECT,
-# MEMEDIT, MEMSCAN, PATCH, TOOL.  El banner dice "Se detectó <nombre>".
+# MEMEDIT, MEMSCAN, PATCH, FILES, TOOL, KILLED.  El banner dice "Se detectó <nombre>".
 [es]
 # TOOL = "un programa no permitido"
 
@@ -169,7 +169,7 @@ limit = 3              # 0 = nunca banear
 window_days = 30
 # MEMSCAN no suma por defecto: un antivirus que lee la memoria del juego
 # lo dispara igual que un editor, y no tiene que terminar en ban.
-codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH"]
+codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH", "KILLED"]
 
 [ban]
 account_days = 7       # 0 = permanente, -1 = no banear la cuenta

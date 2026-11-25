@@ -220,6 +220,9 @@ namespace
 		std::size_t tourAt = 0;
 		Clock::time_point deadline;   // del desafío en curso
 		Clock::time_point nextChallenge;
+		bool hasLife = false;         // KILLED: ya hubo una respuesta con contadores
+		std::uint32_t life[GuardProto::LifeCounters] = {};
+		Clock::time_point lifeAt;
 		bool heartbeat = false;       // el GameServer mandó Ping por esta conexión
 		std::uint64_t kickSerial = 0; // última orden de desconectar entregada
 		std::unique_ptr<SecureChannel> channel;
@@ -264,6 +267,8 @@ namespace
 		// Una detección que cierra el juego: suma el aviso (si corresponde) y le
 		// contesta al guardián con Notice.
 		void Warn(Connection& c, int code, const std::string& detail);
+
+		bool CheckLife(Connection& c, const std::uint8_t* data);
 
 		// Aviso de un arranque anterior: sin Notice y sin gastar el de este guardián.
 		void WarnPrevious(Connection& c, int code, const std::string& detail);
@@ -1192,6 +1197,11 @@ namespace
 
 		if (known && crypto_verify32(expected, payload.data() + 12) == 0)
 		{
+			if (this->CheckLife(c, payload.data() + 12 + HashSize))
+			{
+				return;
+			}
+
 			const int every = this->m_Settings.ChallengeSeconds;
 
 			c.nextChallenge = Clock::now() + std::chrono::seconds(RandomBetween(every - every / 3, every + every / 3));
@@ -1212,6 +1222,81 @@ namespace
 		this->Warn(c, Patch, detail);
 
 		this->KickGuardian(c.guardian, "PATCH (fallo el desafio de memoria)", c.ip);
+	}
+
+	// KILLED: los contadores de vida de la respuesta contra los de la anterior.
+	// El desafío lo contesta el mismo bucle que corre los detectores, así que un
+	// guardián congelado ya cae por no contestar; esto ve un detector que dejó
+	// de correr (o las pasadas enteras) mientras el bucle sigue contestando.
+	// Sólo cuenta un detector que ya corrió alguna vez: los que no existen en la
+	// plataforma del guardián quedan en cero.  true: se cerró el juego.
+	bool Guard::CheckLife(Connection& c, const std::uint8_t* data)
+	{
+		using namespace GuardProto;
+
+		static const char* const kLifeNames[LifeCounters] = { "las pasadas", "DEBUGGER", "FILES", "MEMSCAN", "las funciones de tiempo",
+			"MEMEDIT", "los módulos", "TOOL" };
+
+		std::uint32_t life[LifeCounters];
+
+		for (std::size_t i = 0; i < LifeCounters; i++)
+		{
+			life[i] = GetLe32(data + i * 4);
+		}
+
+		const Clock::time_point now = Clock::now();
+
+		std::string stopped;
+
+		if (c.hasLife)
+		{
+			const std::uint32_t passes = life[LifePasses] - c.life[LifePasses];
+
+			const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now - c.lifeAt).count();
+
+			if (life[LifePasses] < c.life[LifePasses] || (seconds >= 20 && passes < 2))
+			{
+				stopped = kLifeNames[LifePasses];
+			}
+			else if (passes >= 10)
+			{
+				// Los detectores lentos corren cada 5 pasadas: en 10 corrieron todos.
+				for (std::size_t i = 1; i < LifeCounters && stopped.empty(); i++)
+				{
+					if (c.life[i] != 0 && life[i] == c.life[i])
+					{
+						stopped = kLifeNames[i];
+					}
+				}
+			}
+		}
+
+		std::memcpy(c.life, life, sizeof(life));
+
+		c.lifeAt = now;
+
+		c.hasLife = true;
+
+		if (stopped.empty())
+		{
+			return false;
+		}
+
+		c.condemned = true;
+
+		const std::string detail = "dejó de correr " + stopped + " del guardián";
+
+		std::vector<std::uint8_t> verdict{ Killed };
+
+		verdict.insert(verdict.end(), detail.begin(), detail.end());
+
+		this->Reply(c, Verdict, verdict.data(), verdict.size());
+
+		this->Warn(c, Killed, detail);
+
+		this->KickGuardian(c.guardian, "KILLED (un detector del guardian dejo de correr)", c.ip);
+
+		return true;
 	}
 
 	void Guard::WarnPrevious(Connection& c, int code, const std::string& detail)

@@ -27,6 +27,11 @@ constexpr std::size_t kDeltaHistory = 3;                // contra las 3 versione
 constexpr std::uint64_t kBatchBytes = 256ull << 20;     // memoria máxima por tanda de compresión
 const char kMarker[] = "MuRelease1:";
 
+// Un cliente con MU-Guard y sin la clave del server compilada lleva esta marca
+// (guard/Guardian.cpp, KeyMark): sin la clave un proxy se hace pasar por el
+// server, así que no se publica.
+const char kNoKeyMarker[] = "MuGuardKey1:none";
+
 void Say(const Log& log, const std::string& s)
 {
 	if (log) log(s);
@@ -373,6 +378,12 @@ bool BuildPatch(const BuildOptions& o, std::string* error)
 			{
 				releases.insert(release);
 				Say(o.log, path + ": cliente " + release + " (" + f.platform + ")");
+			}
+			if (std::search(data.begin(), data.end(), kNoKeyMarker, kNoKeyMarker + sizeof(kNoKeyMarker)) != data.end())
+			{
+				key.Wipe();
+				return Fail(error, path + ": tiene MU-Guard pero no la clave del server compilada (ServerPublicKey en "
+				                   "app/config/ServerConfig.h, la que el GameServer escribe en su log al arrancar)");
 			}
 			f.self = StartsWithNoCase(path, "Launcher/");
 		}

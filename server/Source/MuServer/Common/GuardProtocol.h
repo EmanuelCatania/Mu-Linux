@@ -46,7 +46,7 @@
 
 namespace GuardProto {
 
-constexpr std::uint16_t Version = 4;   // 2: Report; 3: desafío de memoria; 4: avisos y bans
+constexpr std::uint16_t Version = 5;   // 2: Report; 3: desafío de memoria; 4: avisos y bans; 5: KILLED
 
 constexpr std::uint16_t DefaultPort = 28980;   // fuera de los puertos del server y del rango efímero
 
@@ -73,6 +73,17 @@ constexpr unsigned GuardianGraceSeconds = 30;
 constexpr std::size_t MaxChallengeRanges = 8;
 constexpr std::uint32_t MaxChallengeRange = 64 * 1024;
 
+// Contadores de vida (KILLED): cuántas veces corrió cada detector del guardián.
+// Van en cada respuesta al desafío; si uno que ya corría deja de avanzar
+// mientras las pasadas siguen, mu-guard cierra el juego.  El primero son las
+// pasadas; los que no existen en la plataforma quedan en cero.
+constexpr std::size_t LifeCounters = 8;
+enum LifeCounter : std::uint8_t
+{
+	LifePasses = 0, LifeDebugger = 1, LifeFiles = 2, LifeDecoys = 3,
+	LifeTimeHooks = 4, LifeDrivers = 5, LifeModules = 6, LifeTools = 7,
+};
+
 constexpr char TicketContext[] = "MuTicket1";
 
 // Hash de la máquina: BLAKE2b-256(MachineContext + lo que la identifica).
@@ -87,7 +98,8 @@ enum Type : std::uint8_t
 	Hello = 0x01,           // versión (2, LE) | hash del main en disco (32) | id del guardián (16) | máquina (32)
 	TicketRequest = 0x02,   // sin datos
 	Report = 0x03,          // detección (1) | cerró el juego (1) | detalle (texto UTF-8, hasta MaxDetail)
-	ChallengeAnswer = 0x04, // desafío (4, LE) | base del ejecutable en el juego (8, LE) | hash (32)
+	ChallengeAnswer = 0x04, // desafío (4, LE) | base del ejecutable en el juego (8, LE) | hash (32) |
+                        // contadores de vida (LifeCounters x 4, LE)
 
 	// mu-guard -> guardián
 	HelloResult = 0x81,     // resultado (1) | opciones (1, HelloOption) [| Banned: qué (1, BanFlag) | hasta (8, LE)]
@@ -180,6 +192,7 @@ enum Detection : std::uint8_t
 	Patch = 5,      // código del juego modificado en memoria (desafío, paso 4)
 	Files = 6,      // archivos del cliente que no coinciden
 	Tool = 7,       // proceso o ventana de las listas
+	Killed = 8,     // un detector del guardián dejó de correr (contadores de vida)
 };
 
 constexpr std::size_t MaxDetail = 512;
@@ -190,7 +203,7 @@ constexpr std::size_t HelloResultBannedSize = 2 + 1 + 8;
 constexpr std::size_t HelloResultTooManySize = 2 + 1;   // | el máximo (1)
 constexpr std::size_t NoticeSize = 1 + 1 + 1 + 8;
 constexpr std::size_t IdentifySize = TicketIdSize + AccountSize + AccountSize;
-constexpr std::size_t ChallengeAnswerSize = 4 + 8 + HashSize;
+constexpr std::size_t ChallengeAnswerSize = 4 + 8 + HashSize + LifeCounters * 4;
 constexpr std::size_t TicketSize = 1 + TicketIdSize + TicketKeySize;
 constexpr std::size_t VerifySize = 4 + TicketIdSize + MacSize + TranscriptSize + IpSize;
 constexpr std::size_t VerifyResultSize = 4 + 1;

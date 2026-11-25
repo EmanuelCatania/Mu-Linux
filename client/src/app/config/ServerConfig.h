@@ -44,6 +44,6 @@ constexpr char           ClientVersion[]     = "0.97.40";
 // User/Cache/<server>/server.pub, que se puede editar.  Con clave, ésa es la
 // raíz y ningún archivo la pisa; si está mal escrita no se conecta a ningún
 // server (ver net/ServerTrust.h).
-constexpr char           ServerPublicKey[]   = "";
+constexpr char           ServerPublicKey[]   = "833f46a15d5868668ad59a817b4a470fb212e0defdfc5431c32a75e60fc1a528";
 
 } // namespace ServerConfig
