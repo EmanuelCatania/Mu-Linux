@@ -802,6 +802,7 @@ target_link_options(mu97k PRIVATE
 endif()
 
 elseif(EMSCRIPTEN)
+    target_sources(mu97k PRIVATE src/platform/Web/WebPage.cpp src/platform/Web/WebPage.h)
     # Navegador: main.html/main.js/main.wasm.  El bucle del juego y las cargas
     # bloquean, así que ASYNCIFY le devuelve el control al navegador cuando el
     # cliente cede (emscripten_sleep).  Los hilos piden COOP/COEP en la página.

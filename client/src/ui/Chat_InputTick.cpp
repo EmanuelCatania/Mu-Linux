@@ -546,7 +546,14 @@ void __cdecl Chat_InputTick(void)
                                 // IDA L2406-2589: con Ctrl apretado, las teclas
                                 // 1..9 y 0 asignan ese numero a la skill bajo el
                                 // cursor (y lo sacan de la que lo tenia).
-                                if (((unsigned short)Platform::GetInput().KeyState(VK_CONTROL) >> 8) != 0)
+                                // DESVIACION (versión web): fuera de pantalla
+                                // completa Ctrl+número cambia de pestaña y el
+                                // juego no lo ve; ahí también vale Shift.
+                                if (((unsigned short)Platform::GetInput().KeyState(VK_CONTROL) >> 8) != 0
+#ifdef __EMSCRIPTEN__
+                                    || ((unsigned short)Platform::GetInput().KeyState(VK_SHIFT) >> 8) != 0
+#endif
+                                    )
                                 {
                                     for (int k = 1; k <= 10; ++k)
                                     {

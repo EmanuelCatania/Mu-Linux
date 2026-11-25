@@ -49,6 +49,7 @@
 #include "platform/SDL3/SDLPlatform.h"
 #include "net/Ping.h"
 #ifdef __EMSCRIPTEN__
+#include "platform/Web/WebPage.h"
 #include <emscripten.h>
 #include <emscripten/console.h>
 #endif
@@ -860,6 +861,7 @@ int main(int, [[maybe_unused]] char** argv)
 #ifdef __EMSCRIPTEN__
             // Navegador: el bucle no puede quedarse con el hilo principal; con
             // ASYNCIFY se cede una vez por frame (eventos, red, presentación).
+            WebPage::Tick();
             emscripten_sleep(0);
 #endif
         }

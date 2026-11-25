@@ -12,11 +12,17 @@
   #canvas { display: block; outline: none; touch-action: none; }
   #status { position: fixed; left: 0; right: 0; bottom: 24px; text-align: center;
             font: 14px sans-serif; color: #c8b27a; pointer-events: none; }
+  #fullscreen { position: fixed; right: 8px; top: 8px; z-index: 2; padding: 4px 10px;
+                font: 12px sans-serif; color: #c8b27a; background: rgba(0,0,0,.6);
+                border: 1px solid #5a4a2a; border-radius: 3px; cursor: pointer; opacity: .55; }
+  #fullscreen:hover { opacity: 1; }
+  :fullscreen #fullscreen { display: none; }
 </style>
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
 <div id="status">Cargando…</div>
+<button id="fullscreen" title="Pantalla completa: el juego recibe todas las teclas (Ctrl+número, Ctrl+W...)">Pantalla completa</button>
 <script>
 // Táctil o no: lo decide la página una vez y se lo pasa al cliente (--mobile).
 // No alcanza con el user agent: una notebook táctil o una tablet con teclado
@@ -33,6 +39,30 @@ const ROOT = '/mu';
 const BASE = new URL('game/', document.baseURI).href;
 
 function setStatus(text) { document.getElementById('status').textContent = text || ''; }
+
+// Pantalla completa.  Fuera de ella el navegador se queda con algunas teclas
+// (Ctrl+W cierra la pestaña, Ctrl+1..9 cambian de pestaña, Ctrl+T/N abren otra)
+// y el juego no las ve.  En pantalla completa, donde el navegador lo permite
+// (Chrome, Edge), Keyboard Lock se las pasa todas al juego; Escape sostenido
+// sale.  El tamaño del juego sigue al de la página solo (WebPage.cpp).
+document.getElementById('fullscreen').addEventListener('click', async () => {
+  try {
+    await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+    if (navigator.keyboard && navigator.keyboard.lock) await navigator.keyboard.lock();
+  } catch (e) {
+    console.warn('Pantalla completa: ' + e.message);
+  }
+  document.getElementById('canvas').focus();
+});
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
+});
+// Alt solo abre el menú del navegador (Firefox, y Chrome en Windows al soltarlo)
+// y le saca el foco al juego.  SDL ya frena F1, F10 y el resto.
+for (const type of ['keydown', 'keyup'])
+  addEventListener(type, (e) => { if (e.key === 'Alt') e.preventDefault(); }, true);
+// Antes de cerrar la pestaña con la sesión abierta, el navegador pregunta.
+addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = ''; });
 
 // Red: el cliente abre sockets TCP comunes y Emscripten los convierte en
 // WebSocket a ws://<host>:<puerto>/.  Acá se mandan todos al puente de mu-web

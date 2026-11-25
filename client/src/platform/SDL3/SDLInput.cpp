@@ -9,6 +9,14 @@ std::array<bool, 256> held{};
 std::array<bool, 256> pressed{};
 bool composing = false;
 float wheelRemainder = 0;
+// Un click rápido (apretar y soltar entre dos frames del juego) llegaba entero
+// antes de que el juego viera el botón apretado, y se perdía.  Pasa en el
+// navegador, donde los eventos entran mientras el juego cede el control, y con
+// toques en pantallas táctiles.  El soltar se retiene hasta que el juego haya
+// corrido un frame con el botón apretado (dos bombeos después del apretar).
+unsigned pumpSerial = 0;
+struct HeldButton { unsigned downSerial = 0; bool upPending = false; InputEvent up{}; int key = 0; };
+std::array<HeldButton, 3> buttons{};   // izquierdo, derecho, medio
 int VirtualKey(SDL_Scancode key) {
     if (key >= SDL_SCANCODE_A && key <= SDL_SCANCODE_Z) return 'A' + key - SDL_SCANCODE_A;
     if (key >= SDL_SCANCODE_1 && key <= SDL_SCANCODE_9) return '1' + key - SDL_SCANCODE_1;
@@ -98,6 +106,7 @@ bool SDLCALL Watch(void*, SDL_Event* event) {
     case SDL_EVENT_TEXT_EDITING: Composition(event->edit.text && *event->edit.text); return true;
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         held.fill(false); pressed.fill(false); Composition(false);
+        for (HeldButton& button : buttons) button.upPending = false;
         DeliverSDLInput({InputEventType::LeftUp}); DeliverSDLInput({InputEventType::RightUp});
         DeliverSDLInput({InputEventType::MiddleUp}); return true;
     case SDL_EVENT_MOUSE_MOTION:
@@ -107,10 +116,23 @@ bool SDLCALL Watch(void*, SDL_Event* event) {
         input.x = int(event->button.x); input.y = int(event->button.y);
         switch (event->button.button) {
         case SDL_BUTTON_LEFT:
-            SetKey(1, down); input.type = down ? (event->button.clicks == 2 ? InputEventType::LeftDoubleClick : InputEventType::LeftDown) : InputEventType::LeftUp; break;
-        case SDL_BUTTON_RIGHT: SetKey(2, down); input.type = down ? InputEventType::RightDown : InputEventType::RightUp; break;
-        case SDL_BUTTON_MIDDLE: SetKey(4, down); input.type = down ? InputEventType::MiddleDown : InputEventType::MiddleUp; break;
+            input.type = down ? (event->button.clicks == 2 ? InputEventType::LeftDoubleClick : InputEventType::LeftDown) : InputEventType::LeftUp; break;
+        case SDL_BUTTON_RIGHT: input.type = down ? InputEventType::RightDown : InputEventType::RightUp; break;
+        case SDL_BUTTON_MIDDLE: input.type = down ? InputEventType::MiddleDown : InputEventType::MiddleUp; break;
         default: return true;
+        }
+        const int index = event->button.button == SDL_BUTTON_LEFT ? 0 : event->button.button == SDL_BUTTON_RIGHT ? 1 : 2;
+        HeldButton& button = buttons[index];
+        button.key = index == 0 ? 1 : index == 1 ? 2 : 4;
+        if (down) {
+            if (button.upPending) { SetKey(button.key, false); DeliverSDLInput(button.up); button.upPending = false; }
+            button.downSerial = pumpSerial;
+            SetKey(button.key, true);
+        } else if (pumpSerial < button.downSerial + 2) {
+            button.up = input; button.upPending = true;
+            return true;
+        } else {
+            SetKey(button.key, false);
         }
         break;
     }
@@ -164,6 +186,14 @@ IInput& GetInput() { static SDLInput input; return input; }
 void InstallSDLInput() { held.fill(false); pressed.fill(false); composing = false; wheelRemainder = 0; SDL_AddEventWatch(Watch, nullptr); }
 void RemoveSDLInput() { SDL_RemoveEventWatch(Watch, nullptr); }
 void ServiceSDLEvents(bool pumpNative) {
+    ++pumpSerial;
+    for (HeldButton& button : buttons) {
+        if (button.upPending && pumpSerial >= button.downSerial + 2) {
+            button.upPending = false;
+            SetKey(button.key, false);
+            DeliverSDLInput(button.up);
+        }
+    }
     if (pumpNative) SDL_PumpEvents();
     // El watch ya entregó los eventos sin diferirlos respecto del pump del host.
     SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
