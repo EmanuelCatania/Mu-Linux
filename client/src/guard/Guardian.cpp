@@ -232,6 +232,11 @@ public:
 		{
 			if (!reply.empty() && reply[0] == GuardProto::UnknownBuild)
 				Log("MU-Guard: el server no acepta este build del cliente (no esta en Data/Guard/Builds)");
+			else if (reply.size() >= GuardProto::HelloResultTooManySize && reply[0] == GuardProto::TooMany)
+			{
+				this->m_TooMany = reply[2] != 0 ? reply[2] : 1;
+				Log("MU-Guard: ya hay %u juegos abiertos en esta PC (el maximo del server)", static_cast<unsigned>(this->m_TooMany));
+			}
 			else if (reply.size() >= GuardProto::HelloResultBannedSize && reply[0] == GuardProto::Banned)
 			{
 				this->m_BanFlags = reply[2];
@@ -253,6 +258,9 @@ public:
 	// El saludo fue rechazado por un ban (GuardProto::BanFlag; 0 si no).
 	std::uint8_t BanFlags() const { return this->m_BanFlags.load(); }
 	std::int64_t BanUntil() const { return this->m_BanUntil.load(); }
+
+	// El saludo fue rechazado por juegos abiertos de más: el máximo (0 si no).
+	std::uint8_t TooMany() const { return this->m_TooMany.load(); }
 
 	// Espera la respuesta del server a una detección que cierra el juego.
 	bool AwaitNotice(GuardNotice& notice, int ms)
@@ -378,6 +386,7 @@ private:
 	std::atomic<std::uint8_t> m_Options{ 0 };
 	std::atomic<std::uint8_t> m_BanFlags{ 0 };
 	std::atomic<std::int64_t> m_BanUntil{ 0 };
+	std::atomic<std::uint8_t> m_TooMany{ 0 };
 	std::uint8_t m_Machine[GuardProto::MachineSize] = {};
 	std::string m_Host;
 	std::uint16_t m_Port = 0;
@@ -589,6 +598,20 @@ std::string NoticeText(const GuardNotice& notice, int language)
 	if (notice.number == 0) return std::string();
 	return notice.limit > 0 ? fill(kWarning[lang], std::to_string(notice.number), std::to_string(notice.limit))
 	                        : fill(kWarningNoLimit[lang], std::to_string(notice.number), "");
+}
+
+// Juegos abiertos de más en esta PC, para el banner.
+std::string TooManyText(unsigned limit, int language)
+{
+	static const char* const kOne[3] = { "Este servidor permite un solo juego abierto por PC.",
+		"This server allows only one game open per PC.", "Este servidor permite s\xC3\xB3 um jogo aberto por PC." };
+	static const char* const kMany[3] = { "Este servidor permite {0} juegos abiertos por PC.",
+		"This server allows {0} games open per PC.", "Este servidor permite {0} jogos abertos por PC." };
+	const int lang = (language >= 0 && language < 3) ? language : 0;
+	std::string text = limit <= 1 ? kOne[lang] : kMany[lang];
+	const std::size_t at = text.find("{0}");
+	if (at != std::string::npos) text.replace(at, 3, std::to_string(limit));
+	return text;
 }
 
 // La máquina o la IP baneadas en el saludo, para el banner.
@@ -975,6 +998,14 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	{
 		Log("MU-Guard: se cerro el banner; no se abre el juego");
 		*exitCode = 0;
+		return true;
+	}
+	if (connected.load() != 1 && guard.TooMany() != 0)
+	{
+		// Ya están todos los juegos que permite el server en esta PC.
+		banner.Refused(language, TooManyText(guard.TooMany(), language));
+		banner.Close();
+		*exitCode = 1;
 		return true;
 	}
 	if (connected.load() != 1 && guard.BanFlags() != 0)

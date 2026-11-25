@@ -53,6 +53,9 @@ public:
 	// con el motivo y hasta cuándo en `detail`.
 	void Blocked(int language, const std::string& detail);
 
+	// Ya hay en esta PC todos los juegos que permite el server: no se abre otro.
+	void Refused(int language, const std::string& detail);
+
 	void Close();
 
 private:

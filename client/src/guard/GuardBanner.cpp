@@ -57,18 +57,19 @@ struct Texts
 	const char* closing;   // {0}: segundos
 	const char* faseBlocked;
 	const char* blocked;
+	const char* tooMany;
 };
 
 const Texts kTexts[] = {
 	{ "Iniciando protecci\xC3\xB3n...", "Validando conexi\xC3\xB3n con el servidor...", "Abriendo main.exe",
 	  "Se cerr\xC3\xB3 el juego", "AMENAZA DETECTADA", "Se detect\xC3\xB3 {0}. El cliente se va a cerrar.", "Cerrando en {0}...",
-	  "No se abri\xC3\xB3 el juego", "ACCESO BLOQUEADO" },
+	  "No se abri\xC3\xB3 el juego", "ACCESO BLOQUEADO", "YA HAY UN JUEGO ABIERTO" },
 	{ "Initializing protection...", "Validating server connection...", "Launching main.exe",
 	  "The game was closed", "THREAT DETECTED", "{0} was detected. The client will close.", "Closing in {0}...",
-	  "The game was not opened", "ACCESS BLOCKED" },
+	  "The game was not opened", "ACCESS BLOCKED", "A GAME IS ALREADY OPEN" },
 	{ "Iniciando prote\xC3\xA7\xC3\xA3o...", "Validando conex\xC3\xA3o com o servidor...", "Abrindo main.exe",
 	  "O jogo foi fechado", "AMEA\xC3\x87" "A DETECTADA", "{0} foi detectado. O cliente ser\xC3\xA1 fechado.", "Fechando em {0}...",
-	  "O jogo n\xC3\xA3o foi aberto", "ACESSO BLOQUEADO" },
+	  "O jogo n\xC3\xA3o foi aberto", "ACESSO BLOQUEADO", "J\xC3\x81 H\xC3\x81 UM JOGO ABERTO" },
 };
 
 std::string Fill(const char* text, const std::string& value)
@@ -460,6 +461,13 @@ void Banner::Blocked(int language, const std::string& detail)
 	this->Alert(lang, t.faseBlocked, t.blocked, { detail }, true);
 }
 
+void Banner::Refused(int language, const std::string& detail)
+{
+	const int lang = (language >= 0 && language < 3) ? language : 0;
+	const Texts& t = kTexts[lang];
+	this->Alert(lang, t.faseBlocked, t.tooMany, { detail }, true);
+}
+
 void Banner::Alert(int language, const char* faseText, const char* headline, const std::vector<std::string>& lines, bool keepLast)
 {
 	const Texts& t = kTexts[language];
@@ -502,6 +510,7 @@ void Banner::Step(BannerStep) {}
 void Banner::Close() {}
 void Banner::Threat(int, const std::string&, const std::string&) {}
 void Banner::Blocked(int, const std::string&) {}
+void Banner::Refused(int, const std::string&) {}
 void Banner::Alert(int, const char*, const char*, const std::vector<std::string>&, bool) {}
 
 bool Banner::Wait(const std::function<bool()>& done, int)

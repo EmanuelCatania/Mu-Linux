@@ -65,6 +65,8 @@ AcceptUnknownBuilds = true
 ChallengeSeconds = 30
 # true: una herramienta de Lists.toml abierta cierra el juego.
 ToolCloses = true
+# Juegos abiertos a la vez en una misma PC (0 = sin límite).
+MaxPerMachine = 0
 
 # Avisos (los cuenta mu-guard en la base): una detección que cierra el juego
 # suma uno.  A los `limit` avisos dentro de `window_days` se banea.
