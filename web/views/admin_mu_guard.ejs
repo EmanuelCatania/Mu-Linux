@@ -1,0 +1,128 @@
+<%- include('partials/header') %>
+
+<section class="card">
+  <div class="row-between">
+    <h2>MU-Guard</h2>
+    <div class="admin-links">
+      <a class="button-link" href="/admin/accounts"><%= t("Cuentas") %></a>
+      <% if (editorEnabled) { %>
+        <a class="button-link" href="/admin/server-editor"><%= t("Editor servidor") %></a>
+      <% } %>
+      <a class="button-link" href="/admin/downloads"><%= t("Descargas") %></a>
+      <a class="button-link" href="/admin/news"><%= t("Noticias") %></a>
+      <a class="button-link" href="/admin/logout"><%= t("Salir") %></a>
+    </div>
+  </div>
+
+  <% if (notice) { %>
+    <div class="alert success"><%= t(notice.text) %></div>
+  <% } %>
+  <% if (error) { %>
+    <div class="alert"><%= t(error.text) %></div>
+  <% } %>
+
+  <% if (missing) { %>
+    <p class="muted"><%= t("Todavia no hay avisos: las tablas las crea mu-guard cuando arranca con la base configurada.") %></p>
+  <% } else { %>
+    <form method="get" action="/admin/mu-guard">
+      <label><%= t("Buscar (cuenta, personaje, maquina o IP)") %></label>
+      <input type="text" name="q" value="<%= q %>" maxlength="64" />
+      <button type="submit"><%= t("Buscar") %></button>
+    </form>
+
+    <h3><%= t("Bans") %></h3>
+    <p class="muted"><%= t("Levantar un ban de cuenta tambien le saca el bloqueo a la cuenta.") %></p>
+    <% if (bans.length === 0) { %>
+      <p class="muted"><%= t("No hay bans para mostrar.") %></p>
+    <% } else { %>
+      <table class="table">
+        <thead>
+          <tr>
+            <th><%= t("Fecha") %></th>
+            <th><%= t("Tipo") %></th>
+            <th><%= t("Valor") %></th>
+            <th><%= t("Motivo") %></th>
+            <th><%= t("Vence") %></th>
+            <th><%= t("Estado") %></th>
+            <th><%= t("Acciones") %></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% bans.forEach((ban) => { %>
+            <tr>
+              <td><%= ban.createdLabel %></td>
+              <td><%= ban.kind === 'account' ? t("Cuenta") : (ban.kind === 'machine' ? t("Maquina") : 'IP') %></td>
+              <td>
+                <% if (ban.kind === 'account') { %>
+                  <a href="/admin/accounts/<%= encodeURIComponent(ban.value) %>"><%= ban.value %></a>
+                <% } else { %>
+                  <code><%= ban.value %></code>
+                <% } %>
+              </td>
+              <td><%= ban.reason %></td>
+              <td><%= ban.expiresLabel || t("Permanente") %></td>
+              <td><%= ban.status === 'active' ? t("Vigente") : (ban.status === 'expired' ? t("Vencido") : t("Levantado")) %></td>
+              <td>
+                <% if (ban.status === 'active') { %>
+                  <form method="post" action="/admin/mu-guard/bans/<%= ban.id %>/lift" onsubmit="return confirm('<%= t("Levantar este ban?") %>')">
+                    <input type="hidden" name="q" value="<%= q %>" />
+                    <button type="submit"><%= t("Levantar") %></button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+
+    <h3><%= t("Avisos") %></h3>
+    <p class="muted"><%= t("Un aviso anulado no cuenta para el ban.") %></p>
+    <% if (warnings.length === 0) { %>
+      <p class="muted"><%= t("No hay avisos para mostrar.") %></p>
+    <% } else { %>
+      <table class="table">
+        <thead>
+          <tr>
+            <th><%= t("Fecha") %></th>
+            <th><%= t("Deteccion") %></th>
+            <th><%= t("Cuenta") %></th>
+            <th><%= t("Personaje") %></th>
+            <th><%= t("Maquina") %></th>
+            <th>IP</th>
+            <th><%= t("Aviso") %></th>
+            <th><%= t("Detalle") %></th>
+            <th><%= t("Acciones") %></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% warnings.forEach((w) => { %>
+            <tr class="<%= Number(w.voided) ? 'muted' : '' %>">
+              <td><%= w.createdLabel %></td>
+              <td><%= w.code %></td>
+              <td>
+                <% if (w.account) { %>
+                  <a href="/admin/accounts/<%= encodeURIComponent(w.account) %>"><%= w.account %></a>
+                <% } else { %>-<% } %>
+              </td>
+              <td><%= w.character_name || '-' %></td>
+              <td><code title="<%= w.machine %>"><%= w.machine ? w.machine.slice(0, 12) : '-' %></code></td>
+              <td><%= w.ip || '-' %></td>
+              <td><%= Number(w.voided) ? t("Anulado") : w.number %></td>
+              <td><%= w.detail %></td>
+              <td>
+                <form method="post" action="/admin/mu-guard/warnings/<%= w.id %>/void">
+                  <input type="hidden" name="q" value="<%= q %>" />
+                  <input type="hidden" name="voided" value="<%= Number(w.voided) ? '0' : '1' %>" />
+                  <button type="submit"><%= Number(w.voided) ? t("Restaurar") : t("Anular") %></button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

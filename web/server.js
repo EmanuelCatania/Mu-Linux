@@ -25,6 +25,7 @@ const gatesLib = require('./lib/gates');
 const summonsLib = require('./lib/summons');
 const zonesLib = require('./lib/zones');
 const mapFoldersLib = require('./lib/map-folders');
+const muGuard = require('./lib/mu-guard');
 
 // Se pone en true cuando ensureSchema confirma que memb__pwd tiene 60 bytes.
 let passwordColumnWide = false;
@@ -1772,6 +1773,66 @@ app.get('/admin/accounts', requireAdmin, requireAdminPasswordChange, async (req,
     acquisitionEnabled,
     geoEnabled
   });
+});
+
+// MU-Guard (paso 5b): avisos y bans que escribe mu-guard.  Levantar un ban
+// de cuenta también le saca el bloqueo a la cuenta (lo puso mu-guard).
+app.get('/admin/mu-guard', requireAdmin, requireAdminPasswordChange, async (req, res) => {
+  const filters = muGuard.searchFilters(req.query.q);
+  const notice = req.query.ok ? { type: 'success', text: decodeURIComponent(String(req.query.ok)) } : null;
+  const error = req.query.err ? { type: 'danger', text: decodeURIComponent(String(req.query.err)) } : null;
+  const when = (value) => formatSourceWhen(value, res.locals.locale);
+  try {
+    const [bans] = await pool.query(
+      `SELECT id, created_at, kind, value, reason, expires_at, lifted FROM MuGuardBan ${filters.bans.sql}
+       ORDER BY lifted ASC, created_at DESC LIMIT ${muGuard.LIMIT}`,
+      filters.bans.params
+    );
+    const [warnings] = await pool.query(
+      `SELECT id, created_at, code, detail, account, character_name, machine, ip, build, number, voided
+       FROM MuGuardWarning ${filters.warnings.sql} ORDER BY created_at DESC, id DESC LIMIT ${muGuard.LIMIT}`,
+      filters.warnings.params
+    );
+    const now = new Date();
+    res.render('admin_mu_guard', {
+      q: filters.q,
+      notice,
+      error,
+      missing: false,
+      bans: bans.map((row) => ({
+        ...row,
+        status: muGuard.banStatus(row, now),
+        createdLabel: when(row.created_at),
+        expiresLabel: row.expires_at ? when(row.expires_at) : ''
+      })),
+      warnings: warnings.map((row) => ({ ...row, createdLabel: when(row.created_at) }))
+    });
+  } catch (err) {
+    if (!muGuard.isMissingTable(err)) throw err;
+    res.render('admin_mu_guard', { q: filters.q, notice, error, missing: true, bans: [], warnings: [] });
+  }
+});
+
+app.post('/admin/mu-guard/bans/:id/lift', requireAdmin, requireAdminPasswordChange, async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  const back = `/admin/mu-guard${req.body.q ? `?q=${encodeURIComponent(String(req.body.q))}&` : '?'}`;
+  if (!Number.isInteger(id) || id <= 0) return res.redirect(`${back}err=${encodeURIComponent('Ban invalido.')}`);
+  const [rows] = await pool.query('SELECT kind, value, lifted FROM MuGuardBan WHERE id = ? LIMIT 1', [id]);
+  if (rows.length === 0) return res.redirect(`${back}err=${encodeURIComponent('Ban no encontrado.')}`);
+  await pool.query('UPDATE MuGuardBan SET lifted = 1 WHERE id = ?', [id]);
+  if (rows[0].kind === 'account') {
+    await pool.query("UPDATE MEMB_INFO SET bloc_code = '0', Bloc_Expire = '1900-01-01 00:00:00' WHERE memb___id = ? AND bloc_code = '1'", [rows[0].value]);
+  }
+  return res.redirect(`${back}ok=${encodeURIComponent('Ban levantado. MU-Guard lo deja de aplicar en menos de 30 segundos.')}`);
+});
+
+app.post('/admin/mu-guard/warnings/:id/void', requireAdmin, requireAdminPasswordChange, async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  const back = `/admin/mu-guard${req.body.q ? `?q=${encodeURIComponent(String(req.body.q))}&` : '?'}`;
+  if (!Number.isInteger(id) || id <= 0) return res.redirect(`${back}err=${encodeURIComponent('Aviso invalido.')}`);
+  const voided = req.body.voided === '0' ? 0 : 1;
+  await pool.query('UPDATE MuGuardWarning SET voided = ? WHERE id = ?', [voided, id]);
+  return res.redirect(`${back}ok=${encodeURIComponent(voided ? 'Aviso anulado: ya no cuenta.' : 'Aviso restaurado.')}`);
 });
 
 app.get('/admin/server-editor', requireAdmin, requireAdminPasswordChange, (req, res) => {
