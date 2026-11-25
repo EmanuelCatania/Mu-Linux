@@ -19,6 +19,8 @@ namespace
 	bool s_Exists = false;
 	GuardSettings s_Settings;
 
+	constexpr std::size_t GuardRuleMax = 255;   // GuardProto::MaxRule
+
 	const char* const kDetectionNames[] = { "?", "DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH", "FILES", "TOOL" };
 
 	constexpr int kDetections = (int)(sizeof(kDetectionNames) / sizeof(kDetectionNames[0]));
@@ -104,6 +106,7 @@ GuardSettings ReadGuardSettings(const std::string& dataPath)
 			settings.Required = table["Required"].value_or(false);
 			settings.MemScanCloses = table["MemScanCloses"].value_or(true);
 			settings.AcceptUnknownBuilds = table["AcceptUnknownBuilds"].value_or(true);
+			settings.ToolCloses = table["ToolCloses"].value_or(true);
 
 			const std::int64_t challenge = table["ChallengeSeconds"].value_or(std::int64_t(30));
 
@@ -166,4 +169,113 @@ GuardSettings ReadGuardSettings(const std::string& dataPath)
 	s_Settings = settings;
 
 	return s_Settings;
+}
+
+namespace
+{
+	std::mutex s_RulesLock;
+	std::filesystem::file_time_type s_ListsTime, s_MessagesTime;
+	bool s_ListsExist = false, s_MessagesExist = false;
+	std::string s_RulesPath;
+	GuardRules s_Rules;
+
+	// Entradas de una lista: sin vacías, recortadas al tope y en minúsculas.
+	void Collect(std::vector<std::string>& out, const toml::node_view<const toml::node>& node)
+	{
+		for (std::string& value : Strings(node, true))
+		{
+			if (value.size() > GuardRuleMax)
+			{
+				value.resize(GuardRuleMax);
+			}
+
+			out.push_back(value);
+		}
+	}
+}
+
+GuardRules ReadGuardRules(const std::string& dataPath)
+{
+	std::lock_guard<std::mutex> lock(s_RulesLock);
+
+	const std::string lists = dataPath + "Guard/Lists.toml";
+	const std::string messages = dataPath + "Guard/Messages.toml";
+
+	std::error_code error;
+	const bool listsExist = std::filesystem::exists(lists, error);
+	const bool messagesExist = std::filesystem::exists(messages, error);
+	const auto listsTime = listsExist ? std::filesystem::last_write_time(lists, error) : std::filesystem::file_time_type();
+	const auto messagesTime = messagesExist ? std::filesystem::last_write_time(messages, error) : std::filesystem::file_time_type();
+
+	if (s_RulesPath == dataPath && s_Rules.Version != 0 && listsExist == s_ListsExist && messagesExist == s_MessagesExist &&
+		listsTime == s_ListsTime && messagesTime == s_MessagesTime)
+	{
+		return s_Rules;
+	}
+
+	GuardRules rules;
+	rules.Version = s_Rules.Version + 1;
+
+	if (listsExist)
+	{
+		toml::parse_result result = toml::parse_file(lists);
+
+		if (result)
+		{
+			const toml::table& table = result.table();
+
+			Collect(rules.Processes, table["tool"]["processes"]);
+			Collect(rules.Windows, table["tool"]["windows"]);
+			Collect(rules.ModuleBlock, table["modules"]["block"]);
+			Collect(rules.ModuleAllow, table["modules"]["allow"]);
+		}
+	}
+
+	if (messagesExist)
+	{
+		toml::parse_result result = toml::parse_file(messages);
+
+		if (result)
+		{
+			for (const char* language : { "es", "en", "pt" })
+			{
+				const toml::table* names = result.table()[language].as_table();
+
+				if (names == nullptr)
+				{
+					continue;
+				}
+
+				for (const auto& entry : *names)
+				{
+					auto text = entry.second.value<std::string>();
+
+					if (!text || text->empty())
+					{
+						continue;
+					}
+
+					std::string code(entry.first.str());
+
+					std::transform(code.begin(), code.end(), code.begin(), [](unsigned char c) { return (char)std::toupper(c); });
+
+					std::string line = std::string(language) + "\t" + code + "\t" + *text;
+
+					if (line.size() <= GuardRuleMax)
+					{
+						rules.Names.push_back(line);
+					}
+				}
+			}
+		}
+	}
+
+	s_RulesPath = dataPath;
+	s_ListsExist = listsExist;
+	s_MessagesExist = messagesExist;
+	s_ListsTime = listsTime;
+	s_MessagesTime = messagesTime;
+	s_Rules = rules;
+
+	return s_Rules;
 }

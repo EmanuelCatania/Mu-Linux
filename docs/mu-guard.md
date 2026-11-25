@@ -41,7 +41,9 @@ El guardián revisa el juego cada 2 segundos desde afuera, con prioridad baja.
 | `MEMEDIT` | el driver de Cheat Engine (Windows) u otro programa con la memoria del juego abierta (Linux) | cierra el juego |
 | `INJECT` | módulos de Cheat Engine, o las funciones de tiempo del sistema reescritas dentro del juego (speedhack) | cierra el juego |
 | `MEMSCAN` | alguien leyó las páginas señuelo que el guardián deja en el juego (el escaneo de un editor de memoria) | cierra el juego (`MemScanCloses`) |
-| `INJECT` | otros módulos fuera del juego y del sistema | sólo se registra |
+| `TOOL` | una herramienta de `Data/Guard/Lists.toml` abierta (proceso o ventana) | cierra el juego (`ToolCloses`) |
+| `INJECT` | un módulo de la lista `block` de `Lists.toml` | cierra el juego |
+| `INJECT` | otros módulos fuera del juego y del sistema | sólo se registra (salvo los de `allow`) |
 
 Al cerrar, el guardián muestra el banner rojo de MU-Guard con lo que detectó y
 una cuenta regresiva. Todo queda en el log de `mu-guard` con la IP del
@@ -61,6 +63,46 @@ MemScanCloses = false   # MEMSCAN sólo se registra
 ```
 
 Se aplica a los guardianes que se conecten después del cambio.
+
+## Listas y textos
+
+`Data/Guard/Lists.toml` tiene las listas del server. `mu-guard` se las manda al
+guardián al conectarse y otra vez cuando cambia el archivo, sin reiniciar nada:
+
+```toml
+[tool]
+# Nombre del ejecutable, sin importar mayúsculas (el guardián los revisa cada 10 s).
+processes = ["cheatengine-x86_64.exe", "artmoney.exe", "x64dbg.exe"]
+# Parte del título de una ventana.
+windows = []
+
+[modules]
+# Parte del nombre de un módulo cargado en el juego: lo cierra.
+block = []
+# Parte de la ruta de un módulo que no hace falta registrar (overlays).
+allow = ["obs-studio-hook", "discord", "gameoverlayrenderer"]
+```
+
+La lista de fábrica trae Cheat Engine, ArtMoney, x64dbg, OllyDbg, WPE Pro,
+scanmem, GameConqueror y PINCE. Con `ToolCloses = false` en `Guard.toml` las
+herramientas sólo se registran. Una herramienta abierta no suma aviso salvo que
+se agregue `"TOOL"` a `[warnings] codes`. Cuidado con `windows`: "cheat engine"
+también está en el título del navegador con esa página abierta.
+
+`Data/Guard/Messages.toml` cambia cómo se nombra cada detección en el banner
+("Se detectó *un programa no permitido*"), por idioma:
+
+```toml
+[es]
+TOOL = "un programa no permitido"
+[en]
+TOOL = "A forbidden program"
+[pt]
+TOOL = "Um programa proibido"
+```
+
+Sin una entrada se usa el texto del cliente. Si los archivos no están, el
+entrypoint (y el start de Pterodactyl) los crea con lo de fábrica.
 
 ## Desafío de memoria y builds aceptados
 
@@ -202,6 +244,7 @@ Socket = ""   # vacío = Data/Guard/mu-guard.sock
 MemScanCloses = true
 AcceptUnknownBuilds = true
 ChallengeSeconds = 30
+ToolCloses = true
 
 [warnings]
 limit = 3
@@ -235,6 +278,9 @@ server se comporta como antes.
   a quien vuelve, el firme es el de cuenta.
 - Quien mata al guardián antes de que llegue el reporte evita el aviso (pero no
   sigue jugando).
+- Las herramientas se reconocen por el nombre del ejecutable: una renombrada no
+  cae en `TOOL`, pero sigue cayendo en las detecciones que miran lo que hace
+  (depurador, driver, escaneo de memoria, código modificado).
 - Con administrador se saltea la DACL. Para eso están las detecciones y el
   desafío de memoria. Un programa que se haga pasar por el guardián tiene que
   contestar los desafíos con el código de un `main.exe` sin tocar: eso lo deja

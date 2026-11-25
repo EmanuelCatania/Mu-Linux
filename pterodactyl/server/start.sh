@@ -63,6 +63,8 @@ MemScanCloses = true
 AcceptUnknownBuilds = true
 # Cada cuántos segundos se desafía la memoria del juego (5..300).
 ChallengeSeconds = 30
+# true: una herramienta de Lists.toml abierta cierra el juego.
+ToolCloses = true
 
 # Avisos (los cuenta mu-guard en la base): una detección que cierra el juego
 # suma uno.  A los `limit` avisos dentro de `window_days` se banea.
@@ -77,6 +79,50 @@ machine_days = 7
 ip_hours = 24          # nunca IP privadas ni loopback
 exempt_accounts = []   # staff: se registran pero no se banean
 exempt_ips = []
+EOF
+fi
+# Listas y textos (paso 5c): si no están, se crean con lo de fábrica.
+if [ ! -f "$guard_dir/Lists.toml" ]; then
+  cat > "$guard_dir/Lists.toml" <<'EOF'
+# MU-Guard: listas del server (docs/mu-guard.md).  mu-guard se las manda al
+# guardián al conectarse y otra vez cuando cambia este archivo.
+
+# Herramientas (TOOL): si una está abierta mientras se juega, el juego se
+# cierra (Guard.toml ToolCloses = false para sólo registrarlas).  No suman
+# aviso salvo que se agregue "TOOL" a [warnings] codes.
+[tool]
+# Nombre del ejecutable, sin importar mayúsculas.
+processes = [
+  "cheatengine.exe", "cheatengine-x86_64.exe", "cheatengine-x86_64-sse4-avx2.exe", "cheatengine-i386.exe",
+  "artmoney.exe", "artmoney64.exe",
+  "x64dbg.exe", "x32dbg.exe", "ollydbg.exe",
+  "wpe pro.exe", "wpepro.exe",
+  "scanmem", "gameconqueror", "pince",
+]
+# Parte del título de una ventana.  Ojo: "cheat engine" también aparece en el
+# título del navegador con esa página abierta.
+windows = []
+
+[modules]
+# Parte del nombre de un módulo cargado en el juego: lo cierra (INJECT).
+block = []
+# Parte de la ruta de un módulo que no hace falta registrar (overlays).
+allow = ["obs-studio-hook", "discord", "gameoverlayrenderer"]
+EOF
+fi
+if [ ! -f "$guard_dir/Messages.toml" ]; then
+  cat > "$guard_dir/Messages.toml" <<'EOF'
+# MU-Guard: cómo se nombra cada detección en el banner (docs/mu-guard.md).
+# Sin una entrada se usa el texto del cliente.  Detecciones: DEBUGGER, INJECT,
+# MEMEDIT, MEMSCAN, PATCH, TOOL.  El banner dice "Se detectó <nombre>".
+[es]
+# TOOL = "un programa no permitido"
+
+[en]
+# TOOL = "A forbidden program"
+
+[pt]
+# TOOL = "Um programa proibido"
 EOF
 fi
 # Avisos y bans (paso 5): un Guard.toml de antes no tiene las secciones.

@@ -32,6 +32,11 @@
 //   exempt_accounts = []    # se registran pero no se banean (staff)
 //   exempt_ips = []
 //
+//   ToolCloses = true       # una herramienta de Lists.toml abierta cierra el
+//                           # juego (false: sólo se registra)
+//
+// Lists.toml y Messages.toml (paso 5c) los lee sólo mu-guard (ReadGuardRules).
+//
 // Sin el archivo MU-Guard queda apagado: Data/ es un volumen y las
 // instalaciones anteriores no lo tienen (lo crea el entrypoint).
 
@@ -47,6 +52,7 @@ struct GuardSettings
 	std::string Socket;   // ruta completa
 	bool MemScanCloses = true;
 	bool AcceptUnknownBuilds = true;
+	bool ToolCloses = true;
 	int ChallengeSeconds = 30;
 
 	// [warnings]
@@ -64,6 +70,21 @@ struct GuardSettings
 
 // Nombre de una detección (GuardProto::Detection), o "?".
 const char* GuardDetectionName(int code);
+
+// Listas y textos para el guardián (Data/Guard/Lists.toml y Messages.toml).
+// Todo en minúsculas salvo los nombres.  version cambia cuando cambia alguno de
+// los dos archivos.
+struct GuardRules
+{
+	std::vector<std::string> Processes;
+	std::vector<std::string> Windows;
+	std::vector<std::string> ModuleBlock;
+	std::vector<std::string> ModuleAllow;
+	std::vector<std::string> Names;   // "idioma\tDETECCION\tnombre"
+	std::uint64_t Version = 0;
+};
+
+GuardRules ReadGuardRules(const std::string& dataPath);
 
 // dataPath: la carpeta Data con la barra final (GetDataPath()).
 GuardSettings ReadGuardSettings(const std::string& dataPath);

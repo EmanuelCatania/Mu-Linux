@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <set>
 
 #ifdef _WIN32
@@ -38,8 +39,26 @@ const char* const kKnownBadModules[] = {
 // DACL no los frena.
 const char* const kKnownBadDrivers[] = { "dbk64.sys", "dbk32.sys" };
 
-// Las pasadas caras (drivers, módulos, /proc) van cada tantas pasadas.
+// Las pasadas caras (drivers, módulos, procesos, /proc) van cada tantas
+// pasadas (cada 10 s).
 constexpr int kSlowEvery = 5;
+
+const char* const kDetectionNames[] = { "?", "DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH", "FILES", "TOOL" };
+
+bool Contains(const std::vector<std::string>& list, const std::string& value)
+{
+	for (const std::string& item : list)
+		if (item == value) return true;
+	return false;
+}
+
+// Alguna entrada de la lista es parte de `value`.
+const std::string* FindPart(const std::vector<std::string>& list, const std::string& value)
+{
+	for (const std::string& item : list)
+		if (!item.empty() && value.find(item) != std::string::npos) return &item;
+	return nullptr;
+}
 
 std::string Lower(std::string s)
 {
@@ -129,6 +148,10 @@ struct Detector::State
 {
 	int passes = 0;
 	bool memScanCloses = true;
+	bool toolCloses = true;
+	// Listas del server (Lists.toml), en minúsculas.
+	std::vector<std::string> processes, windows, moduleBlock, moduleAllow;
+	std::map<std::string, std::string> names;   // "idioma\tDETECCION" -> nombre
 	std::string gameDir;   // en minúsculas, con barra final
 	std::set<std::string> reported;
 	unsigned long pid = 0;
@@ -315,10 +338,58 @@ struct Detector::State
 			{
 				if (Once("module:" + path)) Add(found, GuardProto::Inject, true, "m\xC3\xB3" "dulo de Cheat Engine: " + BaseName(path));
 			}
+			else if (FindPart(moduleBlock, BaseName(path)))
+			{
+				if (Once("module:" + path)) Add(found, GuardProto::Inject, true, "m\xC3\xB3" "dulo bloqueado por el server: " + BaseName(path));
+			}
+			else if (FindPart(moduleAllow, path))
+			{
+				continue;
+			}
 			else if (!StartsWith(path, windowsDir) && !StartsWith(path, gameDir) && Once("module:" + path))
 			{
 				Add(found, GuardProto::Inject, false, "m\xC3\xB3" "dulo fuera del juego y del sistema: " + path);
 			}
+		}
+	}
+
+	// Herramientas de las listas del server: procesos por nombre del ejecutable,
+	// ventanas por parte del título.
+	void Tools(std::vector<Finding>& found)
+	{
+		if (!processes.empty())
+		{
+			HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+			if (snapshot != INVALID_HANDLE_VALUE)
+			{
+				PROCESSENTRY32W entry{};
+				entry.dwSize = sizeof(entry);
+				for (BOOL more = Process32FirstW(snapshot, &entry); more; more = Process32NextW(snapshot, &entry))
+				{
+					if (entry.th32ProcessID == pid || entry.th32ProcessID == GetCurrentProcessId()) continue;
+					const std::string name = Lower(Narrow(entry.szExeFile));
+					if (Contains(processes, name) && Once("tool:" + name))
+						Add(found, GuardProto::Tool, toolCloses, "herramienta abierta: " + name);
+				}
+				CloseHandle(snapshot);
+			}
+		}
+		if (!windows.empty())
+		{
+			struct Search { State* state; std::vector<Finding>* found; } search{ this, &found };
+			EnumWindows([](HWND window, LPARAM param) -> BOOL {
+				Search& s = *reinterpret_cast<Search*>(param);
+				if (!IsWindowVisible(window)) return TRUE;
+				wchar_t title[256];
+				if (GetWindowTextW(window, title, 256) <= 0) return TRUE;
+				const std::string text = Narrow(title);
+				if (const std::string* part = FindPart(s.state->windows, Lower(text)))
+				{
+					if (s.state->Once("window:" + *part))
+						Add(*s.found, GuardProto::Tool, s.state->toolCloses, "ventana abierta: " + text);
+				}
+				return TRUE;
+			}, reinterpret_cast<LPARAM>(&search));
 		}
 	}
 #else
@@ -396,6 +467,14 @@ struct Detector::State
 			{
 				if (Once("module:" + path)) Add(found, GuardProto::Inject, true, "m\xC3\xB3" "dulo de Cheat Engine: " + BaseName(path));
 			}
+			else if (FindPart(moduleBlock, BaseName(lower)))
+			{
+				if (Once("module:" + path)) Add(found, GuardProto::Inject, true, "m\xC3\xB3" "dulo bloqueado por el server: " + BaseName(path));
+			}
+			else if (FindPart(moduleAllow, lower))
+			{
+				continue;
+			}
 			else if (!StartsWith(lower, "/usr/") && !StartsWith(lower, "/lib") && !StartsWith(lower, gameDir) && Once("module:" + path))
 			{
 				Add(found, GuardProto::Inject, false, "m\xC3\xB3" "dulo fuera del juego y del sistema: " + path);
@@ -413,6 +492,33 @@ struct Detector::State
 			if (end == std::string::npos) break;
 			at = end + 1;
 		}
+	}
+
+	// Herramientas de las listas del server: procesos del mismo usuario por el
+	// nombre del ejecutable (o comm, que viene cortado a 15 letras).
+	void Tools(std::vector<Finding>& found)
+	{
+		if (processes.empty()) return;
+		DIR* proc = opendir("/proc");
+		if (!proc) return;
+		const std::string self = std::to_string(::getpid()), game = std::to_string(pid);
+		while (dirent* entry = readdir(proc))
+		{
+			if (!std::isdigit(static_cast<unsigned char>(entry->d_name[0])) || self == entry->d_name || game == entry->d_name) continue;
+			const std::string base = std::string("/proc/") + entry->d_name;
+			char exe[1024];
+			const ssize_t n = ::readlink((base + "/exe").c_str(), exe, sizeof(exe) - 1);
+			const std::string exeName = n > 0 ? Lower(BaseName(std::string(exe, static_cast<std::size_t>(n)))) : std::string();
+			const std::string comm = ReadText(base + "/comm");
+			const std::string commName = Lower(comm.substr(0, comm.find('\n')));
+			// Un script (GameConqueror, PINCE) corre como python3: se mira también comm.
+			for (const std::string& name : { exeName, commName })
+			{
+				if (!name.empty() && Contains(processes, name) && Once("tool:" + name))
+					Add(found, GuardProto::Tool, toolCloses, "herramienta abierta: " + name);
+			}
+		}
+		closedir(proc);
 	}
 #endif
 };
@@ -507,6 +613,47 @@ void Detector::SetMemScanCloses(bool closes)
 	m->memScanCloses = closes;
 }
 
+void Detector::SetToolCloses(bool closes)
+{
+	m->toolCloses = closes;
+}
+
+void Detector::Rule(std::uint8_t kind, const std::string& text)
+{
+	switch (kind)
+	{
+	case GuardProto::RuleReset:
+		m->processes.clear();
+		m->windows.clear();
+		m->moduleBlock.clear();
+		m->moduleAllow.clear();
+		m->names.clear();
+		break;
+	case GuardProto::RuleProcess: m->processes.push_back(Lower(text)); break;
+	case GuardProto::RuleWindow: m->windows.push_back(Lower(text)); break;
+	case GuardProto::RuleModuleBlock: m->moduleBlock.push_back(Lower(text)); break;
+	case GuardProto::RuleModuleAllow: m->moduleAllow.push_back(Lower(text)); break;
+	case GuardProto::RuleName:
+	{
+		// idioma TAB DETECCION TAB nombre
+		const std::size_t first = text.find('\t');
+		const std::size_t second = first == std::string::npos ? first : text.find('\t', first + 1);
+		if (second != std::string::npos) m->names[text.substr(0, second)] = text.substr(second + 1);
+		break;
+	}
+	default: break;
+	}
+}
+
+std::string Detector::Name(std::uint8_t code, int language) const
+{
+	static const char* const kLanguages[] = { "es", "en", "pt" };
+	if (code >= sizeof(kDetectionNames) / sizeof(kDetectionNames[0])) return std::string();
+	const int lang = (language >= 0 && language < 3) ? language : 0;
+	auto it = m->names.find(std::string(kLanguages[lang]) + "\t" + kDetectionNames[code]);
+	return it == m->names.end() ? std::string() : it->second;
+}
+
 void Detector::Scan(std::vector<Finding>& found)
 {
 	const bool slow = (m->passes++ % kSlowEvery) == 0;
@@ -518,12 +665,14 @@ void Detector::Scan(std::vector<Finding>& found)
 	{
 		m->Drivers(found);
 		m->Modules(found);
+		m->Tools(found);
 	}
 #else
 	if (slow)
 	{
 		m->MemFiles(found);
 		m->Modules(found);
+		m->Tools(found);
 	}
 #endif
 }

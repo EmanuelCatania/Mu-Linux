@@ -34,6 +34,10 @@
 // (Identify).  Una detección que cierra el juego suma un aviso (uno por
 // guardián); a los X avisos se banea cuenta, máquina e IP.  Notice le dice al
 // guardián qué aviso fue, para el banner.
+//
+// Listas y textos del server (paso 5c, Data/Guard/Lists.toml y Messages.toml):
+// después del saludo mu-guard manda Rules (un RuleReset y una entrada por
+// mensaje), y de nuevo cuando cambian los archivos.
 
 #include <cstddef>
 #include <cstdint>
@@ -92,6 +96,7 @@ enum Type : std::uint8_t
 	Verdict = 0x84,         // detección (1) | detalle (texto): cerrar el juego por orden del server
 	Notice = 0x85,          // aviso (1) | límite (1, 0 = no se banea) | baneado (1, BanFlag) | hasta (8, LE):
 	                        // respuesta a una detección que cierra el juego
+	Rules = 0x86,           // tipo (1, RuleKind) | texto (UTF-8, hasta MaxRule)
 
 	// GameServer -> mu-guard (socket local)
 	Ping = 0x10,            // sin datos
@@ -127,7 +132,22 @@ enum BanFlag : std::uint8_t
 enum HelloOption : std::uint8_t
 {
 	MemScanCloses = 0x01,   // MEMSCAN cierra el juego (si no, sólo se registra)
+	ToolCloses = 0x02,      // TOOL (una herramienta de las listas abierta) cierra el juego
 };
+
+// Entradas de Rules.
+enum RuleKind : std::uint8_t
+{
+	RuleReset = 0,          // sin texto: empieza una lista nueva (borra la anterior)
+	RuleProcess = 1,        // nombre de un ejecutable (sin mayúsculas): TOOL
+	RuleWindow = 2,         // parte del título de una ventana (sin mayúsculas): TOOL
+	RuleModuleBlock = 3,    // parte del nombre de un módulo cargado en el juego: INJECT que cierra
+	RuleModuleAllow = 4,    // parte de la ruta de un módulo: no se reporta
+	RuleName = 5,           // idioma (es, en, pt) TAB detección (DEBUGGER...) TAB nombre para el banner
+};
+
+constexpr std::size_t MaxRule = 255;
+constexpr std::size_t MaxRules = 2000;
 
 // Resultado de Verify.
 enum VerifyCode : std::uint8_t
