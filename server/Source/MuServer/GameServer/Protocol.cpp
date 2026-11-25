@@ -1432,6 +1432,14 @@ void CGConnectAccountRecv(PMSG_CONNECT_ACCOUNT_RECV* lpMsg, int aIndex, int size
 
 			return;
 		}
+
+		// IP baneada por MU-Guard: el mismo "cuenta bloqueada" del ban de cuenta.
+		if (guard == GuardLogin::Banned)
+		{
+			GCConnectAccountSend(aIndex, 5);
+
+			return;
+		}
 #endif
 
 		lpObj->LoginMessageSend++;

@@ -10,6 +10,7 @@
 #include "ObjectManager.h"
 #include "ServerInfo.h"
 #include "Util.h"
+#include "GuardLink.h"
 
 void JoinServerProtocolCore(BYTE head, BYTE* lpMsg, int size)
 {
@@ -141,6 +142,10 @@ void JGConnectAccountRecv(SDHP_CONNECT_ACCOUNT_RECV* lpMsg)
 	gObj[lpMsg->index].AccountLevel = lpMsg->AccountLevel;
 
 	TextField::Copy(gObj[lpMsg->index].AccountExpireDate, lpMsg->AccountExpireDate);
+
+#if defined(MU_GUARD) && !defined(_WIN32)
+	gGuardLink.Identify(lpMsg->index);
+#endif
 
 	// El catálogo de contenido va antes de la respuesta: en el mismo stream TCP
 	// llega antes de que el cliente pida la lista de personajes.
