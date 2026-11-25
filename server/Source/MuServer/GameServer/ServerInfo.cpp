@@ -1900,6 +1900,22 @@ void CServerInfo::ReadHackInfo(const char* section, const char* path)
 
 	this->m_CheckLatencyHackTolerance = GetPrivateProfileInt(section, "CheckLatencyHackTolerance", 0, path);
 
+	this->m_CheckClockHack = GetPrivateProfileInt(section, "CheckClockHack", 1, path);
+
+	this->m_CheckClockHackTolerance = GetPrivateProfileInt(section, "CheckClockHackTolerance", 30, path);
+
+	this->m_CheckClockHackWindow = GetPrivateProfileInt(section, "CheckClockHackWindow", 120, path);
+
+	if (this->m_CheckClockHackTolerance < 5)
+	{
+		this->m_CheckClockHackTolerance = 5;
+	}
+
+	if (this->m_CheckClockHackWindow < 30)
+	{
+		this->m_CheckClockHackWindow = 30;
+	}
+
 	this->m_CheckAutoPotionHack = GetPrivateProfileInt(section, "CheckAutoPotionHack", 0, path);
 
 	this->m_CheckAutoPotionHackTolerance = GetPrivateProfileInt(section, "CheckAutoPotionHackTolerance", 0, path);

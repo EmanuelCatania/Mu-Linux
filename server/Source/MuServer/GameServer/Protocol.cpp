@@ -775,6 +775,52 @@ void CGLiveClientRecv(PMSG_LIVE_CLIENT_RECV* lpMsg, int aIndex)
 	// la deriva del reloj del cliente.
 	TRACE_NOTE(aIndex, 0x0E, -1, "vivo: PhysiSpeed cliente=%d server=%d MagicSpeed cliente=%d server=%d deriva=%d ms", (int)lpMsg->PhysiSpeed, lpObj->PhysiSpeed, (int)lpMsg->MagicSpeed, lpObj->MagicSpeed, (int)((GetTickCount() - lpObj->ServerTickCount) - (lpMsg->TickCount - lpObj->ClientTickCount)));
 
+	// CheckClockHack: el ritmo del reloj del cliente contra el del server, en
+	// mediciones de CheckClockHackWindow segundos.  Un speedhack acelera el reloj
+	// del juego, así que el cliente cuenta más tiempo del que pasó.  Se mide el
+	// ritmo y no la diferencia acumulada desde el login (CheckLatencyHack): dos
+	// relojes reales difieren menos de 0,1 por mil, y eso en una sesión larga
+	// suma segundos sin trampa.  Sólo cuenta el cliente adelantado.
+	if (gServerInfo.m_CheckClockHack != 0)
+	{
+		const DWORD now = GetTickCount();
+
+		if (lpObj->ClockServerStart == 0)
+		{
+			lpObj->ClockServerStart = now;
+
+			lpObj->ClockClientStart = lpMsg->TickCount;
+		}
+		else if ((now - lpObj->ClockServerStart) >= (DWORD)gServerInfo.m_CheckClockHackWindow * 1000)
+		{
+			const DWORD server = now - lpObj->ClockServerStart;
+
+			const DWORD client = lpMsg->TickCount - lpObj->ClockClientStart;
+
+			const long long rate = ((long long)client * 1000) / (long long)server;
+
+			lpObj->ClockServerStart = now;
+
+			lpObj->ClockClientStart = lpMsg->TickCount;
+
+			TRACE_NOTE(aIndex, 0x0E, -1, "reloj: cliente %u ms, server %u ms (%lld por mil)", client, server, rate);
+
+			if (rate > 1000 + gServerInfo.m_CheckClockHackTolerance)
+			{
+				const bool enforce = gServerInfo.m_CheckClockHack >= 2;
+
+				gLog.Output(LOG_HACK, "[%s][%s] Reloj del cliente acelerado: %u ms contra %u del server (%lld por mil)%s", lpObj->Account, lpObj->Name, client, server, rate, enforce ? "" : " [observado]");
+
+				if (enforce)
+				{
+					GCCloseClientSend(aIndex, 0);
+
+					return;
+				}
+			}
+		}
+	}
+
 	if (gServerInfo.m_CheckLatencyHack != 0 && abs((int)((GetTickCount() - lpObj->ServerTickCount) - (lpMsg->TickCount - lpObj->ClientTickCount))) > gServerInfo.m_CheckLatencyHackTolerance)
 	{
 		gLog.Output(LOG_HACK, "[%s][%s] Client Latency Hack Detected [%d][%d]", lpObj->Account, lpObj->Name, (GetTickCount() - lpObj->ServerTickCount), (lpMsg->TickCount - lpObj->ClientTickCount));
@@ -1473,6 +1519,8 @@ void CGConnectAccountRecv(PMSG_CONNECT_ACCOUNT_RECV* lpMsg, int aIndex, int size
 #endif
 
 		lpObj->ClientTickCount = lpMsg->TickCount;
+
+		lpObj->ClockServerStart = 0;
 
 		lpObj->ServerTickCount = GetTickCount();
 

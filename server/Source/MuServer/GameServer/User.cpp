@@ -670,6 +670,10 @@ void gObjClearPlayerOption(LPOBJ lpObj)
 	lpObj->PacketRateTime = 0;
 
 	lpObj->PacketRateCount = 0;
+
+	lpObj->ClockServerStart = 0;
+
+	lpObj->ClockClientStart = 0;
 }
 
 void gObjClearSpecialOption(LPOBJ lpObj)

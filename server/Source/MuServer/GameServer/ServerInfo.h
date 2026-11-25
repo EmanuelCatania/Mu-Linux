@@ -105,6 +105,9 @@ public:
 	int m_CheckSpeedHackTolerance;
 	int m_CheckLatencyHack;
 	int m_CheckLatencyHackTolerance;
+	int m_CheckClockHack;            // 0 no, 1 registra, 2 desconecta
+	int m_CheckClockHackTolerance;   // por mil de más en el reloj del cliente
+	int m_CheckClockHackWindow;      // segundos de cada medición
 	int m_CheckAutoPotionHack;
 	int m_CheckAutoPotionHackTolerance;
 	// Autoridad del server (Fase 5): 0 = apagado, 1 = observar, 2 = aplicar

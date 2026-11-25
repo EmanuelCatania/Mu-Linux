@@ -552,6 +552,8 @@ struct OBJECTSTRUCT
 	DWORD* HackPacketCount;
 	DWORD PacketRateTime; // inicio de la ventana de un segundo (CheckPacketRate)
 	DWORD PacketRateCount; // paquetes recibidos en esa ventana
+	DWORD ClockServerStart; // CheckClockHack: comienzo de la medición en el server (0 = sin empezar)
+	DWORD ClockClientStart; // y el reloj del cliente en ese momento
 	int WarehouseNumber;
 	int AccountLevel;
 	char AccountExpireDate[20];

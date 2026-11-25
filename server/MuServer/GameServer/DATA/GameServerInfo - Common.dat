@@ -10,9 +10,20 @@ CheckSpeedHack=1
 CheckSpeedHackTolerance=20
 
 ; Check Latency (0 = No / 1 = Yes)
+; Mide la diferencia acumulada desde el login: en sesiones largas la suman
+; relojes sin trampa.  Para speedhack usar CheckClockHack.
 CheckLatencyHack=0
 ; The tolerance for the Latency when CheckLatencyHack=1
 CheckLatencyHackTolerance=0
+
+; Reloj del cliente acelerado (speedhack): el ritmo del reloj del juego contra
+; el del server, en mediciones de CheckClockHackWindow segundos.
+; 0 = no, 1 = sólo registra en LOG_HACK, 2 = desconecta.
+CheckClockHack=1
+; Por mil de más que se tolera (30 = el cliente cuenta 3% más tiempo).  Mínimo 5.
+CheckClockHackTolerance=30
+; Segundos de cada medición.  Mínimo 30.
+CheckClockHackWindow=120
 
 ; Check Potions consumption (0 = No / 1 = Yes)
 CheckAutoPotionHack=1
