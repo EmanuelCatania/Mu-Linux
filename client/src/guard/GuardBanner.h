@@ -13,6 +13,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace Guard {
 
@@ -45,11 +46,19 @@ public:
 	// Estado AMENAZA del template: vira a rojo, muestra qué se detectó y cuenta
 	// 5 s antes de volver.  Abre la ventana si estaba cerrada (language: el de
 	// Open).  Sin banner posible, un cartel del sistema con el mismo texto.
-	void Threat(int language, const std::string& what);
+	// notice: el aviso del server ("Aviso 2 de 3."), vacío si no hay.
+	void Threat(int language, const std::string& what, const std::string& notice = std::string());
+
+	// La máquina o la IP están baneadas: el juego no se abre.  Mismo estado rojo,
+	// con el motivo y hasta cuándo en `detail`.
+	void Blocked(int language, const std::string& detail);
 
 	void Close();
 
 private:
+	// keepLast: la última línea sigue a la vista durante la cuenta regresiva.
+	void Alert(int language, const char* fase, const char* headline, const std::vector<std::string>& lines, bool keepLast);
+
 	struct State;
 	State* m;
 };

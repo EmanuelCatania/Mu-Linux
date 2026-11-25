@@ -27,6 +27,7 @@ extern "C" void DbgLogPublic(const char* msg);
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <ctime>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -40,6 +41,7 @@ extern "C" void DbgLogPublic(const char* msg);
 #endif
 #include <windows.h>
 #include <aclapi.h>
+#include <rpc.h>
 #include <sddl.h>
 #else
 #include <cerrno>
@@ -91,7 +93,103 @@ bool Trust(const std::uint8_t* id, const std::uint8_t* previous, const std::uint
 	return ServerTrust::Check(id, previous, signature) != ServerTrust::Result::Mismatch;
 }
 
+// ── La máquina ───────────────────────────────────────────────────────────────
+
+// Hash de lo que identifica a la máquina (va en el saludo; mu-guard lo guarda
+// con una sal propia).  Windows: UUID del SMBIOS, serie del disco del sistema y
+// la MAC de la placa de red.  Linux: machine-id y el UUID del SMBIOS si se puede
+// leer.  Es una señal, no una prueba: sirve para avisos y bans.
+void MachineHash(std::uint8_t out[GuardProto::MachineSize])
+{
+	crypto_blake2b_ctx ctx;
+	crypto_blake2b_init(&ctx, GuardProto::MachineSize);
+	crypto_blake2b_update(&ctx, reinterpret_cast<const std::uint8_t*>(GuardProto::MachineContext), sizeof(GuardProto::MachineContext) - 1);
+	auto add = [&](std::uint8_t tag, const void* data, std::size_t size) {
+		std::uint8_t head[5] = { tag };
+		GuardProto::PutLe32(head + 1, static_cast<std::uint32_t>(size));
+		crypto_blake2b_update(&ctx, head, sizeof(head));
+		crypto_blake2b_update(&ctx, static_cast<const std::uint8_t*>(data), size);
+	};
+#ifdef _WIN32
+	// SMBIOS: la estructura de tipo 1 trae el UUID en el desplazamiento 8.
+	const UINT size = GetSystemFirmwareTable('RSMB', 0, nullptr, 0);
+	if (size > 8)
+	{
+		std::vector<std::uint8_t> table(size);
+		if (GetSystemFirmwareTable('RSMB', 0, table.data(), size) == size)
+		{
+			const std::uint32_t length = GuardProto::GetLe32(table.data() + 4);
+			const std::uint8_t* at = table.data() + 8;
+			const std::uint8_t* end = at + (length < size - 8 ? length : size - 8);
+			while (at + 4 <= end)
+			{
+				const std::uint8_t type = at[0], header = at[1];
+				if (header < 4 || at + header > end) break;
+				if (type == 1 && header >= 0x19)
+				{
+					add(1, at + 8, 16);
+					break;
+				}
+				const std::uint8_t* next = at + header;   // las cadenas terminan en dos ceros
+				while (next + 1 < end && (next[0] != 0 || next[1] != 0)) next++;
+				at = next + 2;
+				if (type == 127) break;
+			}
+		}
+	}
+	char windows[MAX_PATH];
+	if (GetSystemWindowsDirectoryA(windows, MAX_PATH) >= 3)
+	{
+		const char root[4] = { windows[0], ':', '\\', 0 };
+		DWORD serial = 0;
+		if (GetVolumeInformationA(root, nullptr, 0, &serial, nullptr, nullptr, nullptr, 0)) add(2, &serial, sizeof(serial));
+	}
+	UUID uuid;
+	if (UuidCreateSequential(&uuid) == RPC_S_OK) add(3, uuid.Data4 + 2, 6);   // el nodo es la MAC
+#else
+	auto file = [&](std::uint8_t tag, const char* path) {
+		FILE* f = std::fopen(path, "rb");
+		if (!f) return false;
+		char text[128];
+		const std::size_t n = std::fread(text, 1, sizeof(text), f);
+		std::fclose(f);
+		std::size_t used = 0;
+		while (used < n && text[used] != '\n' && text[used] != '\r') used++;
+		if (used == 0) return false;
+		add(tag, text, used);
+		return true;
+	};
+	if (!file(1, "/etc/machine-id")) file(1, "/var/lib/dbus/machine-id");
+	file(2, "/sys/class/dmi/id/product_uuid");
+#endif
+	crypto_blake2b_final(&ctx, out);
+}
+
+// Fecha y hora local, para el banner ("dd/mm/aaaa hh:mm").
+std::string LocalTime(std::int64_t when)
+{
+	const std::time_t t = static_cast<std::time_t>(when);
+	std::tm local{};
+#ifdef _WIN32
+	localtime_s(&local, &t);
+#else
+	localtime_r(&t, &local);
+#endif
+	char text[32];
+	std::strftime(text, sizeof(text), "%d/%m/%Y %H:%M", &local);
+	return text;
+}
+
 // ── Mensajes con mu-guard ────────────────────────────────────────────────────
+
+// Respuesta del server a una detección que cierra el juego (Notice).
+struct GuardNotice
+{
+	int number = 0;   // 0: sin número (no quedó guardado o no suma aviso)
+	int limit = 0;
+	std::uint8_t banned = 0;   // GuardProto::BanFlag
+	std::int64_t until = 0;
+};
 
 // Lo que manda mu-guard sin que se le pida (desafíos, veredictos).
 struct Push
@@ -110,6 +208,7 @@ public:
 		std::memcpy(this->m_MainHash, mainHash, sizeof(this->m_MainHash));
 		// Un id por guardián: mu-guard lo sigue aunque se reconecte.
 		if (!SecureRandomBytes(this->m_Id, sizeof(this->m_Id))) std::memset(this->m_Id, 0, sizeof(this->m_Id));
+		MachineHash(this->m_Machine);
 	}
 
 	// Conecta y saluda si hace falta.
@@ -126,12 +225,19 @@ public:
 		hello[1] = static_cast<std::uint8_t>(GuardProto::Version >> 8);
 		std::memcpy(hello + 2, this->m_MainHash, GuardProto::HashSize);
 		std::memcpy(hello + 2 + GuardProto::HashSize, this->m_Id, GuardProto::GuardianIdSize);
+		std::memcpy(hello + 2 + GuardProto::HashSize + GuardProto::GuardianIdSize, this->m_Machine, GuardProto::MachineSize);
 
 		std::vector<std::uint8_t> reply;
 		if (!this->Exchange(GuardProto::Hello, hello, sizeof(hello), GuardProto::HelloResult, reply) || reply.empty() || reply[0] != GuardProto::Ok)
 		{
 			if (!reply.empty() && reply[0] == GuardProto::UnknownBuild)
 				Log("MU-Guard: el server no acepta este build del cliente (no esta en Data/Guard/Builds)");
+			else if (reply.size() >= GuardProto::HelloResultBannedSize && reply[0] == GuardProto::Banned)
+			{
+				this->m_BanFlags = reply[2];
+				this->m_BanUntil = static_cast<std::int64_t>(GuardProto::GetLe64(reply.data() + 3));
+				Log("MU-Guard: el server tiene baneada esta maquina o esta IP (%u)", static_cast<unsigned>(reply[2]));
+			}
 			else
 				Log("MU-Guard: mu-guard no acepto el saludo");
 			this->m_Socket.Close();
@@ -143,6 +249,39 @@ public:
 
 	// Opciones del server (GuardProto::HelloOption), del último saludo.
 	std::uint8_t Options() const { return this->m_Options.load(); }
+
+	// El saludo fue rechazado por un ban (GuardProto::BanFlag; 0 si no).
+	std::uint8_t BanFlags() const { return this->m_BanFlags.load(); }
+	std::int64_t BanUntil() const { return this->m_BanUntil.load(); }
+
+	// Espera la respuesta del server a una detección que cierra el juego.
+	bool AwaitNotice(GuardNotice& notice, int ms)
+	{
+		std::lock_guard<std::recursive_mutex> lock(this->m_Lock);
+		const Clock::time_point deadline = Clock::now() + std::chrono::milliseconds(ms);
+		for (;;)
+		{
+			for (const Push& push : this->m_Inbox)
+			{
+				if (push.type == GuardProto::Notice && push.payload.size() == GuardProto::NoticeSize)
+				{
+					notice.number = push.payload[0];
+					notice.limit = push.payload[1];
+					notice.banned = push.payload[2];
+					notice.until = static_cast<std::int64_t>(GuardProto::GetLe64(push.payload.data() + 3));
+					return true;
+				}
+			}
+			if (!this->m_Socket.IsOpen()) return false;
+			Push push;
+			int popped;
+			while ((popped = GuardProto::Pop(this->m_Pending, push.type, push.payload)) > 0) this->m_Inbox.push_back(push);
+			if (popped < 0) return false;
+			const int left = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - Clock::now()).count());
+			if (left <= 0) return false;
+			if (!this->m_Socket.Receive(this->m_Pending, left)) return false;
+		}
+	}
 
 	bool Ticket(std::uint8_t out[kTicketReply])
 	{
@@ -179,8 +318,10 @@ public:
 			this->m_Socket.Close();
 			return false;
 		}
-		out.insert(out.end(), this->m_Inbox.begin(), this->m_Inbox.end());
-		this->m_Inbox.clear();
+		// El Notice queda para AwaitNotice: llega junto con el veredicto.
+		std::vector<Push> kept;
+		for (Push& push : this->m_Inbox) (push.type == GuardProto::Notice ? kept : out).push_back(std::move(push));
+		this->m_Inbox.swap(kept);
 		return true;
 	}
 
@@ -235,6 +376,9 @@ private:
 
 	std::recursive_mutex m_Lock;   // tickets (hilo del pipe) y reportes (vigilancia)
 	std::atomic<std::uint8_t> m_Options{ 0 };
+	std::atomic<std::uint8_t> m_BanFlags{ 0 };
+	std::atomic<std::int64_t> m_BanUntil{ 0 };
+	std::uint8_t m_Machine[GuardProto::MachineSize] = {};
 	std::string m_Host;
 	std::uint16_t m_Port = 0;
 	std::uint8_t m_MainHash[GuardProto::HashSize] = {};
@@ -418,6 +562,45 @@ std::string ThreatName(const Guard::Finding& finding, int language)
 	case GuardProto::Patch: return kNames[lang][3];
 	default: return kNames[lang][2];
 	}
+}
+
+// El aviso del server, para el banner ("Aviso 2 de 3." o hasta cuándo queda
+// bloqueado).  Vacío si no hay número.
+std::string NoticeText(const GuardNotice& notice, int language)
+{
+	static const char* const kWarning[3] = { "Aviso {0} de {1}.", "Warning {0} of {1}.", "Aviso {0} de {1}." };
+	static const char* const kWarningNoLimit[3] = { "Aviso {0}.", "Warning {0}.", "Aviso {0}." };
+	static const char* const kBannedUntil[3] = { "Qued\xC3\xA1s bloqueado hasta el {0}.", "You are banned until {0}.", "Voc\xC3\xAA est\xC3\xA1 bloqueado at\xC3\xA9 {0}." };
+	static const char* const kBannedForever[3] = { "Qued\xC3\xA1s bloqueado de forma permanente.", "You are permanently banned.", "Voc\xC3\xAA est\xC3\xA1 bloqueado permanentemente." };
+	const int lang = (language >= 0 && language < 3) ? language : 0;
+	auto fill = [](std::string text, const std::string& a, const std::string& b) {
+		std::size_t at = text.find("{0}");
+		if (at != std::string::npos) text.replace(at, 3, a);
+		at = text.find("{1}");
+		if (at != std::string::npos) text.replace(at, 3, b);
+		return text;
+	};
+	if (notice.banned != 0)
+		return notice.until == 0 ? kBannedForever[lang] : fill(kBannedUntil[lang], LocalTime(notice.until), "");
+	if (notice.number == 0) return std::string();
+	return notice.limit > 0 ? fill(kWarning[lang], std::to_string(notice.number), std::to_string(notice.limit))
+	                        : fill(kWarningNoLimit[lang], std::to_string(notice.number), "");
+}
+
+// La máquina o la IP baneadas en el saludo, para el banner.
+std::string BlockedText(std::uint8_t flags, std::int64_t until, int language)
+{
+	static const char* const kWho[3][2] = {
+		{ "Esta PC", "Esta conexi\xC3\xB3n" }, { "This PC", "This connection" }, { "Este PC", "Esta conex\xC3\xA3o" } };
+	static const char* const kUntil[3] = { "{0} est\xC3\xA1 bloqueada hasta el {1}.", "{0} is banned until {1}.", "{0} est\xC3\xA1 bloqueada at\xC3\xA9 {1}." };
+	static const char* const kForever[3] = { "{0} est\xC3\xA1 bloqueada de forma permanente.", "{0} is permanently banned.", "{0} est\xC3\xA1 bloqueada permanentemente." };
+	const int lang = (language >= 0 && language < 3) ? language : 0;
+	std::string text = until == 0 ? kForever[lang] : kUntil[lang];
+	std::size_t at = text.find("{0}");
+	if (at != std::string::npos) text.replace(at, 3, kWho[lang][(flags & GuardProto::BanMachine) ? 0 : 1]);
+	at = text.find("{1}");
+	if (at != std::string::npos) text.replace(at, 3, LocalTime(until));
+	return text;
 }
 
 // Desafío de memoria (paso 4): el hash de los rangos pedidos del código del
@@ -786,6 +969,14 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 		*exitCode = 0;
 		return true;
 	}
+	if (connected.load() != 1 && guard.BanFlags() != 0)
+	{
+		// Baneado: el juego no se abre.
+		banner.Blocked(language, BlockedText(guard.BanFlags(), guard.BanUntil(), language));
+		banner.Close();
+		*exitCode = 1;
+		return true;
+	}
 	if (connected.load() != 1)
 	{
 		// Puede estar caído: lo decide el GameServer en el login (4c).
@@ -897,7 +1088,10 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	if (threat)
 	{
 		SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
-		banner.Threat(language, ThreatName(closing, language));
+		GuardNotice notice;
+		if (guard.AwaitNotice(notice, 2000))
+			Log("MU-Guard: aviso %d de %d (baneado %u)", notice.number, notice.limit, static_cast<unsigned>(notice.banned));
+		banner.Threat(language, ThreatName(closing, language), NoticeText(notice, language));
 		code = 1;
 	}
 	// El juego terminó.  No se espera el fin del pipe: otro proceso que el juego
@@ -982,7 +1176,10 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	if (threat)
 	{
 		::setpriority(PRIO_PROCESS, 0, 0);
-		banner.Threat(language, ThreatName(closing, language));
+		GuardNotice notice;
+		if (guard.AwaitNotice(notice, 2000))
+			Log("MU-Guard: aviso %d de %d (baneado %u)", notice.number, notice.limit, static_cast<unsigned>(notice.banned));
+		banner.Threat(language, ThreatName(closing, language), NoticeText(notice, language));
 		code = 1;
 	}
 	Log("MU-Guard: el juego termino (%d)", code);
