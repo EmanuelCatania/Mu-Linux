@@ -430,9 +430,9 @@ namespace
 
 		this->m_Rules = ReadGuardRules(this->m_Data);
 
-		LogAdd(LOG_BLUE, "[MU-Guard] Listas: %d procesos, %d ventanas, %d modulos bloqueados, %d permitidos, %d textos",
+		LogAdd(LOG_BLUE, "[MU-Guard] Listas: %d procesos, %d ventanas, %d modulos bloqueados, %d permitidos, %d textos, %d archivos",
 			(int)this->m_Rules.Processes.size(), (int)this->m_Rules.Windows.size(), (int)this->m_Rules.ModuleBlock.size(),
-			(int)this->m_Rules.ModuleAllow.size(), (int)this->m_Rules.Names.size());
+			(int)this->m_Rules.ModuleAllow.size(), (int)this->m_Rules.Names.size(), (int)this->m_Rules.Files.size());
 
 		gServerIdentity.Reload((this->m_Data + "Keys").c_str());
 
@@ -1014,7 +1014,8 @@ namespace
 			}
 		}
 
-		const std::uint8_t options = static_cast<std::uint8_t>((this->m_Settings.MemScanCloses ? MemScanCloses : 0) | (this->m_Settings.ToolCloses ? ToolCloses : 0));
+		const std::uint8_t options = static_cast<std::uint8_t>((this->m_Settings.MemScanCloses ? MemScanCloses : 0) | (this->m_Settings.ToolCloses ? ToolCloses : 0) |
+			(this->m_Settings.FilesCloses ? FilesCloses : 0));
 
 		std::uint8_t reply[HelloResultBannedSize] = { result, options };
 
@@ -1341,6 +1342,7 @@ namespace
 		send(RuleModuleBlock, this->m_Rules.ModuleBlock);
 		send(RuleModuleAllow, this->m_Rules.ModuleAllow);
 		send(RuleName, this->m_Rules.Names);
+		send(RuleFile, this->m_Rules.Files);
 	}
 
 	void Guard::HandleIdentify(const std::vector<std::uint8_t>& payload)
@@ -1575,8 +1577,9 @@ namespace
 
 			this->m_Rules = rules;
 
-			LogAdd(LOG_BLUE, "[MU-Guard] Listas: %d procesos, %d ventanas, %d modulos bloqueados, %d permitidos, %d textos",
-				(int)rules.Processes.size(), (int)rules.Windows.size(), (int)rules.ModuleBlock.size(), (int)rules.ModuleAllow.size(), (int)rules.Names.size());
+			LogAdd(LOG_BLUE, "[MU-Guard] Listas: %d procesos, %d ventanas, %d modulos bloqueados, %d permitidos, %d textos, %d archivos",
+				(int)rules.Processes.size(), (int)rules.Windows.size(), (int)rules.ModuleBlock.size(), (int)rules.ModuleAllow.size(), (int)rules.Names.size(),
+				(int)rules.Files.size());
 
 			for (const auto& c : this->m_Connections)
 			{
@@ -1657,8 +1660,122 @@ namespace
 	}
 }
 
+// mu-guard files: lo que FILES verifica en el cliente.  Los datos que dan
+// ventaja si se tocan (items, skills, terreno, modelos); las texturas y el
+// sonido no (son muchos y el pack HD los reemplaza).
+int WriteFilesManifest(const std::string& client, std::string out)
+{
+	const std::filesystem::path root(client);
+
+	std::error_code error;
+
+	if (!std::filesystem::is_directory(root / "Content", error))
+	{
+		std::fprintf(stderr, "%s no tiene la carpeta Content del cliente\n", client.c_str());
+
+		return 1;
+	}
+
+	std::vector<std::string> lines;
+
+	std::uintmax_t bytes = 0;
+
+	for (auto it = std::filesystem::recursive_directory_iterator(root / "Content", error); it != std::filesystem::recursive_directory_iterator(); it.increment(error))
+	{
+		if (error || !it->is_regular_file(error))
+		{
+			continue;
+		}
+
+		std::string extension = it->path().extension().string();
+
+		std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+
+		if (extension != ".bmd" && extension != ".toml" && extension != ".att")
+		{
+			continue;
+		}
+
+		FILE* file = std::fopen(it->path().string().c_str(), "rb");
+
+		if (file == nullptr)
+		{
+			continue;
+		}
+
+		crypto_blake2b_ctx ctx;
+
+		crypto_blake2b_init(&ctx, GuardProto::HashSize);
+
+		std::vector<std::uint8_t> buffer(64 * 1024);
+
+		std::size_t read = 0;
+
+		while ((read = std::fread(buffer.data(), 1, buffer.size(), file)) > 0)
+		{
+			crypto_blake2b_update(&ctx, buffer.data(), read);
+
+			bytes += read;
+		}
+
+		std::fclose(file);
+
+		std::uint8_t hash[GuardProto::HashSize];
+
+		crypto_blake2b_final(&ctx, hash);
+
+		const std::string path = std::filesystem::relative(it->path(), root, error).generic_string();
+
+		if (path.size() + 65 <= GuardProto::MaxRule)
+		{
+			lines.push_back(Hex(hash, sizeof(hash)) + "  " + path);
+		}
+	}
+
+	std::sort(lines.begin(), lines.end(), [](const std::string& a, const std::string& b) { return a.compare(66, std::string::npos, b, 66, std::string::npos) < 0; });
+
+	if (lines.size() > GuardProto::MaxRules / 2)
+	{
+		std::fprintf(stderr, "Demasiados archivos (%zu, el maximo es %zu)\n", lines.size(), GuardProto::MaxRules / 2);
+
+		return 1;
+	}
+
+	if (out.empty())
+	{
+		out = "Files.txt";
+	}
+
+	FILE* file = std::fopen(out.c_str(), "w");
+
+	if (file == nullptr)
+	{
+		std::fprintf(stderr, "No se pudo escribir %s\n", out.c_str());
+
+		return 1;
+	}
+
+	for (const std::string& line : lines)
+	{
+		std::fprintf(file, "%s\n", line.c_str());
+	}
+
+	std::fclose(file);
+
+	std::printf("%zu archivos (%ju bytes) en %s\n", lines.size(), bytes, out.c_str());
+
+	return 0;
+}
+
 int main(int argc, char** argv)
 {
+	// mu-guard files <carpeta del cliente> [salida]: lo que verifica FILES, para
+	// Data/Guard/Files.txt.
+	if (argc >= 3 && std::strcmp(argv[1], "files") == 0)
+	{
+		return WriteFilesManifest(argv[2], argc >= 4 ? argv[3] : std::string());
+	}
+
 	// mu-guard build <ejecutable> [salida]: el manifiesto de un build del
 	// cliente, para Data/Guard/Builds.
 	if (argc >= 3 && std::strcmp(argv[1], "build") == 0)

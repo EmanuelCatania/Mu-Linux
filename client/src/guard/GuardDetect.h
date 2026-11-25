@@ -21,6 +21,10 @@
 //             ventanas, Data/Guard/Lists.toml); lo decide el server
 //             (Guard.toml ToolCloses, encendido por defecto)
 //   INJECT    un módulo de la lista de bloqueados del server
+//   FILES     un archivo del juego (Content/) distinto del que tiene el server
+//             en Data/Guard/Files.txt, o que falta; lo decide el server
+//             (Guard.toml FilesCloses, encendido por defecto).  Se verifica de
+//             a poco (unos MB por pasada), y otra vez cada 10 minutos
 // Lo que sólo se reporta:
 //   INJECT    otros módulos fuera del juego y del sistema (overlays de Discord,
 //             Steam, OBS... son legítimos), salvo los de la lista de permitidos
@@ -56,6 +60,9 @@ public:
 
 	// Si TOOL cierra el juego (también del saludo).
 	void SetToolCloses(bool closes);
+
+	// Si FILES cierra el juego (también del saludo).
+	void SetFilesCloses(bool closes);
 
 	// Una entrada de las listas del server (GuardProto::RuleKind; RuleReset
 	// las borra).

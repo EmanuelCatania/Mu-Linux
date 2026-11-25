@@ -2,6 +2,7 @@
 
 #include "guard/GuardBanner.h"
 
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -58,18 +59,22 @@ struct Texts
 	const char* faseBlocked;
 	const char* blocked;
 	const char* tooMany;
+	const char* reason;    // {0}: lo que se detectó (fijo bajo la fase)
 };
 
 const Texts kTexts[] = {
 	{ "Iniciando protecci\xC3\xB3n...", "Validando conexi\xC3\xB3n con el servidor...", "Abriendo main.exe",
 	  "Se cerr\xC3\xB3 el juego", "AMENAZA DETECTADA", "Se detect\xC3\xB3 {0}. El cliente se va a cerrar.", "Cerrando en {0}...",
-	  "No se abri\xC3\xB3 el juego", "ACCESO BLOQUEADO", "YA HAY UN JUEGO ABIERTO" },
+	  "No se abri\xC3\xB3 el juego", "ACCESO BLOQUEADO", "YA HAY UN JUEGO ABIERTO",
+	  "Se detect\xC3\xB3 {0}." },
 	{ "Initializing protection...", "Validating server connection...", "Launching main.exe",
 	  "The game was closed", "THREAT DETECTED", "{0} was detected. The client will close.", "Closing in {0}...",
-	  "The game was not opened", "ACCESS BLOCKED", "A GAME IS ALREADY OPEN" },
+	  "The game was not opened", "ACCESS BLOCKED", "A GAME IS ALREADY OPEN",
+	  "{0} was detected." },
 	{ "Iniciando prote\xC3\xA7\xC3\xA3o...", "Validando conex\xC3\xA3o com o servidor...", "Abrindo main.exe",
 	  "O jogo foi fechado", "AMEA\xC3\x87" "A DETECTADA", "{0} foi detectado. O cliente ser\xC3\xA1 fechado.", "Fechando em {0}...",
-	  "O jogo n\xC3\xA3o foi aberto", "ACESSO BLOQUEADO", "J\xC3\x81 H\xC3\x81 UM JOGO ABERTO" },
+	  "O jogo n\xC3\xA3o foi aberto", "ACESSO BLOQUEADO", "J\xC3\x81 H\xC3\x81 UM JOGO ABERTO",
+	  "{0} foi detectado." },
 };
 
 std::string Fill(const char* text, const std::string& value)
@@ -225,6 +230,7 @@ struct Banner::State
 	bool videoStarted = false;
 	bool threat = false;    // AMENAZA: paleta roja
 	const char* faseText = nullptr;   // texto de fase del estado rojo
+	std::vector<std::string> reasons; // el motivo, fijo bajo la fase (la cuenta regresiva no lo tapa)
 
 	float Seconds() const
 	{
@@ -276,6 +282,38 @@ struct Banner::State
 				{ { 0, Rgba(0x4A, 0xA3, 0xE8) }, { 0.55f, Rgba(120, 180, 230, 0.45f) }, { 1, Rgba(120, 180, 230, 0) } });
 		fase->Draw(threat ? (this->faseText ? this->faseText : kTexts[language].faseThreat) : kTexts[language].faseInit, left, ruleY + 2 + 14,
 			threat ? SDL_Color{ 0xB8, 0x44, 0x2F, 255 } : SDL_Color{ 0x4A, 0x7F, 0xB0, 255 });
+		// El motivo, cortado por palabras para no meterse bajo la mascota.
+		if (threat)
+		{
+			const float maxWidth = kWidth * 0.55f;
+			float y = ruleY + 2 + 14 + fase->Height() * 1.6f;
+			for (const std::string& reason : reasons)
+			{
+				std::string line;
+				std::size_t at = 0;
+				while (at <= reason.size())
+				{
+					std::size_t end = reason.find(' ', at);
+					if (end == std::string::npos) end = reason.size();
+					const std::string word = reason.substr(at, end - at);
+					const std::string next = line.empty() ? word : line + " " + word;
+					if (!line.empty() && step->Width(next) > maxWidth)
+					{
+						step->Draw(line, left, y, SDL_Color{ 0xA8, 0x2A, 0x1A, 255 });
+						y += step->Height() * 1.3f;
+						line = word;
+					}
+					else
+						line = next;
+					at = end + 1;
+				}
+				if (!line.empty())
+				{
+					step->Draw(line, left, y, SDL_Color{ 0xA8, 0x2A, 0x1A, 255 });
+					y += step->Height() * 1.3f;
+				}
+			}
+		}
 
 		// Pie (.pie): el paso actual y el hilo con su destello.
 		const float rowH = step->Height() * 1.3f;
@@ -450,22 +488,28 @@ void Banner::Threat(int language, const std::string& what, const std::string& no
 	const Texts& t = kTexts[lang];
 	std::vector<std::string> lines{ Fill(t.detail, what) };
 	if (!notice.empty()) lines.push_back(notice);
-	// El aviso sigue a la vista con la cuenta regresiva: si no, dura 2 s.
-	this->Alert(lang, t.faseThreat, t.threat, lines, !notice.empty());
+	// El motivo y el aviso quedan fijos bajo "Se cerró el juego".
+	std::string reason = Fill(t.reason, what);
+	if (!reason.empty()) reason[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(reason[0])));
+	m->reasons = { reason };
+	if (!notice.empty()) m->reasons.push_back(notice);
+	this->Alert(lang, t.faseThreat, t.threat, lines, false);
 }
 
 void Banner::Blocked(int language, const std::string& detail)
 {
 	const int lang = (language >= 0 && language < 3) ? language : 0;
 	const Texts& t = kTexts[lang];
-	this->Alert(lang, t.faseBlocked, t.blocked, { detail }, true);
+	m->reasons = { detail };
+	this->Alert(lang, t.faseBlocked, t.blocked, { detail }, false);
 }
 
 void Banner::Refused(int language, const std::string& detail)
 {
 	const int lang = (language >= 0 && language < 3) ? language : 0;
 	const Texts& t = kTexts[lang];
-	this->Alert(lang, t.faseBlocked, t.tooMany, { detail }, true);
+	m->reasons = { detail };
+	this->Alert(lang, t.faseBlocked, t.tooMany, { detail }, false);
 }
 
 void Banner::Alert(int language, const char* faseText, const char* headline, const std::vector<std::string>& lines, bool keepLast)

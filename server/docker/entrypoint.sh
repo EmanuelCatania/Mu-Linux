@@ -58,6 +58,8 @@ ChallengeSeconds = 30
 ToolCloses = true
 # Juegos abiertos a la vez en una misma PC (0 = sin límite).
 MaxPerMachine = 0
+# true: un archivo del juego distinto de Files.txt (mu-guard files) lo cierra.
+FilesCloses = true
 
 # Avisos (los cuenta mu-guard en la base): una detección que cierra el juego
 # suma uno.  A los `limit` avisos dentro de `window_days` se banea.

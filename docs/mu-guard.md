@@ -53,6 +53,7 @@ El guardián revisa el juego cada 2 segundos desde afuera, con prioridad baja.
 | `INJECT` | módulos de Cheat Engine, o las funciones de tiempo del sistema reescritas dentro del juego (speedhack) | cierra el juego |
 | `MEMSCAN` | alguien leyó las páginas señuelo que el guardián deja en el juego (el escaneo de un editor de memoria) | cierra el juego (`MemScanCloses`) |
 | `TOOL` | una herramienta de `Data/Guard/Lists.toml` abierta (proceso o ventana) | cierra el juego (`ToolCloses`) |
+| `FILES` | un archivo del juego distinto del de `Data/Guard/Files.txt`, o que falta | cierra el juego (`FilesCloses`) |
 | `INJECT` | un módulo de la lista `block` de `Lists.toml` | cierra el juego |
 | `INJECT` | otros módulos fuera del juego y del sistema | sólo se registra (salvo los de `allow`) |
 
@@ -168,6 +169,28 @@ El intervalo se ajusta con `ChallengeSeconds` (30 por defecto, de 5 a 300): más
 corto revisa todo el código antes y le cuesta más CPU a `mu-guard` (hashear
 512 KB por jugador en cada desafío).
 
+## Archivos del cliente (FILES)
+
+`mu-guard` puede verificar que los datos del juego sean los de tu cliente: los
+`.bmd`, `.toml` y `.att` de `Content/` (items, skills, terreno, modelos), que son
+los que dan ventaja si se tocan. Las texturas y el sonido no se verifican: son
+muchos y el pack HD los reemplaza.
+
+La lista se arma una vez, desde el cliente que repartís, y se vuelve a armar
+cada vez que publicás un parche que toque esos archivos:
+
+```sh
+# en Docker, con la carpeta del cliente copiada a Data/cliente
+docker compose exec mu-server /opt/mu/mu-guard files /opt/mu/Data/cliente /opt/mu/Data/Guard/Files.txt
+```
+
+Sin `Files.txt` no se verifica nada. `mu-guard` lo relee solo y se lo manda a
+los guardianes conectados. El guardián lo revisa de a poco (unos 4 MB cada 2
+segundos: un cliente entero, en unos 30 segundos) y otra vez cada 10 minutos.
+Un archivo distinto, o que falta, cierra el juego; con `FilesCloses = false` en
+`Guard.toml` sólo se registra. No suma aviso salvo que se agregue `"FILES"` a
+`[warnings] codes`: un parche a medio bajar también da `FILES`.
+
 ## Avisos y bans
 
 Cada detección que cierra el juego (y cada desafío de memoria fallado) suma un
@@ -272,6 +295,7 @@ AcceptUnknownBuilds = true
 ChallengeSeconds = 30
 ToolCloses = true
 MaxPerMachine = 0   # juegos abiertos a la vez en una misma PC (0 = sin límite)
+FilesCloses = true  # un archivo distinto de Files.txt cierra el juego
 
 [warnings]
 limit = 3

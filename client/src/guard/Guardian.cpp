@@ -560,10 +560,10 @@ std::string ThreatName(const Guard::Detector& detector, const Guard::Finding& fi
 {
 	const std::string custom = detector.Name(finding.code, language);
 	if (!custom.empty()) return custom;
-	static const char* const kNames[3][5] = {
-		{ "un depurador", "un editor de memoria", "Cheat Engine", "el juego modificado", "una herramienta prohibida" },
-		{ "A debugger", "A memory editor", "Cheat Engine", "A modified game", "A forbidden tool" },
-		{ "Um depurador", "Um editor de mem\xC3\xB3ria", "Cheat Engine", "O jogo modificado", "Uma ferramenta proibida" },
+	static const char* const kNames[3][6] = {
+		{ "un depurador", "un editor de memoria", "Cheat Engine", "el juego modificado", "una herramienta prohibida", "un archivo del juego modificado" },
+		{ "A debugger", "A memory editor", "Cheat Engine", "A modified game", "A forbidden tool", "A modified game file" },
+		{ "Um depurador", "Um editor de mem\xC3\xB3ria", "Cheat Engine", "O jogo modificado", "Uma ferramenta proibida", "Um arquivo do jogo modificado" },
 	};
 	const int lang = (language >= 0 && language < 3) ? language : 0;
 	switch (finding.code)
@@ -573,6 +573,7 @@ std::string ThreatName(const Guard::Detector& detector, const Guard::Finding& fi
 	case GuardProto::MemScan: return kNames[lang][1];
 	case GuardProto::Patch: return kNames[lang][3];
 	case GuardProto::Tool: return kNames[lang][4];
+	case GuardProto::Files: return kNames[lang][5];
 	default: return kNames[lang][2];
 	}
 }
@@ -1094,6 +1095,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	Guard::Detector detector;
 	detector.SetMemScanCloses((guard.Options() & GuardProto::MemScanCloses) != 0);
 	detector.SetToolCloses((guard.Options() & GuardProto::ToolCloses) != 0);
+	detector.SetFilesCloses((guard.Options() & GuardProto::FilesCloses) != 0);
 	detector.Attach(pi.hProcess, pi.hThread, pi.dwProcessId, gameDir);
 	Vigil vigil;
 	ResumeThread(pi.hThread);
@@ -1184,6 +1186,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	Guard::Detector detector;
 	detector.SetMemScanCloses((guard.Options() & GuardProto::MemScanCloses) != 0);
 	detector.SetToolCloses((guard.Options() & GuardProto::ToolCloses) != 0);
+	detector.SetFilesCloses((guard.Options() & GuardProto::FilesCloses) != 0);
 	detector.Attach(nullptr, nullptr, static_cast<unsigned long>(pid), gameDir);
 	Vigil vigil;
 	banner.Wait([]() { return true; }, 1200);
