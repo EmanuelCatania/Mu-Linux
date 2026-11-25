@@ -38,6 +38,8 @@ public:
 	eClientState m_state;
 
 	char m_IpAddr[16];
+	// Entró por el puerto web (Common/WebGateway.h).
+	bool m_web = false;
 
 	SOCKET m_socket;
 

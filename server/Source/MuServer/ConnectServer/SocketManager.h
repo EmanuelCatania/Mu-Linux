@@ -129,6 +129,8 @@ private:
 	CCriticalSection m_critical;
 
 #ifndef _WIN32
+	// Puerto de los clientes web (Common/WebGateway.h); INVALID_SOCKET si no hay.
+	SOCKET m_webListen;
 	int m_epollFd;
 	std::atomic<bool> m_running;
 	std::thread m_acceptThread;

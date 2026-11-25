@@ -340,6 +340,8 @@ struct OBJECTSTRUCT
 	struct PER_SOCKET_CONTEXT* PerSocketContext;
 	SOCKET Socket;
 	char IpAddr[16];
+	// Entró por el puerto web (Common/WebGateway.h): cliente en el navegador.
+	bool WebClient;
 	char HardwareID[36];
 	BYTE CatalogCacheCount; // secciones del catálogo que el cliente tiene en caché (F1:06)
 	BYTE CatalogCacheSub[16];

@@ -19,6 +19,10 @@
 //   ChallengeSeconds = 30   # cada cuánto se desafía la memoria del juego
 //                           # (5..300; más corto revisa todo el código antes
 //                           # y le cuesta más CPU a mu-guard)
+//   WebClients = true       # se puede entrar con la versión web (navegador),
+//                           # que no puede tener guardián: entra sin ticket
+//                           # aunque Required esté en true, sólo con los
+//                           # controles del server.  false = no entra.
 //
 //   [warnings]              # avisos (sólo los lee mu-guard)
 //   limit = 3               # avisos para banear; 0 = nunca banear
@@ -61,6 +65,7 @@ struct GuardSettings
 	int MaxPerMachine = 0;   // 0 = sin límite
 	bool FilesCloses = true;
 	int ChallengeSeconds = 30;
+	bool WebClients = true;
 
 	// [warnings]
 	int WarningLimit = 3;

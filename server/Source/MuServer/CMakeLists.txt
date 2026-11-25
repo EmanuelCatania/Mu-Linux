@@ -30,6 +30,10 @@ endforeach()
 target_sources(ConnectServer PRIVATE Common/IpManager.cpp)
 target_sources(GameServer PRIVATE Common/IpManager.cpp)
 
+# Clientes web: puerto interno para mu-web (Common/WebGateway.h).
+target_sources(ConnectServer PRIVATE Common/WebGateway.cpp)
+target_sources(GameServer PRIVATE Common/WebGateway.cpp)
+
 # Índice de los GameServer conectados (gServerManager).
 target_sources(JoinServer PRIVATE Common/ServerIndex.cpp)
 target_sources(DataServer PRIVATE Common/ServerIndex.cpp)

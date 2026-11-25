@@ -306,6 +306,7 @@ ChallengeSeconds = 30
 ToolCloses = true
 MaxPerMachine = 0   # juegos abiertos a la vez en una misma PC (0 = sin límite)
 FilesCloses = true  # un archivo distinto de Files.txt cierra el juego
+WebClients = true   # la versión web (navegador) entra sin guardián
 
 [warnings]
 limit = 3
@@ -352,3 +353,19 @@ server se comporta como antes.
   afuera si modifica el código del juego, pero no si edita sólo datos.
 - En Linux con `ptrace_scope` 0 no hay bloqueo de lectura de la memoria del
   juego, sólo la detección que llega después.
+
+## Versión web
+
+En el navegador no puede correr el guardián: no hay un proceso aparte que vigile
+la memoria ni la lista de programas, y el código del juego se puede modificar
+con las herramientas del navegador.  Por eso una sesión web (la que entra por el
+puerto web del server, a través de mu-web) no lleva ticket:
+
+- Con `WebClients = true` (por defecto) entra aunque `Required` esté en `true`.
+  Sólo se le revisa el ban de IP; el resto lo controla el server (velocidad del
+  reloj, movimiento, ritmo de paquetes).  El log del GameServer la marca como
+  `Login web`.
+- Con `WebClients = false` no entra.
+
+Un cliente nativo no puede hacerse pasar por web: el puerto web no se publica y
+mu-web lo abre con una clave compartida (`MU_WEB_GATEWAY_KEY`).

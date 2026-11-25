@@ -1483,7 +1483,7 @@ void CGConnectAccountRecv(PMSG_CONNECT_ACCOUNT_RECV* lpMsg, int aIndex, int size
 		const bool hasTicket = size >= (int)(offsetof(PMSG_CONNECT_ACCOUNT_RECV, GuardMac) + sizeof(lpMsg->GuardMac));
 
 		const GuardLogin guard = gGuardLink.CheckLogin(lpObj->IpAddr, hasTicket ? lpMsg->GuardTicket : nullptr,
-			hasTicket ? lpMsg->GuardMac : nullptr, gSecureLink.Transcript(aIndex));
+			hasTicket ? lpMsg->GuardMac : nullptr, gSecureLink.Transcript(aIndex), lpObj->WebClient);
 
 		if (guard == GuardLogin::Reject)
 		{
