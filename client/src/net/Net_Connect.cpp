@@ -59,7 +59,7 @@ void __cdecl CreateSocket(const char *param_1,unsigned int param_2)
       ? std::string(Platform::UserDir()) + "Cache/" + CContentCatalog::CacheId(param_1, param_2)
       : std::string());
   NetChannel::OnNewConnection(gNetwork.IsConnectServerMode());
-  iVar2 = Net_Connect(&SocketClient,(char*)param_1,(u_short)param_2,0x400);
+  iVar2 = Net_Connect(&SocketClient,(char*)param_1,(unsigned short)param_2,0x400);
   {
     char dbg[64];
     Platform::TextFormat(dbg, "NET: CreateSocket Net_Connect returned %d", iVar2);

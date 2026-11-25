@@ -8,6 +8,16 @@ option(MU_RENDER_WEBGPU "Compilar el backend de render WebGPU (Dawn vía vcpkg)"
 if(NOT MU_RENDER_WEBGPU)
     return()
 endif()
+if(EMSCRIPTEN)
+    # Navegador: el webgpu.h de Dawn para Emscripten (emdawnwebgpu) llega como
+    # port de emsdk; no hay Dawn nativo ni vcpkg.  wasm32 es de 32 bits a
+    # propósito, el chequeo de abajo es para Dawn nativo.
+    add_library(dawn::webgpu_dawn INTERFACE IMPORTED)
+    set_target_properties(dawn::webgpu_dawn PROPERTIES
+        INTERFACE_COMPILE_OPTIONS "--use-port=emdawnwebgpu"
+        INTERFACE_LINK_OPTIONS "--use-port=emdawnwebgpu")
+    return()
+endif()
 if(CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "WebGPU sólo se soporta en 64 bits; x86 usa el backend OpenGL")
 endif()

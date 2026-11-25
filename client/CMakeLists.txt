@@ -801,6 +801,24 @@ target_link_options(mu97k PRIVATE
 )
 endif()
 
+elseif(EMSCRIPTEN)
+    # Navegador: main.html/main.js/main.wasm.  El bucle del juego y las cargas
+    # bloquean, así que ASYNCIFY le devuelve el control al navegador cuando el
+    # cliente cede (emscripten_sleep).  Los hilos piden COOP/COEP en la página.
+    set_target_properties(mu97k PROPERTIES SUFFIX ".html")
+    target_link_options(mu97k PRIVATE
+        -pthread
+        -sASYNCIFY -sASYNCIFY_STACK_SIZE=131072
+        -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=268435456 -sMAXIMUM_MEMORY=4294967296
+        -sSTACK_SIZE=8388608
+        -sPTHREAD_POOL_SIZE=8
+        -sMAX_WEBGL_VERSION=2
+        -sFORCE_FILESYSTEM=1 -lidbfs.js
+        -sEXIT_RUNTIME=0
+        -sENVIRONMENT=web,worker
+        -sEXPORTED_RUNTIME_METHODS=FS,ENV,IDBFS,addRunDependency,removeRunDependency
+        "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/src/platform/Web/shell.html")
+    set_property(TARGET mu97k APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/platform/Web/shell.html")
 else()
     find_package(OpenGL REQUIRED)
     target_link_libraries(mu97k PRIVATE OpenGL::GL)

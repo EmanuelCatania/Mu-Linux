@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Mu Online</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #canvas { display: block; width: 100vw; height: 100vh; outline: none; touch-action: none; }
+  #status { position: fixed; left: 0; right: 0; bottom: 24px; text-align: center;
+            font: 14px sans-serif; color: #c8b27a; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+<div id="status">Cargando…</div>
+<script>
+// Táctil o no: lo decide la página una vez y se lo pasa al cliente (--mobile).
+// No alcanza con el user agent: una notebook táctil o una tablet con teclado
+// engañan; se pide puntero grueso y pantalla táctil.
+function isTouchClient() {
+  if (navigator.userAgentData && navigator.userAgentData.mobile) return true;
+  return window.matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0;
+}
+
+// Raíz del cliente dentro del sistema de archivos del wasm.  Content/ y System/
+// se crean como archivos "perezosos": existen en el árbol (las búsquedas y los
+// listados los ven) y su contenido se baja recién cuando el juego los abre.
+const ROOT = '/mu';
+const BASE = new URL('game/', document.baseURI).href;
+
+function setStatus(text) { document.getElementById('status').textContent = text || ''; }
+
+var Module = {
+  canvas: document.getElementById('canvas'),
+  arguments: isTouchClient() ? ['--mobile'] : [],
+  print: (t) => console.log(t),
+  printErr: (t) => console.warn(t),
+  setStatus: (t) => setStatus(t),
+  preRun: [function (M) {
+    const FS = M.FS, ENV = M.ENV, IDBFS = M.IDBFS;
+    const addRunDependency = M.addRunDependency, removeRunDependency = M.removeRunDependency;
+    ENV.MU_CLIENT_ROOT = ROOT;
+    FS.mkdirTree(ROOT + '/User');
+    // User/ (debug.log, caché de claves, preferencias) persiste en IndexedDB.
+    FS.mount(IDBFS, {}, ROOT + '/User');
+    addRunDependency('mu-files');
+    FS.syncfs(true, () => {
+      fetch(BASE + 'files.txt', { cache: 'no-cache' })
+        .then((r) => { if (!r.ok) throw new Error('files.txt ' + r.status); return r.text(); })
+        .then(async (text) => {
+          // Cada archivo nace vacío y anotado en muPending; el cliente lo baja
+          // al abrirlo (src/platform/Web/WebFiles.cpp).  Los de texto chicos
+          // (.toml, .txt, .ini) se bajan ya, todos juntos: el cliente los lee
+          // al arrancar y de a uno serían cientos de idas y vueltas.
+          const pending = new Map();
+          const eager = [];
+          for (const line of text.split('\n')) {
+            const [path, size] = line.split('\t');
+            if (!path) continue;
+            const slash = path.lastIndexOf('/');
+            FS.mkdirTree(ROOT + '/' + path.substring(0, slash));
+            const full = ROOT + '/' + path;
+            const url = BASE + path.split('/').map(encodeURIComponent).join('/');
+            FS.writeFile(full, new Uint8Array(0));
+            if (/\.(toml|txt|ini)$/i.test(path) && Number(size) < 256 * 1024) eager.push([full, url]);
+            else pending.set(full, url);
+          }
+          M.muPending = pending;
+          let done = 0;
+          const next = async () => {
+            while (eager.length) {
+              const [full, url] = eager.pop();
+              const r = await fetch(url);
+              if (!r.ok) throw new Error(url + ' ' + r.status);
+              FS.writeFile(full, new Uint8Array(await r.arrayBuffer()));
+              setStatus('Cargando datos… ' + (++done));
+            }
+          };
+          await Promise.all(Array.from({ length: 8 }, next));
+          setStatus('');
+          removeRunDependency('mu-files');
+        })
+        .catch((e) => setStatus('No se pudo cargar la lista de archivos: ' + e.message));
+    });
+    // Lo que el juego escribe en User/ se guarda cada 10 s y al cerrar.
+    setInterval(() => FS.syncfs(false, () => {}), 10000);
+    addEventListener('pagehide', () => FS.syncfs(false, () => {}));
+  }],
+};
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>

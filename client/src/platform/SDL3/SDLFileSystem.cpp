@@ -1,5 +1,6 @@
 #include "platform/IFileSystem.h"
 #include "platform/ContentLayers.h"
+#include "platform/Web/WebFiles.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <cstring>
@@ -93,6 +94,7 @@ std::vector<IniLine> ReadIni(const char* path) {
     std::vector<IniLine> lines;
     const auto resolved = Resolve(path);
     if (resolved.empty()) return lines;
+    WebFiles::Ensure(resolved.string());
     std::ifstream stream(resolved);
     std::string line, section;
     while (std::getline(stream, line)) {
@@ -123,11 +125,15 @@ public:
         if (!write) {
             for (const auto& candidate : ContentLayers::Candidates(path)) {
                 const auto resolved = Resolve(candidate.path.c_str());
-                if (!resolved.empty()) return std::fopen(resolved.string().c_str(), mode);
+                if (!resolved.empty()) {
+                    WebFiles::Ensure(resolved.string());
+                    return std::fopen(resolved.string().c_str(), mode);
+                }
             }
         }
         const auto resolved = Resolve(path, write);
         if (resolved.empty()) return nullptr;
+        if (!write) WebFiles::Ensure(resolved.string());
         return std::fopen(resolved.string().c_str(), mode);
     }
     bool EnsureDirectory(const char* path) override {

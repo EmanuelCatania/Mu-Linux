@@ -124,6 +124,15 @@ bool CreateSurface(const Surface& source) {
     WGPUSurfaceDescriptor descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
     descriptor.nextInChain = &hwnd.chain;
     g.surface = wgpuInstanceCreateSurface(g.instance, &descriptor);
+#elif defined(__EMSCRIPTEN__)
+    // Navegador: la superficie es el <canvas id="canvas"> de la página, el
+    // mismo que usa SDL3.
+    (void)source;
+    WGPUEmscriptenSurfaceSourceCanvasHTMLSelector canvas = WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
+    canvas.selector = WGPUStringView{"#canvas", WGPU_STRLEN};
+    WGPUSurfaceDescriptor descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
+    descriptor.nextInChain = &canvas.chain;
+    g.surface = wgpuInstanceCreateSurface(g.instance, &descriptor);
 #else
     // Linux: source.window es la SDL_Window; la superficie sale del display y
     // la ventana nativa del driver de video que eligió SDL (Wayland o X11).
@@ -186,11 +195,16 @@ bool RequestDevice(bool validation) {
 #ifndef NDEBUG
     validation = true;
 #endif
+#ifndef __EMSCRIPTEN__
     static const char* const skip[] = { "skip_validation" };
     WGPUDawnTogglesDescriptor toggles = WGPU_DAWN_TOGGLES_DESCRIPTOR_INIT;
     toggles.enabledToggleCount = 1;
     toggles.enabledToggles = skip;
     if (!validation) descriptor.nextInChain = &toggles.chain;
+#else
+    // En el navegador la validación la hace el propio navegador; no hay toggles.
+    validation = true;
+#endif
     DbgLogPublic(validation ? "WebGPU: validación de Dawn activa" : "WebGPU: validación de Dawn desactivada");
     DeviceResult result;
     WGPURequestDeviceCallbackInfo callback = WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
@@ -313,7 +327,11 @@ bool BeginFrame() {
 
 void Present() {
     if (!g.frameView) return;
+#ifndef __EMSCRIPTEN__
+    // En el navegador no se presenta a mano: el cuadro se muestra cuando el
+    // cliente le devuelve el control (emscripten_sleep en el bucle principal).
     wgpuSurfacePresent(g.surface);
+#endif
     DropFrame();
     wgpuInstanceProcessEvents(g.instance);
 }

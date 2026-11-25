@@ -5,6 +5,7 @@
 #include "platform/SDL3/SDLFont.h"
 #include "render/BufferedDraw.h"
 #include "app/config/UserSettings.h"
+#include <cmath>
 #include <unordered_map>
 #include <vector>
 

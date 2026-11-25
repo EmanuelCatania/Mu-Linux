@@ -1,3 +1,4 @@
+#include "platform/Web/WebFiles.h"
 #include "platform/ContentLayers.h"
 #include <algorithm>
 #include <filesystem>
@@ -65,6 +66,7 @@ std::string Unquote(std::string text)
 // relativas al interior de Data y de cada capa.
 void ReadAliases(State& state)
 {
+    WebFiles::Ensure("Content/alias.toml");
     std::ifstream file("Content/alias.toml");
     std::string line, section;
     while (std::getline(file, line)) {
@@ -92,6 +94,7 @@ bool IsDirectory(const fs::path& path)
 // `source = "..."` antes de la primera sección de un .toml de entidad.
 std::string ReadSource(const fs::path& toml)
 {
+    WebFiles::Ensure(toml.string());
     std::ifstream file(toml);
     std::string line;
     while (std::getline(file, line)) {

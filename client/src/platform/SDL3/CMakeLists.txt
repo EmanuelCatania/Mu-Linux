@@ -27,3 +27,7 @@ if(MU_PLATFORM_ONLY)
     target_sources(mu_platform_sdl PRIVATE ../GLFunctions.cpp ../../render/text/TextCore.cpp ../../render/text/Utf8Proc.c
         ../../render/Texture/ImageCodec.cpp)
 endif()
+
+if(EMSCRIPTEN)
+    target_sources(mu_platform_sdl PRIVATE ../Web/WebFiles.cpp)
+endif()
