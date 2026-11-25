@@ -31,6 +31,10 @@ bool IsSecure();
 // true si la conexión siguió en claro (el ConnectServer no habla el canal).
 bool IsPlain();
 
+// Hash del saludo de la conexión actual (SecureChannel::KeySize bytes), para
+// el ticket de MU-Guard.  nullptr si no terminó el saludo.
+const std::uint8_t* TranscriptHash();
+
 // Manda `len` bytes (uno o más paquetes ya armados).  Siempre los acepta
 // enteros: lo que el socket no toma ahora queda en la cola de SocketClient, que
 // vacía CWsctlc_FDWriteSend en el próximo FD_WRITE.

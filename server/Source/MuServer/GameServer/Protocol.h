@@ -85,6 +85,9 @@ struct PMSG_CONNECT_ACCOUNT_RECV
 	BYTE ClientVersion[5];
 	BYTE ClientSerial[16];
 	BYTE ProtocolVersion[2]; // MU_PROTOCOL_VERSION; falta en clientes anteriores a la negociación
+	// MU-Guard (protocolo 14): sólo los trae el juego abierto por su guardián.
+	BYTE GuardTicket[16];    // id del ticket
+	BYTE GuardMac[32];       // BLAKE2b(clave del ticket, "MuTicket1" + hash del saludo)
 #pragma pack()
 };
 

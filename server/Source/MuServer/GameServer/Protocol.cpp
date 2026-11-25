@@ -12,6 +12,7 @@
 #include "Filter.h"
 #include "Fruit.h"
 #include "GoldenArcher.h"
+#include "GuardLink.h"
 #include "GameMaster.h"
 #include "Guild.h"
 #include "GuildManager.h"
@@ -28,6 +29,7 @@
 #include "PacketTrace.h"
 #include "Party.h"
 #include "Quest.h"
+#include "SecureLink.h"
 #include "ServerInfo.h"
 #include "SkillManager.h"
 #include "Trade.h"
@@ -1416,6 +1418,22 @@ void CGConnectAccountRecv(PMSG_CONNECT_ACCOUNT_RECV* lpMsg, int aIndex, int size
 
 	if (lpObj->LoginMessageSend == 0)
 	{
+#if defined(MU_GUARD) && !defined(_WIN32)
+		// MU-Guard: el ticket del guardián, atado a esta conexión por el hash del
+		// saludo del canal.  Se mide contra el offset, como ProtocolVersion.
+		const bool hasTicket = size >= (int)(offsetof(PMSG_CONNECT_ACCOUNT_RECV, GuardMac) + sizeof(lpMsg->GuardMac));
+
+		const GuardLogin guard = gGuardLink.CheckLogin(lpObj->IpAddr, hasTicket ? lpMsg->GuardTicket : nullptr,
+			hasTicket ? lpMsg->GuardMac : nullptr, gSecureLink.Transcript(aIndex));
+
+		if (guard == GuardLogin::Reject)
+		{
+			GCConnectAccountSend(aIndex, 0xE0);
+
+			return;
+		}
+#endif
+
 		lpObj->LoginMessageSend++;
 
 		lpObj->LoginMessageCount++;

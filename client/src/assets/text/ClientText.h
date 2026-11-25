@@ -62,6 +62,8 @@ enum class ClientTextId {
     WorldWater,
     // El server pide abrir el juego desde el launcher y no se lo encontró.
     LauncherRequired,
+    // El GameServer exige MU-Guard y el login no trajo un ticket válido (0xE0).
+    GuardRequired,
     Count
 };
 // Los textos salen del server (F3/F0, tabla 4, Data/Text/<idioma>/Client.txt).

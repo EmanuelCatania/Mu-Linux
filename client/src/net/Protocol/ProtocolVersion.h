@@ -23,4 +23,6 @@
 // 12: canal cifrado (Common/SecureChannel): saludo al conectar y todo el tráfico
 //     en registros XChaCha20-Poly1305; se quita el XOR de byte de HackCheck.
 // 13: nivel de GM de cada jugador en el 0x12 (signo sobre la cabeza).
-constexpr unsigned short MU_PROTOCOL_VERSION = 13;
+// 14: MU-Guard: ticket del guardián al final del F1:01 (atado al hash del
+//     saludo del canal) y el resultado de login 0xE0.
+constexpr unsigned short MU_PROTOCOL_VERSION = 14;

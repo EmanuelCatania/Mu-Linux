@@ -20,6 +20,7 @@ PAIRS = [
     ("src/net/crypto/SecureRandom.h", "SecureRandom.h"),
     ("src/net/crypto/monocypher.h", "monocypher/monocypher.h"),
     ("src/net/crypto/monocypher.c", "monocypher/monocypher.c"),
+    ("src/guard/GuardProtocol.h", "GuardProtocol.h"),
 ]
 
 

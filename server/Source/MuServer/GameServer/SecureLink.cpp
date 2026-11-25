@@ -129,6 +129,13 @@ bool CSecureLink::Receive(int index, const BYTE* raw, int size, IO_MAIN_BUFFER* 
 	return true;
 }
 
+const BYTE* CSecureLink::Transcript(int index)
+{
+	SecureChannel* channel = this->Channel(index);
+
+	return (channel != nullptr && channel->IsReady()) ? channel->TranscriptHash() : nullptr;
+}
+
 int CSecureLink::Seal(int index, const BYTE* plain, int size, BYTE* out)
 {
 	SecureChannel* channel = this->Channel(index);

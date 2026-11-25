@@ -137,6 +137,11 @@ enum eClientPolicy
 	// cierra (ConnectServer.ini [Launcher] RequireLauncher).  No es seguridad:
 	// es para que nadie juegue sin actualizar.  La versión web no lo aplica.
 	CLIENT_POLICY_REQUIRE_LAUNCHER = 0x01,
+	// MU-Guard (Data/Guard/Guard.toml): hay un mu-guard en guardPort y el
+	// cliente tiene que abrirse con su guardián.  Es informativo: quien exige
+	// el ticket es el GameServer, en el login.
+	CLIENT_POLICY_GUARD = 0x02,
+	CLIENT_POLICY_GUARD_REQUIRED = 0x04,   // sin ticket válido no se entra
 };
 
 struct PMSG_CLIENT_POLICY_SEND
@@ -144,6 +149,7 @@ struct PMSG_CLIENT_POLICY_SEND
 	PSBMSG_HEAD header; // C1:F4:17
 	BYTE result;        // CONTENT_OK o CONTENT_NOT_SECURE (entonces flags = 0)
 	BYTE flags;
+	BYTE guardPort[2];  // little-endian; 0 sin CLIENT_POLICY_GUARD
 };
 
 // Seguido de `length` bytes desde `offset` de: la firma (64 bytes, contexto
@@ -168,7 +174,7 @@ static_assert(sizeof(PMSG_CONTENT_FILE_SEND) == 22, "F4:13");
 static_assert(sizeof(PMSG_LAUNCHER_CONFIG_RECV) == 8, "F4:14");
 static_assert(sizeof(PMSG_LAUNCHER_CONFIG_SEND) == 16, "F4:15");
 static_assert(sizeof(PMSG_CLIENT_POLICY_RECV) == 4, "F4:16");
-static_assert(sizeof(PMSG_CLIENT_POLICY_SEND) == 6, "F4:17");
+static_assert(sizeof(PMSG_CLIENT_POLICY_SEND) == 8, "F4:17");
 
 // Bytes de archivo por paquete: entra con el encabezado en MAX_PACKET_SIZE.
 #define CONTENT_FILE_CHUNK 2000

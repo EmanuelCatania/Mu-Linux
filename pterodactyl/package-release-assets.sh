@@ -28,6 +28,7 @@ package_server() {
     "$stage/GameServer/GameServer" \
     "$stage/mu-data" \
     "$stage/mu-trace" \
+    "$stage/mu-guard" \
     "$stage/mu-patch"
   tar -C "$stage" -czf "$RELEASE_DIR/mu-linux-97k-server-${arch}.tar.gz" .
   rm -rf "$stage"

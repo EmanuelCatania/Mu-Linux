@@ -59,6 +59,7 @@ COPY --from=build /build/bin/DataServer /opt/mu/DataServer/DataServer
 COPY --from=build /build/bin/GameServer /opt/mu/GameServer/GameServer
 COPY --from=build /build/bin/mu-data /opt/mu/mu-data
 COPY --from=build /build/bin/mu-trace /opt/mu/mu-trace
+COPY --from=build /build/bin/mu-guard /opt/mu/mu-guard
 COPY --from=mupatch /build/mu-patch /opt/mu/mu-patch
 
 COPY MuServer/ConnectServer/ConnectServer.ini /opt/mu/ConnectServer/
@@ -83,12 +84,13 @@ RUN chmod +x /opt/mu/entrypoint.sh \
     /opt/mu/GameServer/GameServer \
     /opt/mu/mu-data \
     /opt/mu/mu-trace \
+    /opt/mu/mu-guard \
     /opt/mu/mu-patch \
     && ln -s /opt/mu/mu-data /usr/local/bin/mu-data \
     && ln -s /opt/mu/mu-trace /usr/local/bin/mu-trace \
     && ln -s /opt/mu/mu-patch /usr/local/bin/mu-patch \
     && mv /opt/mu/GameServer/DATA /opt/mu/GameServer/Data
 
-EXPOSE 44405/tcp 55601/udp 55901/tcp
+EXPOSE 28980/tcp 44405/tcp 55601/udp 55901/tcp
 
 ENTRYPOINT ["/opt/mu/entrypoint.sh"]

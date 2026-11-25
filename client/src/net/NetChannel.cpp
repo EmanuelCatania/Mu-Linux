@@ -196,6 +196,11 @@ bool Receive(const unsigned char* raw, int size)
 
 int PendingPlain() { return (int)s_Plain.size(); }
 
+const std::uint8_t* TranscriptHash()
+{
+    return s_Channel.IsReady() ? s_Channel.TranscriptHash() : nullptr;
+}
+
 bool IsSecure() { return s_Secure && s_Channel.IsReady(); }
 
 bool IsPlain() { return !s_Secure; }

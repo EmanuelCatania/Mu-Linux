@@ -13,6 +13,9 @@
 #include "net/Ping.h"
 #include "net/Network.h"
 #include "net/NetChannel.h"
+#ifdef MU_GUARD
+#include "guard/Guardian.h"
+#endif
 #include "net/Net.h"
 #include "net/MuEmu.h"
 #include "net/PacketFrame.h"
@@ -159,7 +162,7 @@ void CNetwork::SendLogin(const char* account, const char* password)
     NetText::ToServer(user, 10, account);
     NetText::ToServer(pass, 10, password);
     static const BYTE kArgXor[3] = { 0xFC, 0xCF, 0xAB };
-    BYTE pkt[64] = {0};
+    BYTE pkt[128] = {0};
     pkt[0] = 0xC1;
     pkt[1] = 0x01;     // placeholder — serial stomp overwrites
     pkt[2] = 0xF1;     // head (plaintext)
@@ -197,6 +200,22 @@ void CNetwork::SendLogin(const char* account, const char* password)
     // el server rechaza el login con el código 6.
     pkt[pos++] = (BYTE)(MU_PROTOCOL_VERSION >> 8);
     pkt[pos++] = (BYTE)(MU_PROTOCOL_VERSION & 0xFF);
+
+#ifdef MU_GUARD
+    // MU-Guard (protocolo 14): si este juego lo lanzó su guardián, va el ticket
+    // y su MAC sobre el hash del saludo de ESTA conexión (guard/Guardian.h).
+    // Uno nuevo en cada intento: es de un solo uso y vence en 60 s.  Sin ticket
+    // el login sale igual y el GameServer decide.
+    if (Guardian::IsGameRole()) {
+        std::uint8_t ticket[16], mac[32];
+        if (Guardian::FetchTicket(NetChannel::TranscriptHash(), ticket, mac)) {
+            memcpy(pkt + pos, ticket, sizeof(ticket));
+            pos += sizeof(ticket);
+            memcpy(pkt + pos, mac, sizeof(mac));
+            pos += sizeof(mac);
+        }
+    }
+#endif
     // pkt[1] := serial is set later by gNetwork.Send
 
     // ── LoginKey chain XOR ──────────────────────────────────────

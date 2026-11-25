@@ -19,6 +19,8 @@
 #include "assets/data/ContentCatalog.h"
 #include "net/ContentSync.h"
 #include "net/LauncherPolicy.h"
+#include "assets/text/ClientText.h"
+#include "platform/IWindow.h"
 #include "net/Protocol/ProtocolVersion.h"
 
 // IDA: FUN_00433A80 ReceiveGGAuth. Pertenece al flujo de protocolo/autenticación,
@@ -91,6 +93,15 @@ void Recv_LoginResult(const BYTE* Msg)
 {
     // DESVIACION (DLL Reconnect.cpp): durante la reconexión no se vuelve al login.
     if (gReconnect.OnLoginResult(Msg[4])) return;
+    // MU-Guard (protocolo 14): el GameServer exige el guardián y este login no
+    // trajo un ticket válido.  No tiene cartel del 0.97k: se avisa y se cierra,
+    // porque reintentar desde este proceso no lo arregla.
+    if (Msg[4] == 0xE0) {
+        NetLog("NET:  -> F1/01 LOGIN-RESULT 0xE0: MU-Guard exige el guardian");
+        Platform::GetWindow().ShowError(gClientText.Get(ClientTextId::GuardRequired), "Mu Online", true, true);
+        gWindow.RequestCloseApplication();
+        return;
+    }
     DWORD state;
     switch (Msg[4]) {
         case 0x00: state = MESSAGE_LOGIN_WRONG_PASSWORD; break;

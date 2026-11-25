@@ -80,6 +80,23 @@ int main()
         SecureChannel server, client;
         Require(Handshake(server, client, id), "el saludo completa");
         Require(std::memcmp(client.PeerIdentity(), id.pub, 32) == 0, "el cliente ve la identidad del server");
+        Require(std::memcmp(client.TranscriptHash(), server.TranscriptHash(), 32) == 0, "las dos puntas tienen el mismo hash del saludo");
+        static const std::uint8_t zero[32] = {};
+        Require(std::memcmp(client.TranscriptHash(), zero, 32) != 0, "el hash del saludo no queda en cero");
+
+        // Otra conexión (otras efímeras) da otro hash: un ticket no sirve en otra.
+        SecureChannel server2, client2;
+        std::uint8_t random[32];
+        Bytes hello(SecureChannel::ServerHelloSize);
+        Fill(random, 0xA3);
+        server2.BeginServer(hello.data(), random, id.secret, id.pub, nullptr, nullptr);
+        Fill(random, 0xB4);
+        client2.BeginClient(random, [](const std::uint8_t*, const std::uint8_t*, const std::uint8_t*) { return true; });
+        Bytes ignored;
+        client2.Receive(hello.data(), hello.size(), ignored);
+        std::uint8_t reply2[SecureChannel::ClientHelloSize];
+        server2.Receive(reply2, client2.TakeReply(reply2), ignored);
+        Require(server2.IsReady() && std::memcmp(server2.TranscriptHash(), server.TranscriptHash(), 32) != 0, "otra conexión, otro hash del saludo");
 
         const Bytes a = { 0xC1, 0x04, 0xF1, 0x00 };
         const Bytes b(3000, 0x5A);

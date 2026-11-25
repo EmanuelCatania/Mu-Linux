@@ -2,6 +2,9 @@
 #include "ConnectServerProtocol.h"
 #include "ClientManager.h"
 #include "ClientContent.h"
+#ifdef MU_GUARD
+#include "GuardConfig.h"
+#endif
 #include "SecureLink.h"
 #include "ServerList.h"
 #include "SocketManager.h"
@@ -412,6 +415,24 @@ void CCClientPolicyRecv(PMSG_CLIENT_POLICY_RECV* lpMsg, int size, int index)
 		{
 			pMsg.flags |= CLIENT_POLICY_REQUIRE_LAUNCHER;
 		}
+
+#ifdef MU_GUARD
+		const GuardSettings guard = ReadGuardSettings(GetDataPath());
+
+		if (guard.Enabled)
+		{
+			pMsg.flags |= CLIENT_POLICY_GUARD;
+
+			if (guard.Required)
+			{
+				pMsg.flags |= CLIENT_POLICY_GUARD_REQUIRED;
+			}
+
+			pMsg.guardPort[0] = (BYTE)(guard.Port & 0xFF);
+
+			pMsg.guardPort[1] = (BYTE)(guard.Port >> 8);
+		}
+#endif
 	}
 
 	gSocketManager.DataSend(index, (BYTE*)&pMsg, pMsg.header.size);
