@@ -859,10 +859,10 @@ int main(int, [[maybe_unused]] char** argv)
             // No hay mensajes pendientes: ejecutar frame
             Scene_Dispatch(gWindow.GetHdc());
 #ifdef __EMSCRIPTEN__
-            // Navegador: el bucle no puede quedarse con el hilo principal; con
-            // ASYNCIFY se cede una vez por frame (eventos, red, presentación).
+            // Navegador: el bucle no puede quedarse con el hilo principal; se
+            // cede una vez por cuadro del navegador (eventos, red, presentación).
             WebPage::Tick();
-            emscripten_sleep(0);
+            WebPage::WaitFrame();
 #endif
         }
     }

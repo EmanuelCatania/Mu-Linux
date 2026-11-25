@@ -11,6 +11,9 @@ void Size(DWORD& width, DWORD& height);
 // Una vez por frame: si la página cambió de tamaño (y se quedó quieta un
 // momento), la ventana del juego pasa a ese tamaño.
 void Tick();
+// Le devuelve el control al navegador hasta su próximo cuadro (refresco del
+// monitor), así presenta lo dibujado y atiende eventos y red.
+void WaitFrame();
 // La página detectó pantalla táctil (argumento --mobile).
 bool IsTouch();
 #else

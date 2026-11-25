@@ -175,6 +175,14 @@ public:
     bool IsCreated() const override { return window != nullptr; }
     void ChangeMode(const WindowSettings& settings) override {
         if (!window) return;
+#ifdef __EMSCRIPTEN__
+        // Navegador: sólo cambia la resolución del dibujo.  La pantalla completa
+        // es de la página (botón propio); pedirla o soltarla acá la cortaba en
+        // cuanto la ventana cambiaba de tamaño.
+        SDL_SetWindowSize(window, settings.width, settings.height);
+        SDL_SyncWindow(window);
+        return;
+#endif
         SDL_SetWindowFullscreen(window, false);
         SDL_SetWindowBordered(window, !settings.borderless);
         SDL_SetWindowSize(window, settings.width, settings.height);

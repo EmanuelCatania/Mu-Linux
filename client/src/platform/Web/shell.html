@@ -6,10 +6,10 @@
 <title>Mu Online</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
-  body { display: flex; align-items: center; justify-content: center; }
-  /* El tamaño lo fija el cliente (SDL) con la resolución del juego: estirarlo
-     por CSS desacomoda el mouse. */
-  #canvas { display: block; outline: none; touch-action: none; }
+  /* El canvas ocupa siempre toda la página; el juego dibuja a su resolución
+     (Opciones, o la de la página) y el navegador lo estira.  SDL escala el
+     mouse con la relación entre las dos (canvas con tamaño por CSS). */
+  #canvas { display: block; width: 100vw; height: 100vh; outline: none; touch-action: none; }
   #status { position: fixed; left: 0; right: 0; bottom: 24px; text-align: center;
             font: 14px sans-serif; color: #c8b27a; pointer-events: none; }
   #fullscreen { position: fixed; right: 8px; top: 8px; z-index: 2; padding: 4px 10px;
@@ -138,6 +138,18 @@ var Module = {
   }],
 };
 </script>
-{{{ SCRIPT }}}
+<!-- {{{ SCRIPT }}} : se carga abajo, según lo que soporte el navegador -->
+<script>
+// JSPI (WebAssembly.Suspending) deja pausar el juego sin reescribir el wasm:
+// el frame cuesta como sin pausas.  Sin él, el build con ASYNCIFY.
+{
+  const script = document.createElement('script');
+  // ?asyncify fuerza el de respaldo (pruebas).
+  const jspi = ('Suspending' in WebAssembly) && !new URLSearchParams(location.search).has('asyncify');
+  script.src = jspi ? 'main.js' : 'main-asyncify.js';
+  script.async = true;
+  document.body.appendChild(script);
+}
+</script>
 </body>
 </html>
