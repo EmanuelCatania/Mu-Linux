@@ -4,7 +4,7 @@
 #include <emscripten/threading.h>
 
 // Module.muPending (lo arma la página): ruta absoluta en el FS -> URL.  Lo que
-// ya se bajó sale del mapa.  Un archivo que falla queda vacío y se reintenta la
+// ya se bajó sale del mapa; Module.muFetch lo baja.  Un archivo que falla queda vacío y se reintenta la
 // próxima vez que se abra.
 // El cuerpo no lleva barras invertidas ni expresiones regulares: el
 // preprocesador lo pasa como texto y las rompe.
@@ -19,19 +19,10 @@ EM_ASYNC_JS(int, mu_web_fetch, (const char* rawPath), {
         if (part === '..') parts.pop(); else parts.push(part);
     }
     path = '/' + parts.join('/');
-    const url = pending.get(path);
-    if (!url) return 1;
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        FS.writeFile(path, new Uint8Array(await response.arrayBuffer()));
-        pending.delete(path);
-        if (Module.muOnFetched) Module.muOnFetched(path, pending.size);
-        return 1;
-    } catch (e) {
-        console.warn('No se pudo bajar ' + url + ': ' + e.message);
-        return 0;
-    }
+    if (!pending.has(path)) return 1;
+    // Module.muFetch (shell.html) no repite una bajada que ya está en curso
+    // (la descarga de fondo del menú puede haberla empezado).
+    return (await Module.muFetch(path, true)) ? 1 : 0;
 });
 
 namespace Platform::WebFiles {

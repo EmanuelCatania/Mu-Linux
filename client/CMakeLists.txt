@@ -836,7 +836,7 @@ elseif(EMSCRIPTEN)
         -sEXIT_RUNTIME=0
         --profiling-funcs
         -sENVIRONMENT=web,worker
-        -sEXPORTED_RUNTIME_METHODS=FS,ENV,IDBFS,addRunDependency,removeRunDependency)
+        -sEXPORTED_RUNTIME_METHODS=FS,ENV,IDBFS,addRunDependency,removeRunDependency,callMain)
 else()
     find_package(OpenGL REQUIRED)
     target_link_libraries(mu97k PRIVATE OpenGL::GL)
