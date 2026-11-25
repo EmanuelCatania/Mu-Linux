@@ -265,6 +265,9 @@ namespace
 		// contesta al guardián con Notice.
 		void Warn(Connection& c, int code, const std::string& detail);
 
+		// Aviso de un arranque anterior: sin Notice y sin gastar el de este guardián.
+		void WarnPrevious(Connection& c, int code, const std::string& detail);
+
 		void HandleIdentify(const std::vector<std::uint8_t>& payload);
 
 		// Sal del hash de las máquinas (Data/Guard/MachineSalt.key): así el hash
@@ -801,10 +804,19 @@ namespace
 				}
 			}
 
-			LogAdd(payload[1] ? LOG_RED : LOG_BLUE, "[MU-Guard] [%s] %s %s: %s", c.ip.c_str(), name,
-				payload[1] ? "(cerro el juego)" : "(registrado)", detail.c_str());
+			// ReportPrevious: lo que cerró el juego en un arranque anterior sin
+			// conexión con mu-guard.  Suma el aviso (a la máquina: la cuenta de esa
+			// sesión no se sabe) pero no cuenta como el de este guardián.
+			const bool previous = payload[1] == ReportPrevious;
 
-			if (payload[1])
+			LogAdd(payload[1] ? LOG_RED : LOG_BLUE, "[MU-Guard] [%s] %s %s: %s", c.ip.c_str(), name,
+				previous ? "(cerro el juego sin conexion, arranque anterior)" : (payload[1] ? "(cerro el juego)" : "(registrado)"), detail.c_str());
+
+			if (previous)
+			{
+				this->WarnPrevious(c, payload[0], detail);
+			}
+			else if (payload[1])
 			{
 				this->Warn(c, payload[0], detail);
 			}
@@ -1200,6 +1212,29 @@ namespace
 		this->Warn(c, Patch, detail);
 
 		this->KickGuardian(c.guardian, "PATCH (fallo el desafio de memoria)", c.ip);
+	}
+
+	void Guard::WarnPrevious(Connection& c, int code, const std::string& detail)
+	{
+		if ((this->m_Settings.WarningCodes & (1u << code)) == 0)
+		{
+			return;
+		}
+
+		const GuardianState& guardian = this->m_Guardians[c.guardian];
+
+		GuardWarning warning;
+		warning.code = code;
+		warning.detail = detail + " (sin conexion)";
+		warning.machine = guardian.machine;
+		warning.ip = c.ip;
+		warning.build = guardian.build;
+
+		const GuardWarningResult result = this->m_Store.AddWarning(warning, this->m_Settings);
+
+		LogAdd(LOG_RED, "[MU-Guard] %s (arranque anterior) ip=%s maquina=%s aviso=%d/%d%s%s", GuardDetectionName(code), c.ip.c_str(),
+			warning.machine.c_str(), result.number, this->m_Settings.WarningLimit, result.stored ? "" : " (sin base: no quedo guardado)",
+			result.banned != 0 ? " -> BANEADO" : "");
 	}
 
 	void Guard::Warn(Connection& c, int code, const std::string& detail)

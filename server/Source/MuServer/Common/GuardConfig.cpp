@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <fstream>
+#include <iterator>
+#include <map>
 #include <cctype>
 #include <filesystem>
 #include <mutex>
@@ -21,6 +23,147 @@ namespace
 	GuardSettings s_Settings;
 
 	constexpr std::size_t GuardRuleMax = 255;   // GuardProto::MaxRule
+
+	// Lo que verifica FILES: los .bmd, .toml y .att de Content/ (mu-guard files
+	// usa el mismo criterio).
+	bool FilesTracked(const std::string& path)
+	{
+		if (path.compare(0, 8, "Content/") != 0)
+		{
+			return false;
+		}
+
+		const std::size_t dot = path.find_last_of('.');
+
+		if (dot == std::string::npos)
+		{
+			return false;
+		}
+
+		std::string extension = path.substr(dot);
+
+		std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+
+		return extension == ".bmd" || extension == ".toml" || extension == ".att";
+	}
+
+	// Un string JSON desde la comilla de apertura (at): devuelve el texto y deja
+	// at después de la comilla de cierre.  Sólo los escapes que usa mu-patch.
+	bool JsonString(const std::string& text, std::size_t& at, std::string& out)
+	{
+		if (at >= text.size() || text[at] != '"')
+		{
+			return false;
+		}
+
+		out.clear();
+
+		for (at++; at < text.size(); at++)
+		{
+			const char ch = text[at];
+
+			if (ch == '"')
+			{
+				at++;
+
+				return true;
+			}
+
+			if (ch == '\\' && at + 1 < text.size())
+			{
+				const char next = text[++at];
+
+				out += next == 'n' ? '\n' : (next == 't' ? '\t' : next);
+
+				continue;
+			}
+
+			out += ch;
+		}
+
+		return false;
+	}
+
+	// El valor string de "key" a partir de at (busca hasta `limit`).
+	bool JsonField(const std::string& text, const char* key, std::size_t from, std::size_t limit, std::string& out)
+	{
+		const std::string needle = std::string("\"") + key + "\"";
+
+		std::size_t at = text.find(needle, from);
+
+		if (at == std::string::npos || at >= limit)
+		{
+			return false;
+		}
+
+		at = text.find('"', text.find(':', at + needle.size()));
+
+		return at < limit && JsonString(text, at, out);
+	}
+
+	// Overlay publicado (Data/Patches/published/manifest.json, lo escribe
+	// mu-patch): los archivos que agrega o cambia y los que borra.  El
+	// manifiesto es local y lo firmó este mismo server.
+	void ReadOverlay(const std::string& path, std::map<std::string, std::string>& files)
+	{
+		std::ifstream in(path, std::ios::binary);
+
+		const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+		const std::size_t list = text.find("\"files\"");
+
+		if (list != std::string::npos)
+		{
+			std::size_t at = list;
+
+			for (;;)
+			{
+				const std::size_t entry = text.find("\"path\"", at + 1);
+
+				if (entry == std::string::npos)
+				{
+					break;
+				}
+
+				const std::size_t next = text.find("\"path\"", entry + 6);
+
+				const std::size_t limit = next == std::string::npos ? text.size() : next;
+
+				std::string file, hash;
+
+				if (JsonField(text, "path", entry, limit, file) && JsonField(text, "hash", entry, limit, hash) &&
+					hash.compare(0, 12, "blake2b-256:") == 0 && hash.size() == 12 + 64 && FilesTracked(file))
+				{
+					files[file] = hash.substr(12);
+				}
+
+				at = entry;
+			}
+		}
+
+		const std::size_t deleted = text.find("\"deleted\"");
+
+		if (deleted != std::string::npos)
+		{
+			std::size_t at = text.find('[', deleted);
+
+			const std::size_t end = text.find(']', at);
+
+			while (at != std::string::npos && at < end)
+			{
+				at = text.find('"', at);
+
+				std::string file;
+
+				if (at == std::string::npos || at >= end || !JsonString(text, at, file))
+				{
+					break;
+				}
+
+				files.erase(file);
+			}
+		}
+	}
 
 	const char* const kDetectionNames[] = { "?", "DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH", "FILES", "TOOL" };
 
@@ -181,8 +324,8 @@ GuardSettings ReadGuardSettings(const std::string& dataPath)
 namespace
 {
 	std::mutex s_RulesLock;
-	std::filesystem::file_time_type s_ListsTime, s_MessagesTime, s_FilesTime;
-	bool s_ListsExist = false, s_MessagesExist = false, s_FilesExist = false;
+	std::filesystem::file_time_type s_ListsTime, s_MessagesTime, s_FilesTime, s_OverlayTime, s_DefaultsTime;
+	bool s_ListsExist = false, s_MessagesExist = false, s_FilesExist = false, s_OverlayExist = false, s_DefaultsExist = false;
 	std::string s_RulesPath;
 	GuardRules s_Rules;
 
@@ -208,6 +351,8 @@ GuardRules ReadGuardRules(const std::string& dataPath)
 	const std::string lists = dataPath + "Guard/Lists.toml";
 	const std::string messages = dataPath + "Guard/Messages.toml";
 	const std::string files = dataPath + "Guard/Files.txt";
+	const std::string overlay = dataPath + "Patches/published/manifest.json";
+	const std::string defaults = dataPath + "Guard/Lists.default.toml";
 
 	std::error_code error;
 	const bool listsExist = std::filesystem::exists(lists, error);
@@ -216,9 +361,14 @@ GuardRules ReadGuardRules(const std::string& dataPath)
 	const auto messagesTime = messagesExist ? std::filesystem::last_write_time(messages, error) : std::filesystem::file_time_type();
 	const bool filesExist = std::filesystem::exists(files, error);
 	const auto filesTime = filesExist ? std::filesystem::last_write_time(files, error) : std::filesystem::file_time_type();
+	const bool overlayExist = std::filesystem::exists(overlay, error);
+	const auto overlayTime = overlayExist ? std::filesystem::last_write_time(overlay, error) : std::filesystem::file_time_type();
+	const bool defaultsExist = std::filesystem::exists(defaults, error);
+	const auto defaultsTime = defaultsExist ? std::filesystem::last_write_time(defaults, error) : std::filesystem::file_time_type();
 
 	if (s_RulesPath == dataPath && s_Rules.Version != 0 && listsExist == s_ListsExist && messagesExist == s_MessagesExist &&
-		listsTime == s_ListsTime && messagesTime == s_MessagesTime && filesExist == s_FilesExist && filesTime == s_FilesTime)
+		listsTime == s_ListsTime && messagesTime == s_MessagesTime && filesExist == s_FilesExist && filesTime == s_FilesTime &&
+		overlayExist == s_OverlayExist && overlayTime == s_OverlayTime && defaultsExist == s_DefaultsExist && defaultsTime == s_DefaultsTime)
 	{
 		return s_Rules;
 	}
@@ -226,9 +376,16 @@ GuardRules ReadGuardRules(const std::string& dataPath)
 	GuardRules rules;
 	rules.Version = s_Rules.Version + 1;
 
-	if (listsExist)
+	// Las de fábrica (Lists.default.toml, las reescribe el arranque en cada
+	// versión) y las del operador (Lists.toml) se suman.
+	for (const std::string* file : { &defaults, &lists })
 	{
-		toml::parse_result result = toml::parse_file(lists);
+		if (!std::filesystem::exists(*file, error))
+		{
+			continue;
+		}
+
+		toml::parse_result result = toml::parse_file(*file);
 
 		if (result)
 		{
@@ -239,6 +396,13 @@ GuardRules ReadGuardRules(const std::string& dataPath)
 			Collect(rules.ModuleBlock, table["modules"]["block"]);
 			Collect(rules.ModuleAllow, table["modules"]["allow"]);
 		}
+	}
+
+	for (std::vector<std::string>* list : { &rules.Processes, &rules.Windows, &rules.ModuleBlock, &rules.ModuleAllow })
+	{
+		std::sort(list->begin(), list->end());
+
+		list->erase(std::unique(list->begin(), list->end()), list->end());
 	}
 
 	if (messagesExist)
@@ -280,7 +444,11 @@ GuardRules ReadGuardRules(const std::string& dataPath)
 		}
 	}
 
-	// Files.txt: "hash  ruta" por línea (lo escribe mu-guard files).
+	// Files.txt: "hash  ruta" por línea (lo escribe mu-guard files), la base del
+	// cliente.  Encima, lo que cambió el overlay publicado: así un parche nuevo
+	// no obliga a regenerar Files.txt.
+	std::map<std::string, std::string> tracked;
+
 	if (filesExist)
 	{
 		std::ifstream in(files);
@@ -308,18 +476,32 @@ GuardRules ReadGuardRules(const std::string& dataPath)
 				continue;
 			}
 
-			const std::string rule = line.substr(0, 64) + "\t" + line.substr(path);
+			tracked[line.substr(path)] = line.substr(0, 64);
+		}
 
-			if (rule.size() <= GuardRuleMax)
-			{
-				rules.Files.push_back(rule);
-			}
+		if (overlayExist)
+		{
+			ReadOverlay(overlay, tracked);
+		}
+	}
+
+	for (const auto& entry : tracked)
+	{
+		const std::string rule = entry.second + "\t" + entry.first;
+
+		if (rule.size() <= GuardRuleMax)
+		{
+			rules.Files.push_back(rule);
 		}
 	}
 
 	s_RulesPath = dataPath;
 	s_FilesExist = filesExist;
 	s_FilesTime = filesTime;
+	s_OverlayExist = overlayExist;
+	s_OverlayTime = overlayTime;
+	s_DefaultsExist = defaultsExist;
+	s_DefaultsTime = defaultsTime;
 	s_ListsExist = listsExist;
 	s_MessagesExist = messagesExist;
 	s_ListsTime = listsTime;

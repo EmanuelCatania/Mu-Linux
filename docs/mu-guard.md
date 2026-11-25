@@ -81,8 +81,15 @@ Se aplica a los guardianes que se conecten después del cambio.
 
 ## Listas y textos
 
-`Data/Guard/Lists.toml` tiene las listas del server. `mu-guard` se las manda al
-guardián al conectarse y otra vez cuando cambia el archivo, sin reiniciar nada:
+Las listas vienen en dos archivos que `mu-guard` suma:
+
+- `Data/Guard/Lists.default.toml`, las de fábrica. **No se edita**: el arranque
+  lo reescribe en cada versión, así un server ya instalado recibe las nuevas.
+- `Data/Guard/Lists.toml`, las tuyas. Si no está, el arranque lo crea vacío y
+  después no lo toca.
+
+`mu-guard` se las manda al guardián al conectarse y otra vez cuando cambia
+cualquiera de los dos, sin reiniciar nada. El formato es el mismo:
 
 ```toml
 [tool]
@@ -176,8 +183,11 @@ corto revisa todo el código antes y le cuesta más CPU a `mu-guard` (hashear
 los que dan ventaja si se tocan. Las texturas y el sonido no se verifican: son
 muchos y el pack HD los reemplaza.
 
-La lista se arma una vez, desde el cliente que repartís, y se vuelve a armar
-cada vez que publicás un parche que toque esos archivos:
+`Files.txt` es la lista de la **base** del cliente: se arma una vez, desde el
+cliente que repartís, y otra vez cuando cambia la versión base. Los parches no
+hace falta: `mu-guard` le suma lo que trae el overlay publicado por `mu-patch`
+(`Data/Patches/published/manifest.json`), lo que agrega o cambia y lo que
+borra, y lo relee solo cuando publicás uno nuevo.
 
 ```sh
 # en Docker, con la carpeta del cliente copiada a Data/cliente
@@ -327,6 +337,10 @@ server se comporta como antes.
 - La versión web no tiene guardián: con `MU_GUARD_REQUIRED=1` no puede entrar.
 - El hash de la máquina se puede falsificar: el ban de máquina le sube el costo
   a quien vuelve, el firme es el de cuenta.
+- Si el guardián no llega a `mu-guard` cuando detecta algo, cierra el juego
+  igual y guarda la detección en `User/Cache/guard-pending.txt`; se manda en el
+  próximo arranque y suma el aviso a la máquina (la cuenta de esa sesión no se
+  sabe). Quien borre ese archivo antes lo evita.
 - Quien mata al guardián antes de que llegue el reporte evita el aviso (pero no
   sigue jugando).
 - Las herramientas se reconocen por el nombre del ejecutable: una renombrada no
