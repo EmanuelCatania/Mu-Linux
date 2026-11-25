@@ -59,6 +59,7 @@ extern "C"
 #include <map>
 #include <set>
 #include <memory>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
@@ -121,6 +122,24 @@ namespace
 		}
 
 		return text;
+	}
+
+	// IP de la red del server: privada, loopback o de enlace local.  CGNAT
+	// (100.64/10) no cuenta: ahí comparten IP clientes de afuera.
+	bool LocalIp(const std::string& ip)
+	{
+		in_addr address {};
+
+		if (::inet_pton(AF_INET, ip.c_str(), &address) != 1)
+		{
+			return false;
+		}
+
+		const std::uint32_t a = ntohl(address.s_addr);
+
+		const auto in = [a](std::uint32_t net, int bits) { return (a >> (32 - bits)) == (net >> (32 - bits)); };
+
+		return in(0x0A000000, 8) || in(0x7F000000, 8) || in(0xAC100000, 12) || in(0xC0A80000, 16) || in(0xA9FE0000, 16);
 	}
 
 	// Un número al azar en [low, high].
@@ -255,6 +274,10 @@ namespace
 		// Listas y textos (Rules) a un guardián.
 		void SendRules(Connection& c);
 
+		// El ticket se saludó desde una IP y el login llega desde otra, pero las
+		// dos son de la red del server (ver Verify).
+		bool SameNetwork(const std::string& ticketIp, const std::string& loginIp);
+
 		void Drop(Connection& c);
 
 		void LoadBuilds();
@@ -286,6 +309,11 @@ namespace
 		std::uint8_t m_Salt[32] = {};
 
 		GuardRules m_Rules;
+
+		// IPs de PUBLIC_IP (puede ser un nombre), resueltas cuando hacen falta.
+		std::vector<std::string> m_PublicIps;
+
+		Clock::time_point m_PublicIpsAt {};
 
 		std::map<std::string, std::shared_ptr<const CGuardBuild>> m_Builds;   // hash del ejecutable
 
@@ -857,7 +885,7 @@ namespace
 			{
 				reply[4] = Expired;
 			}
-			else if (ticket.ip != ip)
+			else if (ticket.ip != ip && !this->SameNetwork(ticket.ip, ip))
 			{
 				reply[4] = WrongIp;
 			}
@@ -1188,6 +1216,63 @@ namespace
 		}
 
 		this->Reply(c, Notice, guardian.notice.data(), guardian.notice.size());
+	}
+
+	// Un jugador en la misma red que el server: según el puerto, el router le
+	// deja la IP privada o le pone la pública del server (cuando se entra por
+	// el dominio desde adentro), así que el saludo y el login pueden llegar con
+	// IPs distintas.  Se acepta sólo si el login viene de la red local y el
+	// saludo también, o de la IP pública del server.  Entre IPs de afuera el
+	// ticket sigue atado a la suya.
+	bool Guard::SameNetwork(const std::string& ticketIp, const std::string& loginIp)
+	{
+		if (!LocalIp(loginIp))
+		{
+			return false;
+		}
+
+		if (LocalIp(ticketIp))
+		{
+			return true;
+		}
+
+		const char* name = std::getenv("PUBLIC_IP");
+
+		if (name == nullptr || *name == '\0')
+		{
+			return false;
+		}
+
+		if (this->m_PublicIps.empty() || Clock::now() - this->m_PublicIpsAt > std::chrono::minutes(5))
+		{
+			this->m_PublicIps.clear();
+
+			this->m_PublicIpsAt = Clock::now();
+
+			addrinfo hints {};
+
+			hints.ai_family = AF_INET;
+
+			hints.ai_socktype = SOCK_STREAM;
+
+			addrinfo* list = nullptr;
+
+			if (::getaddrinfo(name, nullptr, &hints, &list) == 0)
+			{
+				for (addrinfo* entry = list; entry != nullptr; entry = entry->ai_next)
+				{
+					char text[INET_ADDRSTRLEN] = {};
+
+					::inet_ntop(AF_INET, &((sockaddr_in*)entry->ai_addr)->sin_addr, text, sizeof(text));
+
+					this->m_PublicIps.push_back(text);
+				}
+
+				::freeaddrinfo(list);
+			}
+		}
+
+		return std::find(this->m_PublicIps.begin(), this->m_PublicIps.end(), ticketIp) != this->m_PublicIps.end();
 	}
 
 	void Guard::SendRules(Connection& c)

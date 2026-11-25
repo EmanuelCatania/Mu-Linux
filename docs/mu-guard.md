@@ -21,6 +21,11 @@ que su código no esté modificado.
 - En cada intento de login el juego le pide al guardián un **ticket** de un
   solo uso. `mu-guard` lo ata a la IP del jugador, vence en 60 segundos y sólo
   sirve en la conexión donde se presenta.
+  Excepción: si el login llega desde la red del server (IP privada), se acepta
+  también un ticket pedido desde otra IP privada o desde la IP pública del
+  server (`PUBLIC_IP`). Es el caso de jugar desde la misma red entrando por el
+  dominio: según el puerto, el router deja pasar la IP privada o pone la
+  pública.
 - El GameServer le pregunta a `mu-guard` si el ticket es válido. Con
   `MU_GUARD_REQUIRED=1`, un login sin ticket válido se rechaza con el mensaje
   "La protección MU-Guard no está activa".
@@ -222,6 +227,10 @@ MU_GUARD_REQUIRED=0
 ```
 
 y abrir el puerto **28980/tcp** (`MU_GUARD_PORT`, ya publicado en `docker-compose.yml`).
+Si tu firewall filtra lo que Docker publica (reglas en la cadena `DOCKER-USER`),
+el 28980 va al lado del 44405 y el 55901: `ufw allow` solo no alcanza. Con el
+puerto cerrado el guardián no llega a `mu-guard`, el juego abre sin protección y
+el login se rechaza.
 Conviene arrancar con `MU_GUARD_REQUIRED=0`: los que entren sin guardián quedan
 en el log como `Login sin guardian valido` y nadie queda afuera. Cuando todos
 usan un cliente con MU-Guard, pasarlo a `1`.
