@@ -87,11 +87,12 @@ exempt_accounts = []   # staff: se registran pero no se banean
 exempt_ips = []
 EOF
 fi
-# Listas y textos (paso 5c): si no están, se crean con lo de fábrica.
-if [ ! -f "$guard_dir/Lists.toml" ]; then
-  cat > "$guard_dir/Lists.toml" <<'EOF'
-# MU-Guard: listas del server (docs/mu-guard.md).  mu-guard se las manda al
-# guardián al conectarse y otra vez cuando cambia este archivo.
+# Listas de fábrica: se reescriben en cada arranque, así un server ya instalado
+# recibe las nuevas.  Las del operador van en Lists.toml y se suman a estas.
+cat > "$guard_dir/Lists.default.toml" <<'EOF'
+# MU-Guard: listas de fábrica (docs/mu-guard.md).  NO EDITAR: el arranque las
+# reescribe en cada versión.  Para agregar las tuyas, usá Lists.toml: mu-guard
+# suma los dos archivos.
 
 # Herramientas (TOOL): si una está abierta mientras se juega, el juego se
 # cierra (Guard.toml ToolCloses = false para sólo registrarlas).  No suman
@@ -122,6 +123,24 @@ allow = [
   '\eset\', 'malwarebytes', 'norton', 'mcafee', 'trend micro', 'sophos', 'panda security',
   'f-secure', 'webroot', 'comodo', 'avira', '360total security', '360safe',
 ]
+EOF
+# Las del operador: si no están, un archivo con las secciones vacías.
+if [ ! -f "$guard_dir/Lists.toml" ]; then
+  cat > "$guard_dir/Lists.toml" <<'EOF'
+# MU-Guard: tus listas (docs/mu-guard.md).  Se suman a las de fábrica
+# (Lists.default.toml, que no se edita).  mu-guard se las manda al guardián al
+# conectarse y otra vez cuando cambian.
+[tool]
+# Nombre del ejecutable, sin importar mayúsculas: si está abierto, TOOL.
+processes = []
+# Parte del título de una ventana.
+windows = []
+
+[modules]
+# Parte del nombre de un módulo cargado en el juego: lo cierra (INJECT).
+block = []
+# Parte de la ruta de un módulo que no hace falta registrar.
+allow = []
 EOF
 fi
 if [ ! -f "$guard_dir/Messages.toml" ]; then

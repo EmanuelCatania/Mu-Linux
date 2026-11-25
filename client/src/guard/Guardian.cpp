@@ -28,6 +28,7 @@ extern "C" void DbgLogPublic(const char* msg);
 #include <chrono>
 #include <cstdio>
 #include <ctime>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -345,8 +346,19 @@ public:
 	// Le cuenta a mu-guard lo que se detectó (no tiene respuesta).
 	bool Report(const Guard::Finding& finding)
 	{
+		return this->Send(finding, static_cast<std::uint8_t>(finding.closes ? 1 : 0));
+	}
+
+	// Lo que cerró el juego en un arranque anterior, sin conexión (SavePending).
+	bool ReportPrevious(const Guard::Finding& finding)
+	{
+		return this->Send(finding, GuardProto::ReportPrevious);
+	}
+
+	bool Send(const Guard::Finding& finding, std::uint8_t closes)
+	{
 		std::lock_guard<std::recursive_mutex> lock(this->m_Lock);
-		std::vector<std::uint8_t> body{ finding.code, static_cast<std::uint8_t>(finding.closes ? 1 : 0) };
+		std::vector<std::uint8_t> body{ finding.code, closes };
 		body.insert(body.end(), finding.detail.begin(), finding.detail.end());
 		std::vector<std::uint8_t> message;
 		GuardProto::Append(message, GuardProto::Report, body.data(), body.size());
@@ -672,6 +684,54 @@ bool AnswerChallenge(Guard::Detector& detector, GuardConnection& guard, const st
 	return true;
 }
 
+// Lo que cerró el juego sin poder avisarle a mu-guard (sin conexión) queda en
+// User/Cache/guard-pending.txt ("detección TAB detalle" por línea) y se manda
+// en el próximo arranque.  Se puede borrar: es lo mejor posible.
+std::string PendingPath()
+{
+	return std::string(Platform::UserDir()) + "Cache/guard-pending.txt";
+}
+
+void SavePending(const Guard::Finding& finding)
+{
+	FILE* file = std::fopen(PendingPath().c_str(), "a");
+	if (!file) return;
+	std::string detail = finding.detail;
+	std::replace(detail.begin(), detail.end(), '\n', ' ');
+	std::replace(detail.begin(), detail.end(), '\r', ' ');
+	std::replace(detail.begin(), detail.end(), '\t', ' ');
+	std::fprintf(file, "%u\t%s\n", static_cast<unsigned>(finding.code), detail.c_str());
+	std::fclose(file);
+	Log("MU-Guard: sin conexion con mu-guard; la deteccion se manda en el proximo arranque");
+}
+
+template <class Connection>
+void SendPending(Connection& guard)
+{
+	FILE* file = std::fopen(PendingPath().c_str(), "r");
+	if (!file) return;
+	std::vector<Guard::Finding> pending;
+	char line[GuardProto::MaxDetail + 16];
+	while (pending.size() < 8 && std::fgets(line, sizeof(line), file))
+	{
+		char* tab = std::strchr(line, '\t');
+		if (!tab) continue;
+		Guard::Finding finding;
+		finding.code = static_cast<std::uint8_t>(std::atoi(line));
+		finding.detail.assign(tab + 1);
+		while (!finding.detail.empty() && (finding.detail.back() == '\n' || finding.detail.back() == '\r')) finding.detail.pop_back();
+		pending.push_back(finding);
+	}
+	std::fclose(file);
+	bool sent = true;
+	for (const Guard::Finding& finding : pending) sent = guard.ReportPrevious(finding) && sent;
+	if (sent)
+	{
+		std::remove(PendingPath().c_str());
+		Log("MU-Guard: %u deteccion(es) de un arranque anterior enviadas", static_cast<unsigned>(pending.size()));
+	}
+}
+
 // Una pasada de los detectores: todo se reporta; si algo cierra el juego, lo
 // devuelve.  También atiende lo que manda mu-guard.
 bool Watch(Guard::Detector& detector, GuardConnection& guard, Vigil& vigil, Guard::Finding& closing)
@@ -707,7 +767,7 @@ bool Watch(Guard::Detector& detector, GuardConnection& guard, Vigil& vigil, Guar
 	for (const Guard::Finding& finding : found)
 	{
 		Log("MU-Guard: deteccion %u (%s): %s", static_cast<unsigned>(finding.code), finding.closes ? "cierra" : "se reporta", finding.detail.c_str());
-		guard.Report(finding);
+		if (!guard.Report(finding) && finding.closes) SavePending(finding);
 		if (finding.closes && !close)
 		{
 			closing = finding;
@@ -1025,6 +1085,7 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 		return false;
 	}
 	Log("MU-Guard: guardian activo (mu-guard en %s:%u); se lanza el juego", host, guardPort);
+	SendPending(guard);
 	banner.Step(Guard::BannerStep::Launch);
 
 #ifdef _WIN32

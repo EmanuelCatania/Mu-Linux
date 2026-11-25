@@ -152,6 +152,10 @@ enum RuleKind : std::uint8_t
 constexpr std::size_t MaxRule = 255;
 constexpr std::size_t MaxRules = 8000;
 
+// Segundo byte de Report: 0 se registra, 1 cerró el juego, ReportPrevious cerró el
+// juego en un arranque anterior sin conexión con mu-guard (sólo suma aviso).
+constexpr std::uint8_t ReportPrevious = 2;
+
 // Resultado de Verify.
 enum VerifyCode : std::uint8_t
 {
