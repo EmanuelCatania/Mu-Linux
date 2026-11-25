@@ -18,6 +18,9 @@ EM_ASYNC_JS(void, mu_wait_frame, (), {
 EM_JS(int, mu_page_touch, (), {
     return (Module.arguments || []).indexOf('--mobile') >= 0 ? 1 : 0;
 });
+EM_JS(int, mu_page_fullscreen, (), { return document.fullscreenElement ? 1 : 0; });
+// muSetFullscreen es de la página (shell.html): la misma que usa su botón.
+EM_JS(void, mu_page_set_fullscreen, (int on), { if (window.muSetFullscreen) window.muSetFullscreen(!!on); });
 
 namespace WebPage {
 namespace {
@@ -46,6 +49,10 @@ void Tick() {
     const DWORD now = Platform::GetTimer().Ticks();
     if (now - s_lastCheck < 100) return;
     s_lastCheck = now;
+    // La pantalla completa la maneja la página (su botón, Escape, F11): el
+    // juego sólo refleja el estado, que es lo que muestra Opciones.
+    const bool windowed = mu_page_fullscreen() == 0;
+    if (gWindow.IsWindowMode() != windowed) gWindow.SetWindowMode(windowed, false);
     DWORD width, height;
     Size(width, height);
     if (width == gWindow.GetRealWidth() && height == gWindow.GetHeight()) { s_pendingWidth = 0; return; }
@@ -63,5 +70,9 @@ void Tick() {
 void WaitFrame() { mu_wait_frame(); }
 
 bool IsTouch() { return mu_page_touch() != 0; }
+
+bool IsFullscreen() { return mu_page_fullscreen() != 0; }
+
+void SetFullscreen(bool on) { mu_page_set_fullscreen(on ? 1 : 0); }
 }
 #endif

@@ -9,6 +9,7 @@
 #include "assets/text/ClientText.h"
 #include "net/HWID.h"
 #include "audio/SoundManager.h"
+#include "platform/Web/WebPage.h"
 
 COptionsMenu gOptionsMenu;
 
@@ -499,6 +500,17 @@ bool COptionsMenu::UpdateAntilagGroup()
 namespace {
 void ApplyScreen(bool windowMode, bool borderless, int resolution)
 {
+#ifdef __EMSCRIPTEN__
+    // Navegador: la pantalla completa es de la página y la resolución es la
+    // de dibujo; el tamaño final lo calcula WebPage::Size con la proporción
+    // de la página.  No hay bordes que sacar.
+    if (windowMode == WebPage::IsFullscreen()) WebPage::SetFullscreen(!windowMode);
+    gUserSettings.SetWindow(true, false, resolution);
+    DWORD webWidth, webHeight;
+    WebPage::Size(webWidth, webHeight);
+    gWindow.ChangeMode(gWindow.IsWindowMode(), false, webWidth, webHeight);
+    return;
+#endif
     DWORD width = gWindow.GetRealWidth(), height = gWindow.GetHeight();
     CUserSettings::GetResolutionSize(resolution, &width, &height);
     gWindow.ChangeMode(windowMode, borderless, width, height);
@@ -506,7 +518,22 @@ void ApplyScreen(bool windowMode, bool borderless, int resolution)
 }
 int CurrentResolution()
 {
+#ifdef __EMSCRIPTEN__
+    // El tamaño real sigue la proporción de la página y casi nunca está en la
+    // tabla: vale la elegida.
+    return gUserSettings.GetResolution();
+#else
     return CUserSettings::FindResolution(gWindow.GetRealWidth(), gWindow.GetHeight());
+#endif
+}
+// Sin bordes no existe en el navegador.
+bool ShowBorderless()
+{
+#ifdef __EMSCRIPTEN__
+    return false;
+#else
+    return gWindow.IsWindowMode();
+#endif
 }
 }
 
@@ -531,7 +558,7 @@ void COptionsMenu::RenderScreen()
     RenderButton((float)RowY(row++), GlobalText[920], true);
     RenderButton((float)RowY(row++), gClientText.Get(gWindow.IsWindowMode()
         ? ClientTextId::ScreenWindowed : ClientTextId::ScreenFullscreen));
-    if (gWindow.IsWindowMode())
+    if (ShowBorderless())
         RenderToggle((float)RowY(row++), gClientText.Get(ClientTextId::ScreenBorderless),
                      gWindow.IsBorderless());
     char text[32];
@@ -651,7 +678,7 @@ bool COptionsMenu::UpdateScreen()
         if (clicked) ApplyScreen(!windowMode, borderless, resolution);
         return true;
     }
-    if (windowMode) {
+    if (ShowBorderless()) {
         if (UpdateToggle(RowY(row++), clicked)) {
             if (clicked) ApplyScreen(windowMode, !borderless, resolution);
             return true;

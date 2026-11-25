@@ -16,6 +16,10 @@ void Tick();
 void WaitFrame();
 // La página detectó pantalla táctil (argumento --mobile).
 bool IsTouch();
+// Pantalla completa de la página.  Pedirla necesita un click reciente del
+// jugador: se llama desde el click en Opciones, que lo es.
+bool IsFullscreen();
+void SetFullscreen(bool on);
 #else
 inline bool IsTouch() { return false; }
 #endif

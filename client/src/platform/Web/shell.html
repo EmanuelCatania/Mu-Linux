@@ -45,15 +45,18 @@ function setStatus(text) { document.getElementById('status').textContent = text 
 // y el juego no las ve.  En pantalla completa, donde el navegador lo permite
 // (Chrome, Edge), Keyboard Lock se las pasa todas al juego; Escape sostenido
 // sale.  El tamaño del juego sigue al de la página solo (WebPage.cpp).
-document.getElementById('fullscreen').addEventListener('click', async () => {
+// Opciones > Pantalla la pide con muSetFullscreen (WebPage.cpp).
+window.muSetFullscreen = async (on) => {
   try {
+    if (!on) { if (document.fullscreenElement) await document.exitFullscreen(); return; }
     await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
     if (navigator.keyboard && navigator.keyboard.lock) await navigator.keyboard.lock();
   } catch (e) {
     console.warn('Pantalla completa: ' + e.message);
   }
   document.getElementById('canvas').focus();
-});
+};
+document.getElementById('fullscreen').addEventListener('click', () => window.muSetFullscreen(true));
 document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement && navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
 });
@@ -127,14 +130,22 @@ var Module = {
             }
           };
           await Promise.all(Array.from({ length: 8 }, next));
+          // Config.ini (opciones del jugador) se guarda en User/ (ver abajo).
+          try { FS.writeFile(ROOT + '/Config.ini', FS.readFile(ROOT + '/User/Config.ini')); } catch (e) {}
           setStatus('');
           removeRunDependency('mu-files');
         })
         .catch((e) => setStatus('No se pudo cargar la lista de archivos: ' + e.message));
     });
-    // Lo que el juego escribe en User/ se guarda cada 10 s y al cerrar.
-    setInterval(() => FS.syncfs(false, () => {}), 10000);
-    addEventListener('pagehide', () => FS.syncfs(false, () => {}));
+    // Lo que el juego escribe en User/ se guarda cada 10 s y al cerrar.  El
+    // cliente escribe Config.ini en la raíz: se copia a User/ antes, así las
+    // opciones (y las que piden reiniciar) valen al recargar la página.
+    const save = () => {
+      try { FS.writeFile(ROOT + '/User/Config.ini', FS.readFile(ROOT + '/Config.ini')); } catch (e) {}
+      FS.syncfs(false, () => {});
+    };
+    setInterval(save, 10000);
+    addEventListener('pagehide', save);
   }],
 };
 </script>
