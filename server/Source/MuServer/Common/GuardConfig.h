@@ -36,8 +36,11 @@
 //                           # juego (false: sólo se registra)
 //   MaxPerMachine = 0       # juegos abiertos a la vez en una misma PC (0 = sin
 //                           # límite); el que se pasa no se abre
+//   FilesCloses = true      # un archivo distinto de Files.txt cierra el juego
+//                           # (false: sólo se registra)
 //
-// Lists.toml y Messages.toml (paso 5c) los lee sólo mu-guard (ReadGuardRules).
+// Lists.toml, Messages.toml (paso 5c) y Files.txt (FILES) los lee sólo mu-guard
+// (ReadGuardRules).
 //
 // Sin el archivo MU-Guard queda apagado: Data/ es un volumen y las
 // instalaciones anteriores no lo tienen (lo crea el entrypoint).
@@ -56,6 +59,7 @@ struct GuardSettings
 	bool AcceptUnknownBuilds = true;
 	bool ToolCloses = true;
 	int MaxPerMachine = 0;   // 0 = sin límite
+	bool FilesCloses = true;
 	int ChallengeSeconds = 30;
 
 	// [warnings]
@@ -84,6 +88,7 @@ struct GuardRules
 	std::vector<std::string> ModuleBlock;
 	std::vector<std::string> ModuleAllow;
 	std::vector<std::string> Names;   // "idioma\tDETECCION\tnombre"
+	std::vector<std::string> Files;   // "hash en hex\truta" (Files.txt)
 	std::uint64_t Version = 0;
 };
 

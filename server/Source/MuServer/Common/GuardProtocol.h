@@ -134,6 +134,7 @@ enum HelloOption : std::uint8_t
 {
 	MemScanCloses = 0x01,   // MEMSCAN cierra el juego (si no, sólo se registra)
 	ToolCloses = 0x02,      // TOOL (una herramienta de las listas abierta) cierra el juego
+	FilesCloses = 0x04,     // FILES (un archivo del juego distinto de Files.txt) cierra el juego
 };
 
 // Entradas de Rules.
@@ -145,10 +146,11 @@ enum RuleKind : std::uint8_t
 	RuleModuleBlock = 3,    // parte del nombre de un módulo cargado en el juego: INJECT que cierra
 	RuleModuleAllow = 4,    // parte de la ruta de un módulo: no se reporta
 	RuleName = 5,           // idioma (es, en, pt) TAB detección (DEBUGGER...) TAB nombre para el banner
+	RuleFile = 6,           // hash BLAKE2b-256 (64 hex) TAB ruta relativa a la carpeta del juego: FILES
 };
 
 constexpr std::size_t MaxRule = 255;
-constexpr std::size_t MaxRules = 2000;
+constexpr std::size_t MaxRules = 8000;
 
 // Resultado de Verify.
 enum VerifyCode : std::uint8_t

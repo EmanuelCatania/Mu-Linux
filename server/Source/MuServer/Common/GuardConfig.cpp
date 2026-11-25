@@ -7,6 +7,7 @@
 #include "tomlplusplus/toml.hpp"
 
 #include <algorithm>
+#include <fstream>
 #include <cctype>
 #include <filesystem>
 #include <mutex>
@@ -112,6 +113,8 @@ GuardSettings ReadGuardSettings(const std::string& dataPath)
 
 			settings.MaxPerMachine = ClampInt(table["MaxPerMachine"].value_or(std::int64_t(0)), 0, 255);
 
+			settings.FilesCloses = table["FilesCloses"].value_or(true);
+
 			const std::int64_t challenge = table["ChallengeSeconds"].value_or(std::int64_t(30));
 
 			settings.ChallengeSeconds = (int)(challenge < 5 ? 5 : (challenge > 300 ? 300 : challenge));
@@ -178,8 +181,8 @@ GuardSettings ReadGuardSettings(const std::string& dataPath)
 namespace
 {
 	std::mutex s_RulesLock;
-	std::filesystem::file_time_type s_ListsTime, s_MessagesTime;
-	bool s_ListsExist = false, s_MessagesExist = false;
+	std::filesystem::file_time_type s_ListsTime, s_MessagesTime, s_FilesTime;
+	bool s_ListsExist = false, s_MessagesExist = false, s_FilesExist = false;
 	std::string s_RulesPath;
 	GuardRules s_Rules;
 
@@ -204,15 +207,18 @@ GuardRules ReadGuardRules(const std::string& dataPath)
 
 	const std::string lists = dataPath + "Guard/Lists.toml";
 	const std::string messages = dataPath + "Guard/Messages.toml";
+	const std::string files = dataPath + "Guard/Files.txt";
 
 	std::error_code error;
 	const bool listsExist = std::filesystem::exists(lists, error);
 	const bool messagesExist = std::filesystem::exists(messages, error);
 	const auto listsTime = listsExist ? std::filesystem::last_write_time(lists, error) : std::filesystem::file_time_type();
 	const auto messagesTime = messagesExist ? std::filesystem::last_write_time(messages, error) : std::filesystem::file_time_type();
+	const bool filesExist = std::filesystem::exists(files, error);
+	const auto filesTime = filesExist ? std::filesystem::last_write_time(files, error) : std::filesystem::file_time_type();
 
 	if (s_RulesPath == dataPath && s_Rules.Version != 0 && listsExist == s_ListsExist && messagesExist == s_MessagesExist &&
-		listsTime == s_ListsTime && messagesTime == s_MessagesTime)
+		listsTime == s_ListsTime && messagesTime == s_MessagesTime && filesExist == s_FilesExist && filesTime == s_FilesTime)
 	{
 		return s_Rules;
 	}
@@ -274,7 +280,46 @@ GuardRules ReadGuardRules(const std::string& dataPath)
 		}
 	}
 
+	// Files.txt: "hash  ruta" por línea (lo escribe mu-guard files).
+	if (filesExist)
+	{
+		std::ifstream in(files);
+
+		std::string line;
+
+		while (std::getline(in, line))
+		{
+			if (!line.empty() && line.back() == '\r')
+			{
+				line.pop_back();
+			}
+
+			const std::size_t gap = line.find_first_of(" \t");
+
+			if (gap != 64 || line.find_first_not_of("0123456789abcdef") < 64)
+			{
+				continue;
+			}
+
+			const std::size_t path = line.find_first_not_of(" \t", gap);
+
+			if (path == std::string::npos)
+			{
+				continue;
+			}
+
+			const std::string rule = line.substr(0, 64) + "\t" + line.substr(path);
+
+			if (rule.size() <= GuardRuleMax)
+			{
+				rules.Files.push_back(rule);
+			}
+		}
+	}
+
 	s_RulesPath = dataPath;
+	s_FilesExist = filesExist;
+	s_FilesTime = filesTime;
 	s_ListsExist = listsExist;
 	s_MessagesExist = messagesExist;
 	s_ListsTime = listsTime;

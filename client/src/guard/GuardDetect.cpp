@@ -3,9 +3,11 @@
 #include "guard/GuardDetect.h"
 
 #include "guard/GuardProtocol.h"
+#include "net/crypto/monocypher.h"
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -42,6 +44,10 @@ const char* const kKnownBadDrivers[] = { "dbk64.sys", "dbk32.sys" };
 // Las pasadas caras (drivers, módulos, procesos, /proc) van cada tantas
 // pasadas (cada 10 s).
 constexpr int kSlowEvery = 5;
+
+// FILES: cuánto se lee por pasada (cada 2 s) y cada cuánto se vuelve a verificar.
+constexpr std::size_t kFilesBytesPerPass = 4 * 1024 * 1024;
+constexpr int kFilesRecheckSeconds = 600;
 
 const char* const kDetectionNames[] = { "?", "DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH", "FILES", "TOOL" };
 
@@ -149,6 +155,18 @@ struct Detector::State
 	int passes = 0;
 	bool memScanCloses = true;
 	bool toolCloses = true;
+	bool filesCloses = true;
+	// FILES: lo que dice el server (Files.txt) y por dónde va la verificación.
+	struct FileEntry
+	{
+		std::string path;   // relativa a la carpeta del juego, con '/'
+		std::uint8_t hash[GuardProto::HashSize];
+	};
+	std::vector<FileEntry> files;
+	std::size_t fileCursor = 0;
+	FILE* fileOpen = nullptr;
+	crypto_blake2b_ctx fileHash;
+	std::chrono::steady_clock::time_point filesNext {};
 	// Listas del server (Lists.toml), en minúsculas.
 	std::vector<std::string> processes, windows, moduleBlock, moduleAllow;
 	std::map<std::string, std::string> names;   // "idioma\tDETECCION" -> nombre
@@ -171,6 +189,63 @@ struct Detector::State
 	bool Once(const std::string& key)
 	{
 		return reported.insert(key).second;
+	}
+
+	void FilesReset()
+	{
+		if (fileOpen) std::fclose(fileOpen);
+		fileOpen = nullptr;
+		fileCursor = 0;
+		filesNext = std::chrono::steady_clock::time_point {};
+	}
+
+	// Verifica de a kFilesBytesPerPass: el juego ya tiene la carpeta de trabajo
+	// en la del cliente, así que las rutas relativas del server sirven tal cual.
+	void Files(std::vector<Finding>& found)
+	{
+		if (files.empty()) return;
+		const auto now = std::chrono::steady_clock::now();
+		if (fileCursor >= files.size())
+		{
+			if (now < filesNext) return;
+			fileCursor = 0;
+		}
+		std::size_t budget = kFilesBytesPerPass;
+		std::vector<std::uint8_t> buffer(64 * 1024);
+		while (budget > 0 && fileCursor < files.size())
+		{
+			const FileEntry& entry = files[fileCursor];
+			if (!fileOpen)
+			{
+				fileOpen = std::fopen(entry.path.c_str(), "rb");
+				if (!fileOpen)
+				{
+					if (Once("files:" + entry.path))
+						Add(found, GuardProto::Files, filesCloses, "falta un archivo del juego: " + entry.path);
+					++fileCursor;
+					continue;
+				}
+				crypto_blake2b_init(&fileHash, GuardProto::HashSize);
+			}
+			const std::size_t want = (std::min)(budget, buffer.size());
+			const std::size_t read = std::fread(buffer.data(), 1, want, fileOpen);
+			if (read > 0)
+			{
+				crypto_blake2b_update(&fileHash, buffer.data(), read);
+				budget -= read;
+			}
+			if (read < want)
+			{
+				std::fclose(fileOpen);
+				fileOpen = nullptr;
+				std::uint8_t hash[GuardProto::HashSize];
+				crypto_blake2b_final(&fileHash, hash);
+				if (std::memcmp(hash, entry.hash, sizeof(hash)) != 0 && Once("files:" + entry.path))
+					Add(found, GuardProto::Files, filesCloses, "archivo del juego modificado: " + entry.path);
+				++fileCursor;
+			}
+		}
+		if (fileCursor >= files.size()) filesNext = now + std::chrono::seconds(kFilesRecheckSeconds);
 	}
 
 #ifdef _WIN32
@@ -527,6 +602,7 @@ Detector::Detector() : m(new State) {}
 
 Detector::~Detector()
 {
+	m->FilesReset();
 	delete m;
 }
 
@@ -618,6 +694,11 @@ void Detector::SetToolCloses(bool closes)
 	m->toolCloses = closes;
 }
 
+void Detector::SetFilesCloses(bool closes)
+{
+	m->filesCloses = closes;
+}
+
 void Detector::Rule(std::uint8_t kind, const std::string& text)
 {
 	switch (kind)
@@ -628,11 +709,35 @@ void Detector::Rule(std::uint8_t kind, const std::string& text)
 		m->moduleBlock.clear();
 		m->moduleAllow.clear();
 		m->names.clear();
+		m->files.clear();
+		m->FilesReset();
 		break;
 	case GuardProto::RuleProcess: m->processes.push_back(Lower(text)); break;
 	case GuardProto::RuleWindow: m->windows.push_back(Lower(text)); break;
 	case GuardProto::RuleModuleBlock: m->moduleBlock.push_back(Lower(text)); break;
 	case GuardProto::RuleModuleAllow: m->moduleAllow.push_back(Lower(text)); break;
+	case GuardProto::RuleFile:
+	{
+		// hash en hex TAB ruta
+		State::FileEntry entry;
+		if (text.size() < 2 * GuardProto::HashSize + 2 || text[2 * GuardProto::HashSize] != '\t') break;
+		bool ok = true;
+		for (std::size_t i = 0; i < GuardProto::HashSize && ok; ++i)
+		{
+			unsigned value = 0;
+			ok = std::sscanf(text.c_str() + 2 * i, "%2x", &value) == 1;
+			entry.hash[i] = static_cast<std::uint8_t>(value);
+		}
+		entry.path = text.substr(2 * GuardProto::HashSize + 1);
+		// Sólo rutas dentro de la carpeta del juego.
+		if (ok && !entry.path.empty() && entry.path[0] != '/' && entry.path[0] != '\\' &&
+		    entry.path.find("..") == std::string::npos && entry.path.find(':') == std::string::npos)
+		{
+			m->files.push_back(entry);
+			m->FilesReset();
+		}
+		break;
+	}
 	case GuardProto::RuleName:
 	{
 		// idioma TAB DETECCION TAB nombre
@@ -658,6 +763,7 @@ void Detector::Scan(std::vector<Finding>& found)
 {
 	const bool slow = (m->passes++ % kSlowEvery) == 0;
 	m->Debugger(found);
+	m->Files(found);
 #ifdef _WIN32
 	m->Decoys(found);
 	m->TimeHooks(found);
