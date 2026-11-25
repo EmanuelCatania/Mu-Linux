@@ -55,7 +55,8 @@ El guardián revisa el juego cada 2 segundos desde afuera, con prioridad baja.
 | `TOOL` | una herramienta de `Data/Guard/Lists.toml` abierta (proceso o ventana) | cierra el juego (`ToolCloses`) |
 | `FILES` | un archivo del juego distinto del de `Data/Guard/Files.txt`, o que falta | cierra el juego (`FilesCloses`) |
 | `INJECT` | un módulo de la lista `block` de `Lists.toml` | cierra el juego |
-| `INJECT` | otros módulos fuera del juego y del sistema | sólo se registra (salvo los de `allow`) |
+| `INJECT` | otros módulos fuera del juego y del sistema | sólo se registra (salvo los de `allow` y los firmados por Microsoft) |
+| `KILLED` | un detector del guardián dejó de correr mientras el guardián sigue contestando el desafío | cierra el juego |
 
 Al cerrar, el guardián muestra el banner rojo de MU-Guard con lo que detectó y
 una cuenta regresiva. Todo queda en el log de `mu-guard` con la IP del
@@ -176,6 +177,12 @@ El intervalo se ajusta con `ChallengeSeconds` (30 por defecto, de 5 a 300): más
 corto revisa todo el código antes y le cuesta más CPU a `mu-guard` (hashear
 512 KB por jugador en cada desafío).
 
+Cada respuesta trae además cuántas veces corrió cada detector del guardián.
+Si entre una respuesta y la siguiente las pasadas no avanzan, o un detector que
+ya corría se queda quieto mientras las pasadas siguen, `mu-guard` cierra el
+juego con `KILLED`. Sólo funciona con builds registrados (sin build no hay
+desafío).
+
 ## Archivos del cliente (FILES)
 
 `mu-guard` puede verificar que los datos del juego sean los de tu cliente: los
@@ -233,7 +240,7 @@ desconecta pero **no** suma aviso: un corte de internet no banea a nadie.
 [warnings]
 limit = 3              # 0 = nunca banear
 window_days = 30
-codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH"]
+codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH", "KILLED"]
 
 [ban]
 account_days = 7       # 0 = permanente, -1 = no banear la cuenta
@@ -310,7 +317,7 @@ FilesCloses = true  # un archivo distinto de Files.txt cierra el juego
 [warnings]
 limit = 3
 window_days = 30
-codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH"]
+codes = ["DEBUGGER", "INJECT", "MEMEDIT", "PATCH", "KILLED"]
 
 [ban]
 account_days = 7
@@ -346,6 +353,11 @@ server se comporta como antes.
 - Las herramientas se reconocen por el nombre del ejecutable: una renombrada no
   cae en `TOOL`, pero sigue cayendo en las detecciones que miran lo que hace
   (depurador, driver, escaneo de memoria, código modificado).
+- Los hilos que el juego crea después de arrancar reciben la DACL en la
+  siguiente pasada del guardián: hay una ventana de hasta 2 segundos.
+- Un cliente compilado con MU-Guard y sin `ServerPublicKey` (la clave del
+  server, `app/config/ServerConfig.h`) sirve para probar, pero `mu-patch` no lo
+  publica: sin la clave un proxy se hace pasar por el server.
 - Con administrador se saltea la DACL. Para eso están las detecciones y el
   desafío de memoria. Un programa que se haga pasar por el guardián tiene que
   contestar los desafíos con el código de un `main.exe` sin tocar: eso lo deja

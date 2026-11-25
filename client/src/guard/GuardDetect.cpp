@@ -18,8 +18,12 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include <aclapi.h>
 #include <psapi.h>
 #include <tlhelp32.h>
+#include <wincrypt.h>
+#include <wintrust.h>
+#include <softpub.h>
 #else
 #include <dirent.h>
 #include <fcntl.h>
@@ -49,7 +53,7 @@ constexpr int kSlowEvery = 5;
 constexpr std::size_t kFilesBytesPerPass = 4 * 1024 * 1024;
 constexpr int kFilesRecheckSeconds = 600;
 
-const char* const kDetectionNames[] = { "?", "DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH", "FILES", "TOOL" };
+const char* const kDetectionNames[] = { "?", "DEBUGGER", "INJECT", "MEMEDIT", "MEMSCAN", "PATCH", "FILES", "TOOL", "KILLED" };
 
 bool Contains(const std::vector<std::string>& list, const std::string& value)
 {
@@ -114,6 +118,11 @@ using NtQuerySystemInformationFn = LONG(NTAPI*)(ULONG, PVOID, ULONG, PULONG);
 using QueryWorkingSetExFn = BOOL(WINAPI*)(HANDLE, PVOID, DWORD);
 using EnumProcessModulesExFn = BOOL(WINAPI*)(HANDLE, HMODULE*, DWORD, LPDWORD, DWORD);
 using GetModuleFileNameExWFn = DWORD(WINAPI*)(HANDLE, HMODULE, LPWSTR, DWORD);
+using WinVerifyTrustFn = LONG(WINAPI*)(HWND, GUID*, LPVOID);
+using ProvDataFromStateDataFn = CRYPT_PROVIDER_DATA*(WINAPI*)(HANDLE);
+using ProvSignerFromChainFn = CRYPT_PROVIDER_SGNR*(WINAPI*)(CRYPT_PROVIDER_DATA*, DWORD, BOOL, DWORD);
+using ProvCertFromChainFn = CRYPT_PROVIDER_CERT*(WINAPI*)(CRYPT_PROVIDER_SGNR*, DWORD);
+using CertGetNameStringWFn = DWORD(WINAPI*)(PCCERT_CONTEXT, DWORD, DWORD, void*, LPWSTR, DWORD);
 
 constexpr ULONG kProcessDebugPort = 7;
 constexpr ULONG kProcessDebugObjectHandle = 30;
@@ -153,6 +162,7 @@ constexpr SIZE_T kDecoyRegion = 64 * 1024;
 struct Detector::State
 {
 	int passes = 0;
+	std::uint32_t life[GuardProto::LifeCounters] = {};   // contadores de vida (KILLED)
 	bool memScanCloses = true;
 	bool toolCloses = true;
 	bool filesCloses = true;
@@ -184,6 +194,19 @@ struct Detector::State
 	GetModuleFileNameExWFn moduleName = nullptr;
 	std::vector<void*> decoys;
 	bool decoyReported = false;
+	// Hilos del juego: el handle se abre una vez, con lo que el guardián
+	// necesita, antes de ponerle la DACL (después ya no se podría abrir).
+	PACL threadDacl = nullptr;
+	std::map<DWORD, HANDLE> threads;
+	// INJECT: módulos fuera del sistema firmados por Microsoft (por ruta).
+	std::map<std::string, bool> microsoft;
+	HMODULE wintrust = nullptr;
+	HMODULE crypt32 = nullptr;
+	WinVerifyTrustFn verifyTrust = nullptr;
+	ProvDataFromStateDataFn provData = nullptr;
+	ProvSignerFromChainFn provSigner = nullptr;
+	ProvCertFromChainFn provCert = nullptr;
+	CertGetNameStringWFn certName = nullptr;
 #endif
 
 	bool Once(const std::string& key)
@@ -203,6 +226,7 @@ struct Detector::State
 	// en la del cliente, así que las rutas relativas del server sirven tal cual.
 	void Files(std::vector<Finding>& found)
 	{
+		++life[GuardProto::LifeFiles];
 		if (files.empty()) return;
 		const auto now = std::chrono::steady_clock::now();
 		if (fileCursor >= files.size())
@@ -249,8 +273,44 @@ struct Detector::State
 	}
 
 #ifdef _WIN32
+	// Hilos del juego: abre los nuevos y les pone la misma DACL que al primero
+	// (diseño 3.1).  CreateProcess sólo protege el hilo que crea; los que el
+	// juego crea después nacen con la DACL por defecto del usuario, y con eso
+	// cualquier programa suyo los puede suspender o leerles el contexto.  Queda
+	// una ventana de hasta una pasada (2 s) entre que nace un hilo y su DACL.
+	void Threads()
+	{
+		for (auto it = threads.begin(); it != threads.end();)
+		{
+			if (WaitForSingleObject(it->second, 0) == WAIT_OBJECT_0)
+			{
+				CloseHandle(it->second);
+				it = threads.erase(it);
+			}
+			else ++it;
+		}
+		HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+		if (snapshot == INVALID_HANDLE_VALUE) return;
+		THREADENTRY32 entry{};
+		entry.dwSize = sizeof(entry);
+		const DWORD mainId = mainThread ? GetThreadId(mainThread) : 0;
+		for (BOOL more = Thread32First(snapshot, &entry); more; more = Thread32Next(snapshot, &entry))
+		{
+			if (entry.th32OwnerProcessID != pid || entry.th32ThreadID == mainId || threads.count(entry.th32ThreadID)) continue;
+			HANDLE thread = OpenThread(WRITE_DAC | READ_CONTROL | THREAD_GET_CONTEXT | THREAD_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+			                           FALSE, entry.th32ThreadID);
+			if (!thread) continue;
+			if (threadDacl)
+				SetSecurityInfo(thread, SE_KERNEL_OBJECT, DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+				                nullptr, nullptr, threadDacl, nullptr);
+			threads[entry.th32ThreadID] = thread;
+		}
+		CloseHandle(snapshot);
+	}
+
 	void Debugger(std::vector<Finding>& found)
 	{
+		++life[GuardProto::LifeDebugger];
 		if (IsDebuggerPresent())
 		{
 			if (Once("debugger:self")) Add(found, GuardProto::Debugger, true, "depurador sobre el guardi\xC3\xA1n");
@@ -285,34 +345,27 @@ struct Detector::State
 			}
 		}
 		// Registros de depuración (Dr0-Dr3 con Dr7 encendido): los usan los
-		// depuradores por hardware y el VEH de Cheat Engine.
-		HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-		if (snapshot == INVALID_HANDLE_VALUE) return;
-		THREADENTRY32 entry{};
-		entry.dwSize = sizeof(entry);
-		for (BOOL more = Thread32First(snapshot, &entry); more; more = Thread32Next(snapshot, &entry))
+		// depuradores por hardware y el VEH de Cheat Engine.  Por los handles de
+		// Threads(): el primer hilo, por el de CreateProcess.
+		std::vector<HANDLE> handles;
+		if (mainThread) handles.push_back(mainThread);
+		for (const auto& thread : threads) handles.push_back(thread.second);
+		for (HANDLE thread : handles)
 		{
-			if (entry.th32OwnerProcessID != pid) continue;
-			HANDLE thread = OpenThread(THREAD_GET_CONTEXT | THREAD_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ThreadID);
-			// El primer hilo tiene la DACL del juego: se usa el handle de CreateProcess.
-			if (!thread && mainThread && GetThreadId(mainThread) == entry.th32ThreadID) thread = mainThread;
-			if (!thread) continue;
 			CONTEXT context{};
 			context.ContextFlags = CONTEXT_DEBUG_REGISTERS;
-			const bool hardware = GetThreadContext(thread, &context) && (context.Dr7 & 0xFF) != 0 &&
-			                      (context.Dr0 || context.Dr1 || context.Dr2 || context.Dr3);
-			if (thread != mainThread) CloseHandle(thread);
-			if (hardware)
+			if (GetThreadContext(thread, &context) && (context.Dr7 & 0xFF) != 0 &&
+			    (context.Dr0 || context.Dr1 || context.Dr2 || context.Dr3))
 			{
 				if (Once("debugger:hardware")) Add(found, GuardProto::Debugger, true, "registros de depuraci\xC3\xB3n en un hilo del juego");
 				break;
 			}
 		}
-		CloseHandle(snapshot);
 	}
 
 	void Drivers(std::vector<Finding>& found)
 	{
+		++life[GuardProto::LifeDrivers];
 		if (!querySystem) return;
 		ULONG size = 0;
 		querySystem(kSystemModuleInformation, nullptr, 0, &size);
@@ -344,6 +397,7 @@ struct Detector::State
 
 	void Decoys(std::vector<Finding>& found)
 	{
+		++life[GuardProto::LifeDecoys];
 		if (!queryWorkingSet || decoys.empty() || decoyReported) return;
 		const SIZE_T pages = kDecoyRegion / 4096;
 		std::vector<PSAPI_WORKING_SET_EX_INFORMATION> info(decoys.size() * pages);
@@ -372,6 +426,7 @@ struct Detector::State
 	// enganchan funciones de dibujo, no éstas.
 	void TimeHooks(std::vector<Finding>& found)
 	{
+		++life[GuardProto::LifeTimeHooks];
 		static const struct { const wchar_t* module; const char* function; } kFunctions[] = {
 			{ L"kernel32.dll", "QueryPerformanceCounter" }, { L"kernel32.dll", "GetTickCount" },
 			{ L"kernel32.dll", "GetTickCount64" }, { L"kernelbase.dll", "QueryPerformanceCounter" },
@@ -397,8 +452,67 @@ struct Detector::State
 		}
 	}
 
+	// Firmado por Microsoft: firma válida (embebida) cuyo firmante es Microsoft y
+	// cuya raíz es una raíz de Microsoft.  Sin revocación ni red: es para no
+	// reportar módulos legítimos que viven fuera de Windows (Office, OneDrive,
+	// Edge WebView, la capa D3D de WindowsApps...), no para dar fe de nada.
+	bool MicrosoftSigned(const std::string& path, const wchar_t* wide)
+	{
+		auto cached = microsoft.find(path);
+		if (cached != microsoft.end()) return cached->second;
+		bool result = false;
+		if (!wintrust)
+		{
+			wintrust = LoadLibraryW(L"wintrust.dll");
+			crypt32 = LoadLibraryW(L"crypt32.dll");
+			if (wintrust && crypt32)
+			{
+				verifyTrust = reinterpret_cast<WinVerifyTrustFn>(reinterpret_cast<void*>(GetProcAddress(wintrust, "WinVerifyTrust")));
+				provData = reinterpret_cast<ProvDataFromStateDataFn>(reinterpret_cast<void*>(GetProcAddress(wintrust, "WTHelperProvDataFromStateData")));
+				provSigner = reinterpret_cast<ProvSignerFromChainFn>(reinterpret_cast<void*>(GetProcAddress(wintrust, "WTHelperGetProvSignerFromChain")));
+				provCert = reinterpret_cast<ProvCertFromChainFn>(reinterpret_cast<void*>(GetProcAddress(wintrust, "WTHelperGetProvCertFromChain")));
+				certName = reinterpret_cast<CertGetNameStringWFn>(reinterpret_cast<void*>(GetProcAddress(crypt32, "CertGetNameStringW")));
+			}
+		}
+		if (verifyTrust && provData && provSigner && provCert && certName)
+		{
+			WINTRUST_FILE_INFO file{};
+			file.cbStruct = sizeof(file);
+			file.pcwszFilePath = wide;
+			WINTRUST_DATA data{};
+			data.cbStruct = sizeof(data);
+			data.dwUIChoice = WTD_UI_NONE;
+			data.fdwRevocationChecks = WTD_REVOKE_NONE;
+			data.dwUnionChoice = WTD_CHOICE_FILE;
+			data.pFile = &file;
+			data.dwStateAction = WTD_STATEACTION_VERIFY;
+			data.dwProvFlags = WTD_CACHE_ONLY_URL_RETRIEVAL | WTD_REVOCATION_CHECK_NONE;
+			GUID action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+			if (verifyTrust(static_cast<HWND>(INVALID_HANDLE_VALUE), &action, &data) == 0)
+			{
+				CRYPT_PROVIDER_DATA* provider = provData(data.hWVTStateData);
+				CRYPT_PROVIDER_SGNR* signer = provider ? provSigner(provider, 0, FALSE, 0) : nullptr;
+				if (signer && signer->csCertChain > 0)
+				{
+					auto name = [&](DWORD index) {
+						CRYPT_PROVIDER_CERT* cert = provCert(signer, index);
+						wchar_t text[256] = {};
+						if (cert && cert->pCert) certName(cert->pCert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr, text, 256);
+						return Narrow(text);
+					};
+					result = StartsWith(name(0), "Microsoft ") && StartsWith(name(signer->csCertChain - 1), "Microsoft Root");
+				}
+			}
+			data.dwStateAction = WTD_STATEACTION_CLOSE;
+			verifyTrust(static_cast<HWND>(INVALID_HANDLE_VALUE), &action, &data);
+		}
+		microsoft[path] = result;
+		return result;
+	}
+
 	void Modules(std::vector<Finding>& found)
 	{
+		++life[GuardProto::LifeModules];
 		if (!enumModules || !moduleName) return;
 		std::vector<HMODULE> modules(1024);
 		DWORD needed = 0;
@@ -421,7 +535,8 @@ struct Detector::State
 			{
 				continue;
 			}
-			else if (!StartsWith(path, windowsDir) && !StartsWith(path, gameDir) && Once("module:" + path))
+			else if (!StartsWith(path, windowsDir) && !StartsWith(path, gameDir) && !reported.count("module:" + path) &&
+			         !MicrosoftSigned(path, wide) && Once("module:" + path))
 			{
 				Add(found, GuardProto::Inject, false, "m\xC3\xB3" "dulo fuera del juego y del sistema: " + path);
 			}
@@ -432,6 +547,7 @@ struct Detector::State
 	// ventanas por parte del título.
 	void Tools(std::vector<Finding>& found)
 	{
+		++life[GuardProto::LifeTools];
 		if (!processes.empty())
 		{
 			HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -497,6 +613,7 @@ struct Detector::State
 	// GameConqueror, PINCE).  Sólo se ven los del mismo usuario.
 	void MemFiles(std::vector<Finding>& found)
 	{
+		++life[GuardProto::LifeDrivers];
 		const std::string target = "/proc/" + std::to_string(pid) + "/mem";
 		DIR* proc = opendir("/proc");
 		if (!proc) return;
@@ -529,6 +646,7 @@ struct Detector::State
 
 	void Modules(std::vector<Finding>& found)
 	{
+		++life[GuardProto::LifeModules];
 		std::ifstream maps("/proc/" + std::to_string(pid) + "/maps");
 		std::string line;
 		while (std::getline(maps, line))
@@ -573,6 +691,7 @@ struct Detector::State
 	// nombre del ejecutable (o comm, que viene cortado a 15 letras).
 	void Tools(std::vector<Finding>& found)
 	{
+		++life[GuardProto::LifeTools];
 		if (processes.empty()) return;
 		DIR* proc = opendir("/proc");
 		if (!proc) return;
@@ -603,7 +722,26 @@ Detector::Detector() : m(new State) {}
 Detector::~Detector()
 {
 	m->FilesReset();
+#ifdef _WIN32
+	for (const auto& thread : m->threads) CloseHandle(thread.second);
+	if (m->wintrust) FreeLibrary(m->wintrust);
+	if (m->crypt32) FreeLibrary(m->crypt32);
+#endif
 	delete m;
+}
+
+void Detector::SetThreadDacl(void* dacl)
+{
+#ifdef _WIN32
+	m->threadDacl = static_cast<PACL>(dacl);
+#else
+	(void)dacl;
+#endif
+}
+
+void Detector::Life(std::uint32_t out[GuardProto::LifeCounters]) const
+{
+	std::memcpy(out, m->life, sizeof(m->life));
 }
 
 void Detector::Attach(void* process, void* mainThread, unsigned long pid, const std::string& gameDir)
@@ -762,6 +900,10 @@ std::string Detector::Name(std::uint8_t code, int language) const
 void Detector::Scan(std::vector<Finding>& found)
 {
 	const bool slow = (m->passes++ % kSlowEvery) == 0;
+	++m->life[GuardProto::LifePasses];
+#ifdef _WIN32
+	m->Threads();
+#endif
 	m->Debugger(found);
 	m->Files(found);
 #ifdef _WIN32
