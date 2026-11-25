@@ -23,6 +23,10 @@
 // cuenta, máquina e IP (GuardStore.h).  Una máquina o una IP baneadas no pasan
 // el saludo.
 //
+// Listas y textos (paso 5c): Data/Guard/Lists.toml (herramientas y módulos) y
+// Messages.toml (cómo se llama cada detección en el banner).  Se le mandan al
+// guardián después del saludo, y de nuevo si cambian.
+//
 // Un solo hilo con poll(): son pocas conexiones y cada mensaje se atiende en
 // microsegundos (las consultas a la base son pocas: un aviso es raro y los bans
 // se leen de una caché).  Sólo Linux, como mu-trace.
@@ -248,6 +252,9 @@ namespace
 		// guardado no sirve para cruzar jugadores entre servers.
 		bool LoadSalt();
 
+		// Listas y textos (Rules) a un guardián.
+		void SendRules(Connection& c);
+
 		void Drop(Connection& c);
 
 		void LoadBuilds();
@@ -277,6 +284,8 @@ namespace
 		CGuardStore m_Store;
 
 		std::uint8_t m_Salt[32] = {};
+
+		GuardRules m_Rules;
 
 		std::map<std::string, std::shared_ptr<const CGuardBuild>> m_Builds;   // hash del ejecutable
 
@@ -390,6 +399,12 @@ namespace
 		}
 
 		this->m_Store.Tick();
+
+		this->m_Rules = ReadGuardRules(this->m_Data);
+
+		LogAdd(LOG_BLUE, "[MU-Guard] Listas: %d procesos, %d ventanas, %d modulos bloqueados, %d permitidos, %d textos",
+			(int)this->m_Rules.Processes.size(), (int)this->m_Rules.Windows.size(), (int)this->m_Rules.ModuleBlock.size(),
+			(int)this->m_Rules.ModuleAllow.size(), (int)this->m_Rules.Names.size());
 
 		gServerIdentity.Reload((this->m_Data + "Keys").c_str());
 
@@ -949,7 +964,9 @@ namespace
 			}
 		}
 
-		std::uint8_t reply[HelloResultBannedSize] = { result, static_cast<std::uint8_t>(this->m_Settings.MemScanCloses ? MemScanCloses : 0) };
+		const std::uint8_t options = static_cast<std::uint8_t>((this->m_Settings.MemScanCloses ? MemScanCloses : 0) | (this->m_Settings.ToolCloses ? ToolCloses : 0));
+
+		std::uint8_t reply[HelloResultBannedSize] = { result, options };
 
 		if (result == Banned)
 		{
@@ -1001,6 +1018,8 @@ namespace
 		guardian.ip = c.ip;
 
 		guardian.build = Hex(payload.data() + 2, 8);
+
+		this->SendRules(c);
 
 		if (build)
 		{
@@ -1169,6 +1188,40 @@ namespace
 		}
 
 		this->Reply(c, Notice, guardian.notice.data(), guardian.notice.size());
+	}
+
+	void Guard::SendRules(Connection& c)
+	{
+		using namespace GuardProto;
+
+		const std::uint8_t reset = RuleReset;
+
+		this->Reply(c, Rules, &reset, 1);
+
+		std::size_t sent = 0;
+
+		const auto send = [&](std::uint8_t kind, const std::vector<std::string>& list)
+		{
+			for (const std::string& text : list)
+			{
+				if (sent++ >= MaxRules)
+				{
+					return;
+				}
+
+				std::vector<std::uint8_t> body{ kind };
+
+				body.insert(body.end(), text.begin(), text.begin() + (std::ptrdiff_t)std::min(text.size(), MaxRule));
+
+				this->Reply(c, Rules, body.data(), body.size());
+			}
+		};
+
+		send(RuleProcess, this->m_Rules.Processes);
+		send(RuleWindow, this->m_Rules.Windows);
+		send(RuleModuleBlock, this->m_Rules.ModuleBlock);
+		send(RuleModuleAllow, this->m_Rules.ModuleAllow);
+		send(RuleName, this->m_Rules.Names);
 	}
 
 	void Guard::HandleIdentify(const std::vector<std::uint8_t>& payload)
@@ -1393,6 +1446,27 @@ namespace
 		this->m_Settings = ReadGuardSettings(this->m_Data);
 
 		this->m_Store.Tick();
+
+		// Listas o textos nuevos: a todos los guardianes conectados.
+		const GuardRules rules = ReadGuardRules(this->m_Data);
+
+		if (rules.Version != this->m_Rules.Version)
+		{
+			const bool first = this->m_Rules.Version == 0;
+
+			this->m_Rules = rules;
+
+			LogAdd(LOG_BLUE, "[MU-Guard] Listas: %d procesos, %d ventanas, %d modulos bloqueados, %d permitidos, %d textos",
+				(int)rules.Processes.size(), (int)rules.Windows.size(), (int)rules.ModuleBlock.size(), (int)rules.ModuleAllow.size(), (int)rules.Names.size());
+
+			for (const auto& c : this->m_Connections)
+			{
+				if (!first && !c->local && c->greeted && !c->closing)
+				{
+					this->SendRules(*c);
+				}
+			}
+		}
 	}
 
 	void Guard::Run()
