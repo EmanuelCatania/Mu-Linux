@@ -18,6 +18,7 @@
 #include "GameMaster.h"
 #include "Gate.h"
 #include "GoldenArcherBingo.h"
+#include "GuardLink.h"
 #include "Guild.h"
 #include "HackPacketCheck.h"
 #include "InvasionManager.h"
@@ -989,6 +990,10 @@ short gObjDel(int aIndex)
 
 	if (lpObj->Type == OBJECT_USER)
 	{
+#if defined(MU_GUARD) && !defined(_WIN32)
+		gGuardLink.Unbind(aIndex);
+#endif
+
 		gObjectManager.CharacterGameClose(aIndex);
 
 		GJDisconnectAccountSend(aIndex, lpObj->Account, lpObj->IpAddr);

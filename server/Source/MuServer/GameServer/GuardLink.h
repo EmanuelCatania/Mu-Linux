@@ -47,9 +47,11 @@ public:
 	GuardLogin CheckLogin(const char* ip, const std::uint8_t* ticket, const std::uint8_t* mac,
 	                      const std::uint8_t* transcript);
 
-	// Ata el ticket a la conexión que entró con él.  connectTick: su
-	// ConnectTickCount (distingue una conexión nueva en el mismo índice).
-	void Bind(const std::uint8_t* ticket, int aIndex, std::uint32_t connectTick);
+	// Ata el ticket a la conexión que entró con él.
+	void Bind(const std::uint8_t* ticket, int aIndex);
+
+	// La conexión se cerró (gObjDel): su ticket ya no la identifica.
+	void Unbind(int aIndex);
 
 	// Desconecta a los jugadores que pidió mu-guard.  Hilo del juego.
 	void ProcessKicks();
@@ -70,17 +72,21 @@ private:
 
 	std::thread m_Thread;
 
+	// La conexión se reconoce por índice + socket.  ConnectTickCount no sirve:
+	// el keep-alive lo reescribe (CGLiveClientRecv).
 	struct Session
 	{
 		int Index;
-		std::uint32_t ConnectTick;
+		std::uint64_t Socket;
 	};
 
-	std::mutex m_Lock;   // m_Kicks (latido) y m_Sessions
+	std::mutex m_Lock;   // m_Kicks (latido), m_Sessions y m_Bound
 
 	std::vector<std::string> m_Kicks;
 
 	std::map<std::string, Session> m_Sessions;   // id del ticket
+
+	std::map<int, std::string> m_Bound;   // índice -> id del ticket
 };
 
 extern CGuardLink gGuardLink;

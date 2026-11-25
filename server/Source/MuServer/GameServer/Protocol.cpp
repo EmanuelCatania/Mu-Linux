@@ -1443,7 +1443,7 @@ void CGConnectAccountRecv(PMSG_CONNECT_ACCOUNT_RECV* lpMsg, int aIndex, int size
 #if defined(MU_GUARD) && !defined(_WIN32)
 		if (guard == GuardLogin::Accept && hasTicket)
 		{
-			gGuardLink.Bind(lpMsg->GuardTicket, aIndex, lpObj->ConnectTickCount);
+			gGuardLink.Bind(lpMsg->GuardTicket, aIndex);
 		}
 #endif
 

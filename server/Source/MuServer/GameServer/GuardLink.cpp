@@ -298,20 +298,51 @@ int CGuardLink::Verify(const char* ip, const std::uint8_t* ticket, const std::ui
 	return result;
 }
 
-void CGuardLink::Bind(const std::uint8_t* ticket, int aIndex, std::uint32_t connectTick)
+namespace
+{
+	bool SameConnection(int index, std::uint64_t socket)
+	{
+		if (!OBJECT_USER_RANGE(index))
+		{
+			return false;
+		}
+
+		const LPOBJ lpObj = &gObj[index];
+
+		return lpObj->Connected != OBJECT_OFFLINE && (std::uint64_t)lpObj->Socket == socket;
+	}
+}
+
+void CGuardLink::Bind(const std::uint8_t* ticket, int aIndex)
 {
 	std::lock_guard<std::mutex> lock(this->m_Lock);
 
+	// Un segundo login por la misma conexión reemplaza al anterior.
+	auto bound = this->m_Bound.find(aIndex);
+
+	if (bound != this->m_Bound.end())
+	{
+		this->m_Sessions.erase(bound->second);
+
+		this->m_Bound.erase(bound);
+	}
+
 	if (this->m_Sessions.size() >= kMaxSessions)
 	{
-		// Se van las de conexiones que ya no son las que entraron.
+		// Se van las de conexiones que ya no son las que entraron (no debería
+		// haber: gObjDel las saca).
 		for (auto it = this->m_Sessions.begin(); it != this->m_Sessions.end();)
 		{
-			const LPOBJ lpObj = &gObj[it->second.Index];
+			if (SameConnection(it->second.Index, it->second.Socket))
+			{
+				++it;
 
-			const bool same = lpObj->Connected != OBJECT_OFFLINE && lpObj->ConnectTickCount == it->second.ConnectTick;
+				continue;
+			}
 
-			it = same ? std::next(it) : this->m_Sessions.erase(it);
+			this->m_Bound.erase(it->second.Index);
+
+			it = this->m_Sessions.erase(it);
 		}
 
 		if (this->m_Sessions.size() >= kMaxSessions)
@@ -320,7 +351,27 @@ void CGuardLink::Bind(const std::uint8_t* ticket, int aIndex, std::uint32_t conn
 		}
 	}
 
-	this->m_Sessions[std::string((const char*)ticket, GuardProto::TicketIdSize)] = { aIndex, connectTick };
+	const std::string id((const char*)ticket, GuardProto::TicketIdSize);
+
+	this->m_Sessions[id] = { aIndex, (std::uint64_t)gObj[aIndex].Socket };
+
+	this->m_Bound[aIndex] = id;
+}
+
+void CGuardLink::Unbind(int aIndex)
+{
+	std::lock_guard<std::mutex> lock(this->m_Lock);
+
+	auto bound = this->m_Bound.find(aIndex);
+
+	if (bound == this->m_Bound.end())
+	{
+		return;
+	}
+
+	this->m_Sessions.erase(bound->second);
+
+	this->m_Bound.erase(bound);
 }
 
 void CGuardLink::ProcessKicks()
@@ -354,20 +405,17 @@ void CGuardLink::ProcessKicks()
 
 			session = it->second;
 
+			this->m_Bound.erase(session.Index);
+
 			this->m_Sessions.erase(it);
 		}
 
-		if (!OBJECT_USER_RANGE(session.Index))
+		if (!SameConnection(session.Index, session.Socket))
 		{
 			continue;
 		}
 
 		const LPOBJ lpObj = &gObj[session.Index];
-
-		if (lpObj->Connected == OBJECT_OFFLINE || lpObj->ConnectTickCount != session.ConnectTick)
-		{
-			continue;
-		}
 
 		LogAdd(LOG_RED, "[MU-Guard] [%s][%s] Desconectado por mu-guard", lpObj->IpAddr, lpObj->Account);
 
