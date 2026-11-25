@@ -899,7 +899,12 @@ void __cdecl CUIRenderText_RenderText(HDC /*hdc_unused*/, int x, int y, const ch
                 // GDI son los 256 de 1252.
                 const std::string legacy = TextEngine::ToWindows1252(
                     std::string_view(drawText + startChar, size_t(endChar - startChar)));
-                GlyphAtlas::Draw(s_fontAtlas, runX, (float)rasterY, legacy.c_str(), (int)legacy.size(), vw, vh);
+                // El viewport del atlas tiene que ser el de GL_Begin2D (toda la
+                // ventana): la posicion raster sale en pixeles de ese viewport.
+                // Con el ancho logico (vw) se recortaba en pantalla ancha todo
+                // glifo mas alla de UiWidth: los textos del lado derecho.
+                const DWORD rw = gWindow.GetRealWidth() ? gWindow.GetRealWidth() : vw;
+                GlyphAtlas::Draw(s_fontAtlas, runX, (float)rasterY, legacy.c_str(), (int)legacy.size(), rw, vh);
             }
 #endif
         }
