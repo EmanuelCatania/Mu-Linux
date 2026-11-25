@@ -31,7 +31,13 @@ que su código no esté modificado.
   "La protección MU-Guard no está activa".
 - Si `mu-guard` se cae, el GameServer lo nota solo (latido cada segundo) y deja
   entrar sin validar hasta que vuelva, avisándolo en el log. Los que ya están
-  jugando siguen.
+  jugando siguen. Con `MU_GUARD_REQUIRED=1`, los que entraron mientras estaba
+  caído tienen 60 segundos desde que vuelve para validar: el juego le pide un
+  ticket nuevo a su guardián y lo manda solo. El que no valida queda
+  desconectado.
+- El GameServer le avisa a cada jugador el estado de `mu-guard` cada 5
+  segundos, dentro del canal cifrado y siempre con el mismo tamaño: desde afuera
+  no se ve cuándo hay una caída. El juego no baja la guardia por el aviso.
 
 Todo viaja por el mismo canal cifrado que el juego y con la misma identidad del
 server (`Data/Keys/ServerIdentity.key`).

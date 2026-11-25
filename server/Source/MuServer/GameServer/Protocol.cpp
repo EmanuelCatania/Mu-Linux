@@ -507,6 +507,19 @@ void ProtocolCore(BYTE head, BYTE* lpMsg, int size, int aIndex, int encrypt, int
 
 					break;
 				}
+
+#if defined(MU_GUARD) && !defined(_WIN32)
+				// MU-Guard: ticket nuevo de una sesión que entró con mu-guard caído.
+				case 0x08:
+				{
+					if (gObj[aIndex].Connected >= OBJECT_LOGGED && size >= 4 + 16 + 32)
+					{
+						gGuardLink.Revalidate(aIndex, lpMsg + 4, lpMsg + 4 + 16);
+					}
+
+					break;
+				}
+#endif
 			}
 
 			break;
@@ -1452,6 +1465,10 @@ void CGConnectAccountRecv(PMSG_CONNECT_ACCOUNT_RECV* lpMsg, int aIndex, int size
 		if (guard == GuardLogin::Accept && hasTicket)
 		{
 			gGuardLink.Bind(lpMsg->GuardTicket, aIndex);
+		}
+		else if (guard == GuardLogin::Pending)
+		{
+			gGuardLink.MarkPending(aIndex);
 		}
 #endif
 

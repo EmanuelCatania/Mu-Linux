@@ -18,6 +18,10 @@
 //   el del juego no espera.
 // - Un login sin ticket también se le consulta, sólo por la IP: una IP baneada
 //   no entra aunque no se exija el ticket.
+// - A cada jugador se le manda el estado de mu-guard cada 5 s (F1:07, siempre
+//   del mismo tamaño, dentro del canal cifrado).  Si se exige el ticket, el que
+//   entró con mu-guard caído tiene RevalidateSeconds desde que vuelve para
+//   mandar uno nuevo por la misma conexión (F1:08); si no, se lo desconecta.
 //
 // Sin MU_GUARD (o en Windows) todo esto no existe y el login es el de siempre.
 
@@ -26,7 +30,8 @@
 enum class GuardLogin
 {
 	Accept,        // ticket válido, o MU-Guard apagado
-	Unvalidated,   // entra sin validar: mu-guard caído, o no se exige el ticket
+	Unvalidated,   // entra sin validar: no se exige el ticket
+	Pending,       // entra sin validar porque mu-guard está caído: valida al volver
 	Reject,        // se exige y el ticket no es válido (o no vino)
 	Banned         // la IP está baneada por MU-Guard (aunque no se exija el ticket)
 };
@@ -35,6 +40,7 @@ enum class GuardLogin
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <map>
 #include <mutex>
 #include <string>
@@ -65,6 +71,16 @@ public:
 
 	// Desconecta a los jugadores que pidió mu-guard.  Hilo del juego.
 	void ProcessKicks();
+
+	// Esa conexión entró con mu-guard caído (GuardLogin::Pending).  Hilo del juego.
+	void MarkPending(int aIndex);
+
+	// F1:08: el ticket nuevo de una sesión que entró sin validar.  Hilo del juego.
+	void Revalidate(int aIndex, const std::uint8_t* ticket, const std::uint8_t* mac);
+
+	// Cada segundo: el estado a los jugadores (cada 5 s) y el plazo de los que
+	// tienen que validar.  Hilo del juego.
+	void Tick();
 
 private:
 
@@ -99,6 +115,21 @@ private:
 	std::map<std::string, Session> m_Sessions;   // id del ticket
 
 	std::map<int, std::string> m_Bound;   // índice -> id del ticket
+
+	// Veces que mu-guard volvió (va en el estado: el cliente sabe que es otro aviso).
+	std::atomic<std::uint32_t> m_Epoch { 0 };
+
+	// Sesiones que entraron con mu-guard caído.  Sólo el hilo del juego.
+	struct PendingSession
+	{
+		std::uint64_t Socket;
+		bool Armed;   // mu-guard volvió y corre el plazo
+		std::chrono::steady_clock::time_point Deadline;
+	};
+
+	std::map<int, PendingSession> m_Pending;
+
+	std::chrono::steady_clock::time_point m_LastStatus {};
 };
 
 extern CGuardLink gGuardLink;
