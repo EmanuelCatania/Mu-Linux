@@ -8,6 +8,7 @@
 #endif
 #include "guard/Guardian.h"
 
+#include "guard/GuardBanner.h"
 #include "guard/GuardProtocol.h"
 #include "guard/GuardSocket.h"
 
@@ -21,6 +22,7 @@ extern "C" {
 
 extern "C" void DbgLogPublic(const char* msg);
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -35,6 +37,8 @@ extern "C" void DbgLogPublic(const char* msg);
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include <aclapi.h>
+#include <sddl.h>
 #else
 #include <cerrno>
 #include <fcntl.h>
@@ -325,7 +329,96 @@ void Serve(int in, int out, GuardConnection& guard)
 	}
 }
 
+// Idioma del banner: el del juego (Config.ini [Language] LangSelection), que
+// todavía no se leyó.  0 castellano, 1 inglés, 2 portugués.
+int LanguageIndex()
+{
+	FILE* file = std::fopen((std::string(Platform::UserDir()) + "Config.ini").c_str(), "r");
+	if (!file) return 0;
+	char line[256];
+	int language = 0;
+	while (std::fgets(line, sizeof(line), file))
+	{
+		if (std::strncmp(line, "LangSelection=", 14) != 0) continue;
+		if (std::strncmp(line + 14, "Eng", 3) == 0) language = 1;
+		else if (std::strncmp(line + 14, "Por", 3) == 0) language = 2;
+		break;
+	}
+	std::fclose(file);
+	return language;
+}
+
 #ifdef _WIN32
+// DACL del guardián y del juego (diseño 1.2 y 3.1): el usuario sólo puede
+// terminarlos, esperarlos y consultar lo básico; SYSTEM, todo.  Leer o escribir
+// la memoria, duplicar sus handles o cambiar la DACL queda denegado a cualquier
+// otro programa del mismo usuario.  La entrada OWNER RIGHTS hace falta porque
+// sin ella el dueño tiene WRITE_DAC implícito y podría quitarle la DACL.
+// El guardián no pierde nada: lee al juego por el handle que le dio CreateProcess.
+constexpr DWORD kProcessRights = PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE;
+constexpr DWORD kThreadRights = THREAD_TERMINATE | THREAD_QUERY_LIMITED_INFORMATION | SYNCHRONIZE;
+
+class Descriptor
+{
+public:
+	explicit Descriptor(DWORD rights)
+	{
+		HANDLE token = nullptr;
+		if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return;
+		DWORD size = 0;
+		GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+		std::vector<std::uint8_t> buffer(size);
+		LPWSTR sid = nullptr;
+		if (size && GetTokenInformation(token, TokenUser, buffer.data(), size, &size) &&
+		    ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer.data())->User.Sid, &sid))
+		{
+			wchar_t sddl[512];
+			swprintf(sddl, sizeof(sddl) / sizeof(sddl[0]), L"D:P(A;;0x%08lx;;;OW)(A;;0x%08lx;;;%ls)(A;;GA;;;SY)",
+			         static_cast<unsigned long>(rights), static_cast<unsigned long>(rights), sid);
+			ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, SDDL_REVISION_1, &m_Descriptor, nullptr);
+			LocalFree(sid);
+		}
+		CloseHandle(token);
+	}
+
+	~Descriptor() { if (m_Descriptor) LocalFree(m_Descriptor); }
+
+	PSECURITY_DESCRIPTOR Get() const { return m_Descriptor; }
+
+	PACL Dacl() const
+	{
+		BOOL present = FALSE, defaulted = FALSE;
+		PACL dacl = nullptr;
+		return (m_Descriptor && GetSecurityDescriptorDacl(m_Descriptor, &present, &dacl, &defaulted) && present) ? dacl : nullptr;
+	}
+
+private:
+	PSECURITY_DESCRIPTOR m_Descriptor = nullptr;
+};
+
+// Para cerrar el banner cuando el juego ya muestra su ventana.
+struct WindowSearch { DWORD pid; bool found; };
+
+BOOL CALLBACK FindVisibleWindow(HWND hwnd, LPARAM data)
+{
+	WindowSearch* search = reinterpret_cast<WindowSearch*>(data);
+	DWORD pid = 0;
+	GetWindowThreadProcessId(hwnd, &pid);
+	if (pid == search->pid && IsWindowVisible(hwnd))
+	{
+		search->found = true;
+		return FALSE;
+	}
+	return TRUE;
+}
+
+bool HasVisibleWindow(DWORD pid)
+{
+	WindowSearch search{ pid, false };
+	EnumWindows(FindVisibleWindow, reinterpret_cast<LPARAM>(&search));
+	return search.found;
+}
+
 struct ServeArgs { HANDLE in, out; GuardConnection* guard; };
 
 DWORD WINAPI ServeThread(LPVOID p)
@@ -499,13 +592,32 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 
 	GuardConnection guard;
 	guard.Configure(host, guardPort, mainHash);
-	if (!guard.Ensure())
+
+	// El banner aparece recién ahora: sin MU-Guard en el server no se muestra.
+	// Cada paso queda en pantalla un mínimo (el SECUENCIA del template) para que
+	// un chequeo instantáneo no haga parpadear el texto.
+	Guard::Banner banner;
+	banner.Open(LanguageIndex());
+	banner.Step(Guard::BannerStep::Network);
+	std::atomic<int> connected{ -1 };
+	std::thread hello([&]() { connected = guard.Ensure() ? 1 : 0; });
+	const bool kept = banner.Wait([&]() { return connected.load() >= 0; }, 750);
+	hello.join();
+	if (!kept)
+	{
+		Log("MU-Guard: se cerro el banner; no se abre el juego");
+		*exitCode = 0;
+		return true;
+	}
+	if (connected.load() != 1)
 	{
 		// Puede estar caído: lo decide el GameServer en el login (4c).
+		banner.Close();
 		Log("MU-Guard: no responde mu-guard en %s:%u; sigue sin guardian", host, guardPort);
 		return false;
 	}
 	Log("MU-Guard: guardian activo (mu-guard en %s:%u); se lanza el juego", host, guardPort);
+	banner.Step(Guard::BannerStep::Launch);
 
 #ifdef _WIN32
 	SECURITY_ATTRIBUTES sa{ sizeof(sa), nullptr, TRUE };
@@ -535,12 +647,22 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	si.lpAttributeList = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributes.data());
 	HANDLE inherited[2] = { toGameRead, fromGameWrite };
 	PROCESS_INFORMATION pi{};
+	// El guardián toma la DACL antes de crear al juego: si no, otro programa le
+	// duplica el handle del juego (PROCESS_DUP_HANDLE) y se saltea todo.
+	const Descriptor processSd(kProcessRights), threadSd(kThreadRights);
+	if (!processSd.Get() || !threadSd.Get() ||
+	    SetSecurityInfo(GetCurrentProcess(), SE_KERNEL_OBJECT, DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+	                    nullptr, nullptr, processSd.Dacl(), nullptr) != ERROR_SUCCESS)
+		Log("MU-Guard: no se pudo proteger el guardian (%lu)", GetLastError());
+	SECURITY_ATTRIBUTES processAttributes{ sizeof(SECURITY_ATTRIBUTES), processSd.Get(), FALSE };
+	SECURITY_ATTRIBUTES threadAttributes{ sizeof(SECURITY_ATTRIBUTES), threadSd.Get(), FALSE };
 	std::wstring command = GetCommandLineW();
 	wchar_t module[MAX_PATH * 4];
 	GetModuleFileNameW(nullptr, module, static_cast<DWORD>(sizeof(module) / sizeof(module[0])));
 	const bool started = InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, &attributeSize) &&
 		UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherited, sizeof(inherited), nullptr, nullptr) &&
-		CreateProcessW(module, command.data(), nullptr, nullptr, TRUE, EXTENDED_STARTUPINFO_PRESENT, nullptr, nullptr, &si.StartupInfo, &pi);
+		CreateProcessW(module, command.data(), processSd.Get() ? &processAttributes : nullptr, threadSd.Get() ? &threadAttributes : nullptr,
+		               TRUE, EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED, nullptr, nullptr, &si.StartupInfo, &pi);
 	const DWORD error = started ? 0 : GetLastError();
 	if (si.lpAttributeList) DeleteProcThreadAttributeList(si.lpAttributeList);
 	SetEnvironmentVariableA(kPipeVar, nullptr);
@@ -552,14 +674,27 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 		Log("MU-Guard: no se pudo lanzar el juego (%lu)", error);
 		CloseHandle(toGameWrite);
 		CloseHandle(fromGameRead);
+		banner.Close();
 		return false;
 	}
-	CloseHandle(pi.hThread);
 
 	// Hilo de Win32 y no std::thread: hace falta su HANDLE para cortarle la
 	// lectura (con MinGW, native_handle() no es un HANDLE).
 	ServeArgs args{ fromGameRead, toGameWrite, &guard };
 	const HANDLE thread = CreateThread(nullptr, 0, ServeThread, &args, 0, nullptr);
+	// Se creó suspendido: ya tiene su DACL y el guardián lo puede atender.
+	ResumeThread(pi.hThread);
+	CloseHandle(pi.hThread);
+
+	// El banner se va cuando el juego muestra su ventana (o termina): así no
+	// queda un hueco sin nada en pantalla.  Como mucho 30 s.
+	const auto launched = std::chrono::steady_clock::now();
+	banner.Wait([&]() {
+		return WaitForSingleObject(pi.hProcess, 0) == WAIT_OBJECT_0 || HasVisibleWindow(pi.dwProcessId) ||
+		       std::chrono::steady_clock::now() - launched > std::chrono::seconds(30);
+	}, 1200);
+	banner.Close();
+
 	WaitForSingleObject(pi.hProcess, INFINITE);
 	DWORD code = 0;
 	GetExitCodeProcess(pi.hProcess, &code);
@@ -584,8 +719,13 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	if (::socketpair(AF_UNIX, SOCK_STREAM, 0, pair) != 0)
 	{
 		Log("MU-Guard: no se pudo crear el pipe (%d)", errno);
+		banner.Close();
 		return false;
 	}
+	// Nadie del mismo usuario lee la memoria del guardián (tiene las claves de
+	// los tickets).  El juego no hereda esto: el exec lo vuelve a dejar legible,
+	// y en Linux lo protege Yama (ptrace_scope >= 1: sólo un ancestro).
+	::prctl(PR_SET_DUMPABLE, 0);
 	// El extremo del guardián no se hereda; el del juego sí.
 	::fcntl(pair[0], F_SETFD, FD_CLOEXEC);
 	::setenv(kPipeVar, std::to_string(pair[1]).c_str(), 1);
@@ -601,10 +741,13 @@ bool Run(const char* host, unsigned short port, char** argv, int* exitCode)
 	{
 		Log("MU-Guard: no se pudo lanzar el juego (%d)", spawned);
 		::close(pair[0]);
+		banner.Close();
 		return false;
 	}
 
 	std::thread server([&]() { Serve(pair[0], pair[0], guard); });
+	banner.Wait([]() { return true; }, 1200);
+	banner.Close();
 	int status = 0;
 	while (::waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
 	// Otro proceso que haya abierto el juego puede tener heredado su extremo: se
