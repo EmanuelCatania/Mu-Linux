@@ -6,6 +6,7 @@
 #include "game/item/ItemDefines.h"
 #include "game/core/MapManager.h"
 #include <vector>
+#include <algorithm>
 #include "game/core/FramePointerSet.h"
 
 namespace {
@@ -14,9 +15,16 @@ struct Block {
     const void *owner;
     std::uint64_t generation;
     bool registered, bones, valid=true;
-    std::vector<unsigned char> bytes;
+    std::size_t offset, size;
 };
 std::vector<Block> blocks;
+// Todas las copias del cuadro van seguidas en un solo buffer. Con un vector
+// por bloque cada posición se quedaba con el tamaño más grande que le había
+// tocado, y como la tabla de modelos (cientos de KB) cae en una posición
+// distinta según cuántos efectos hay vivos, la memoria crecía sin parar
+// mientras se jugaba (más de 1 GB en pocos minutos).
+std::vector<unsigned char> arena;
+std::size_t arenaUsed=0;
 FramePointerSet savedObjects;
 std::size_t used=0;
 bool active=false;
@@ -32,8 +40,10 @@ void Save(void *address, std::size_t size, const void *owner=nullptr,
     block.address=address; block.owner=owner;
     block.registered=registered; block.bones=bones; block.valid=true;
     block.generation=registered ? SceneObjects::Generation(owner) : 0;
-    block.bytes.resize(size);
-    memcpy(block.bytes.data(),address,size);
+    block.offset=arenaUsed; block.size=size;
+    if (arena.size()<arenaUsed+size) arena.resize((std::max)(arena.size()*2,arenaUsed+size));
+    memcpy(arena.data()+arenaUsed,address,size);
+    arenaUsed+=size;
 }
 void SaveObject(void *address, std::size_t size, bool registered=false) {
     if (!address || !savedObjects.Insert(address)) return;
@@ -49,7 +59,7 @@ void SaveObject(void *address, std::size_t size, bool registered=false) {
 // al siguiente input o tick. Las altas invalidan su copia previa; no se
 // suprimen llamadas a creadores. Los sprites conservan su Capture/ReplayStep.
 void RenderDerivedState_Begin() {
-    active=false; used=0; savedObjects.Reset();
+    active=false; used=0; arenaUsed=0; savedObjects.Reset();
     const bool ready=SceneFlag==2 ? InitLogIn!=0 :
         SceneFlag==4 ? CharSelectSceneInitialized && CurrentProtocolState>50 :
         SceneFlag==5 && EnableMainRender && LoadingWorld<=30;
@@ -108,7 +118,7 @@ void RenderDerivedState_End() {
         // Validar antes de leer o escribir una dirección que pudo liberarse.
         if (block.registered && (!SceneObjects::Contains(block.owner) ||
             SceneObjects::Generation(block.owner)!=block.generation)) continue;
-        if (block.bones && !SceneObjects::HasBoneRange(block.owner,block.address,0,block.bytes.size())) continue;
-        memcpy(block.address,block.bytes.data(),block.bytes.size());
+        if (block.bones && !SceneObjects::HasBoneRange(block.owner,block.address,0,block.size)) continue;
+        memcpy(block.address,arena.data()+block.offset,block.size);
     }
 }
