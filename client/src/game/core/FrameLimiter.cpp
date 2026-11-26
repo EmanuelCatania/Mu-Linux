@@ -26,8 +26,11 @@ uint32_t CFrameLimiter::Wait(const StartTime& start)
 #ifdef __EMSCRIPTEN__
     // Navegador: el ritmo lo pone el cuadro del navegador (WebPage::WaitFrame,
     // al refresco del monitor, o al límite de FPS si es más bajo).  Esperar
-    // acá además sumaba las dos esperas.
-    if (m_RenderDecoupled) minimum = 0.0;
+    // acá además sumaba las dos esperas.  Con el dibujo ligado al paso de
+    // 40 ms tampoco se espera acá: en el hilo principal del navegador la
+    // espera no duerme, gira en vacío con un núcleo al 100 % (el celular
+    // levantaba temperatura).  Los 40 ms los pone WaitFrame.
+    minimum = 0.0;
 #endif
     const double elapsed = Platform::GetTimer().Wait(start, minimum) + m_FractionMilliseconds;
     const uint32_t milliseconds = (uint32_t)elapsed;

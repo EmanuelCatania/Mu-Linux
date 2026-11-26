@@ -118,6 +118,33 @@
 #include "platform/Text.h"
 #include "Scene.h"
 
+// DESVIACION (interfaz táctil): la lista de servers se dibuja ampliada
+// alrededor de un punto fijo, porque sus filas de 16 unidades son unos 12
+// píxeles en un celular.  Game_SceneUpdate.cpp le aplica la inversa al
+// cursor, así el toque cae donde se ve.  Sin interfaz táctil el factor es 1.
+namespace {
+constexpr float ZoomPivotX = 185.0f, ZoomPivotY = 228.0f;
+float s_zoom = 1.0f;
+float ZoomX(float x) { return ZoomPivotX + (x - ZoomPivotX) * s_zoom; }
+float ZoomY(float y) { return ZoomPivotY + (y - ZoomPivotY) * s_zoom; }
+void ZoomTexture(int tex, float x, float y, float w, float h, float u, float v, float uw, float vh, char a, char b) {
+    GL_DrawTexture(tex, ZoomX(x), ZoomY(y), w * s_zoom, h * s_zoom, u, v, uw, vh, a, b);
+}
+// El texto no cambia de tamaño: se mueve con su centro.
+void ZoomText(int x, int y, const char* text, LPSIZE size, char flag, int extra) {
+    if (s_zoom != 1.0f && text) {
+        SIZE measured = {};
+        gFont.MeasureText(gFont.GetTextDC(), text, Platform::TextLength(text), &measured);
+        const float half = (float)measured.cx * 640.0f / (float)gWindow.GetWidth() * 0.5f;
+        x = (int)(ZoomX((float)x + half) - half);
+        y = (int)(ZoomY((float)y + 6.0f) - 6.0f);
+    }
+    UI_RenderText(x, y, text, size, flag, extra);
+}
+}
+#define GL_DrawTexture ZoomTexture
+#define UI_RenderText  ZoomText
+
 
 // Scene_Login_ServerSelect @ 0x0051F020
 // Renders the server-group + channel selection panel inside the login screen.
@@ -125,6 +152,7 @@
 // Stack allocates ~48 KB of display strings (triggers __chkstk_probe).
 int Scene_Login_ServerSelect(void)
 {
+    s_zoom = gWindow.IsTouchHud() ? 1.7f : 1.0f;
 
     byte        bVar2;
     float       fVar3, fVar18, fVar20;

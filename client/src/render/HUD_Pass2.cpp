@@ -650,6 +650,7 @@ void RenderExperience_(void)
 
     void* v3 = CharacterAttribute;
     if (!v3) return;
+    if (gWindow.IsTouchHud()) return;
 
     if (*(WORD*)((BYTE*)v3 + 0xE) == 0) return;
 

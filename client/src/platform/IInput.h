@@ -5,6 +5,14 @@ namespace Platform {
 enum class InputEventType { MouseMove, LeftDown, LeftUp, LeftDoubleClick, RightDown, RightUp, Wheel, MiddleDown, MiddleUp, ImeStart, ImeEnd, Text };
 struct InputEvent { InputEventType type; int x = 0; int y = 0; int wheel = 0; uint32_t character = 0; };
 struct ImeState { uint32_t conversion = 0; uint32_t sentence = 0; };
+// Mando (gamepad) o joystick táctil.  move: palanca en pantalla, -1..1 (y hacia
+// abajo).  attack / skill: botones sostenidos (golpe básico / skill elegido).
+// selectSkill: ranura de skill a dejar elegida (-1 = ninguna).  cycleSkill: +1 /
+// -1 = pasar al skill siguiente / anterior.  Los dos valen por una lectura.
+struct PadState {
+    float moveX = 0; float moveY = 0; bool attack = false; bool skill = false;
+    int selectSkill = -1; int cycleSkill = 0;
+};
 class IInput {
 public:
     virtual ~IInput() = default;
@@ -16,6 +24,8 @@ public:
     virtual void PositionIme(int x, int y, int width, int height) = 0;
     // Texto del portapapeles en UTF-8 (vacío si no hay texto). Lo usa Ctrl+V.
     virtual std::string ClipboardText() = 0;
+    // Estado del mando; sin mando, todo en cero.
+    virtual PadState Pad() { return {}; }
 };
 IInput& GetInput();
 } // namespace Platform

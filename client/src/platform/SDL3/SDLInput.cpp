@@ -1,7 +1,22 @@
 #include "platform/SDL3/SDLPlatform.h"
 #include "platform/IWindow.h"
 #include <array>
+#include <utility>
 #include <cmath>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+// Joystick táctil de la página (shell.html): palanca -1..1 y botones
+// sostenidos (bit 0 atacar, bit 1 skill).
+EM_JS(double, mu_touch_pad_x, (), { return Module.muPad ? Module.muPad.x : 0; });
+EM_JS(double, mu_touch_pad_y, (), { return Module.muPad ? Module.muPad.y : 0; });
+EM_JS(int, mu_touch_pad_buttons, (), { return Module.muPad ? Module.muPad.buttons : 0; });
+// Ranura de skill elegida en la página (-1 = ninguna); se lee una vez.
+EM_JS(int, mu_touch_pad_select, (), {
+    const pad = Module.muPad;
+    if (!pad || pad.select === undefined || pad.select < 0) return -1;
+    const slot = pad.select; pad.select = -1; return slot;
+});
+#endif
 namespace Platform {
 void DeliverSDLInput(const InputEvent& event);
 namespace {
@@ -68,6 +83,95 @@ void SetKey(int key, bool down) {
     if (!key) return;
     if (down && !held[key]) pressed[key] = true;
     held[key] = down;
+}
+// ── Mando (gamepad) ──────────────────────────────────────────────────────────
+// DESVIACION: el 0.97k no tiene mando.  Reparto (nombres de Xbox):
+//   palanca izquierda  caminar            palanca derecha  mover el cursor
+//   A                  skill elegido      X / gatillo der. golpe básico
+//   B                  Escape             Y                inventario (V)
+//   cruceta izq./der.  skill anterior / siguiente
+//   cruceta arriba     poción E           cruceta abajo    menú de mapas (M)
+//   LB / RB            pociones Q / W
+//   Start              Escape             Back             personaje (C)
+//   gatillo izq.       click izquierdo    apretar palanca der.  click derecho
+SDL_Gamepad* gamepad = nullptr;
+PadState padState{};
+std::array<bool, SDL_GAMEPAD_BUTTON_COUNT> padHeld{};
+bool padLeftClick = false, padRightClick = false;
+float padCursorX = 0, padCursorY = 0;
+constexpr float PadDeadZone = 0.25f;
+
+float PadAxis(SDL_GamepadAxis axis) {
+    const float value = SDL_GetGamepadAxis(gamepad, axis) / 32767.0f;
+    return std::fabs(value) < PadDeadZone ? 0.0f : value;
+}
+void PadKey(SDL_GamepadButton button, int key, bool text = false) {
+    const bool down = SDL_GetGamepadButton(gamepad, button);
+    if (down == padHeld[button]) return;
+    padHeld[button] = down;
+    SetKey(key, down);
+    if (down && text) { InputEvent event{InputEventType::Text}; event.character = uint32_t(key); DeliverSDLInput(event); }
+}
+// Click del mando en la posición actual del cursor.
+void PadClick(bool down, bool& state, InputEventType downType, InputEventType upType, int key) {
+    if (down == state) return;
+    state = down;
+    float x = 0, y = 0;
+    SDL_GetMouseState(&x, &y);
+    InputEvent event{down ? downType : upType};
+    event.x = int(x); event.y = int(y);
+    SetKey(key, down);
+    DeliverSDLInput(event);
+}
+void ServiceGamepad() {
+    if (gamepad && !SDL_GamepadConnected(gamepad)) {
+        SDL_CloseGamepad(gamepad);
+        gamepad = nullptr; padState = {}; padHeld.fill(false);
+    }
+    if (!gamepad) {
+        // Buscar un mando cuesta poco, pero no hace falta en cada cuadro.
+        if (pumpSerial % 120 != 1) return;
+        int count = 0;
+        SDL_JoystickID* ids = SDL_GetGamepads(&count);
+        if (ids && count > 0) gamepad = SDL_OpenGamepad(ids[0]);
+        SDL_free(ids);
+        if (!gamepad) return;
+    }
+    SDL_UpdateGamepads();
+    padState.moveX = PadAxis(SDL_GAMEPAD_AXIS_LEFTX);
+    padState.moveY = PadAxis(SDL_GAMEPAD_AXIS_LEFTY);
+    padState.skill = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_SOUTH);
+    padState.attack = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_WEST)
+        || SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 16000;
+    for (const auto [button, step] : {std::pair{SDL_GAMEPAD_BUTTON_DPAD_LEFT, -1}, std::pair{SDL_GAMEPAD_BUTTON_DPAD_RIGHT, 1}}) {
+        const bool down = SDL_GetGamepadButton(gamepad, button);
+        if (down && !padHeld[button]) padState.cycleSkill = step;
+        padHeld[button] = down;
+    }
+    PadKey(SDL_GAMEPAD_BUTTON_EAST, 27, true);
+    PadKey(SDL_GAMEPAD_BUTTON_START, 27, true);
+    PadKey(SDL_GAMEPAD_BUTTON_NORTH, 'V');
+    PadKey(SDL_GAMEPAD_BUTTON_BACK, 'C');
+    PadKey(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, 'Q');
+    PadKey(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, 'W');
+    PadKey(SDL_GAMEPAD_BUTTON_DPAD_UP, 'E');
+    PadKey(SDL_GAMEPAD_BUTTON_DPAD_DOWN, 'M');
+    // Palanca derecha: mueve el cursor del sistema (los paneles se manejan
+    // igual que con mouse).  Se acumula la fracción: a baja velocidad el paso
+    // por cuadro es menor que un píxel.
+    const float cursorX = PadAxis(SDL_GAMEPAD_AXIS_RIGHTX), cursorY = PadAxis(SDL_GAMEPAD_AXIS_RIGHTY);
+    if (cursorX != 0 || cursorY != 0) {
+        float x = 0, y = 0;
+        SDL_GetMouseState(&x, &y);
+        padCursorX += cursorX * 12.0f; padCursorY += cursorY * 12.0f;
+        const float stepX = std::trunc(padCursorX), stepY = std::trunc(padCursorY);
+        padCursorX -= stepX; padCursorY -= stepY;
+        if (stepX != 0 || stepY != 0) SDL_WarpMouseInWindow(SDLWindow(), x + stepX, y + stepY);
+    }
+    PadClick(SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 16000, padLeftClick,
+             InputEventType::LeftDown, InputEventType::LeftUp, 1);
+    PadClick(SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_STICK), padRightClick,
+             InputEventType::RightDown, InputEventType::RightUp, 2);
 }
 void Composition(bool active) {
     if (composing == active) return;
@@ -183,6 +287,20 @@ public:
         SDL_Rect area{x, y, width > x ? width - x : 1, 1};
         SDL_SetTextInputArea(SDLWindow(), &area, 0);
     }
+    PadState Pad() override {
+        PadState result = padState;
+        padState.cycleSkill = 0;
+#ifdef __EMSCRIPTEN__
+        result.selectSkill = mu_touch_pad_select();
+        // El joystick táctil se suma al mando: gana el que esté en uso.
+        const float touchX = float(mu_touch_pad_x()), touchY = float(mu_touch_pad_y());
+        if (touchX != 0 || touchY != 0) { result.moveX = touchX; result.moveY = touchY; }
+        const int buttons = mu_touch_pad_buttons();
+        result.attack = result.attack || (buttons & 1);
+        result.skill = result.skill || (buttons & 2);
+#endif
+        return result;
+    }
     std::string ClipboardText() override {
         std::string result;
         if (char* text = SDL_GetClipboardText()) { result = text; SDL_free(text); }
@@ -191,8 +309,17 @@ public:
 };
 }
 IInput& GetInput() { static SDLInput input; return input; }
-void InstallSDLInput() { held.fill(false); pressed.fill(false); composing = false; wheelRemainder = 0; SDL_AddEventWatch(Watch, nullptr); }
-void RemoveSDLInput() { SDL_RemoveEventWatch(Watch, nullptr); }
+void InstallSDLInput() {
+    held.fill(false); pressed.fill(false); composing = false; wheelRemainder = 0;
+    // Sin soporte de mando en el sistema el juego sigue igual, con mouse.
+    SDL_InitSubSystem(SDL_INIT_GAMEPAD);
+    SDL_AddEventWatch(Watch, nullptr);
+}
+void RemoveSDLInput() {
+    SDL_RemoveEventWatch(Watch, nullptr);
+    if (gamepad) { SDL_CloseGamepad(gamepad); gamepad = nullptr; }
+    SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
+}
 void ServiceSDLEvents(bool pumpNative) {
     ++pumpSerial;
     for (HeldButton& button : buttons) {
@@ -203,6 +330,7 @@ void ServiceSDLEvents(bool pumpNative) {
         }
     }
     if (pumpNative) SDL_PumpEvents();
+    ServiceGamepad();
     // El watch ya entregó los eventos sin diferirlos respecto del pump del host.
     SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
 }

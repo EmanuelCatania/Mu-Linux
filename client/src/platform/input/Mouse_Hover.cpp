@@ -199,6 +199,12 @@ process_click:
     Party_MatchEntityNames();
 
 done:
+    // Mando o joystick táctil: con atacar o skill sostenido no se apunta con
+    // el cursor; el objetivo es el monstruo más cercano.
+    if (PadControls_ActionHeld()) {
+        SelectedCharacter = PadControls_Target();
+        SelectedNpc = -1; SelectedItem = -1; SelectedOperate = -1;
+    }
     if (SelectedCharacter == -1)
         Attacking = -1;
 

@@ -333,6 +333,7 @@ void RenderMainFrameWindow_(void)
     DAT_07e11d6e = 0;
     m_dwTextColor = 0xFFFFFFFF;
     m_dwBackColor = 0xFF000000;
+    if (gWindow.IsTouchHud()) return;
 
     // Two corner decorations (bitmap 0xE9 mirrored at x=532).
     // DESVIACION (DLL Interface.cpp, 0x004BD300 / 0x004BD332): con el mapa
@@ -484,7 +485,7 @@ void Render_HotbarItems3D_(void)
             FUN_004f6420(0, 0, 0, 0);
         }
 
-        int slot_x = 208;
+        int slot_x = gWindow.IsTouchHud() ? 301 : 208;
         for (int slot_idx = 0; slot_x < 301; ++slot_idx) {
             int v2 = Item_FindQuickSlotByCategory(slot_idx);
             if (v2 != -1) {

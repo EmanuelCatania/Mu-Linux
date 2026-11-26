@@ -48,20 +48,97 @@
 
   /* Controles táctiles (celular y tablet): una capa sobre el canvas que pasa
      los toques al juego como mouse, y botones para las teclas. */
-  #touch, #pad, #padtoggle, #rotate { display: none; }
+  /* Cuenta guardada: sólo en celular y tablet. */
+  #account { display: none; margin: 10px 0 4px; text-align: left; }
+  body.touchclient #account { display: block; }
+  #account input[type=text], #account input[type=password] { width: 48%; box-sizing: border-box; padding: 8px; margin: 4px 1% 6px 0;
+            font: 15px sans-serif; color: #eee; background: #14161c; border: 1px solid #5a4a2c; border-radius: 4px; }
+  #account label { display: block; font: 12px sans-serif; color: #b8ac8c; }
+  #touch, #joy, #ring, #hud, #tbar, #padtoggle, #skillpick, #social, #toast, #rotate { display: none; }
   body.touch:not(.menu) #touch { display: block; position: fixed; inset: 0; z-index: 1; touch-action: none;
                                  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  body.touch:not(.menu) #pad { display: flex; position: fixed; z-index: 2; right: 6px; top: 50%;
-                               transform: translateY(-58%); gap: 6px; }
-  body.touch.padhidden #pad { display: none; }
-  body.touch:not(.menu) #padtoggle { display: block; position: fixed; z-index: 2; right: 6px; top: 6px; }
-  #pad .col { display: flex; flex-direction: column; gap: 6px; }
-  #pad button, #padtoggle { width: 44px; height: 44px; padding: 0; border-radius: 50%; touch-action: none;
-                            font: 600 13px sans-serif; color: #f0d890; background: rgba(20, 14, 6, .55);
-                            border: 1px solid rgba(200, 160, 80, .7); -webkit-user-select: none; user-select: none; }
-  #padtoggle { width: 34px; height: 34px; font-size: 11px; opacity: .7; }
-  #pad button.on { background: rgba(180, 120, 30, .8); color: #fff; }
-  #pad button:active { background: rgba(120, 90, 30, .8); }
+  #joy, #ring, #hud, #tbar, #padtoggle, #skillpick, #social, #toast { position: fixed; z-index: 2; touch-action: none;
+                                 -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  /* Con un panel del juego abierto (inventario, personaje, mapas) el anillo
+     no se muestra: los paneles van de ese lado. */
+  body.touch.ingame.panel:not(.menu) #ring { display: none !important; }
+  /* Joystick: abajo a la izquierda.  Sólo dentro del juego (.ingame). */
+  body.touch.ingame:not(.menu) #joy { display: block; left: 3vh; bottom: 8vh; width: 36vh; height: 36vh;
+                               background: url(touch/joy-base.png) center / contain no-repeat; opacity: .8; }
+  #joy.on { background-image: url(touch/joy-active.png); opacity: 1; }
+  #joy i { position: absolute; left: 50%; top: 50%; width: 38%; height: 38%; margin: -19% 0 0 -19%;
+           background: url(touch/joy-knob.png) center / contain no-repeat; pointer-events: none; }
+  /* Anillo: el centro lanza el skill elegido; alrededor, cinco skills a
+     elección; en la esquina, el golpe básico. */
+  body.touch.ingame:not(.menu) #ring { display: block; right: 1vh; bottom: 5vh; width: 46vh; height: 46vh;
+                                background: url(touch/ring.png) center / contain no-repeat; pointer-events: none; }
+  #ring button { position: absolute; width: 22%; height: 22%; margin: -11% 0 0 -11%; padding: 0; border: 0;
+                 border-radius: 50%; background: rgba(8, 10, 16, .35) center no-repeat; pointer-events: auto;
+                 touch-action: none; font: 700 3.4vh sans-serif; color: #e8cf96; text-shadow: 0 0 4px #000; }
+  #ring #cast { width: 35%; height: 35%; margin: -17.5% 0 0 -17.5%; background-color: rgba(8, 10, 16, .6);
+                box-shadow: 0 0 0 .6vh rgba(190, 160, 100, .75); }
+  #ring #basic { width: 20%; height: 20%; margin: -10% 0 0 -10%; font-size: 4.4vh;
+                 background-color: rgba(12, 16, 26, .75); box-shadow: 0 0 0 .3vh rgba(190, 160, 100, .7); }
+  #ring button.on { box-shadow: 0 0 0 .5vh rgba(240, 200, 110, .95) inset; filter: brightness(1.4); }
+  #ring button.current { box-shadow: 0 0 0 .4vh rgba(120, 220, 255, .9); }
+  body.assigning #ring button[data-slot] { box-shadow: 0 0 0 .5vh rgba(120, 255, 140, .9); }
+  /* Barra del héroe (texturas del pack): vida, maná, AG, experiencia y los
+     tres ítems rápidos.  Reemplaza a la barra del juego, que acá no se dibuja. */
+  body.touch.ingame:not(.menu) #hud { display: block; left: 50%; bottom: 0; height: 15vh; width: 78.87vh;
+                               transform: translateX(-50%); pointer-events: none;
+                               background: url(touch/hud-main.png) center / 100% 100% no-repeat; }
+  body.touch.chatting #hud { opacity: .25; }
+  #hud .gem { position: absolute; top: 12.9%; width: 12.27%; height: 61.3%; }
+  #hud .gem i { position: absolute; inset: 0; background-position: center; background-size: 100% 100%; background-repeat: no-repeat; }
+  #hud .gem b { position: absolute; left: -30%; right: -30%; top: 34%; text-align: center;
+                font: 700 2.5vh sans-serif; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  #hudhp { left: 24.4%; } #hudhp i { background-image: url(touch/hud-hp.png); }
+  #hudmp { left: 63.3%; } #hudmp i { background-image: url(touch/hud-mp.png); }
+  #hud button { position: absolute; top: 19.4%; width: 7.4%; height: 43.5%; padding: 0; border: 0;
+                background: transparent; pointer-events: auto; touch-action: none;
+                font: 700 2.6vh sans-serif; color: #e8cf96; text-shadow: 0 0 3px #000; }
+  #hud button small { display: block; font: 600 2vh sans-serif; color: #fff; }
+  #hud button.on { background: rgba(240, 200, 110, .35); }
+  #hudag, #hudexp { position: absolute; overflow: hidden; }
+  #hudag { left: 39.3%; top: 67.5%; width: 21.5%; height: 10.5%; background: rgba(0, 0, 0, .6); }
+  #hudag i { display: block; height: 100%; width: 0; background: url(touch/hud-ag.png) left / 16.8vh 100% no-repeat; }
+  #hudexp { left: 35.9%; top: 83.9%; width: 28.2%; height: 8.9%; }
+  #hudexp i { display: block; height: 100%; width: 0; background: linear-gradient(#f4dc7c, #b8862c); }
+  #hudinfo { position: absolute; left: 0; right: 0; top: -2.8vh; text-align: center;
+             font: 600 2.2vh sans-serif; color: #e8d8a8; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  /* Paneles y menú, arriba a la derecha. */
+  body.touch:not(.menu) #tbar { display: flex; right: 12vh; top: 1vh; gap: 1vh; }
+  /* Dentro del juego la barra está plegada: la abre el botón de los tres puntos. */
+  body.touch.ingame:not(.baropen) #tbar { display: none; }
+  /* Íconos del pack (Resources.xaml, Icon.*): trazos de 32x32 en dorado. */
+  [data-icon] svg { height: 78%; aspect-ratio: 1; vertical-align: middle; pointer-events: none; }
+  #tbar button[data-icon], #padtoggle[data-icon] { min-width: 9.5vh; padding: 0; font-size: 0; }
+  #social button svg { height: 60%; margin-right: 1.2vh; }
+  /* Acciones sobre otro jugador (en esta versión son comandos de chat). */
+  body.touch.ingame.socializing #social { display: flex; z-index: 3; flex-direction: column; gap: 1.2vh; right: 12vh; top: 11vh;
+               padding: 1.5vh; background: rgba(8, 10, 16, .92); border: .3vh solid rgba(190, 160, 100, .7); border-radius: 1.5vh; }
+  #social button { height: 8.5vh; min-width: 30vh; padding: 0 2vh; border: 0; touch-action: none;
+               font: 600 2.4vh sans-serif; letter-spacing: .05em; text-transform: uppercase; color: #d8bf86;
+               background: url(touch/button.png) center / 100% 100% no-repeat; }
+  #social button:active { filter: brightness(1.6); }
+  body.touch.toasting #toast { display: block; z-index: 3; left: 50%; top: 11vh; transform: translateX(-50%); max-width: 80vw;
+               padding: 1.2vh 2.5vh; background: rgba(8, 10, 16, .9); border: .3vh solid rgba(120, 255, 140, .8);
+               border-radius: 1.5vh; color: #e8f8e0; font: 500 2.5vh sans-serif; text-align: center; pointer-events: none; }
+  #tbar button, #padtoggle { height: 8.5vh; min-width: 12vh; padding: 0 1.2vh; touch-action: none;
+                            font: 600 2.4vh sans-serif; letter-spacing: .05em; text-transform: uppercase; color: #d8bf86;
+                            background: url(touch/button.png) center / 100% 100% no-repeat; border: 0; }
+  body:not(.ingame) #tbar .game { display: none; }
+  body.touch:not(.menu) #padtoggle { display: block; right: 1vh; top: 1vh; min-width: 9vh; }
+  #tbar button.on, #tbar button:active, #padtoggle:active { filter: brightness(1.6); }
+  /* Lista de skills del personaje: elegir el que lanza el botón grande y
+     armar las cinco ranuras del anillo. */
+  body.touch.ingame.picking #skillpick { display: block; z-index: 3; left: 50%; top: 12vh; transform: translateX(-50%);
+               max-width: 92vw; padding: 2vh; background: rgba(8, 10, 16, .92); border: .3vh solid rgba(190, 160, 100, .7);
+               border-radius: 1.5vh; color: #e8d8a8; font: 500 2.4vh sans-serif; text-align: center; }
+  #skillpick .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.5vh; margin-top: 1.5vh; max-width: 80vh; }
+  #skillpick .grid button { width: 12vh; height: 13.5vh; padding: 0; border: .3vh solid rgba(190, 160, 100, .5);
+               background: #111 center no-repeat; touch-action: none; }
+  #skillpick .grid button.current { border-color: rgba(120, 220, 255, .95); }
   /* Barra de texto: lo que se escribe con el teclado del celular, arriba (el
      campo del juego puede quedar tapado por el teclado). */
   #textbar { display: none; position: fixed; z-index: 5; left: 50%; top: 6px; transform: translateX(-50%);
@@ -90,29 +167,60 @@
     <h1>MU Online</h1>
     <p class="sub">Elegí las opciones mientras se prepara el juego</p>
     <div id="options"></div>
+    <div id="account">
+      <p class="sub">Contraseña (opcional): aparece ya puesta en el cuadro de ingreso</p>
+      <input id="accountpass" type="password" placeholder="Contraseña" maxlength="10" autocomplete="current-password">
+      <label><input id="accountkeep" type="checkbox"> Recordar en este dispositivo (queda guardada sin cifrar en este navegador)</label>
+    </div>
     <div class="progress"><div id="bar"></div></div>
     <div class="note" id="note">Cargando…</div>
     <button id="play" disabled>Jugar</button>
   </div>
 </div>
+<svg id="touchdefs" width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6e2a8"/><stop offset="1" stop-color="#b98a3c"/></linearGradient>
+</defs></svg>
 <div id="touch"></div>
-<div id="pad">
-  <div class="col">
-    <button data-key="Digit1">1</button><button data-key="Digit2">2</button>
-    <button data-key="Digit3">3</button><button data-key="Digit4">4</button>
-  </div>
-  <div class="col">
-    <button id="rightmode" title="Los toques son clic derecho: lanzar el skill elegido">Skill</button>
-    <button data-key="KeyQ">Q</button><button data-key="KeyW">W</button><button data-key="KeyE">E</button>
-  </div>
-  <div class="col">
-    <button data-key="KeyV" title="Inventario">Inv</button>
-    <button data-key="KeyC" title="Personaje">Pj</button>
-    <button id="keyboard" title="Abre el teclado del celular">Tecl.</button>
-    <button data-key="Escape" title="Menú">Menú</button>
-  </div>
+<div id="joy"><i></i></div>
+<div id="ring">
+  <button id="cast" style="left:56%;top:56%" title="Lanzar el skill elegido al monstruo más cercano"></button>
+  <button data-slot="0" style="left:26.5%;top:85%"></button>
+  <button data-slot="1" style="left:14.5%;top:56%"></button>
+  <button data-slot="2" style="left:26.5%;top:26.5%"></button>
+  <button data-slot="3" style="left:56%;top:14.5%"></button>
+  <button data-slot="4" style="left:85%;top:26.5%"></button>
+  <button id="basic" style="left:89%;top:89%" data-icon="Attack02" title="Golpe básico"></button>
 </div>
-<button id="padtoggle" title="Mostrar u ocultar los botones">⋯</button>
+<div id="hud">
+  <div id="hudinfo"></div>
+  <div id="hudhp" class="gem"><i></i><b></b></div>
+  <div id="hudmp" class="gem"><i></i><b></b></div>
+  <button data-key="KeyQ" style="left:37.9%">Q<small></small></button>
+  <button data-key="KeyW" style="left:46.3%">W<small></small></button>
+  <button data-key="KeyE" style="left:54.6%">E<small></small></button>
+  <div id="hudag"><i></i></div>
+  <div id="hudexp"><i></i></div>
+</div>
+<div id="tbar">
+  <button class="game" data-icon="Inventory" data-key="KeyV" title="Inventario">Bolso</button>
+  <button class="game" data-icon="Character" data-key="KeyC" title="Personaje">Pj</button>
+  <button class="game" data-icon="Skill" id="skillsbtn" title="Elegir skill">Skills</button>
+  <button class="game" data-icon="Party" id="socialbtn" title="Party, guild y trade">Social</button>
+  <button class="game" data-icon="Moves" data-key="KeyM" title="Menú de mapas">Mapas</button>
+  <button class="game" data-icon="Events" data-key="KeyH" title="Horarios de eventos">Eventos</button>
+  <button id="keyboard" data-icon="Chat" title="Abre el teclado del celular">Chat</button>
+  <button data-key="Escape" data-icon="Settings" title="Menú del juego">Menú</button>
+</div>
+<button id="padtoggle" data-icon="Menu" title="Mostrar u ocultar los botones">⋯</button>
+<div id="social">
+  <button data-command="/party" data-icon="Party" data-label="1">Invitar a party</button>
+  <button data-command="/trade" data-icon="Change" data-label="1">Tradear</button>
+  <button data-command="/guild" data-icon="Guild" data-label="1">Invitar a guild</button>
+  <button data-tap="KeyP">Ver party</button>
+  <button data-tap="KeyG">Ver guild</button>
+</div>
+<div id="toast"></div>
+<div id="skillpick"><span id="skillhint"></span><div class="grid"></div></div>
 <div id="textbar">
   <input id="textin" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="send">
   <button id="textmask" title="Ocultar lo que se escribe (contraseñas)">***</button>
@@ -129,6 +237,14 @@ function isTouchClient() {
   if (navigator.userAgentData && navigator.userAgentData.mobile) return true;
   return window.matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0;
 }
+// Teléfono modesto: 4 GB de memoria o menos (navigator.deviceMemory, sólo en
+// Chrome) o pocos núcleos.  Arranca con los gráficos al mínimo ("touchLow" en
+// OPTIONS); el jugador puede subirlos en el menú.
+function isLowEndTouch() {
+  if (!isTouchClient()) return false;
+  if (navigator.deviceMemory) return navigator.deviceMemory <= 4;
+  return (navigator.hardwareConcurrency || 8) <= 4;
+}
 
 // Raíz del cliente dentro del sistema de archivos del wasm.  Content/ y System/
 // se crean como archivos "perezosos": existen en el árbol (las búsquedas y los
@@ -138,7 +254,9 @@ const BASE = new URL('game/', document.baseURI).href;
 const CONFIG = ROOT + '/Config.ini', SAVED_CONFIG = ROOT + '/User/Config.ini';
 
 function setStatus(text) { document.getElementById('status').textContent = text || ''; }
-function setNote(text) { document.getElementById('note').textContent = text || ''; }
+// Un motivo por el que el juego no puede arrancar queda fijo en la nota.
+let blockedNote = '';
+function setNote(text) { document.getElementById('note').textContent = blockedNote || text || ''; }
 
 // Pantalla completa.  Fuera de ella el navegador se queda con algunas teclas
 // (Ctrl+W cierra la pestaña, Ctrl+1..9 cambian de pestaña, Ctrl+T/N abren otra)
@@ -204,11 +322,11 @@ const GATEWAY = (LOCAL_PAGE && new URLSearchParams(location.search).get('gw'))
 // que cualquier página común).
 const OPTIONS = [
   { title: 'Pantalla' },
-  { label: 'Resolución', section: 'Window', key: 'Resolution', def: 8, choices: [
+  { label: 'Resolución', section: 'Window', key: 'Resolution', def: 8, touchLow: 1, choices: [
     [8, 'Automática (la de la página)'], [0, '480 de alto'], [1, '600 de alto'], [4, '720 de alto'],
     [2, '768 de alto'], [6, '900 de alto'], [7, '1080 de alto']] },
   { label: 'Pantalla completa al entrar', local: 'mu-fullscreen', def: 0, check: true },
-  { label: 'Límite de FPS', section: 'Window', key: 'FpsLimit', def: 60, choices: [
+  { label: 'Límite de FPS', section: 'Window', key: 'FpsLimit', def: 60, touchLow: 30, choices: [
     [30, '30'], [60, '60'], [120, '120'], [144, '144'], [0, 'Sin límite']] },
   { title: 'Gráficos' },
   { label: 'Calidad de texturas', section: 'Window', key: 'TextureQuality', def: 0, choices: [
@@ -218,14 +336,14 @@ const OPTIONS = [
     [0, 'No'], [1, 'FXAA'], [2, 'MSAA 4x'], [3, 'MSAA 4x + FXAA']] },
   { label: 'Sombras', section: 'Window', key: 'Shadows', def: 0, choices: [
     [0, 'No'], [1, '1'], [2, '2']] },
-  { label: 'Luces dinámicas', section: 'Window', key: 'DynamicLights', def: 1, choices: [
+  { label: 'Luces dinámicas', section: 'Window', key: 'DynamicLights', def: 1, touchLow: 0, choices: [
     [0, 'No'], [1, 'Normales'], [2, 'Altas']] },
-  { label: 'Brillo (bloom)', section: 'Window', key: 'Bloom', def: 1, choices: [
+  { label: 'Brillo (bloom)', section: 'Window', key: 'Bloom', def: 1, touch: 0, choices: [
     [0, 'No'], [1, 'Normal'], [2, 'Alto']] },
   { label: 'Distancia de dibujado', section: 'Window', key: 'DrawDistance', def: 0, choices: [
     [0, 'Normal'], [1, 'x1.5'], [2, 'x2'], [3, 'x3']] },
-  { label: 'Agua mejorada', section: 'Window', key: 'WorldWater', def: 1, check: true },
-  { label: 'Efecto bajo el agua (Atlans)', section: 'Window', key: 'Underwater', def: 2, choices: [
+  { label: 'Agua mejorada', section: 'Window', key: 'WorldWater', def: 1, touchLow: 0, check: true },
+  { label: 'Efecto bajo el agua (Atlans)', section: 'Window', key: 'Underwater', def: 2, touch: 1, touchLow: 0, choices: [
     [0, 'No'], [1, 'Sin ondulación'], [2, 'Completo']] },
   { label: 'Niebla de profundidad', section: 'Window', key: 'DepthFog', def: 0, check: true },
   { title: 'Cuenta' },
@@ -294,7 +412,11 @@ function buildMenu(configText) {
       box.appendChild(row);
       continue;
     }
-    let value = saved === null || saved === '' || isNaN(Number(saved)) ? option.def : Number(saved);
+    // En celular algunos efectos arrancan apagados; en uno modesto, más.
+    let def = option.def;
+    if (isTouchClient() && option.touch !== undefined) def = option.touch;
+    if (isLowEndTouch() && option.touchLow !== undefined) def = option.touchLow;
+    let value = saved === null || saved === '' || isNaN(Number(saved)) ? def : Number(saved);
     const row = document.createElement('label'); row.className = 'row';
     const name = document.createElement('span'); name.textContent = option.label; row.appendChild(name);
     let input;
@@ -511,6 +633,7 @@ var Module = {
             const full = ROOT + '/' + path;
             FS.writeFile(full, new Uint8Array(0));
             pending.set(full, BASE + path.split('/').map(encodeURIComponent).join('/') + '?v=' + (version || size));
+            if (/(^|\/)interface\/skill\.ozj$/i.test(path)) M.muSkillAtlasUrl = pending.get(full);
             const folder = full.substring(0, full.lastIndexOf('/'));
             if (!folders.has(folder)) folders.set(folder, []);
             folders.get(folder).push(full);
@@ -566,29 +689,55 @@ var Module = {
   onRuntimeInitialized() {
     const play = document.getElementById('play');
     // Sin WebGPU o sin aislamiento de origen (hilos) el juego no arranca.
-    if (!navigator.gpu) { setNote('Este navegador no tiene WebGPU: probá con Chrome o Edge actualizados.'); return; }
+    const noGpu = 'Este navegador o dispositivo no tiene WebGPU, que el juego necesita para dibujar. '
+                + 'Hace falta Chrome o Edge actualizados; en celular, Android 12 o más nuevo.';
+    if (!navigator.gpu) { setNote(blockedNote = noGpu); return; }
     if (!crossOriginIsolated) { setNote('La página no quedó aislada (faltan cabeceras del sitio): el juego no puede arrancar.'); return; }
-    play.disabled = false;
-    if (bootDone < bootTotal) setNote('Bajando datos de fondo; ya podés jugar');
-    else setNote('Listo');
+    // El navegador puede tener WebGPU y no darle placa a este dispositivo
+    // (GPU vieja o bloqueada): sin esto el juego arrancaba y fallaba con un
+    // cartel de OpenGL que no tenía nada que ver.
+    navigator.gpu.requestAdapter().catch(() => null).then((adapter) => {
+      if (!adapter) { setNote(blockedNote = noGpu); return; }
+      play.disabled = false;
+      if (bootDone < bootTotal) setNote('Bajando datos de fondo; ya podés jugar');
+      else setNote(isLowEndTouch() ? 'Listo (gráficos al mínimo para este teléfono; se cambian arriba)' : 'Listo');
+    });
   },
 };
 
 // ── Controles táctiles ──────────────────────────────────────────────────────
 // En celular y tablet (--mobile) los toques no llegan a SDL: una capa encima
-// del canvas los convierte en mouse sintético, y los botones de #pad en teclas.
+// del canvas los convierte en mouse sintético, y los botones en teclas.
 //  - Un toque mueve el cursor y recién después aprieta: el juego elige el
 //    objetivo con lo que estaba bajo el cursor el cuadro anterior.  Sostener es
-//    tener el botón apretado (caminar, atacar seguido).
-//  - "Skill" hace que los toques sean clic derecho (lanzar el skill elegido).
-//  - "Tecl." abre el teclado del celular con un <input> en una barra arriba
+//    tener el botón apretado (caminar, atacar seguido).  Sirve para hablar con
+//    un NPC, levantar un item o elegir un monstruo puntual.
+//  - El joystick (#joy) y el anillo (#ring) no pasan por el mouse: escriben
+//    Module.muPad, que el cliente lee como un mando (SDLInput.cpp).  El centro
+//    del anillo lanza el skill elegido al monstruo más cercano; los cinco de
+//    alrededor son skills a elección (botón Skills: se toca uno de la lista
+//    y queda elegido; tocando después una ranura del anillo, queda ahí).
+//  - La barra de abajo (#hud) la dibuja la página con lo que el cliente le
+//    pasa diez veces por segundo en Module.muHud (WebPage.cpp); la del juego
+//    no se dibuja.
+//  - "Chat" abre el teclado del celular con un <input> en una barra arriba
 //    (los campos del juego pueden quedar tapados por el teclado).  Lo que se
 //    escribe se manda como texto (keypress) y lo borrado como Backspace,
 //    comparando con lo ya mandado: así funciona también con teclados que
 //    arman la palabra de a poco (Gboard).  Enter, Tab y *** (ocultar, para la
 //    contraseña) están en la barra.  Para chatear: Enter abre el renglón.
+const TOUCH_ICONS = {"Inventory":"M6.31047,23.985C4.82792,22.641 6.56077,15.6767 6.56077,15.6767L6.0698,15.7425 5.03009,15.6767C5.03009,15.6767 4.82792,15.6767 4.77979,15.9398 4.77979,15.9398 4.36583,19.0601 4.01926,21.391 3.66306,24.1917 6.30084,23.985 6.30084,23.985H6.31047z M10.9218,25H21.3093C21.3093,25 24.5921,25.1974 24.361,20.3477 23.6679,15.968 23.6775,14.4737 23.6775,14.4737 23.6775,14.4737 22.3394,15.4135 19.278,16.0526V17.4154C19.278,18.1579 18.6715,18.8816 17.5066,18.8064H16.1107 14.6763C13.2996,18.8064 13.3478,16.8703 13.3478,16.8703L13.3189,15.7425C10.7485,15.4229 8.73646,14.4643 8.73646,14.4643 8.73646,14.4643 8.33213,15.9586 7.87004,20.3383 7.40794,25.188 10.9122,24.9906 10.9122,24.9906L10.9218,25z M16.4765,13.8722H15.5235C15.5235,13.8722 14.9555,13.9286 14.9555,14.3703V16.4474C14.9555,17.359 15.4657,17.2274 15.4657,17.2274H17.0156C17.0156,17.2274 17.5259,17.359 17.5259,16.4474V14.4643C17.5259,14.0226 17.0156,13.8628 17.0156,13.8628H16.4862L16.4765,13.8722z M8.59206,11.4944C8.59206,11.4944 9.48737,12.3496 13.3285,13.5244 13.3285,13.5244 13.3285,11.9549 16.2262,11.9549 18.6619,11.9549 19.2876,13.4211 19.2876,13.4211 23.071,12.3214 23.8604,11.7763 23.8604,11.7763 23.8604,7.34962 21.3189,7.62218 21.3189,7.62218H19.0277V7.35902C19.0277,5.22556 16.7365,5 16.7365,5H15.716C15.716,5 13.4248,5.22556 13.4248,7.35902V7.62218H11.1336C11.1336,7.62218 8.59206,7.69737 8.59206,10.7425V11.4944z M16.2262,6.06203C17.911,6.06203 17.7569,7.62218 17.7569,7.62218H14.7052C14.7052,7.62218 14.0891,6.06203 16.2359,6.06203H16.2262z M25.4681,23.985C25.4681,23.985 28.1252,24.0414 28,21.25 27.4224,18.9192 26.8159,16.062 26.8159,16.062 26.8159,15.7989 26.5656,15.7989 26.5656,15.7989L25.3045,15.5545 25.6799,16.9643C25.6799,16.9643 26.296,20.4417 26.296,22.0207 26.296,23.5996 25.8436,23.6654 25.4681,23.985z","Character":"M25.9435,26.2292 25.8809,26.1671C24.425,27.6466 23.3394,26.7042 23.3394,26.7042L17.7283,21.0629C17.6161,20.8957 17.433,20.4691 17.433,20.4691L18.0236,19.8753 16.638,18.4822C15.4348,19.3381 13.9692,19.5783 12.1172,19.5783 8.30552,19.5783 5,16.5222 5,12.1556 5,8.32333 8.30552,5 12.1172,5 16.4605,5 19.5002,8.32333 19.5002,12.1556 19.5002,14.0899 19.2129,15.6232 18.29,16.8622L19.9521,18.5095 20.551,17.9156C20.551,17.9156 20.7119,17.8325 21.1502,18.2126L26.8422,23.8539C26.8422,23.8539 27.5571,24.7099 25.9435,26.2292z M12.1172,7.49138C9.67403,7.49138 7.47803,9.69922 7.47803,12.1556 7.47803,15.1464 9.67403,17.3542 12.1172,17.3542 15.092,17.3542 17.288,15.1464 17.288,12.1556 17.288,9.69922 15.092,7.49138 12.1172,7.49138z","Skill":"M11.09,16.12s-6.48.85-7.03,4.28c-.3,3.67.6,6.1,3.1,6.79,2.75.94,3.05,1.68,6.2-1.47,1.07-.75,3.65.27,3.65.27,0,0-.83-1.63-1.41-1.74,0,0,4.36.27,6.48-2.93,0,0-5.38,1.55-6.48.28,0,0,2.04-1.32,3.1-1.33,0,0-.23-.44-1.55-.28,0,0,.85-1.66,1.69-1.85.85.05,4.89-.52,5.37-1.33h-2.13s2.63-1.96,4.23-1.48c0,0-3.31-.59-4.23-.27,0,0,1.17-1.33,1.71-3.86.79-2.65,2.62-2.69,4.07-3.06,0,0-2.61-.64-3.1-.25-.49.63,2.3-3.57,3.24-3.88,0,0-4.8,1.36-6.48,4.8,0,0-2.58-.48-.41-2.93l1.27-.53s-3.5-.81-4.65,3.86c-.28,1.88,1.14,3.15-.99,5.19,0,0,1.11-2.45-1.69-4.26,0,0,3.08,4.1-3.96,5.99Z","Party":"M24.41,12.41C23.38,12.41 23.16,12.37 23.16,12.37V10.08C23.16,10.08 23.63,10.14 24.52,10.14 24.79,10.14 25.05,10.23 25.05,10.44V12.04C25.05,12.32 25,12.41 24.41,12.41z M15.84,17.91 10.49,24.06V9.89C10.49,9.89 10.53,9.22 11.29,9.22H20.65C20.65,9.22 21.32,9.4 21.32,9.89V24.06C21.32,24.06 16.88,17.91 15.84,17.91z M16.09,5.53C16.09,5.26 16.18,5 16.39,5H17.99C18.27,5 18.24,5.05 18.24,5.64 18.24,6.67 18.24,7.53 18.24,7.53L16.09,7.58V5.53z M7.64,12.4C7.04,12.4 7,12.31 7,12.03V10.44C7,10.24 7.26,10.02 7.53,10.02H8.63L8.74,12.41C8.74,12.41 8.66,12.39 7.63,12.39L7.64,12.4z M17.58,22.46C18.09,23.04 18.25,23.4 18.25,23.4 18.25,23.4 18.25,24.81 18.25,26.54 18.25,26.81 18.28,26.95 18.07,26.95H16.47C16.19,26.95 16.1,27.02 16.1,26.43 16.1,24.59 16.1,20.72 16.1,20.72 16.1,20.72 17.04,21.79 17.58,22.46z","Moves":"M23.36,21.09v2.33s-2.39-.92-6.67-.9-7.46,1.37-7.46,1.37l-1.4-1.45.16-10.05s2.91-3.14,8.26-3.14,7.21,2.98,7.21,2.98l-.11,8.87ZM27.79,11.58v10.86h-1.85v-10.86h1.85ZM27.97,23.97l1.03,1.51-1.07,1.55h-2.05l-1.16-1.44,1.1-1.66,2.15.04ZM27.97,7.11l1.03,1.51-1.07,1.55h-2.05l-1.16-1.44,1.1-1.66,2.15.04ZM6.07,11.53v10.86h-1.85v-10.86h1.85ZM6.25,23.93l1.03,1.51-1.07,1.55h-2.05l-1.16-1.44,1.1-1.66,2.15.04ZM6.25,7.07l1.03,1.51-1.07,1.55h-2.05l-1.16-1.44,1.1-1.66,2.15.04Z","Events":"M24.73,14c-1.1.22-2.93,2-3.57,2.36s-.13-.75-.26-1.17c-.13-.18-1.59-2.21-2.24-2.9-.65-.46-1.59-1.16-2.24-1.58-.65-.18-.78-.54-.78-.54,0,0,2.2-2.61,3.02-3.82s.22-1.64.54-1.96c.56-.09.31-.89,3.43.13,3.36,1.26,3.75,2.22,5.13,5.13,1.38,2.91-1.68,4.38-3.02,4.36ZM18.67,13.74c2.06,2.2,1.7,3.15,1.7,3.15l-.51.26s-.04-.2-.53-.26c-.25-.06-.97.23-1.71.66-.5.43,0,2.24,0,2.24,0,0-.21.48-.4,0,.05-.48.32-1.12-1.73-3.82s-3.3-1.73-3.15-2.23c.39-.26.13-.79.13-.79,0,0,.79.16,1.3-.66.51-.58.91-1.46,1.71-1.05.8.64,1.35.54,3.18,2.5ZM14.98,16.89c1.8,2.31,2,2.81,1.96,3.69s.64-.27-1.05,1.46c-1.69,1.97-.77,3-1.58,3.94s-.35-.07-.78,1.19c-.19,1.26-.52.68-1.46.79s-1.42-.24-1.98-.79-1.09-.61-2.23-1.32c-.9-.7-1.09-.84-2.11-2.36-.78-1.28-1.1-1.81-1.45-2.64-.11-.59-.21-.63-.4-1.59.05-.96.53-1.45.53-1.45,0,0,.65-.48.4-.53-.01-.05.93.27,1.98-.26,1.29-.53,3.36-2.14,3.95-2.49.83-.11.41-.85,1.45-.13,1.91,1.41,1.2.18,2.77,2.49ZM11.67,21.25c-1-1.15-1.29-1.33-2.1-1.73-.57-.39-2.6-.68-3.16-.13-.87,1.21.61,2.89,1.44,3.57.83.92,2.32,1.78,2.91,1.19.83-.36-2.53-3.46-2.64-2.5.13,1.19,1.05,1.45,1.05,1.45-.29-.02-.28.45-.66.13-.37-.25-.92-1.32-1.19-2.11.01-.37.21-.46.26-.8.65-1.07,5.57,3.88,4.09,4.89-1.08,1.11-5.16-2.26-5.94-3.82-.53-.86-.7-2.33-.7-2.33,0,0-.12-.71-.35.48-.48,2.45,3.15,5.31,5.02,6.72,2.11,1.41,3.03.79,3.03.79,0,0,.67-.18.66-.53.19-.23-.25-.5-.13-.92.71-1.05-.6-2.95-1.59-4.34ZM18.13,22.04c.4-.74.53-.79.53-.79,0,0,.37.29.92.26.55.21-.53,1.34-.92,3.03-.39,1.93.22,2.22,0,3.02s-1.96-.4-1.96-.4c0,0-.12-.79.4-1.96.75-.93.64-2.18,1.04-3.16ZM18.13,18.47s.58-.71,1.07-.66c.73.05.93.09,1.57.26s.87,1.06.67,1.58c.04.52-.97,1.16-1.33,1.19-.73.06-.92-.14-1.45-.53-.53-.38-.53-1.85-.53-1.85ZM20.63,24.68l-.26-3.16.92-.53s-.08.8,0,1.32c.08.76.69,2.92.8,3.28.35.36-.28,1.19-.28,1.19l-.92-.26-.79.26.13-.79.4-1.3Z","Chat":"M26.12,22.51l-.91-3.14v3.14s-10.08,0-10.08,0l.22-.23.88-1.13h8.13v-11.33h1.98l.66.73v11.13l-.88.83ZM16.98,19.34l.71-1.93-2.11,1.93-5.93,5.66.44-5.66-4.21.23-.88-.91V7.91l.9-.91h1.06l.02,3.54,2.09-3.54h12.66l.88.95.22,10.93-.88.68-4.97-.23Z","Settings":"M24.8644 16C24.8644 15.508 24.8176 15.004 24.7298 14.452L27 12.424L24.2676 7.576L21.4358 8.578C20.6576 7.924 19.7741 7.402 18.8087 7.03L18.2353 4H12.7705L12.1972 7.03C11.2317 7.402 10.3483 7.924 9.57008 8.578L6.73238 7.576L4 12.424L6.27016 14.452C6.1824 15.004 6.13559 15.514 6.13559 16C6.13559 16.486 6.1824 17.002 6.27016 17.548L4 19.576L6.73238 24.424L9.56423 23.422C10.3424 24.076 11.2259 24.598 12.1913 24.97L12.7647 28H18.2295L18.8028 24.97C19.7683 24.598 20.6517 24.076 21.4299 23.422L24.2676 24.424L27 19.576L24.7298 17.548C24.8176 16.996 24.8644 16.486 24.8644 16ZM15.5029 21.4C12.6126 21.4 10.2371 18.964 10.2371 16C10.2371 13.036 12.6126 10.6 15.5029 10.6C18.3933 10.6 20.7688 13.036 20.7688 16C20.7688 18.964 18.3933 21.4 15.5029 21.4Z","Menu":"M8.25507,10.5982 6,7H26L23.7449,10.5982H8.25507z M8.25507,17.7946 7.13176,16.0585 8.25507,14.1964H23.7449L24.8682,16.0225 23.7449,17.7946H8.25507z M23.7449,21.4018 26,25H6L8.25507,21.4018H23.7449z","Attack02":"M14.08,18.48c.74.68,1.46,1.22,1.95,1.57l-7,7.7h-4.22l9.21-9.21.07-.06ZM13.68,18.11c-.58-.57-1.15-1.21-1.61-1.89l-7.59,7.17.08,4.22,9.03-9.38.09-.11ZM26.91,4.97l-.08.08-.71-.49-4.21.46.68,2.29-.87,1.55-1.02.02-.11.9-1.52.8-2.62,3.37-1.78.42-.37.65-2.74-3.02-.57-2.93-2.91,1.46.03,1.79s2.4-1.06,4.66,3.24l.42.59c.71.78.66.9,2.29,2.21l1.21.95c4.45,2.3,3.32,4.6,3.32,4.6h1.79l1.41-2.83-2.83-.51-3.18-2.69.75-.38.38-1.79,3.32-2.69.65-1.65h.9v-1.04l1.65-.9,2.3.52.38-4.1-.64-.9Z","Guild":"M27.18,27.07l-1.62.07-2.35-2.39-1.63,1.45-2.86-.98,1.91-1.91-4.46-3.82-4.28,4.22,2.01,1.76-2.4,1.09-1.7-1.4-2.55,2.55h-1.97v-1.91l2.4-2.94-1.7-1.52.64-3.12,1.91,1.91,12.09-14.64h5.73v5.09l-6.09,5.36,3.55,4.19,1.91-1.91,1.21,3.12-1.53,1.53,1.86,2.27-.08,1.93ZM5.36,10.58v-5.16l5.73.06,3.39,4.57-3.82,4.46-5.3-3.93Z","Change":"M17.48,27h-.24c-.07-.06-.28-.17-.28-.28v-2.62l-.06-.06h-6.99c-.83,0-1.89-1.17-1.9-2.08l.02-5.78c.09-.13.17-.16.32-.17.76-.08,1.63.06,2.4,0,.22.03.32.18.34.41.1,1.23-.09,2.62,0,3.86-.01.19.27.45.42.45h5.39l.06-.06v-2.62c0-.17.44-.38.59-.25l6.28,4.2c.22.16.24.58.02.74l-6.36,4.26ZM15.04,11.34l.06-.06h5.39c.14,0,.43.27.42.45.09,1.24-.1,2.64,0,3.86.02.23.12.38.34.41.77-.06,1.64.08,2.4,0,.14-.01.23-.04.32-.17l.02-5.78c-.01-.91-1.06-2.08-1.9-2.08h-6.99l-.06-.06v-2.62c0-.14-.36-.35-.49-.27l-6.39,4.25c-.22.16-.2.58.02.74l6.28,4.2c.17.11.55-.04.59-.25v-2.62Z","Close":"M8,5.33333H5.33333V8L12.3333,16 5.33333,24V26.6667H8L16,20 24.1182,26.6667H26.6667V24L19.6667,16 26.6667,8V5.33333H24.1182L16,12.1201 8,5.33333z"};
 function startTouchControls() {
   document.body.classList.add('touch');
+  // Íconos: el trazo delante del texto (que queda como nombre accesible).
+  for (const button of document.querySelectorAll('[data-icon]')) {
+    // El degradado vive en un <svg> aparte (más abajo, #touchdefs): dentro de
+    // un botón oculto no se aplica y los demás íconos salían grises.
+    const svg = '<svg viewBox="0 0 32 32">' +
+      '<path fill="url(#gold)" fill-rule="evenodd" d="' + TOUCH_ICONS[button.dataset.icon] + '"/></svg>';
+    button.insertAdjacentHTML('afterbegin', svg);
+    if (!button.dataset.label) button.setAttribute('aria-label', button.textContent.trim());
+  }
   const canvas = document.getElementById('canvas');
   const layer = document.getElementById('touch');
   const textin = document.getElementById('textin');
@@ -609,15 +758,29 @@ function startTouchControls() {
   const typeText = (text) => { for (const ch of text) keyEvent('keypress', '', ch.codePointAt(0)); };
 
   // Toques -> mouse.
-  let rightMode = false, finger = null, last = null, pressed = -1, pressTimer = 0;
+  let finger = null, last = null, pressed = -1, pressTimer = 0;
   const mouse = (type, point, button) => canvas.dispatchEvent(new MouseEvent(type, {
     bubbles: true, cancelable: true, view: window, clientX: point.clientX, clientY: point.clientY,
     button: button < 0 ? 0 : button, buttons: type === 'mouseup' ? 0 : button === 2 ? 2 : button === 0 ? 1 : 0 }));
-  const press = () => { pressTimer = 0; pressed = rightMode ? 2 : 0; mouse('mousedown', last, pressed); };
+  const press = () => { pressTimer = 0; pressed = 0; mouse('mousedown', last, pressed); };
   const own = (e) => [...e.changedTouches].find((t) => t.identifier === finger);
+  // Comando de chat que espera un jugador (/party, /trade, /guild): el
+  // próximo toque sólo lo señala (el juego toma al que está bajo el cursor) y
+  // el comando se escribe solo.
+  let command = '', commandTimer = 0;
+  const toast = (text) => { document.getElementById('toast').textContent = text; document.body.classList.toggle('toasting', !!text); };
+  const cancelCommand = () => { command = ''; clearTimeout(commandTimer); toast(''); };
   layer.addEventListener('touchstart', (e) => {
     e.preventDefault();
     if (finger !== null) return;
+    if (command) {
+      const point = e.changedTouches[0], text = command;
+      cancelCommand();
+      mouse('mousemove', { clientX: point.clientX, clientY: point.clientY }, -1);
+      // Dos cuadros del juego para que tome al jugador señalado.
+      setTimeout(() => { tapKey('Enter'); setTimeout(() => { typeText(text); setTimeout(() => tapKey('Enter'), 120); }, 200); }, 200);
+      return;
+    }
     const t = e.changedTouches[0];
     finger = t.identifier; last = { clientX: t.clientX, clientY: t.clientY };
     mouse('mousemove', last, -1);
@@ -643,17 +806,184 @@ function startTouchControls() {
   layer.addEventListener('touchcancel', release, { passive: false });
 
   // Botones: el apretón no saca el foco (si no, se cierra el teclado del chat).
-  for (const button of document.querySelectorAll('#pad button, #padtoggle'))
-    button.addEventListener('pointerdown', (e) => e.preventDefault());
-  for (const button of document.querySelectorAll('#pad [data-key]')) {
+  const controls = '#ring button, #hud button, #tbar button, #padtoggle, #joy, #skillpick, #social';
+  for (const element of document.querySelectorAll(controls))
+    element.addEventListener('pointerdown', (e) => e.preventDefault());
+  // Sostener: `down` al apoyar el dedo, `up` al levantarlo (o si se va del botón).
+  const hold = (button, down, up) => {
+    button.addEventListener('pointerdown', (e) => {
+      if (button.dataset.down) return;
+      button.dataset.down = '1'; button.classList.add('on');
+      try { button.setPointerCapture(e.pointerId); } catch (_) {}
+      down();
+    });
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'])
+      button.addEventListener(type, () => {
+        if (!button.dataset.down) return;
+        delete button.dataset.down; button.classList.remove('on');
+        up();
+      });
+  };
+  for (const button of document.querySelectorAll('[data-key]')) {
     const code = button.dataset.key;
-    button.addEventListener('pointerdown', () => { button.dataset.down = '1'; keyEvent('keydown', code); });
-    for (const type of ['pointerup', 'pointercancel', 'pointerleave'])
-      button.addEventListener(type, () => { if (button.dataset.down) { delete button.dataset.down; keyEvent('keyup', code); } });
+    hold(button, () => keyEvent('keydown', code), () => keyEvent('keyup', code));
   }
-  const rightButton = document.getElementById('rightmode');
-  rightButton.addEventListener('pointerup', () => { rightMode = !rightMode; rightButton.classList.toggle('on', rightMode); });
-  document.getElementById('padtoggle').addEventListener('pointerup', () => document.body.classList.toggle('padhidden'));
+  // Los tres puntos despliegan o pliegan la barra de arriba.
+  document.getElementById('padtoggle').addEventListener('pointerdown', () => {
+    document.body.classList.toggle('baropen');
+    document.body.classList.remove('socializing', 'picking');
+  });
+  document.getElementById('socialbtn').addEventListener('pointerup', () => document.body.classList.toggle('socializing'));
+  for (const button of document.querySelectorAll('#social button')) {
+    button.addEventListener('pointerdown', (e) => e.preventDefault());
+    button.addEventListener('pointerup', () => {
+      document.body.classList.remove('socializing', 'baropen');
+      if (button.dataset.tap) { tapKey(button.dataset.tap); return; }
+      command = button.dataset.command;
+      toast('Parate al lado del jugador y tocalo.');
+      clearTimeout(commandTimer); commandTimer = setTimeout(cancelCommand, 15000);
+    });
+  }
+
+  // Joystick y anillo: estado de mando que lee el cliente.  buttons: bit 0
+  // golpe básico, bit 1 skill.  select: ranura de skill a dejar elegida.
+  const pad = Module.muPad = { x: 0, y: 0, buttons: 0, select: -1 };
+  const joy = document.getElementById('joy'), knob = joy.firstElementChild;
+  let joyPointer = null;
+  const joyMove = (e) => {
+    const box = joy.getBoundingClientRect(), radius = box.width / 2;
+    let x = (e.clientX - box.left - radius) / (radius * 0.62), y = (e.clientY - box.top - radius) / (radius * 0.62);
+    const length = Math.hypot(x, y);
+    if (length > 1) { x /= length; y /= length; }
+    pad.x = x; pad.y = y;
+    knob.style.transform = 'translate(' + (x * 82) + '%,' + (y * 82) + '%)';
+  };
+  joy.addEventListener('pointerdown', (e) => {
+    if (joyPointer !== null) return;
+    joyPointer = e.pointerId; joy.classList.add('on');
+    try { joy.setPointerCapture(e.pointerId); } catch (_) {}
+    joyMove(e);
+  });
+  joy.addEventListener('pointermove', (e) => { if (e.pointerId === joyPointer) joyMove(e); });
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'])
+    joy.addEventListener(type, (e) => {
+      if (e.pointerId !== joyPointer) return;
+      joyPointer = null; joy.classList.remove('on');
+      pad.x = pad.y = 0; knob.style.transform = '';
+    });
+  hold(document.getElementById('basic'), () => { pad.buttons |= 1; }, () => { pad.buttons &= ~1; });
+  hold(document.getElementById('cast'), () => { pad.buttons |= 2; }, () => { pad.buttons &= ~2; });
+
+  // Skills.  hud.skills son las 20 ranuras del personaje (id de skill, 0 =
+  // vacía); ring[] dice qué ranura lanza cada botón del anillo (-1 = libre) y
+  // se guarda por personaje.
+  const body = document.body, picker = document.getElementById('skillpick');
+  const grid = picker.querySelector('.grid'), hint = document.getElementById('skillhint');
+  const ringButtons = [...document.querySelectorAll('#ring [data-slot]')], cast = document.getElementById('cast');
+  let hud = { skills: [], current: -1, name: '' }, ring = [-1, -1, -1, -1, -1], ringOwner = null;
+  let atlas = '', assigning = -1, assignTimer = 0, drawn = '';
+  // El atlas (Interface/Skill.OZJ) es un JPG con 24 bytes de cabecera delante:
+  // 8 columnas de íconos de 32x36 en 256x256.
+  const loadAtlas = () => {
+    if (atlas || !Module.muSkillAtlasUrl) return;
+    atlas = 'pending';
+    fetch(Module.muSkillAtlasUrl).then((r) => r.arrayBuffer()).then((data) => {
+      atlas = URL.createObjectURL(new Blob([data.slice(24)], { type: 'image/jpeg' }));
+      drawn = ''; drawSkills();
+    }).catch(() => { atlas = ''; });
+  };
+  const paint = (button, slot) => {
+    const id = slot >= 0 ? hud.skills[slot] || 0 : 0;
+    if (id > 0 && atlas && atlas !== 'pending') {
+      const index = id - 1;
+      button.style.backgroundImage = 'url(' + atlas + ')';
+      button.style.backgroundSize = '800% 711.11%';
+      button.style.backgroundPosition = ((index % 8) / 7 * 100) + '% ' + (Math.floor(index / 8) / 6.1111 * 100) + '%';
+      button.textContent = '';
+    } else {
+      button.style.backgroundImage = '';
+      button.textContent = id > 0 ? String(id) : slot === -2 ? '' : '+';
+    }
+  };
+  const saveRing = () => storageSet('mu-ring:' + hud.name, ring.join(','));
+  const stopAssigning = () => { assigning = -1; clearTimeout(assignTimer); body.classList.remove('assigning'); };
+  const closePicker = () => { body.classList.remove('picking'); };
+  function drawSkills() {
+    const key = hud.name + '|' + hud.skills.join(',') + '|' + hud.current + '|' + ring.join(',') + '|' + atlas;
+    if (key === drawn) return;
+    drawn = key;
+    if (ringOwner !== hud.name) {
+      // Otro personaje: sus ranuras guardadas, o sus primeros skills.
+      ringOwner = hud.name;
+      const saved = (storageGet('mu-ring:' + hud.name) || '').split(',').map(Number);
+      const learned = hud.skills.map((id, slot) => id ? slot : -1).filter((slot) => slot >= 0);
+      ring = ring.map((_, i) => saved.length === 5 && Number.isInteger(saved[i]) ? saved[i] : (learned[i] ?? -1));
+    }
+    ringButtons.forEach((button, i) => {
+      if (ring[i] >= 0 && !hud.skills[ring[i]]) ring[i] = -1;
+      paint(button, ring[i]);
+      button.classList.toggle('current', ring[i] >= 0 && ring[i] === hud.current);
+    });
+    paint(cast, hud.skills[hud.current] ? hud.current : -2);
+    grid.textContent = '';
+    hud.skills.forEach((id, slot) => {
+      if (!id) return;
+      const button = document.createElement('button');
+      paint(button, slot);
+      button.classList.toggle('current', slot === hud.current);
+      button.addEventListener('pointerup', () => {
+        // Queda elegido; durante unos segundos, tocar una ranura del anillo
+        // lo deja ahí.
+        pad.select = slot;
+        assigning = slot; body.classList.add('assigning');
+        clearTimeout(assignTimer); assignTimer = setTimeout(stopAssigning, 5000);
+        closePicker();
+      });
+      grid.appendChild(button);
+    });
+    hint.textContent = grid.childElementCount
+      ? 'Tocá un skill para elegirlo.  Después, tocá un círculo del anillo si querés dejarlo ahí.'
+      : 'Este personaje todavía no tiene skills.';
+  }
+  ringButtons.forEach((button, i) => {
+    hold(button, () => {
+      if (assigning >= 0) { ring[i] = assigning; saveRing(); stopAssigning(); drawSkills(); return; }
+      if (ring[i] < 0) { body.classList.add('picking'); return; }
+      // Primero se elige; el lanzamiento se sostiene un instante después
+      // (el cliente tiene que haber leído la elección).
+      pad.select = ring[i];
+      button.castTimer = setTimeout(() => { button.castTimer = 0; pad.buttons |= 2; }, 60);
+    }, () => {
+      if (button.castTimer) { clearTimeout(button.castTimer); button.castTimer = 0; pad.buttons |= 2; setTimeout(() => { pad.buttons &= ~2; }, 120); }
+      else pad.buttons &= ~2;
+    });
+  });
+  document.getElementById('skillsbtn').addEventListener('pointerup', () => { stopAssigning(); body.classList.toggle('picking'); });
+  layer.addEventListener('touchstart', closePicker, { passive: true });
+
+  // Barra del héroe.
+  const hpFill = document.querySelector('#hudhp i'), mpFill = document.querySelector('#hudmp i');
+  const hpText = document.querySelector('#hudhp b'), mpText = document.querySelector('#hudmp b');
+  const agFill = document.querySelector('#hudag i'), expFill = document.querySelector('#hudexp i');
+  const info = document.getElementById('hudinfo'), counts = [...document.querySelectorAll('#hud button small')];
+  const part = (now, max) => max > 0 ? Math.max(0, Math.min(1, now / max)) : 0;
+  Module.muHudChanged = (state) => {
+    hud = state;
+    body.classList.toggle('ingame', state.inGame);
+    body.classList.toggle('chatting', state.inGame && state.chat);
+    body.classList.toggle('panel', state.inGame && state.panel);
+    if (!state.inGame) { closePicker(); return; }
+    loadAtlas();
+    // Las gemas se vacían de arriba hacia abajo.
+    hpFill.style.clipPath = 'inset(' + ((1 - part(state.hp, state.maxHp)) * 100) + '% 0 0 0)';
+    mpFill.style.clipPath = 'inset(' + ((1 - part(state.mp, state.maxMp)) * 100) + '% 0 0 0)';
+    hpText.textContent = state.hp; mpText.textContent = state.mp;
+    agFill.style.width = (part(state.ag, state.maxAg) * 100) + '%';
+    expFill.style.width = (state.exp * 100) + '%';
+    info.textContent = 'Nv ' + state.level + '  ·  ' + state.x + ', ' + state.y + '  ·  AG ' + state.ag;
+    counts.forEach((label, i) => { label.textContent = state.potions[i] > 0 ? state.potions[i] : ''; });
+    drawSkills();
+  };
 
   // Teclado: el foco al <input> lo saca (tiene que ser en el pointerup: es lo
   // que el navegador cuenta como gesto).
@@ -692,8 +1022,21 @@ function startTouchControls() {
     });
 }
 
+// Cuenta guardada (celular): se carga al abrir la página.
+if (isTouchClient()) {
+  document.body.classList.add('touchclient');
+  document.getElementById('accountpass').value = storageGet('mu-account-pass') || '';
+  document.getElementById('accountkeep').checked = !!storageGet('mu-account-pass');
+  try { localStorage.removeItem('mu-account-user'); } catch (e) {}
+}
 document.getElementById('play').addEventListener('click', () => {
   const M = Module, FS = M.FS;
+  if (isTouchClient()) {
+    // El juego la pone en su cuadro de ingreso (mu_page_password).
+    const pass = document.getElementById('accountpass').value;
+    M.muPassword = pass;
+    try { if (document.getElementById('accountkeep').checked && pass) localStorage.setItem('mu-account-pass', pass); else localStorage.removeItem('mu-account-pass'); } catch (e) {}
+  }
   const configText = readMenu(M.muConfigText || '');
   FS.writeFile(CONFIG, configText);
   FS.writeFile(SAVED_CONFIG, configText);
