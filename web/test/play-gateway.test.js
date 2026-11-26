@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { acceptKey, decodeFrames, encodeFrame, toServerIp, readConfig, originAllowed } = require('../lib/play-gateway');
+const { attach, acceptKey, decodeFrames, encodeFrame, toServerIp, readConfig, originAllowed } = require('../lib/play-gateway');
 
 test('la clave del saludo es la del ejemplo de la RFC 6455', () => {
   assert.equal(acceptKey('dGhlIHNhbXBsZSBub25jZQ=='), 's3pPLMBiTxaQ9kYGzzhZRbK+xOo=');
@@ -59,4 +59,26 @@ test('origen: el propio y los configurados', () => {
   assert.equal(originAllowed(req('https://mu.example'), config), true);
   assert.equal(originAllowed(req('http://127.0.0.1:8091'), config), true);
   assert.equal(originAllowed(req('https://otro.example'), config), false);
+});
+
+test('un upgrade ajeno o con URL inválida se cierra y no tira el proceso', async () => {
+  const http = require('http');
+  const net = require('net');
+  const server = http.createServer((req, res) => res.end('ok'));
+  attach(server, { env: { MU_WEB_GATEWAY_KEY: 'k'.repeat(20) }, log: { log() {}, warn() {} } });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const closes = (path) => new Promise((resolve, reject) => {
+    const socket = net.connect(server.address().port, '127.0.0.1', () => {
+      socket.write(`GET ${path} HTTP/1.1\r\nHost: x\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n`);
+    });
+    const timer = setTimeout(() => { socket.destroy(); reject(new Error('sigue abierto: ' + path)); }, 2000);
+    socket.on('close', () => { clearTimeout(timer); resolve(); });
+    socket.on('error', () => {});
+  });
+  try {
+    await closes('//');
+    await closes('/otra');
+  } finally {
+    server.close();
+  }
 });

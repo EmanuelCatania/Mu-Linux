@@ -42,21 +42,22 @@ function isolation(req, res, next) {
   next();
 }
 
-function cacheHeaders(res, file) {
-  const rel = file.split(path.sep).join('/');
-  if (/\/game\//.test(rel) && !/\/game\/files\.txt$/i.test(rel)) {
+// Relativo a la carpeta publicada: que ésta viva dentro de un "game" no cambia nada.
+const cacheHeaders = (dir) => (res, file) => {
+  const rel = path.relative(dir, file).split(path.sep).join('/');
+  if (/^game\//.test(rel) && !/^game\/files\.txt$/i.test(rel)) {
     res.setHeader('Cache-Control', 'public, max-age=86400');
   } else {
     res.setHeader('Cache-Control', 'no-cache');
   }
-}
+};
 
 // null si no hay build en la carpeta: /jugar no se publica.
 function router(dir) {
   if (!dir || !fs.existsSync(path.join(dir, 'main.html'))) return null;
   const r = express.Router();
   r.use(isolation);
-  r.use(express.static(dir, { index: 'main.html', dotfiles: 'ignore', setHeaders: cacheHeaders }));
+  r.use(express.static(dir, { index: 'main.html', dotfiles: 'ignore', setHeaders: cacheHeaders(dir) }));
   return r;
 }
 

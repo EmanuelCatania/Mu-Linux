@@ -22,6 +22,9 @@
 //   MU_WEB_PORT_OFFSET   distancia al puerto web interno (por defecto 100).
 //   MU_WEB_ORIGINS       orígenes aceptados además del propio, separados por coma.
 //
+// La IP del jugador sale de la última entrada de X-Forwarded-For (la que
+// agrega nuestro proxy): las anteriores las escribe el que conecta.
+//
 // Sin dependencias: el WebSocket (RFC 6455) está implementado acá, sólo lo que
 // hace falta (marcos binarios, ping/pong y cierre).
 
@@ -30,6 +33,10 @@ const net = require('net');
 
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const MAX_FRAME = 1 << 20;
+// Topes: conexiones a la vez por IP, minutos sin tráfico y bytes sin entregar
+// antes de frenar al que manda.
+const MAX_PER_IP = 16;
+const IDLE_MS = 10 * 60 * 1000;
 
 function acceptKey(key) {
   return crypto.createHash('sha1').update(key + GUID).digest('base64');
@@ -72,7 +79,7 @@ function expandIPv6(address) {
 
 function clientIp(req, trustProxy) {
   if (trustProxy) {
-    const forwarded = (req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    const forwarded = (req.headers['x-forwarded-for'] || '').split(',').pop().trim();
     if (forwarded) return toServerIp(forwarded);
   }
   return toServerIp(req.socket.remoteAddress);
@@ -133,16 +140,23 @@ function decodeFrames(buffer) {
 function attach(server, { trustProxy = false, env = process.env, log = console } = {}) {
   const config = readConfig(env);
   if (!config.enabled) return false;
+  const perIp = new Map();
   server.on('upgrade', (req, socket) => {
-    const url = new URL(req.url, 'http://x');
-    if (url.pathname !== '/play/ws') return; // otro upgrade: no es nuestro
+    // Un socket sin oyente de error tira abajo el proceso si se corta.
+    socket.on('error', () => {});
+    let url;
+    try { url = new URL(req.url, 'http://x'); } catch { socket.destroy(); return; }
+    // No hay otro upgrade en el sitio: lo que no es del puente se cierra (si
+    // no, el socket queda abierto para siempre).
+    if (url.pathname !== '/play/ws') { socket.destroy(); return; }
     const port = Number(url.searchParams.get('port'));
     const key = req.headers['sec-websocket-key'];
-    if (!key || !config.ports.has(port) || !originAllowed(req, config)) {
+    const ip = clientIp(req, trustProxy);
+    if (!key || !config.ports.has(port) || !originAllowed(req, config) || (perIp.get(ip) || 0) >= MAX_PER_IP) {
       socket.end('HTTP/1.1 403 Forbidden\r\n\r\n');
       return;
     }
-    const ip = clientIp(req, trustProxy);
+    perIp.set(ip, (perIp.get(ip) || 0) + 1);
     const protocol = (req.headers['sec-websocket-protocol'] || '').split(',')[0].trim();
     socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
       + `Sec-WebSocket-Accept: ${acceptKey(key)}\r\n`
@@ -153,17 +167,25 @@ function attach(server, { trustProxy = false, env = process.env, log = console }
     game.setNoDelay(true);
     let pending = Buffer.alloc(0);
     let message = [];
+    let messageSize = 0;
     let closed = false;
     const close = () => {
       if (closed) return;
       closed = true;
+      const left = (perIp.get(ip) || 1) - 1;
+      if (left > 0) perIp.set(ip, left); else perIp.delete(ip);
       try { socket.write(encodeFrame(0x8, Buffer.alloc(0))); } catch { /* ya cerrado */ }
       socket.destroy();
       game.destroy();
     };
+    socket.setTimeout(IDLE_MS, close);
 
     game.on('connect', () => game.write(`MUWEB ${config.key} ${ip}\n`));
-    game.on('data', (data) => socket.write(encodeFrame(0x2, data)));
+    // Si un lado no da abasto, el otro espera: sin esto lo pendiente se
+    // acumula en memoria sin tope.
+    game.on('data', (data) => { if (!socket.write(encodeFrame(0x2, data))) game.pause(); });
+    socket.on('drain', () => game.resume());
+    game.on('drain', () => socket.resume());
     game.on('error', (e) => { log.warn(`[play] ${ip} -> ${port}: ${e.message}`); close(); });
     game.on('close', close);
 
@@ -176,8 +198,13 @@ function attach(server, { trustProxy = false, env = process.env, log = console }
         if (frame.opcode === 0x8) return close();
         if (frame.opcode === 0x9) { socket.write(encodeFrame(0xA, frame.payload)); continue; }
         if (frame.opcode === 0xA) continue;
+        messageSize += frame.payload.length;
+        if (messageSize > MAX_FRAME) return close(); // mensaje partido en marcos sin fin
         message.push(frame.payload);
-        if (frame.fin) { game.write(Buffer.concat(message)); message = []; }
+        if (frame.fin) {
+          if (!game.write(Buffer.concat(message))) socket.pause();
+          message = []; messageSize = 0;
+        }
       }
     });
     socket.on('error', close);
