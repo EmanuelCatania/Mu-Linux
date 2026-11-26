@@ -48,20 +48,40 @@
 
   /* Controles táctiles (celular y tablet): una capa sobre el canvas que pasa
      los toques al juego como mouse, y botones para las teclas. */
-  #touch, #pad, #padtoggle, #rotate { display: none; }
+  #touch, #joy, #ring, #quick, #bar, #padtoggle, #rotate { display: none; }
   body.touch:not(.menu) #touch { display: block; position: fixed; inset: 0; z-index: 1; touch-action: none;
                                  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  body.touch:not(.menu) #pad { display: flex; position: fixed; z-index: 2; right: 6px; top: 50%;
-                               transform: translateY(-58%); gap: 6px; }
-  body.touch.padhidden #pad { display: none; }
-  body.touch:not(.menu) #padtoggle { display: block; position: fixed; z-index: 2; right: 6px; top: 6px; }
-  #pad .col { display: flex; flex-direction: column; gap: 6px; }
-  #pad button, #padtoggle { width: 44px; height: 44px; padding: 0; border-radius: 50%; touch-action: none;
-                            font: 600 13px sans-serif; color: #f0d890; background: rgba(20, 14, 6, .55);
-                            border: 1px solid rgba(200, 160, 80, .7); -webkit-user-select: none; user-select: none; }
-  #padtoggle { width: 34px; height: 34px; font-size: 11px; opacity: .7; }
-  #pad button.on { background: rgba(180, 120, 30, .8); color: #fff; }
-  #pad button:active { background: rgba(120, 90, 30, .8); }
+  #joy, #ring, #quick, #bar, #padtoggle { position: fixed; z-index: 2; touch-action: none;
+                                          -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  body.touch.padhidden #joy, body.touch.padhidden #ring, body.touch.padhidden #quick, body.touch.padhidden #bar { display: none; }
+  /* Joystick: abajo a la izquierda, por encima de la barra del juego. */
+  body.touch:not(.menu) #joy { display: block; left: 3vh; bottom: 14vh; width: 36vh; height: 36vh;
+                               background: url(touch/joy-base.png) center / contain no-repeat; opacity: .8; }
+  #joy.on { background-image: url(touch/joy-active.png); opacity: 1; }
+  #joy i { position: absolute; left: 50%; top: 50%; width: 38%; height: 38%; margin: -19% 0 0 -19%;
+           background: url(touch/joy-knob.png) center / contain no-repeat; pointer-events: none; }
+  /* Anillo: el centro ataca, los cinco de alrededor lanzan los skills 1..5. */
+  body.touch:not(.menu) #ring { display: block; right: 1vh; bottom: 9vh; width: 46vh; height: 46vh;
+                                background: url(touch/ring.png) center / contain no-repeat; pointer-events: none; }
+  #ring button { position: absolute; width: 22%; height: 22%; margin: -11% 0 0 -11%; padding: 0; border: 0;
+                 border-radius: 50%; background: transparent; pointer-events: auto; touch-action: none;
+                 font: 700 3.6vh sans-serif; color: #e8cf96; text-shadow: 0 0 4px #000; }
+  #ring #attack { width: 35%; height: 35%; margin: -17.5% 0 0 -17.5%; font-size: 3vh; letter-spacing: .1em;
+                  background: url(touch/joy-knob.png) center / 86% no-repeat; }
+  #ring button.on { box-shadow: 0 0 0 .5vh rgba(240, 200, 110, .9) inset; }
+  #ring #attack.on { filter: brightness(1.4); box-shadow: none; }
+  /* Pociones (Q W E), a la izquierda del anillo. */
+  body.touch:not(.menu) #quick { display: flex; right: 49vh; bottom: 13vh; gap: 1.5vh; }
+  #quick button { width: 10vh; height: 10vh; padding: 0; border-radius: 50%; touch-action: none;
+                  font: 700 3.4vh sans-serif; color: #e8cf96; background: rgba(12, 16, 26, .7);
+                  border: .3vh solid rgba(190, 160, 100, .7); }
+  /* Paneles y menú, arriba a la derecha. */
+  body.touch:not(.menu) #bar { display: flex; right: 12vh; top: 1vh; gap: 1vh; }
+  #bar button, #padtoggle { height: 8.5vh; min-width: 15vh; padding: 0 1.5vh; touch-action: none;
+                            font: 600 2.8vh sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #d8bf86;
+                            background: url(touch/button.png) center / 100% 100% no-repeat; border: 0; }
+  body.touch:not(.menu) #padtoggle { display: block; right: 1vh; top: 1vh; min-width: 9vh; }
+  #quick button.on, #bar button.on, #bar button:active, #padtoggle:active { filter: brightness(1.6); }
   /* Barra de texto: lo que se escribe con el teclado del celular, arriba (el
      campo del juego puede quedar tapado por el teclado). */
   #textbar { display: none; position: fixed; z-index: 5; left: 50%; top: 6px; transform: translateX(-50%);
@@ -96,23 +116,25 @@
   </div>
 </div>
 <div id="touch"></div>
-<div id="pad">
-  <div class="col">
-    <button data-key="Digit1">1</button><button data-key="Digit2">2</button>
-    <button data-key="Digit3">3</button><button data-key="Digit4">4</button>
-  </div>
-  <div class="col">
-    <button id="rightmode" title="Los toques son clic derecho: lanzar el skill elegido">Skill</button>
-    <button data-key="KeyQ">Q</button><button data-key="KeyW">W</button><button data-key="KeyE">E</button>
-  </div>
-  <div class="col">
-    <button data-key="KeyV" title="Inventario">Inv</button>
-    <button data-key="KeyC" title="Personaje">Pj</button>
-    <button id="keyboard" title="Abre el teclado del celular">Tecl.</button>
-    <button data-key="Escape" title="Menú">Menú</button>
-  </div>
+<div id="joy"><i></i></div>
+<div id="ring">
+  <button id="attack" style="left:56%;top:56%" title="Atacar al monstruo más cercano"></button>
+  <button data-skill="Digit1" style="left:26.5%;top:85%">1</button>
+  <button data-skill="Digit2" style="left:14.5%;top:56%">2</button>
+  <button data-skill="Digit3" style="left:26.5%;top:26.5%">3</button>
+  <button data-skill="Digit4" style="left:56%;top:14.5%">4</button>
+  <button data-skill="Digit5" style="left:85%;top:26.5%">5</button>
 </div>
-<button id="padtoggle" title="Mostrar u ocultar los botones">⋯</button>
+<div id="quick">
+  <button data-key="KeyQ">Q</button><button data-key="KeyW">W</button><button data-key="KeyE">E</button>
+</div>
+<div id="bar">
+  <button data-key="KeyV" title="Inventario">Bolso</button>
+  <button data-key="KeyC" title="Personaje">Pj</button>
+  <button id="keyboard" title="Abre el teclado del celular">Chat</button>
+  <button data-key="Escape" title="Menú">Menú</button>
+</div>
+<button id="padtoggle" title="Mostrar u ocultar los controles">⋯</button>
 <div id="textbar">
   <input id="textin" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="send">
   <button id="textmask" title="Ocultar lo que se escribe (contraseñas)">***</button>
@@ -576,12 +598,16 @@ var Module = {
 
 // ── Controles táctiles ──────────────────────────────────────────────────────
 // En celular y tablet (--mobile) los toques no llegan a SDL: una capa encima
-// del canvas los convierte en mouse sintético, y los botones de #pad en teclas.
+// del canvas los convierte en mouse sintético, y los botones en teclas.
 //  - Un toque mueve el cursor y recién después aprieta: el juego elige el
 //    objetivo con lo que estaba bajo el cursor el cuadro anterior.  Sostener es
-//    tener el botón apretado (caminar, atacar seguido).
-//  - "Skill" hace que los toques sean clic derecho (lanzar el skill elegido).
-//  - "Tecl." abre el teclado del celular con un <input> en una barra arriba
+//    tener el botón apretado (caminar, atacar seguido).  Sirve para hablar con
+//    un NPC, levantar un item o elegir un monstruo puntual.
+//  - El joystick (#joy) y el anillo (#ring) no pasan por el mouse: escriben
+//    Module.muPad, que el cliente lee como un mando (SDLInput.cpp).  El centro
+//    del anillo ataca al monstruo más cercano; los de alrededor eligen el
+//    skill 1..5 y lo lanzan mientras se sostienen.
+//  - "Chat" abre el teclado del celular con un <input> en una barra arriba
 //    (los campos del juego pueden quedar tapados por el teclado).  Lo que se
 //    escribe se manda como texto (keypress) y lo borrado como Backspace,
 //    comparando con lo ya mandado: así funciona también con teclados que
@@ -609,11 +635,11 @@ function startTouchControls() {
   const typeText = (text) => { for (const ch of text) keyEvent('keypress', '', ch.codePointAt(0)); };
 
   // Toques -> mouse.
-  let rightMode = false, finger = null, last = null, pressed = -1, pressTimer = 0;
+  let finger = null, last = null, pressed = -1, pressTimer = 0;
   const mouse = (type, point, button) => canvas.dispatchEvent(new MouseEvent(type, {
     bubbles: true, cancelable: true, view: window, clientX: point.clientX, clientY: point.clientY,
     button: button < 0 ? 0 : button, buttons: type === 'mouseup' ? 0 : button === 2 ? 2 : button === 0 ? 1 : 0 }));
-  const press = () => { pressTimer = 0; pressed = rightMode ? 2 : 0; mouse('mousedown', last, pressed); };
+  const press = () => { pressTimer = 0; pressed = 0; mouse('mousedown', last, pressed); };
   const own = (e) => [...e.changedTouches].find((t) => t.identifier === finger);
   layer.addEventListener('touchstart', (e) => {
     e.preventDefault();
@@ -643,17 +669,69 @@ function startTouchControls() {
   layer.addEventListener('touchcancel', release, { passive: false });
 
   // Botones: el apretón no saca el foco (si no, se cierra el teclado del chat).
-  for (const button of document.querySelectorAll('#pad button, #padtoggle'))
-    button.addEventListener('pointerdown', (e) => e.preventDefault());
-  for (const button of document.querySelectorAll('#pad [data-key]')) {
+  const controls = '#ring button, #quick button, #bar button, #padtoggle, #joy';
+  for (const element of document.querySelectorAll(controls))
+    element.addEventListener('pointerdown', (e) => e.preventDefault());
+  // Sostener: `down` al apoyar el dedo, `up` al levantarlo (o si se va del botón).
+  const hold = (button, down, up) => {
+    button.addEventListener('pointerdown', (e) => {
+      if (button.dataset.down) return;
+      button.dataset.down = '1'; button.classList.add('on');
+      try { button.setPointerCapture(e.pointerId); } catch (_) {}
+      down();
+    });
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'])
+      button.addEventListener(type, () => {
+        if (!button.dataset.down) return;
+        delete button.dataset.down; button.classList.remove('on');
+        up();
+      });
+  };
+  for (const button of document.querySelectorAll('[data-key]')) {
     const code = button.dataset.key;
-    button.addEventListener('pointerdown', () => { button.dataset.down = '1'; keyEvent('keydown', code); });
-    for (const type of ['pointerup', 'pointercancel', 'pointerleave'])
-      button.addEventListener(type, () => { if (button.dataset.down) { delete button.dataset.down; keyEvent('keyup', code); } });
+    hold(button, () => keyEvent('keydown', code), () => keyEvent('keyup', code));
   }
-  const rightButton = document.getElementById('rightmode');
-  rightButton.addEventListener('pointerup', () => { rightMode = !rightMode; rightButton.classList.toggle('on', rightMode); });
   document.getElementById('padtoggle').addEventListener('pointerup', () => document.body.classList.toggle('padhidden'));
+
+  // Joystick y anillo: estado de mando que lee el cliente.
+  const pad = Module.muPad = { x: 0, y: 0, buttons: 0 };
+  const joy = document.getElementById('joy'), knob = joy.firstElementChild;
+  let joyPointer = null;
+  const joyMove = (e) => {
+    const box = joy.getBoundingClientRect(), radius = box.width / 2;
+    let x = (e.clientX - box.left - radius) / (radius * 0.62), y = (e.clientY - box.top - radius) / (radius * 0.62);
+    const length = Math.hypot(x, y);
+    if (length > 1) { x /= length; y /= length; }
+    pad.x = x; pad.y = y;
+    knob.style.transform = 'translate(' + (x * 82) + '%,' + (y * 82) + '%)';
+  };
+  joy.addEventListener('pointerdown', (e) => {
+    if (joyPointer !== null) return;
+    joyPointer = e.pointerId; joy.classList.add('on');
+    try { joy.setPointerCapture(e.pointerId); } catch (_) {}
+    joyMove(e);
+  });
+  joy.addEventListener('pointermove', (e) => { if (e.pointerId === joyPointer) joyMove(e); });
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'])
+    joy.addEventListener(type, (e) => {
+      if (e.pointerId !== joyPointer) return;
+      joyPointer = null; joy.classList.remove('on');
+      pad.x = pad.y = 0; knob.style.transform = '';
+    });
+  hold(document.getElementById('attack'), () => { pad.buttons |= 1; }, () => { pad.buttons &= ~1; });
+  // Skill: la tecla lo elige y, un instante después (el juego la tiene que
+  // ver primero), se sostiene el lanzamiento.
+  for (const button of document.querySelectorAll('[data-skill]')) {
+    const code = button.dataset.skill;
+    let timer = 0;
+    hold(button, () => {
+      keyEvent('keydown', code);
+      timer = setTimeout(() => { timer = 0; keyEvent('keyup', code); pad.buttons |= 2; }, 90);
+    }, () => {
+      if (timer) { clearTimeout(timer); timer = 0; keyEvent('keyup', code); pad.buttons |= 2; setTimeout(() => { pad.buttons &= ~2; }, 90); }
+      else pad.buttons &= ~2;
+    });
+  }
 
   // Teclado: el foco al <input> lo saca (tiene que ser en el pointerup: es lo
   // que el navegador cuenta como gesto).

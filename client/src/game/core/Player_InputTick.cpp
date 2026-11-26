@@ -606,9 +606,112 @@ static void SendPacket(const char *buf, unsigned int len)
     gNetwork.SendRaw(buf, (int)len);
 }
 
+// ── Mando (gamepad) y joystick táctil ────────────────────────────────────────
+// DESVIACION: el 0.97k sólo se maneja con mouse.  La palanca camina en la
+// dirección que se empuja; "atacar" y "skill" valen como sostener el botón
+// izquierdo o el derecho sobre el monstruo más cercano (ver Mouse_Hover.cpp).
+namespace {
+Platform::PadState s_pad;
+bool s_padLeft = false, s_padRight = false;
+int  s_padTarget = -1;
+int  s_padWalkWait = 0;
+constexpr int PadTargetRange = 10;   // casillas
+
+bool Pad_TargetValid(int index) {
+    if (index < 0 || index >= 400 || !Hero) return false;
+    const CHARACTER* c = AsCharacter(CharactersClient + index * CHARACTER_STRIDE);
+    if (!c->Object.Live || c->Object.Kind != 2 || c->Dead || !c->Object.Visible) return false;
+    const CHARACTER* hero = AsCharacter(Hero);
+    return abs(c->PositionX - hero->PositionX) <= PadTargetRange + 2
+        && abs(c->PositionY - hero->PositionY) <= PadTargetRange + 2;
+}
+
+// Lee el mando y lo vuelca a los flags de mouse del juego.
+void Pad_Apply() {
+    s_pad = Platform::GetInput().Pad();
+    if (s_pad.attack || s_pad.skill) {
+        // El cursor va al héroe: así un panel o un botón bajo el cursor real
+        // no recibe el "click".
+        MouseX = gWindow.IsWide() ? 320 : (DWORD)(GetScreenWidth() / 2);
+        MouseY = 180;
+    }
+    if (s_pad.attack != s_padLeft) {
+        s_padLeft = s_pad.attack;
+        MouseLButton = s_padLeft ? 1 : 0;
+        if (s_padLeft) MouseLButtonPush = 1;
+    }
+    if (s_pad.skill != s_padRight) {
+        s_padRight = s_pad.skill;
+        MouseRButton = s_padRight ? 1 : 0;
+        if (s_padRight) MouseRButtonPush = 1;
+    }
+}
+
+// Camina hacia donde apunta la palanca: un tramo corto que se renueva mientras
+// se la sostiene.
+void Pad_Walk(unsigned char* ent) {
+    const float length2 = s_pad.moveX * s_pad.moveX + s_pad.moveY * s_pad.moveY;
+    if (length2 < 0.09f || s_pad.attack || s_pad.skill || EditFlag != 0) { s_padWalkWait = 0; return; }
+    if (s_padWalkWait > 0) { --s_padWalkWait; return; }
+    // Pantalla -> mundo con la misma cuenta que gira el cuerpo hacia el mouse
+    // (más abajo, IDA L419-440): el facing que tendría el héroe mirando a un
+    // cursor puesto en esa dirección.
+    const float cx = gWindow.IsWide() ? 320.0f : (float)(GetScreenWidth() / 2);
+    const int toMouse = (int)CreateAngle(cx + s_pad.moveX * 100.0f, 180.0f + s_pad.moveY * 100.0f, cx, 180.0f);
+    const float want = (float)(((405 - toMouse) % 360 + 360) % 360);
+    // La casilla destino es la que, caminando hacia ella, deja ese facing.
+    int bestX = 0, bestY = 0; float bestDiff = 1000.0f;
+    for (int i = 0; i < 16; ++i) {
+        const float a = (float)i * 0.39269908f;
+        const int dx = (int)lroundf(cosf(a) * 3.0f), dy = (int)lroundf(sinf(a) * 3.0f);
+        float diff = fabsf(CreateAngle(0.0f, 0.0f, (float)dx, (float)dy) - want);
+        if (diff > 180.0f) diff = 360.0f - diff;
+        if (diff < bestDiff) { bestDiff = diff; bestX = dx; bestY = dy; }
+    }
+    CHARACTER* hero = AsCharacter(ent);
+    const int srcX = hero->PositionX, srcY = hero->PositionY;
+    // Mismo gate que el click al piso: si la casilla de arranque guardada quedó
+    // lejos de donde está el héroe, se espera.
+    if (hero->Movement != 0) {
+        if (abs(srcX - (int)(hero->Object.Position[0] * 0.01f)) >= 2) return;
+        if (abs(srcY - (int)(hero->Object.Position[1] * 0.01f)) >= 2) return;
+    }
+    for (int step = 3; step >= 1; --step) {
+        const int tx = srcX + bestX * step / 3, ty = srcY + bestY * step / 3;
+        if (tx < 0 || ty < 0 || tx > 255 || ty > 255 || (tx == srcX && ty == srcY)) continue;
+        if ((char)Path_FindRoute(srcX, srcY, tx, ty, FieldAddress(ent, &hero->PathCurrent), 0.0f) == 0) continue;
+        TargetX = (DWORD)tx; TargetY = (DWORD)ty;
+        hero->MovementType = 0;
+        Combat_SendMovePathPacket(hero, AsObject(ent));
+        s_padWalkWait = 5;   // 200 ms
+        return;
+    }
+    s_padWalkWait = 2;
+}
+}
+
+bool PadControls_ActionHeld(void) { return s_pad.attack || s_pad.skill; }
+
+int PadControls_Target(void) {
+    if (!PadControls_ActionHeld() || !Hero) { s_padTarget = -1; return -1; }
+    if (Pad_TargetValid(s_padTarget)) return s_padTarget;
+    const CHARACTER* hero = AsCharacter(Hero);
+    int best = -1, bestDistance = 0;
+    for (int i = 0; i < 400; ++i) {
+        if (!Pad_TargetValid(i)) continue;
+        const CHARACTER* c = AsCharacter(CharactersClient + i * CHARACTER_STRIDE);
+        const int dx = c->PositionX - hero->PositionX, dy = c->PositionY - hero->PositionY;
+        if (abs(dx) > PadTargetRange || abs(dy) > PadTargetRange) continue;
+        const int distance = dx * dx + dy * dy;
+        if (best < 0 || distance < bestDistance) { best = i; bestDistance = distance; }
+    }
+    return s_padTarget = best;
+}
+
 // IDA: Player_InputTick
 void __cdecl Player_ProcessInput(void)
 {
+    Pad_Apply();
     // El procesamiento de hotkeys de UI va PRIMERO, para que los toggles funcionen
     // incluso cuando los gates de abajo saldrían temprano (p.ej. durante un cooldown).
     HUD_HotkeyTick();
@@ -814,6 +917,8 @@ void __cdecl Player_ProcessInput(void)
             }
         }
     }
+
+    Pad_Walk((unsigned char*)Hero);
 
     // ── obsolete inline mini-attack disabled below ──────────────────────────
 
@@ -1468,6 +1573,8 @@ void __cdecl Player_ProcessInput(void)
             // seguiría recalculando el destino un frame más (como la cámara sigue al
             // héroe, el destino huiría con ella).
             if (MouseLButton == 0 && !bClickEdge) goto end_tick_inc;
+            // Atacar desde el mando sin monstruo a mano no es un click al piso.
+            if (PadControls_ActionHeld()) goto end_tick_inc;
             // Per IDA Player_InputTick:416,566: bloquear el ground click cuando el mouse
             // está sobre cualquier panel abierto (MouseOnWindow=1).
             if (MouseOnWindow) goto end_tick_inc;

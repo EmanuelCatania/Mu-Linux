@@ -2,6 +2,7 @@
 """Arma la carpeta que sirve mu-web en /jugar (MU_WEB_CLIENT_PATH):
 
     <salida>/main.html, main.js, main.wasm, main-asyncify.*   el build
+    <salida>/touch/*.png                                      controles táctiles
     <salida>/game/Content, game/System                         los del juego
     <salida>/game/files.txt                                    su índice
 
@@ -56,6 +57,10 @@ def main():
     # shell.html): un proxy que guarda los .js no mezcla versiones.
     with open(os.path.join(build, 'main.html'), encoding='utf-8') as f:
         page = f.read().replace('%MU_BUILD%', digest.hexdigest()[:12])
+    # Imágenes de los controles táctiles (junto a shell.html en el fuente).
+    touch = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'src', 'platform', 'Web', 'touch')
+    for name in sorted(os.listdir(touch)):
+        copied += copy_if_changed(os.path.join(touch, name), os.path.join(out, 'touch', name))
     page_out = os.path.join(out, 'main.html')
     old = open(page_out, encoding='utf-8').read() if os.path.isfile(page_out) else None
     if page != old:

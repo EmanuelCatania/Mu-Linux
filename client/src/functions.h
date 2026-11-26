@@ -440,6 +440,10 @@ char  __cdecl Combat_CheckArrowRequirement(void);                               
 void  __cdecl Action(intptr_t c, intptr_t o);
 unsigned int __cdecl CheckAttack(void); // IDA: CheckAttack (0x00483160)
 void  __cdecl Player_ProcessInput(void); // IDA: Player_InputTick
+// Mando / joystick táctil (Player_InputTick.cpp).  Objetivo elegido solo
+// mientras se sostiene atacar o skill (-1 = ninguno), y si alguno está sostenido.
+int   PadControls_Target(void);
+bool  PadControls_ActionHeld(void);
 void  __cdecl Mouse_UpdateHoverTargets(void);                                    // IDA: FUN_004b0310
 char  __cdecl SelectSkillByHotkey(int number);                              // SelectSkillByHotkey (0x4B0E80)
 void  __cdecl Chat_InputTick(void);
