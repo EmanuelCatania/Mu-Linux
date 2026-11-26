@@ -7,6 +7,13 @@
 
 #define MAX_SKILL 57
 #define MAX_SKILL_LIST 60
+// Cupo de reportes de impacto (0x1D) de los skills de área: cada casteo (0x1E)
+// suma HITS_PER_CAST, acumulable hasta HITS_MAX (ver MultiSkillAttack).
+#define MULTI_SKILL_HITS_PER_CAST 5
+#define MULTI_SKILL_HITS_MAX 20
+// Ventana para reportar impactos después del último casteo (ms).  Medido con
+// Evil Spirit: los espíritus siguen pegando ~2,1 s después del último 0x1E.
+#define MULTI_SKILL_HIT_WINDOW 3000
 
 #define CHECK_SKILL_ATTACK_EXTENDED_COUNT(x) (((++x)>=20)?false:true)
 

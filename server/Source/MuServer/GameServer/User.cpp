@@ -475,6 +475,8 @@ void gObjCharZeroSet(int aIndex)
 
 	lpObj->MultiSkillCount = 0;
 
+	lpObj->MultiSkillTime = 0;
+
 	for (int n = 0; n < MAX_SKILL_LIST; n++)
 	{
 		lpObj->Skill[n].Clear();

@@ -997,9 +997,27 @@ bool CSkillManager::MultiSkillAttack(int aIndex, int bIndex, CSkill* lpSkill)
 
 	if (lpObj->Type == OBJECT_USER)
 	{
+		// MultiSkillCount es el cupo de reportes de impacto (0x1D) que quedan
+		// para este skill.  Cada casteo suma MULTI_SKILL_HITS_PER_CAST, hasta
+		// MULTI_SKILL_HITS_MAX.  Antes se reiniciaba en 5 con cada 0x1E, pero
+		// los proyectiles de un casteo (los espíritus de Evil Spirit, el rayo
+		// de Aqua Beam) siguen pegando después del siguiente: sus impactos se
+		// cobraban del cupo del último casteo y desde el sexto se descartaban,
+		// casteando seguido y, sobre todo, al dejar de castear.
+		if (lpObj->MultiSkillIndex == lpSkill->m_index)
+		{
+			int budget = lpObj->MultiSkillCount + MULTI_SKILL_HITS_PER_CAST;
+
+			lpObj->MultiSkillCount = (budget > MULTI_SKILL_HITS_MAX) ? MULTI_SKILL_HITS_MAX : budget;
+		}
+		else
+		{
+			lpObj->MultiSkillCount = MULTI_SKILL_HITS_PER_CAST;
+		}
+
 		lpObj->MultiSkillIndex = lpSkill->m_index;
 
-		lpObj->MultiSkillCount = 0;
+		lpObj->MultiSkillTime = GetTickCount();
 
 		switch (lpSkill->m_skill)
 		{
@@ -1877,11 +1895,16 @@ void CSkillManager::CGMultiSkillAttackRecv(PMSG_MULTI_SKILL_ATTACK_RECV* lpMsg, 
 		return;
 	}
 
-	if (lpObj->Type == OBJECT_USER && (lpObj->MultiSkillIndex == 0 || lpObj->MultiSkillIndex != lpSkill->m_index || (lpObj->MultiSkillCount++) >= 5))
+	if (lpObj->Type == OBJECT_USER && (lpObj->MultiSkillIndex == 0 || lpObj->MultiSkillIndex != lpSkill->m_index || lpObj->MultiSkillCount == 0 || (GetTickCount() - lpObj->MultiSkillTime) > MULTI_SKILL_HIT_WINDOW))
 	{
-		TRACE_REJECT(aIndex, 0x1D, -1, "skill %d: sin 0x1E previo o fuera de cuenta (MultiSkillIndex=%d esperado=%d MultiSkillCount=%d)", lpSkill->m_skill, lpObj->MultiSkillIndex, lpSkill->m_index, lpObj->MultiSkillCount);
+		TRACE_REJECT(aIndex, 0x1D, -1, "skill %d: sin 0x1E previo, sin cupo o fuera de ventana (MultiSkillIndex=%d esperado=%d cupo=%d hace=%lu ms)", lpSkill->m_skill, lpObj->MultiSkillIndex, lpSkill->m_index, lpObj->MultiSkillCount, (unsigned long)(GetTickCount() - lpObj->MultiSkillTime));
 		GCRejectSend(aIndex, 0x1D, REJECT_SKILL_SEQUENCE);
 		return;
+	}
+
+	if (lpObj->Type == OBJECT_USER)
+	{
+		lpObj->MultiSkillCount--;
 	}
 
 	if (lpObj->Type == OBJECT_USER && lpSkill->m_skill == SKILL_TRIPLE_SHOT)
@@ -2057,10 +2080,8 @@ void CSkillManager::CGSkillAttackRecv(PMSG_SKILL_ATTACK_RECV* lpMsg, int aIndex)
 		}
 	}
 
-	lpObj->MultiSkillIndex = 0;
-
-	lpObj->MultiSkillCount = 0;
-
+	// No se toca el cupo de impactos del skill de área anterior: sus proyectiles
+	// siguen en el aire y lo acota la ventana MULTI_SKILL_HIT_WINDOW.
 	this->UseAttackSkill(aIndex, bIndex, lpSkill);
 }
 
@@ -2120,9 +2141,15 @@ void CSkillManager::CGDurationSkillAttackRecv(PMSG_DURATION_SKILL_ATTACK_RECV* l
 		}
 	}
 
-	lpObj->MultiSkillIndex = 0;
+	// Mismo skill de área que el casteo anterior: el cupo de impactos se
+	// conserva y MultiSkillAttack le suma el de este casteo.  Otro skill
+	// arranca de cero, como antes.
+	if (lpObj->MultiSkillIndex != lpSkill->m_index)
+	{
+		lpObj->MultiSkillIndex = 0;
 
-	lpObj->MultiSkillCount = 0;
+		lpObj->MultiSkillCount = 0;
+	}
 
 	short bIndex = MAKE_NUMBERW(lpMsg->index[0], lpMsg->index[1]);
 

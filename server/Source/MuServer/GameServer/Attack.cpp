@@ -1415,10 +1415,8 @@ void CAttack::CGAttackRecv(PMSG_ATTACK_RECV* lpMsg, int aIndex)
 
 	lpObj->Dir = lpMsg->dir;
 
-	lpObj->MultiSkillIndex = 0;
-
-	lpObj->MultiSkillCount = 0;
-
+	// El golpe no borra el cupo de impactos del último skill de área: sus
+	// proyectiles siguen pegando (ver MULTI_SKILL_HIT_WINDOW en SkillManager.h).
 	GCActionSend(lpObj, lpMsg->action, aIndex, bIndex);
 
 	this->Attack(lpObj, lpTarget, 0, 0, 0, 0);
