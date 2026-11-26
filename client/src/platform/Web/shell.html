@@ -16,7 +16,7 @@
                 font: 12px sans-serif; color: #c8b27a; background: rgba(0,0,0,.6);
                 border: 1px solid #5a4a2a; border-radius: 3px; cursor: pointer; opacity: .55; }
   #fullscreen:hover { opacity: 1; }
-  :fullscreen #fullscreen, body.menu #fullscreen { display: none; }
+  :fullscreen #fullscreen, body.menu #fullscreen, body.touch #fullscreen { display: none; }
 
   /* Menú previo: opciones mientras el juego y los datos bajan de fondo. */
   #menu { position: fixed; inset: 0; z-index: 3; display: none; overflow: auto;
@@ -43,6 +43,30 @@
           color: #1a1206; background: linear-gradient(#e8c060, #a87a20); border: 1px solid #f0d890;
           border-radius: 3px; cursor: pointer; }
   #play:disabled { color: #6a5a3a; background: #2a2214; border-color: #4a3a20; cursor: default; }
+
+  /* Controles táctiles (celular y tablet): una capa sobre el canvas que pasa
+     los toques al juego como mouse, y botones para las teclas. */
+  #touch, #pad, #padtoggle, #rotate { display: none; }
+  body.touch:not(.menu) #touch { display: block; position: fixed; inset: 0; z-index: 1; touch-action: none;
+                                 -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  body.touch:not(.menu) #pad { display: flex; position: fixed; z-index: 2; right: 6px; top: 50%;
+                               transform: translateY(-58%); gap: 6px; }
+  body.touch.padhidden #pad { display: none; }
+  body.touch:not(.menu) #padtoggle { display: block; position: fixed; z-index: 2; right: 6px; top: 6px; }
+  #pad .col { display: flex; flex-direction: column; gap: 6px; }
+  #pad button, #padtoggle { width: 44px; height: 44px; padding: 0; border-radius: 50%; touch-action: none;
+                            font: 600 13px sans-serif; color: #f0d890; background: rgba(20, 14, 6, .55);
+                            border: 1px solid rgba(200, 160, 80, .7); -webkit-user-select: none; user-select: none; }
+  #padtoggle { width: 34px; height: 34px; font-size: 11px; opacity: .7; }
+  #pad button.on { background: rgba(180, 120, 30, .8); color: #fff; }
+  #pad button:active { background: rgba(120, 90, 30, .8); }
+  #textin { position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px;
+            border: 0; padding: 0; z-index: 0; }
+  @media (orientation: portrait) {
+    body.touch:not(.menu) #rotate { display: flex; position: fixed; inset: 0; z-index: 4; align-items: center;
+                                    justify-content: center; padding: 24px; text-align: center;
+                                    font: 16px sans-serif; color: #d8c898; background: rgba(0, 0, 0, .9); }
+  }
 </style>
 </head>
 <body class="menu">
@@ -59,6 +83,26 @@
     <button id="play" disabled>Jugar</button>
   </div>
 </div>
+<div id="touch"></div>
+<div id="pad">
+  <div class="col">
+    <button data-key="Digit1">1</button><button data-key="Digit2">2</button>
+    <button data-key="Digit3">3</button><button data-key="Digit4">4</button>
+  </div>
+  <div class="col">
+    <button id="rightmode" title="Los toques son clic derecho: lanzar el skill elegido">Skill</button>
+    <button data-key="KeyQ">Q</button><button data-key="KeyW">W</button><button data-key="KeyE">E</button>
+  </div>
+  <div class="col">
+    <button data-key="KeyV" title="Inventario">Inv</button>
+    <button data-key="KeyC" title="Personaje">Pj</button>
+    <button id="chat" title="Chat: abre el teclado">Chat</button>
+    <button data-key="Escape" title="Menú">Menú</button>
+  </div>
+</div>
+<button id="padtoggle" title="Mostrar u ocultar los botones">⋯</button>
+<input id="textin" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-hidden="true">
+<div id="rotate">Girá el celular: el juego se ve acostado.</div>
 <script>
 // Táctil o no: lo decide la página una vez y se lo pasa al cliente (--mobile).
 // No alcanza con el user agent: una notebook táctil o una tablet con teclado
@@ -425,14 +469,125 @@ var Module = {
   },
 };
 
+// ── Controles táctiles ──────────────────────────────────────────────────────
+// En celular y tablet (--mobile) los toques no llegan a SDL: una capa encima
+// del canvas los convierte en mouse sintético, y los botones de #pad en teclas.
+//  - Un toque mueve el cursor y recién después aprieta: el juego elige el
+//    objetivo con lo que estaba bajo el cursor el cuadro anterior.  Sostener es
+//    tener el botón apretado (caminar, atacar seguido).
+//  - "Skill" hace que los toques sean clic derecho (lanzar el skill elegido).
+//  - El chat usa un <input> invisible para que aparezca el teclado del
+//    celular; lo que se escribe se manda como texto (keypress) y lo borrado
+//    como Backspace.  Se compara con lo ya mandado, así funciona también con
+//    teclados que arman la palabra de a poco (Gboard).
+function startTouchControls() {
+  document.body.classList.add('touch');
+  const canvas = document.getElementById('canvas');
+  const layer = document.getElementById('touch');
+  const textin = document.getElementById('textin');
+  const KEYCODES = { Enter: 13, Escape: 27, Backspace: 8 };
+  const keyCodeOf = (code) => KEYCODES[code] || code.charCodeAt(code.length - 1);
+  const keyNameOf = (code) => KEYCODES[code] ? code : code.slice(-1).toLowerCase();
+  // Las propiedades viejas (keyCode, which, charCode) no se pueden pasar en
+  // todos los navegadores al crear el evento: se pisan en la instancia.
+  const keyEvent = (type, code, charCode) => {
+    const keyCode = charCode ? 0 : keyCodeOf(code);
+    const e = new KeyboardEvent(type, { code, key: charCode ? String.fromCodePoint(charCode) : keyNameOf(code),
+                                        bubbles: true, cancelable: true });
+    for (const [name, value] of [['keyCode', keyCode], ['which', charCode || keyCode], ['charCode', charCode || 0]])
+      Object.defineProperty(e, name, { get: () => value });
+    window.dispatchEvent(e);
+  };
+  const tapKey = (code) => { keyEvent('keydown', code); setTimeout(() => keyEvent('keyup', code), 60); };
+  const typeText = (text) => { for (const ch of text) keyEvent('keypress', '', ch.codePointAt(0)); };
+
+  // Toques -> mouse.
+  let rightMode = false, finger = null, last = null, pressed = -1, pressTimer = 0;
+  const mouse = (type, point, button) => canvas.dispatchEvent(new MouseEvent(type, {
+    bubbles: true, cancelable: true, view: window, clientX: point.clientX, clientY: point.clientY,
+    button: button < 0 ? 0 : button, buttons: type === 'mouseup' ? 0 : button === 2 ? 2 : button === 0 ? 1 : 0 }));
+  const press = () => { pressTimer = 0; pressed = rightMode ? 2 : 0; mouse('mousedown', last, pressed); };
+  const own = (e) => [...e.changedTouches].find((t) => t.identifier === finger);
+  layer.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (finger !== null) return;
+    const t = e.changedTouches[0];
+    finger = t.identifier; last = { clientX: t.clientX, clientY: t.clientY };
+    mouse('mousemove', last, -1);
+    pressTimer = setTimeout(press, 50);
+  }, { passive: false });
+  layer.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const t = own(e);
+    if (!t) return;
+    last = { clientX: t.clientX, clientY: t.clientY };
+    mouse('mousemove', last, pressed);
+  }, { passive: false });
+  const release = (e) => {
+    e.preventDefault();
+    if (!own(e)) return;
+    finger = null;
+    if (pressTimer) { clearTimeout(pressTimer); press(); }
+    // SDLInput ya demora la suelta si llega en el mismo cuadro que el apretón.
+    const button = pressed; pressed = -1;
+    mouse('mouseup', last, button);
+  };
+  layer.addEventListener('touchend', release, { passive: false });
+  layer.addEventListener('touchcancel', release, { passive: false });
+
+  // Botones: el apretón no saca el foco (si no, se cierra el teclado del chat).
+  for (const button of document.querySelectorAll('#pad button, #padtoggle'))
+    button.addEventListener('pointerdown', (e) => e.preventDefault());
+  for (const button of document.querySelectorAll('#pad [data-key]')) {
+    const code = button.dataset.key;
+    button.addEventListener('pointerdown', () => { button.dataset.down = '1'; keyEvent('keydown', code); });
+    for (const type of ['pointerup', 'pointercancel', 'pointerleave'])
+      button.addEventListener(type, () => { if (button.dataset.down) { delete button.dataset.down; keyEvent('keyup', code); } });
+  }
+  const rightButton = document.getElementById('rightmode');
+  rightButton.addEventListener('pointerup', () => { rightMode = !rightMode; rightButton.classList.toggle('on', rightMode); });
+  document.getElementById('padtoggle').addEventListener('pointerup', () => document.body.classList.toggle('padhidden'));
+
+  // Chat: Enter abre el renglón del juego y el foco al <input> saca el teclado
+  // (tiene que ser en el pointerup: es lo que el navegador cuenta como gesto).
+  let sent = '';
+  document.getElementById('chat').addEventListener('pointerup', () => {
+    if (document.activeElement === textin) { tapKey('Enter'); textin.blur(); return; }
+    tapKey('Enter');
+    textin.value = sent = '';
+    textin.focus();
+  });
+  textin.addEventListener('input', () => {
+    const now = textin.value;
+    let same = 0;
+    while (same < sent.length && same < now.length && sent[same] === now[same]) ++same;
+    for (let i = [...sent.slice(same)].length; i > 0; --i) tapKey('Backspace');
+    typeText(now.slice(same));
+    sent = now;
+  });
+  // Las teclas del <input> no tienen que llegar también al juego por window.
+  for (const type of ['keydown', 'keyup', 'keypress'])
+    textin.addEventListener(type, (e) => {
+      e.stopPropagation();
+      if (type === 'keydown' && e.key === 'Enter') { e.preventDefault(); tapKey('Enter'); textin.value = sent = ''; textin.blur(); }
+    });
+}
+
 document.getElementById('play').addEventListener('click', () => {
   const M = Module, FS = M.FS;
   const configText = readMenu(M.muConfigText || '');
   FS.writeFile(CONFIG, configText);
   FS.writeFile(SAVED_CONFIG, configText);
   FS.syncfs(false, () => {});
-  // El click del jugador habilita pedir la pantalla completa.
-  if (storageGet('mu-fullscreen') === '1') window.muSetFullscreen(true);
+  // El click del jugador habilita pedir la pantalla completa.  En el celular
+  // siempre, y acostado si el navegador deja trabar la orientación.
+  const touch = M.arguments.indexOf('--mobile') >= 0;
+  if (touch) {
+    startTouchControls();
+    window.muSetFullscreen(true).then(() => {
+      if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+    });
+  } else if (storageGet('mu-fullscreen') === '1') window.muSetFullscreen(true);
   document.body.classList.remove('menu');
   document.getElementById('canvas').focus();
   M.muStarted = true;
