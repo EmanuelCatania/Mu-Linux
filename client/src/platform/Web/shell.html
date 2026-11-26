@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=overlays-content">
 <title>Mu Online</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
@@ -16,7 +16,9 @@
                 font: 12px sans-serif; color: #c8b27a; background: rgba(0,0,0,.6);
                 border: 1px solid #5a4a2a; border-radius: 3px; cursor: pointer; opacity: .55; }
   #fullscreen:hover { opacity: 1; }
-  :fullscreen #fullscreen, body.menu #fullscreen, body.touch #fullscreen { display: none; }
+  :fullscreen #fullscreen, body.menu #fullscreen { display: none; }
+  /* En el celular, si no quedó en pantalla completa: arriba a la izquierda. */
+  body.touch #fullscreen { left: 6px; right: auto; padding: 8px 12px; font-size: 13px; opacity: .85; }
 
   /* Menú previo: opciones mientras el juego y los datos bajan de fondo. */
   #menu { position: fixed; inset: 0; z-index: 3; display: none; overflow: auto;
@@ -60,8 +62,18 @@
   #padtoggle { width: 34px; height: 34px; font-size: 11px; opacity: .7; }
   #pad button.on { background: rgba(180, 120, 30, .8); color: #fff; }
   #pad button:active { background: rgba(120, 90, 30, .8); }
-  #textin { position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px;
-            border: 0; padding: 0; z-index: 0; }
+  /* Barra de texto: lo que se escribe con el teclado del celular, arriba (el
+     campo del juego puede quedar tapado por el teclado). */
+  #textbar { display: none; position: fixed; z-index: 5; left: 50%; top: 6px; transform: translateX(-50%);
+             gap: 6px; align-items: center; padding: 6px; background: rgba(10, 8, 4, .9);
+             border: 1px solid #6b5630; border-radius: 4px; }
+  body.typing #textbar { display: flex; }
+  #textin { width: min(360px, 50vw); padding: 6px 8px; font: 16px sans-serif; color: #f0e0b0;
+            background: #1a140a; border: 1px solid #5a4a2a; border-radius: 3px; outline: none; }
+  #textin.masked { -webkit-text-security: disc; }
+  #textbar button { min-width: 44px; height: 36px; font: 600 13px sans-serif; color: #f0d890;
+                    background: rgba(40, 28, 10, .9); border: 1px solid rgba(200, 160, 80, .7); border-radius: 3px; }
+  #textbar button.on { background: rgba(180, 120, 30, .8); color: #fff; }
   @media (orientation: portrait) {
     body.touch:not(.menu) #rotate { display: flex; position: fixed; inset: 0; z-index: 4; align-items: center;
                                     justify-content: center; padding: 24px; text-align: center;
@@ -96,12 +108,18 @@
   <div class="col">
     <button data-key="KeyV" title="Inventario">Inv</button>
     <button data-key="KeyC" title="Personaje">Pj</button>
-    <button id="chat" title="Chat: abre el teclado">Chat</button>
+    <button id="keyboard" title="Abre el teclado del celular">Tecl.</button>
     <button data-key="Escape" title="Menú">Menú</button>
   </div>
 </div>
 <button id="padtoggle" title="Mostrar u ocultar los botones">⋯</button>
-<input id="textin" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-hidden="true">
+<div id="textbar">
+  <input id="textin" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="send">
+  <button id="textmask" title="Ocultar lo que se escribe (contraseñas)">***</button>
+  <button id="texttab" title="Pasar al campo siguiente">Tab</button>
+  <button id="textenter" title="Enter">Enter</button>
+  <button id="textclose" title="Cerrar el teclado">X</button>
+</div>
 <div id="rotate">Girá el celular: el juego se ve acostado.</div>
 <script>
 // Táctil o no: lo decide la página una vez y se lo pasa al cliente (--mobile).
@@ -484,16 +502,18 @@ var Module = {
 //    objetivo con lo que estaba bajo el cursor el cuadro anterior.  Sostener es
 //    tener el botón apretado (caminar, atacar seguido).
 //  - "Skill" hace que los toques sean clic derecho (lanzar el skill elegido).
-//  - El chat usa un <input> invisible para que aparezca el teclado del
-//    celular; lo que se escribe se manda como texto (keypress) y lo borrado
-//    como Backspace.  Se compara con lo ya mandado, así funciona también con
-//    teclados que arman la palabra de a poco (Gboard).
+//  - "Tecl." abre el teclado del celular con un <input> en una barra arriba
+//    (los campos del juego pueden quedar tapados por el teclado).  Lo que se
+//    escribe se manda como texto (keypress) y lo borrado como Backspace,
+//    comparando con lo ya mandado: así funciona también con teclados que
+//    arman la palabra de a poco (Gboard).  Enter, Tab y *** (ocultar, para la
+//    contraseña) están en la barra.  Para chatear: Enter abre el renglón.
 function startTouchControls() {
   document.body.classList.add('touch');
   const canvas = document.getElementById('canvas');
   const layer = document.getElementById('touch');
   const textin = document.getElementById('textin');
-  const KEYCODES = { Enter: 13, Escape: 27, Backspace: 8 };
+  const KEYCODES = { Enter: 13, Escape: 27, Backspace: 8, Tab: 9 };
   const keyCodeOf = (code) => KEYCODES[code] || code.charCodeAt(code.length - 1);
   const keyNameOf = (code) => KEYCODES[code] ? code : code.slice(-1).toLowerCase();
   // Las propiedades viejas (keyCode, which, charCode) no se pueden pasar en
@@ -556,15 +576,27 @@ function startTouchControls() {
   rightButton.addEventListener('pointerup', () => { rightMode = !rightMode; rightButton.classList.toggle('on', rightMode); });
   document.getElementById('padtoggle').addEventListener('pointerup', () => document.body.classList.toggle('padhidden'));
 
-  // Chat: Enter abre el renglón del juego y el foco al <input> saca el teclado
-  // (tiene que ser en el pointerup: es lo que el navegador cuenta como gesto).
+  // Teclado: el foco al <input> lo saca (tiene que ser en el pointerup: es lo
+  // que el navegador cuenta como gesto).
   let sent = '';
-  document.getElementById('chat').addEventListener('pointerup', () => {
-    if (document.activeElement === textin) { tapKey('Enter'); textin.blur(); return; }
-    tapKey('Enter');
-    textin.value = sent = '';
-    textin.focus();
+  const clearText = () => { textin.value = sent = ''; };
+  const openKeyboard = () => { clearText(); document.body.classList.add('typing'); textin.focus(); };
+  const closeKeyboard = () => { textin.blur(); document.body.classList.remove('typing'); };
+  document.getElementById('keyboard').addEventListener('pointerup', () => {
+    if (document.body.classList.contains('typing')) closeKeyboard(); else openKeyboard();
   });
+  // Los botones de la barra no sacan el foco (el teclado sigue abierto).
+  for (const button of document.querySelectorAll('#textbar button'))
+    button.addEventListener('pointerdown', (e) => e.preventDefault());
+  document.getElementById('textenter').addEventListener('pointerup', () => { tapKey('Enter'); clearText(); });
+  document.getElementById('texttab').addEventListener('pointerup', () => { tapKey('Tab'); clearText(); });
+  document.getElementById('textclose').addEventListener('pointerup', closeKeyboard);
+  const mask = document.getElementById('textmask');
+  mask.addEventListener('pointerup', () => mask.classList.toggle('on', textin.classList.toggle('masked')));
+  // El teclado se cerró desde el celular (atrás): la barra también.
+  textin.addEventListener('blur', () => setTimeout(() => {
+    if (document.activeElement !== textin) document.body.classList.remove('typing');
+  }, 100));
   textin.addEventListener('input', () => {
     const now = textin.value;
     let same = 0;
@@ -577,7 +609,7 @@ function startTouchControls() {
   for (const type of ['keydown', 'keyup', 'keypress'])
     textin.addEventListener(type, (e) => {
       e.stopPropagation();
-      if (type === 'keydown' && e.key === 'Enter') { e.preventDefault(); tapKey('Enter'); textin.value = sent = ''; textin.blur(); }
+      if (type === 'keydown' && e.key === 'Enter') { e.preventDefault(); tapKey('Enter'); clearText(); }
     });
 }
 
