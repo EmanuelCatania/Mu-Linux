@@ -253,10 +253,21 @@ function readMenu(configText) {
 }
 
 // ── Descargas ───────────────────────────────────────────────────────────────
-// Module.muFetch(ruta) baja un archivo perezoso una sola vez aunque lo pidan el
-// juego (WebFiles.cpp) y la descarga de fondo a la vez.  files.txt marca con
-// una tercera columna "b" los que el cliente abre hasta la pantalla de login
-// (tools/web/boot-files.txt): esos se bajan mientras el jugador está en el menú.
+// El juego pide los archivos de a uno y espera cada uno (WebFiles.cpp): al
+// entrar a un mapa son cientos seguidos, y con la latencia de internet cada uno
+// cuesta una ida y vuelta.  Para que eso no se note:
+//  - Todo lo bajado queda en la caché del navegador (Cache Storage, "mu-files"),
+//    que sobrevive a cerrar la pestaña: la segunda vez no se baja nada.  La
+//    clave lleva el tamaño (?v=), así un archivo cambiado en el server no se
+//    confunde con el viejo.
+//  - Cuando el juego pide un archivo, se pide en paralelo el resto de su
+//    carpeta (los objetos de un mapa, las texturas de un monstruo): el juego
+//    los va a pedir enseguida y los encuentra en camino o listos.
+//  - Después del arranque se baja de fondo todo lo demás, de a poco, a la caché
+//    (no a la memoria del juego).
+// files.txt marca con una tercera columna "b" los que el cliente abre hasta la
+// pantalla de login (tools/web/boot-files.txt): esos se bajan en el menú.
+const CACHE_NAME = 'mu-files';
 let bootTotal = 0, bootDone = 0;
 function showProgress() {
   document.getElementById('bar').style.width = (bootTotal ? 100 * bootDone / bootTotal : 0) + '%';
@@ -279,21 +290,63 @@ var Module = {
     FS.mount(IDBFS, {}, ROOT + '/User');
     addRunDependency('mu-files');
 
-    const pending = new Map(), inflight = new Map();
+    const pending = new Map();      // ruta en el FS -> URL (con ?v=tamaño)
+    const folders = new Map();      // carpeta -> rutas que contiene
+    const inflight = new Map();     // ruta -> promesa de los bytes
+    const seenFolders = new Set();
+    const cacheReady = ('caches' in self) ? caches.open(CACHE_NAME).catch(() => null) : Promise.resolve(null);
     M.muPending = pending;
     M.muRequested = [];   // lo que pidió el juego, en orden (para boot-files.txt)
-    M.muFetch = (path, fromGame) => {
-      if (fromGame) M.muRequested.push(path.substring(ROOT.length + 1));
+
+    // Bytes de un archivo: de la caché o de la red (y quedan en la caché).
+    const loadBytes = (path) => {
       if (inflight.has(path)) return inflight.get(path);
       const url = pending.get(path);
-      if (!url) return Promise.resolve(true);
-      const job = fetch(url)
-        .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
-        .then((data) => { FS.writeFile(path, new Uint8Array(data)); pending.delete(path); return true; })
-        .catch((e) => { console.warn('No se pudo bajar ' + url + ': ' + e.message); return false; })
-        .finally(() => inflight.delete(path));
+      const job = (async () => {
+        const cache = await cacheReady;
+        if (cache) {
+          const hit = await cache.match(url).catch(() => null);
+          if (hit) return new Uint8Array(await hit.arrayBuffer());
+        }
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.arrayBuffer();
+        if (cache) cache.put(url, new Response(data.slice(0))).catch(() => {});
+        return new Uint8Array(data);
+      })().finally(() => inflight.delete(path));
       inflight.set(path, job);
       return job;
+    };
+    // Al FS del juego: lo que el juego abre (o va a abrir enseguida).
+    const fetchOne = (path) => {
+      if (!pending.has(path)) return Promise.resolve(true);
+      return loadBytes(path)
+        .then((data) => { if (pending.has(path)) { FS.writeFile(path, data); pending.delete(path); } return true; })
+        .catch((e) => { console.warn('No se pudo bajar ' + pending.get(path) + ': ' + e.message); return false; });
+    };
+    // Sólo a la caché (descarga de fondo): no ocupa memoria del juego.
+    const warm = async (path) => {
+      if (!pending.has(path) || inflight.has(path)) return;
+      const cache = await cacheReady;
+      if (!cache || await cache.match(pending.get(path)).catch(() => null)) return;
+      await loadBytes(path).catch(() => {});
+    };
+    // Cola con N descargas a la vez.
+    const runQueue = (list, n, fn) =>
+      Promise.all(Array.from({ length: n }, async () => { while (list.length) await fn(list.shift()); }));
+    // El resto de la carpeta del archivo pedido, en paralelo.  No las que son
+    // una colección suelta (sonidos, música): de esas se usa uno por vez.
+    const prefetchFolder = (path) => {
+      const folder = path.substring(0, path.lastIndexOf('/'));
+      if (seenFolders.has(folder)) return;
+      seenFolders.add(folder);
+      if (/\/audio\/|\/monster\/unused/i.test(folder)) return;
+      const list = (folders.get(folder) || []).filter((p) => p !== path && pending.has(p));
+      if (list.length) runQueue(list, 6, fetchOne);
+    };
+    M.muFetch = (path, fromGame) => {
+      if (fromGame) { M.muRequested.push(path.substring(ROOT.length + 1)); prefetchFolder(path); }
+      return fetchOne(path);
     };
     // Pedido desde un hilo (WebFiles.cpp): arranca la bajada y no espera.
     M.muFetchStart = (path) => { if (!pending.has(path)) return 0; M.muFetch(path, true); return 1; };
@@ -318,7 +371,10 @@ var Module = {
             FS.mkdirTree(ROOT + '/' + path.substring(0, slash));
             const full = ROOT + '/' + path;
             FS.writeFile(full, new Uint8Array(0));
-            pending.set(full, BASE + path.split('/').map(encodeURIComponent).join('/'));
+            pending.set(full, BASE + path.split('/').map(encodeURIComponent).join('/') + '?v=' + size);
+            const folder = full.substring(0, full.lastIndexOf('/'));
+            if (!folders.has(folder)) folders.set(folder, []);
+            folders.get(folder).push(full);
             if (/\.(toml|txt|ini)$/i.test(path) && Number(size) < 256 * 1024) eager.push(full);
             else if (flag === 'b') boot.push(full);
           }
@@ -330,9 +386,17 @@ var Module = {
           await Promise.all(Array.from({ length: 8 }, worker(eager)));
           removeRunDependency('mu-files');
           // Lo del login sigue de fondo, aunque el jugador ya haya entrado.
-          Promise.all(Array.from({ length: 4 }, worker(boot))).then(() => {
-            if (!M.muStarted) setNote('Listo');
-          });
+          await Promise.all(Array.from({ length: 4 }, worker(boot)));
+          if (!M.muStarted) setNote('Listo');
+          // Después, todo lo demás a la caché, de a dos: primero lo que se ve
+          // (mapas, monstruos, efectos), la música al final.  Las HD sólo si
+          // están activadas.
+          const hdOption = OPTIONS.find((o) => o.key === 'HDTextures');
+          const hd = hdOption && hdOption.input ? hdOption.input.checked : false;
+          const rank = (p) => /\/audio\/music\//i.test(p) ? 3 : /\/audio\//i.test(p) ? 2 : /\/monster\/unused/i.test(p) ? 4 : 1;
+          const rest = [...pending.keys()].filter((p) => hd || !/-hd\.[^.\/]+$/i.test(p))
+            .sort((a, b) => rank(a) - rank(b)).filter((p) => rank(p) < 4);
+          runQueue(rest, 2, warm);
         })
         .catch((e) => setNote('No se pudo cargar la lista de archivos: ' + e.message));
     });
