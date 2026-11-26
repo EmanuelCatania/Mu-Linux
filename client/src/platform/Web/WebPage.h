@@ -20,6 +20,9 @@ bool IsTouch();
 // jugador: se llama desde el click en Opciones, que lo es.
 bool IsFullscreen();
 void SetFullscreen(bool on);
+// El juego terminó (Salir del juego): la página guarda lo pendiente y vuelve
+// al inicio del sitio.
+void Exited();
 #else
 inline bool IsTouch() { return false; }
 #endif

@@ -9,7 +9,7 @@
   <title><%= pageTitle || appName %></title>
   <link rel="icon" href="/favicon.ico" type="image/x-icon">
   <link rel="stylesheet" href="/assets/css/bootstrap.min.css">
-  <link rel="stylesheet" href="/assets/css/custom.css?v=20261013-layers-language2">
+  <link rel="stylesheet" href="/assets/css/custom.css?v=20261126-play">
   <script src="/js/i18n.js"></script>
   <script src="/locales/<%= language %>.js"></script>
   <% if (siteSettings.theme !== "classic") { %><link rel="stylesheet" href="/css/daedalus.css?v=20261013-layers-language2"><% } %>
@@ -45,7 +45,7 @@
           <li class="nav-item"><a href="/" class="nav-link text-white <%= page === 'home' ? 'active' : '' %>"><%= t("Inicio") %></a></li>
           <li class="nav-item"><a href="/rankings" class="nav-link text-white <%= page === 'rankings' ? 'active' : '' %>">Rankings</a></li>
           <li class="nav-item"><a href="/download" class="nav-link text-white <%= page === 'download' ? 'active' : '' %>"><%= t("Descargas") %></a></li>
-          <% if (playEnabled) { %><li class="nav-item"><a href="/play" class="nav-link text-white <%= page === 'play' ? 'active' : '' %>"><%= t("Jugar") %></a></li><% } %>
+          <% if (playEnabled) { %><li class="nav-item"><a href="/play" class="nav-link play-link <%= page === 'play' ? 'active' : '' %>"><%= t("Jugar en el navegador") %><span class="play-ribbon">BETA</span></a></li><% } %>
         </ul>
       </div>
     </div>
@@ -62,7 +62,7 @@
         <li class="nav-item"><a href="/" class="nav-link"><%= t("Inicio") %></a></li>
         <li class="nav-item"><a href="/rankings" class="nav-link">Rankings</a></li>
         <li class="nav-item"><a href="/download" class="nav-link"><%= t("Descargas") %></a></li>
-        <% if (playEnabled) { %><li class="nav-item"><a href="/play" class="nav-link"><%= t("Jugar") %></a></li><% } %>
+        <% if (playEnabled) { %><li class="nav-item"><a href="/play" class="nav-link play-link"><%= t("Jugar en el navegador") %><span class="play-ribbon">BETA</span></a></li><% } %>
       </ul>
 
       <div class="mt-3">

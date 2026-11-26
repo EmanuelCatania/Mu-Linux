@@ -79,7 +79,10 @@ EM_JS(int, mu_page_login, (int visible, char* user, char* pass), {
     return 1;
 });
 
+EM_JS(void, mu_page_exited, (), { if (Module.muExited) Module.muExited(); });
+
 namespace WebPage {
+void Exited() { mu_page_exited(); }
 namespace {
 // Por debajo de esto la interfaz 640x480 se achica demasiado.
 constexpr DWORD MinWidth = 480, MinHeight = 360;

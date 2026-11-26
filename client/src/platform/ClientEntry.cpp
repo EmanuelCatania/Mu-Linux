@@ -874,6 +874,9 @@ int main(int, [[maybe_unused]] char** argv)
     Platform::GetWindow().Shutdown();
     DbgLog_Finish();
     Platform::SessionLog::FinishAll();
+#ifdef __EMSCRIPTEN__
+    WebPage::Exited();   // la página vuelve al sitio en vez de quedar en negro
+#endif
 
 #ifdef _WIN32
     return (int)msg.wParam;

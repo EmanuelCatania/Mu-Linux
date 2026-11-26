@@ -273,7 +273,7 @@ for (const type of ['keydown', 'keyup'])
   addEventListener(type, (e) => { if (e.key === 'Alt' && !document.body.classList.contains('menu')) e.preventDefault(); }, true);
 // Antes de cerrar la pestaña con el juego andando, el navegador pregunta.
 addEventListener('beforeunload', (e) => {
-  if (document.body.classList.contains('menu')) return;
+  if (document.body.classList.contains('menu') || Module.muLeaving) return;
   e.preventDefault(); e.returnValue = '';
 });
 
@@ -1049,6 +1049,14 @@ document.getElementById('play').addEventListener('click', () => {
   document.body.classList.remove('menu');
   document.getElementById('canvas').focus();
   M.muStarted = true;
+  // "Salir del juego": se guarda lo pendiente (Config.ini, debug.log) y la
+  // página vuelve al inicio del sitio, en vez de quedar en negro.
+  M.muExited = () => {
+    M.muLeaving = true;   // el aviso de "¿salir de la página?" no corresponde
+    const leave = () => { location.href = '/'; };
+    setTimeout(leave, 1500);   // por si el guardado no contesta
+    try { FS.syncfs(false, leave); } catch (e) { leave(); }
+  };
   // Un error al arrancar (o en el bucle del juego) no tiene que dejar la
   // página en negro sin explicación.
   const failed = (e) => {

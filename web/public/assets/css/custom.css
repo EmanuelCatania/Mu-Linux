@@ -175,3 +175,36 @@ footer a:hover {
 .language-flag img { border-radius:2px; }
 .language-flag:is(:hover,:focus-visible,.selected) { border-color:#8cdaff; box-shadow:0 0 0 1px #8cdaff; }
 .theme-daedalus-elf .language-flag { background:#eff8ff; color:#203e56!important; }
+
+/* Enlace "Jugar en el navegador" del menú: botón destacado con cinta BETA.
+   Los selectores largos son para ganarle a los colores de cada tema. */
+body .navbar-nav .nav-item .nav-link.play-link {
+  position: relative;
+  display: inline-block;
+  margin-left: .6rem;
+  padding: .4rem .95rem;
+  border-radius: 6px;
+  background: #ffc107;
+  color: #1c1608 !important;
+  font-weight: 600;
+  text-shadow: none;
+}
+body .navbar-nav .nav-item .nav-link.play-link:is(:hover, :focus-visible, .active) {
+  background: #ffd24a;
+  color: #1c1608 !important;
+}
+.play-link .play-ribbon {
+  position: absolute;
+  top: -9px;
+  right: -16px;
+  padding: 3px 7px;
+  border-radius: 2px;
+  background: #c62828;
+  color: #fff;
+  font: 700 10px/1 sans-serif;
+  letter-spacing: .08em;
+  transform: rotate(14deg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+  pointer-events: none;
+}
+.offcanvas .navbar-nav .nav-item .nav-link.play-link { margin: .5rem 0 0; }
