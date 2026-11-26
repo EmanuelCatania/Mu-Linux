@@ -222,6 +222,9 @@ const OPTIONS = [
     [0, 'No'], [1, 'Normal'], [2, 'Alto']] },
   { label: 'Distancia de dibujado', section: 'Window', key: 'DrawDistance', def: 0, choices: [
     [0, 'Normal'], [1, 'x1.5'], [2, 'x2'], [3, 'x3']] },
+  { label: 'Agua mejorada', section: 'Window', key: 'WorldWater', def: 1, check: true },
+  { label: 'Efecto bajo el agua (Atlans)', section: 'Window', key: 'Underwater', def: 2, choices: [
+    [0, 'No'], [1, 'Sin ondulación'], [2, 'Completo']] },
   { label: 'Niebla de profundidad', section: 'Window', key: 'DepthFog', def: 0, check: true },
   { title: 'Cuenta' },
   { label: 'Usuario', section: 'User', key: 'Username', text: true, max: 10 },

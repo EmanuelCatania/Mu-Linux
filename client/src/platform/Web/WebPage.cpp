@@ -10,6 +10,9 @@
 // Con la pestaña oculta el documento puede medir 0: se usa la ventana.
 EM_JS(int, mu_page_width, (), { return (document.documentElement.clientWidth || innerWidth) | 0; });
 EM_JS(int, mu_page_height, (), { return (document.documentElement.clientHeight || innerHeight) | 0; });
+// Píxeles de pantalla por píxel CSS: 2 o 3 en un celular, más de 1 en un
+// monitor con escala.
+EM_JS(double, mu_page_pixel_ratio, (), { return window.devicePixelRatio || 1; });
 // Con la pestaña oculta el navegador no da cuadros: el tope de 100 ms deja
 // correr la red y la lógica (si no, el server corta por inactividad).
 EM_ASYNC_JS(void, mu_wait_frame, (), {
@@ -30,7 +33,11 @@ DWORD s_pendingWidth = 0, s_pendingHeight = 0, s_pendingSince = 0, s_lastCheck =
 }
 
 void Size(DWORD& width, DWORD& height) {
-    const int w = mu_page_width(), h = mu_page_height();
+    // En píxeles de pantalla, no CSS: en un celular la página mide ~800x360
+    // CSS y dibujar a eso se veía pixelado al estirarlo x3.
+    double ratio = mu_page_pixel_ratio();
+    if (ratio < 1.0) ratio = 1.0;
+    const int w = (int)(mu_page_width() * ratio), h = (int)(mu_page_height() * ratio);
     width = w > (int)MinWidth ? (DWORD)w : MinWidth;
     height = h > (int)MinHeight ? (DWORD)h : MinHeight;
     // Con una resolución elegida en Opciones se dibuja con ese alto (si es más
