@@ -14,7 +14,7 @@
 // preprocesador lo pasa como texto y las rompe.
 EM_ASYNC_JS(int, mu_web_fetch, (const char* rawPath), {
     const pending = Module.muPending;
-    if (!pending || pending.size === 0) return 1;
+    if (!pending) return 1;
     let path = UTF8ToString(rawPath).split(String.fromCharCode(92)).join('/');
     if (path.charAt(0) !== '/') path = FS.cwd() + '/' + path;
     const parts = [];
@@ -23,7 +23,7 @@ EM_ASYNC_JS(int, mu_web_fetch, (const char* rawPath), {
         if (part === '..') parts.pop(); else parts.push(part);
     }
     path = '/' + parts.join('/');
-    if (!pending.has(path)) return 1;
+    if (!pending.has(path)) { if (Module.muTouch) Module.muTouch(path); return 1; }
     // Module.muFetch (shell.html) no repite una bajada que ya está en curso
     // (la descarga de fondo del menú puede haberla empezado).
     return (await Module.muFetch(path, true)) ? 1 : 0;

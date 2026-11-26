@@ -369,6 +369,13 @@ var Module = {
     const seenFolders = new Set();
     const cacheReady = ('caches' in self) ? caches.open(CACHE_NAME).catch(() => null) : Promise.resolve(null);
     M.muPending = pending;
+    // Lo que ya está en el FS del juego: ruta -> { url, último uso }.  El juego
+    // lee cada archivo entero y se queda con su copia (textura, modelo,
+    // sonido); la del FS sólo ocupa memoria.  Pasado un rato sin abrirlo se
+    // vacía y vuelve a pending: si hace falta otra vez sale de la caché.
+    const loaded = new Map();
+    const EVICT_AFTER = 60000;
+    M.muTouch = (path) => { const entry = loaded.get(path); if (entry) entry.used = performance.now(); };
     M.muRequested = [];   // lo que pidió el juego, en orden (para boot-files.txt)
 
     // Bytes de un archivo: de la caché o de la red (y quedan en la caché).
@@ -394,7 +401,14 @@ var Module = {
     const fetchOne = (path) => {
       if (!pending.has(path)) return Promise.resolve(true);
       return loadBytes(path)
-        .then((data) => { if (pending.has(path)) { FS.writeFile(path, data); pending.delete(path); } return true; })
+        .then((data) => {
+          if (pending.has(path)) {
+            loaded.set(path, { url: pending.get(path), used: performance.now() });
+            FS.writeFile(path, data);
+            pending.delete(path);
+          }
+          return true;
+        })
         .catch((e) => { console.warn('No se pudo bajar ' + pending.get(path) + ': ' + e.message); return false; });
     };
     // Sólo a la caché (descarga de fondo): no ocupa memoria del juego.
@@ -422,7 +436,28 @@ var Module = {
       return fetchOne(path);
     };
     // Pedido desde un hilo (WebFiles.cpp): arranca la bajada y no espera.
-    M.muFetchStart = (path) => { if (!pending.has(path)) return 0; M.muFetch(path, true); return 1; };
+    M.muFetchStart = (path) => { if (!pending.has(path)) { M.muTouch(path); return 0; } M.muFetch(path, true); return 1; };
+    // Sólo con caché (si no, volver a pedirlo sería otra bajada) y nunca un
+    // archivo abierto (las fuentes quedan abiertas) ni los de texto chicos.
+    cacheReady.then((cache) => {
+      if (!cache) return;
+      setInterval(() => {
+        const now = performance.now(), open = new Set();
+        for (const stream of FS.streams) if (stream && stream.node) open.add(stream.node);
+        for (const [path, entry] of loaded) {
+          if (now - entry.used < EVICT_AFTER || inflight.has(path)) continue;
+          if (/\.(toml|txt|ini)$/i.test(path)) { loaded.delete(path); continue; }
+          let node;
+          try { node = FS.lookupPath(path).node; } catch (e) { loaded.delete(path); continue; }
+          if (open.has(node)) { entry.used = now; continue; }
+          FS.truncate(path, 0);
+          pending.set(path, entry.url);
+          loaded.delete(path);
+          // La próxima vez que se abra uno, la carpeta vuelve a venir en paralelo.
+          seenFolders.delete(path.substring(0, path.lastIndexOf('/')));
+        }
+      }, 15000);
+    });
 
     FS.syncfs(true, () => {
       let configText = '';
