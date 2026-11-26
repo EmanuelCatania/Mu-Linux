@@ -997,9 +997,25 @@ bool CSkillManager::MultiSkillAttack(int aIndex, int bIndex, CSkill* lpSkill)
 
 	if (lpObj->Type == OBJECT_USER)
 	{
-		lpObj->MultiSkillIndex = lpSkill->m_index;
+		// MultiSkillCount es el cupo de reportes de impacto (0x1D) que quedan
+		// para este skill.  Cada casteo suma MULTI_SKILL_HITS_PER_CAST, hasta
+		// MULTI_SKILL_HITS_MAX.  Antes se reiniciaba en 5 con cada 0x1E, pero
+		// los proyectiles de un casteo (los espíritus de Evil Spirit, el rayo
+		// de Aqua Beam) siguen pegando después del siguiente: sus impactos se
+		// cobraban del cupo del último casteo y desde el sexto se descartaban,
+		// casteando seguido y, sobre todo, al dejar de castear.
+		if (lpObj->MultiSkillIndex == lpSkill->m_index)
+		{
+			int budget = lpObj->MultiSkillCount + MULTI_SKILL_HITS_PER_CAST;
 
-		lpObj->MultiSkillCount = 0;
+			lpObj->MultiSkillCount = (budget > MULTI_SKILL_HITS_MAX) ? MULTI_SKILL_HITS_MAX : budget;
+		}
+		else
+		{
+			lpObj->MultiSkillCount = MULTI_SKILL_HITS_PER_CAST;
+		}
+
+		lpObj->MultiSkillIndex = lpSkill->m_index;
 
 		switch (lpSkill->m_skill)
 		{
@@ -1877,11 +1893,16 @@ void CSkillManager::CGMultiSkillAttackRecv(PMSG_MULTI_SKILL_ATTACK_RECV* lpMsg, 
 		return;
 	}
 
-	if (lpObj->Type == OBJECT_USER && (lpObj->MultiSkillIndex == 0 || lpObj->MultiSkillIndex != lpSkill->m_index || (lpObj->MultiSkillCount++) >= 5))
+	if (lpObj->Type == OBJECT_USER && (lpObj->MultiSkillIndex == 0 || lpObj->MultiSkillIndex != lpSkill->m_index || lpObj->MultiSkillCount == 0))
 	{
-		TRACE_REJECT(aIndex, 0x1D, -1, "skill %d: sin 0x1E previo o fuera de cuenta (MultiSkillIndex=%d esperado=%d MultiSkillCount=%d)", lpSkill->m_skill, lpObj->MultiSkillIndex, lpSkill->m_index, lpObj->MultiSkillCount);
+		TRACE_REJECT(aIndex, 0x1D, -1, "skill %d: sin 0x1E previo o sin cupo de impactos (MultiSkillIndex=%d esperado=%d cupo=%d)", lpSkill->m_skill, lpObj->MultiSkillIndex, lpSkill->m_index, lpObj->MultiSkillCount);
 		GCRejectSend(aIndex, 0x1D, REJECT_SKILL_SEQUENCE);
 		return;
+	}
+
+	if (lpObj->Type == OBJECT_USER)
+	{
+		lpObj->MultiSkillCount--;
 	}
 
 	if (lpObj->Type == OBJECT_USER && lpSkill->m_skill == SKILL_TRIPLE_SHOT)
