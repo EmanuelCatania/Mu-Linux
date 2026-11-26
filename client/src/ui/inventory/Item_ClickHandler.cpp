@@ -1080,6 +1080,11 @@ void __cdecl InventoryGrid_Tick(char* origin_x, int origin_y, short* inv_base,
             // Per líneas 989-1009 de IDA. Guarda el tipo de item en la tabla de 3 slots
             // table at dword_559C60[0..2].
             SHORT ctrl = Platform::GetInput().KeyState(0x11);   // VK_CONTROL
+#ifdef __EMSCRIPTEN__
+            // DESVIACION (versión web): fuera de pantalla completa Ctrl+W cierra
+            // la pestaña; ahí también vale Shift+Q/W/E.
+            ctrl |= Platform::GetInput().KeyState(0x10);       // VK_SHIFT
+#endif
             if ((char)((unsigned short)ctrl >> 8) == (char)0x80) {
                 int hk = -1;
                 if (PressKey(0x51))      hk = 0;   // Q

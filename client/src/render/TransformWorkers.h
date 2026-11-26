@@ -36,7 +36,10 @@ public:
         {
             std::lock_guard<std::mutex> lock(mutex_);
             size_ = size; context_ = context; work_ = work;
-            std::fegetenv(&environment_); mxcsr_ = _mm_getcsr();
+            std::fegetenv(&environment_);
+#ifndef __EMSCRIPTEN__
+            mxcsr_ = _mm_getcsr();
+#endif
             pending_ = count_; ++generation_;
         }
         ready_.notify_all();
@@ -58,7 +61,12 @@ private:
             const auto end = size * (id + 2) / (count_ + 1);
             lock.unlock();
             // Los hilos nuevos no heredan necesariamente el modo FP del juego.
-            std::fesetenv(&environment); _mm_setcsr(mxcsr);
+            std::fesetenv(&environment);
+#ifndef __EMSCRIPTEN__
+            _mm_setcsr(mxcsr);
+#else
+            (void)mxcsr;  // wasm no tiene MXCSR: el modo FP es fijo.
+#endif
             work(context, begin, end);
             lock.lock();
             if (--pending_ == 0) done_.notify_one();

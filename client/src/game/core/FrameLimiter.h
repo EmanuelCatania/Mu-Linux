@@ -17,6 +17,7 @@ public:
     void SetFpsLimit(int fps) { m_FpsLimit = fps >= 0 ? fps : 60; }
     void SetRenderDecoupled(bool enabled) { m_RenderDecoupled = enabled; }
     bool IsRenderDecoupled() const { return m_RenderDecoupled; }
+    int FpsLimit() const { return m_FpsLimit; }
     void Shutdown();
 private:
     StartTime m_PreviousStart{};

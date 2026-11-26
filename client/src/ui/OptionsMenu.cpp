@@ -9,6 +9,7 @@
 #include "assets/text/ClientText.h"
 #include "net/HWID.h"
 #include "audio/SoundManager.h"
+#include "platform/Web/WebPage.h"
 
 COptionsMenu gOptionsMenu;
 
@@ -499,6 +500,17 @@ bool COptionsMenu::UpdateAntilagGroup()
 namespace {
 void ApplyScreen(bool windowMode, bool borderless, int resolution)
 {
+#ifdef __EMSCRIPTEN__
+    // Navegador: la pantalla completa es de la página y la resolución es la
+    // de dibujo; el tamaño final lo calcula WebPage::Size con la proporción
+    // de la página.  No hay bordes que sacar.
+    if (windowMode == WebPage::IsFullscreen()) WebPage::SetFullscreen(!windowMode);
+    gUserSettings.SetWindow(true, false, resolution);
+    DWORD webWidth, webHeight;
+    WebPage::Size(webWidth, webHeight);
+    gWindow.ChangeMode(gWindow.IsWindowMode(), false, webWidth, webHeight);
+    return;
+#endif
     DWORD width = gWindow.GetRealWidth(), height = gWindow.GetHeight();
     CUserSettings::GetResolutionSize(resolution, &width, &height);
     gWindow.ChangeMode(windowMode, borderless, width, height);
@@ -506,7 +518,22 @@ void ApplyScreen(bool windowMode, bool borderless, int resolution)
 }
 int CurrentResolution()
 {
+#ifdef __EMSCRIPTEN__
+    // El tamaño real sigue la proporción de la página y casi nunca está en la
+    // tabla: vale la elegida.
+    return gUserSettings.GetResolution();
+#else
     return CUserSettings::FindResolution(gWindow.GetRealWidth(), gWindow.GetHeight());
+#endif
+}
+// Sin bordes no existe en el navegador.
+bool ShowBorderless()
+{
+#ifdef __EMSCRIPTEN__
+    return false;
+#else
+    return gWindow.IsWindowMode();
+#endif
 }
 }
 
@@ -531,7 +558,7 @@ void COptionsMenu::RenderScreen()
     RenderButton((float)RowY(row++), GlobalText[920], true);
     RenderButton((float)RowY(row++), gClientText.Get(gWindow.IsWindowMode()
         ? ClientTextId::ScreenWindowed : ClientTextId::ScreenFullscreen));
-    if (gWindow.IsWindowMode())
+    if (ShowBorderless())
         RenderToggle((float)RowY(row++), gClientText.Get(ClientTextId::ScreenBorderless),
                      gWindow.IsBorderless());
     char text[32];
@@ -580,7 +607,12 @@ bool COptionsMenu::UpdateAdvanced()
     return true;
 }
 
-#ifdef MU_RENDER_WEBGPU
+// En el navegador el render es siempre WebGPU (el navegador elige Vulkan,
+// D3D o Metal por debajo): no hay backend que elegir.
+#if defined(MU_RENDER_WEBGPU) && !defined(__EMSCRIPTEN__)
+#define MU_BACKEND_SELECTOR 1
+#endif
+#ifdef MU_BACKEND_SELECTOR
 namespace {
 // Siguiente backend disponible en la dirección `step` (+1/-1); -1 si no hay.
 int NextRenderBackend(int from, int step)
@@ -600,7 +632,7 @@ void COptionsMenu::RenderGraphics()
     int row = 0;
     char text[96];
     RenderButton((float)RowY(row++), gClientText.Get(ClientTextId::OptionsGraphics), true);
-#ifdef MU_RENDER_WEBGPU
+#ifdef MU_BACKEND_SELECTOR
     // Backend de render (OpenGL o WebGPU sobre D3D12/D3D11/Vulkan).
     const auto backend = gUserSettings.GetRenderBackend();
     Platform::TextFormatSecure(text, gClientText.Get(ClientTextId::RenderBackend), CUserSettings::RenderBackendName(backend));
@@ -651,7 +683,7 @@ bool COptionsMenu::UpdateScreen()
         if (clicked) ApplyScreen(!windowMode, borderless, resolution);
         return true;
     }
-    if (windowMode) {
+    if (ShowBorderless()) {
         if (UpdateToggle(RowY(row++), clicked)) {
             if (clicked) ApplyScreen(windowMode, !borderless, resolution);
             return true;
@@ -684,7 +716,7 @@ bool COptionsMenu::UpdateGraphics()
 {
     int row = 1;
     bool clicked;
-#ifdef MU_RENDER_WEBGPU
+#ifdef MU_BACKEND_SELECTOR
     const int backend = static_cast<int>(gUserSettings.GetRenderBackend());
     const int backendStep = UpdateSelector(RowY(row++), NextRenderBackend(backend, -1) >= 0, NextRenderBackend(backend, 1) >= 0);
     if (backendStep != INT_MIN) {

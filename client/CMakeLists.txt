@@ -801,6 +801,43 @@ target_link_options(mu97k PRIVATE
 )
 endif()
 
+elseif(EMSCRIPTEN)
+    target_sources(mu97k PRIVATE src/platform/Web/WebPage.cpp src/platform/Web/WebPage.h)
+    # Navegador.  El bucle del juego y las cargas bloquean: el cliente cede el
+    # control al navegador una vez por cuadro (WebPage::WaitFrame) y espera las
+    # descargas (WebFiles).  Para eso hay dos mecanismos:
+    #   JSPI      (main.html/js/wasm): lo trae el navegador; el frame cuesta lo
+    #             mismo que sin pausas.  Chrome y Edge.
+    #   ASYNCIFY  (main-asyncify.js/wasm): reescribe el wasm para poder pausarlo;
+    #             anda en todos lados pero el frame cuesta varias veces más.
+    # La página (shell.html) carga el que soporte el navegador.  Los dos se
+    # escriben en bin/Web.  Los hilos piden COOP/COEP en la página.
+    set(MU_WEB_ASYNC "JSPI" CACHE STRING "Cómo pausa el cliente web: JSPI o ASYNCIFY")
+    set_property(CACHE MU_WEB_ASYNC PROPERTY STRINGS JSPI ASYNCIFY)
+    set_target_properties(mu97k PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/bin/Web"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}/bin/Web")
+    if(MU_WEB_ASYNC STREQUAL "ASYNCIFY")
+        set_target_properties(mu97k PROPERTIES OUTPUT_NAME main-asyncify SUFFIX ".js")
+        target_link_options(mu97k PRIVATE -sASYNCIFY -sASYNCIFY_STACK_SIZE=131072)
+    else()
+        set_target_properties(mu97k PROPERTIES SUFFIX ".html")
+        target_link_options(mu97k PRIVATE -sJSPI
+            "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/src/platform/Web/shell.html")
+        set_property(TARGET mu97k APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/platform/Web/shell.html")
+    endif()
+    target_link_options(mu97k PRIVATE
+        -pthread
+        -sAUDIO_WORKLET=1 -sWASM_WORKERS=1
+        -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=268435456 -sMAXIMUM_MEMORY=4294967296
+        -sSTACK_SIZE=8388608
+        -sPTHREAD_POOL_SIZE=8
+        -sMAX_WEBGL_VERSION=2
+        -sFORCE_FILESYSTEM=1 -lidbfs.js
+        -sEXIT_RUNTIME=0
+        --profiling-funcs
+        -sENVIRONMENT=web,worker
+        -sEXPORTED_RUNTIME_METHODS=FS,ENV,IDBFS,addRunDependency,removeRunDependency,callMain)
 else()
     find_package(OpenGL REQUIRED)
     target_link_libraries(mu97k PRIVATE OpenGL::GL)

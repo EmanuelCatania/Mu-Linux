@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=overlays-content">
+<title>Mu Online</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  /* El canvas ocupa siempre toda la página; el juego dibuja a su resolución
+     (Opciones, o la de la página) y el navegador lo estira.  SDL escala el
+     mouse con la relación entre las dos (canvas con tamaño por CSS). */
+  #canvas { display: block; width: 100vw; height: 100vh; outline: none; touch-action: none; }
+  #status { position: fixed; left: 0; right: 0; bottom: 24px; text-align: center;
+            font: 14px sans-serif; color: #c8b27a; pointer-events: none; }
+  #fullscreen { position: fixed; right: 8px; top: 8px; z-index: 2; padding: 4px 10px;
+                font: 12px sans-serif; color: #c8b27a; background: rgba(0,0,0,.6);
+                border: 1px solid #5a4a2a; border-radius: 3px; cursor: pointer; opacity: .55; }
+  #fullscreen:hover { opacity: 1; }
+  :fullscreen #fullscreen, body.menu #fullscreen { display: none; }
+  /* En el celular, si no quedó en pantalla completa: arriba a la izquierda. */
+  body.touch #fullscreen { left: 6px; right: auto; padding: 8px 12px; font-size: 13px; opacity: .85; }
+
+  /* Menú previo: opciones mientras el juego y los datos bajan de fondo. */
+  #menu { position: fixed; inset: 0; z-index: 3; display: none; overflow: auto;
+          background: radial-gradient(ellipse at center, #1c140a 0%, #000 75%);
+          font: 14px sans-serif; color: #d8c898; }
+  body.menu #menu { display: flex; align-items: center; justify-content: center; }
+  #menu .panel { width: min(520px, 92vw); margin: 16px; padding: 20px 24px;
+                 background: rgba(10, 8, 4, .9); border: 1px solid #6b5630; border-radius: 4px;
+                 box-shadow: 0 0 24px rgba(0,0,0,.8); }
+  #menu h1 { margin: 0 0 4px; font: 600 24px serif; color: #f0d890; text-align: center; letter-spacing: 1px; }
+  #menu .sub { margin: 0 0 16px; text-align: center; color: #9a8a60; font-size: 12px; }
+  #menu h2 { margin: 14px 0 6px; font: 600 12px sans-serif; color: #b09a60; text-transform: uppercase;
+             letter-spacing: 1px; border-bottom: 1px solid #3a2e18; padding-bottom: 3px; }
+  #menu .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 6px 0; }
+  #menu select { min-width: 170px; padding: 3px 6px; font: 13px sans-serif; color: #e8d8a8;
+                 background: #1a140a; border: 1px solid #5a4a2a; border-radius: 3px; }
+  #menu input[type=text] { width: 158px; padding: 3px 6px; font: 13px sans-serif; color: #e8d8a8;
+                           background: #1a140a; border: 1px solid #5a4a2a; border-radius: 3px; }
+  #menu input[type=checkbox] { width: 18px; height: 18px; accent-color: #b8902a; }
+  #menu .progress { height: 6px; margin: 16px 0 6px; background: #1a140a; border: 1px solid #3a2e18; border-radius: 3px; overflow: hidden; }
+  #menu .progress div { height: 100%; width: 0; background: linear-gradient(90deg, #6b5020, #d8a840); transition: width .3s; }
+  #menu .note { min-height: 16px; font-size: 12px; color: #9a8a60; text-align: center; }
+  #play { display: block; width: 100%; margin-top: 12px; padding: 10px; font: 600 16px sans-serif;
+          color: #1a1206; background: linear-gradient(#e8c060, #a87a20); border: 1px solid #f0d890;
+          border-radius: 3px; cursor: pointer; }
+  #play:disabled { color: #6a5a3a; background: #2a2214; border-color: #4a3a20; cursor: default; }
+
+  /* Controles táctiles (celular y tablet): una capa sobre el canvas que pasa
+     los toques al juego como mouse, y botones para las teclas. */
+  #touch, #pad, #padtoggle, #rotate { display: none; }
+  body.touch:not(.menu) #touch { display: block; position: fixed; inset: 0; z-index: 1; touch-action: none;
+                                 -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  body.touch:not(.menu) #pad { display: flex; position: fixed; z-index: 2; right: 6px; top: 50%;
+                               transform: translateY(-58%); gap: 6px; }
+  body.touch.padhidden #pad { display: none; }
+  body.touch:not(.menu) #padtoggle { display: block; position: fixed; z-index: 2; right: 6px; top: 6px; }
+  #pad .col { display: flex; flex-direction: column; gap: 6px; }
+  #pad button, #padtoggle { width: 44px; height: 44px; padding: 0; border-radius: 50%; touch-action: none;
+                            font: 600 13px sans-serif; color: #f0d890; background: rgba(20, 14, 6, .55);
+                            border: 1px solid rgba(200, 160, 80, .7); -webkit-user-select: none; user-select: none; }
+  #padtoggle { width: 34px; height: 34px; font-size: 11px; opacity: .7; }
+  #pad button.on { background: rgba(180, 120, 30, .8); color: #fff; }
+  #pad button:active { background: rgba(120, 90, 30, .8); }
+  /* Barra de texto: lo que se escribe con el teclado del celular, arriba (el
+     campo del juego puede quedar tapado por el teclado). */
+  #textbar { display: none; position: fixed; z-index: 5; left: 50%; top: 6px; transform: translateX(-50%);
+             gap: 6px; align-items: center; padding: 6px; background: rgba(10, 8, 4, .9);
+             border: 1px solid #6b5630; border-radius: 4px; }
+  body.typing #textbar { display: flex; }
+  #textin { width: min(360px, 50vw); padding: 6px 8px; font: 16px sans-serif; color: #f0e0b0;
+            background: #1a140a; border: 1px solid #5a4a2a; border-radius: 3px; outline: none; }
+  #textin.masked { -webkit-text-security: disc; }
+  #textbar button { min-width: 44px; height: 36px; font: 600 13px sans-serif; color: #f0d890;
+                    background: rgba(40, 28, 10, .9); border: 1px solid rgba(200, 160, 80, .7); border-radius: 3px; }
+  #textbar button.on { background: rgba(180, 120, 30, .8); color: #fff; }
+  @media (orientation: portrait) {
+    body.touch:not(.menu) #rotate { display: flex; position: fixed; inset: 0; z-index: 4; align-items: center;
+                                    justify-content: center; padding: 24px; text-align: center;
+                                    font: 16px sans-serif; color: #d8c898; background: rgba(0, 0, 0, .9); }
+  }
+</style>
+</head>
+<body class="menu">
+<canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+<div id="status"></div>
+<button id="fullscreen" title="Pantalla completa: el juego recibe todas las teclas (Ctrl+número, Ctrl+W...)">Pantalla completa</button>
+<div id="menu">
+  <div class="panel">
+    <h1>MU Online</h1>
+    <p class="sub">Elegí las opciones mientras se prepara el juego</p>
+    <div id="options"></div>
+    <div class="progress"><div id="bar"></div></div>
+    <div class="note" id="note">Cargando…</div>
+    <button id="play" disabled>Jugar</button>
+  </div>
+</div>
+<div id="touch"></div>
+<div id="pad">
+  <div class="col">
+    <button data-key="Digit1">1</button><button data-key="Digit2">2</button>
+    <button data-key="Digit3">3</button><button data-key="Digit4">4</button>
+  </div>
+  <div class="col">
+    <button id="rightmode" title="Los toques son clic derecho: lanzar el skill elegido">Skill</button>
+    <button data-key="KeyQ">Q</button><button data-key="KeyW">W</button><button data-key="KeyE">E</button>
+  </div>
+  <div class="col">
+    <button data-key="KeyV" title="Inventario">Inv</button>
+    <button data-key="KeyC" title="Personaje">Pj</button>
+    <button id="keyboard" title="Abre el teclado del celular">Tecl.</button>
+    <button data-key="Escape" title="Menú">Menú</button>
+  </div>
+</div>
+<button id="padtoggle" title="Mostrar u ocultar los botones">⋯</button>
+<div id="textbar">
+  <input id="textin" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="send">
+  <button id="textmask" title="Ocultar lo que se escribe (contraseñas)">***</button>
+  <button id="texttab" title="Pasar al campo siguiente">Tab</button>
+  <button id="textenter" title="Enter">Enter</button>
+  <button id="textclose" title="Cerrar el teclado">X</button>
+</div>
+<div id="rotate">Girá el celular: el juego se ve acostado.</div>
+<script>
+// Táctil o no: lo decide la página una vez y se lo pasa al cliente (--mobile).
+// No alcanza con el user agent: una notebook táctil o una tablet con teclado
+// engañan; se pide puntero grueso y pantalla táctil.
+function isTouchClient() {
+  if (navigator.userAgentData && navigator.userAgentData.mobile) return true;
+  return window.matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0;
+}
+
+// Raíz del cliente dentro del sistema de archivos del wasm.  Content/ y System/
+// se crean como archivos "perezosos": existen en el árbol (las búsquedas y los
+// listados los ven) y su contenido se baja recién cuando el juego los abre.
+const ROOT = '/mu';
+const BASE = new URL('game/', document.baseURI).href;
+const CONFIG = ROOT + '/Config.ini', SAVED_CONFIG = ROOT + '/User/Config.ini';
+
+function setStatus(text) { document.getElementById('status').textContent = text || ''; }
+function setNote(text) { document.getElementById('note').textContent = text || ''; }
+
+// Pantalla completa.  Fuera de ella el navegador se queda con algunas teclas
+// (Ctrl+W cierra la pestaña, Ctrl+1..9 cambian de pestaña, Ctrl+T/N abren otra)
+// y el juego no las ve.  En pantalla completa, donde el navegador lo permite
+// (Chrome, Edge), Keyboard Lock se las pasa todas al juego; Escape sostenido
+// sale.  El tamaño del juego sigue al de la página solo (WebPage.cpp).
+// Opciones > Pantalla la pide con muSetFullscreen (WebPage.cpp).
+window.muSetFullscreen = async (on) => {
+  try {
+    if (!on) { if (document.fullscreenElement) await document.exitFullscreen(); return; }
+    await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+    if (navigator.keyboard && navigator.keyboard.lock) await navigator.keyboard.lock();
+  } catch (e) {
+    console.warn('Pantalla completa: ' + e.message);
+  }
+  document.getElementById('canvas').focus();
+};
+document.getElementById('fullscreen').addEventListener('click', () => window.muSetFullscreen(true));
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
+});
+// Alt solo abre el menú del navegador (Firefox, y Chrome en Windows al soltarlo)
+// y le saca el foco al juego.  SDL ya frena F1, F10 y el resto.
+for (const type of ['keydown', 'keyup'])
+  addEventListener(type, (e) => { if (e.key === 'Alt' && !document.body.classList.contains('menu')) e.preventDefault(); }, true);
+// Antes de cerrar la pestaña con el juego andando, el navegador pregunta.
+addEventListener('beforeunload', (e) => {
+  if (document.body.classList.contains('menu')) return;
+  e.preventDefault(); e.returnValue = '';
+});
+
+// Versión del build en las URLs de main.js y main.wasm: un proxy que guarda los
+// .js sin mirar las cabeceras (el Asset Caching de nginx-proxy-manager) podría
+// servir un main.js viejo con un main.wasm nuevo.  tools/web/stage-site.py
+// cambia la marca por un hash del build; sin cambiar (pruebas locales), nada.
+const BUILD = '%MU_BUILD%';
+const BUILD_QUERY = BUILD.includes('%') ? '' : '?v=' + BUILD;
+
+// Red: el cliente abre sockets TCP comunes y Emscripten los convierte en
+// WebSocket a ws://<host>:<puerto>/.  Acá se mandan todos al puente de mu-web
+// (/play/ws, web/lib/play-gateway.js), que sólo deja pasar los puertos del
+// server.  ?gw=<url> usa otro puente, sólo en pruebas locales (en el sitio
+// un link armado podría mandar el login del jugador por un puente ajeno).
+const LOCAL_PAGE = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+const GATEWAY = (LOCAL_PAGE && new URLSearchParams(location.search).get('gw'))
+  || (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/play/ws';
+{
+  const NativeWebSocket = window.WebSocket;
+  window.WebSocket = class extends NativeWebSocket {
+    constructor(url, protocols) {
+      const port = new URL(url).port;
+      super(GATEWAY + (GATEWAY.includes('?') ? '&' : '?') + 'port=' + encodeURIComponent(port), protocols);
+    }
+  };
+}
+
+// ── Opciones ────────────────────────────────────────────────────────────────
+// Las mismas claves de Config.ini que lee el cliente (app/config/OptionTable.h).
+// Lo que el jugador cambia acá o en el juego queda en Config.ini, que se guarda
+// en User/ (IndexedDB) y vale la próxima vez.  En el navegador la resolución es
+// la de dibujo: el alto elegido con la proporción de la página
+// (WebPage::Size); "Automática" usa la de la página (índice 8 = 1440, más alto
+// que cualquier página común).
+const OPTIONS = [
+  { title: 'Pantalla' },
+  { label: 'Resolución', section: 'Window', key: 'Resolution', def: 8, choices: [
+    [8, 'Automática (la de la página)'], [0, '480 de alto'], [1, '600 de alto'], [4, '720 de alto'],
+    [2, '768 de alto'], [6, '900 de alto'], [7, '1080 de alto']] },
+  { label: 'Pantalla completa al entrar', local: 'mu-fullscreen', def: 0, check: true },
+  { label: 'Límite de FPS', section: 'Window', key: 'FpsLimit', def: 60, choices: [
+    [30, '30'], [60, '60'], [120, '120'], [144, '144'], [0, 'Sin límite']] },
+  { title: 'Gráficos' },
+  { label: 'Calidad de texturas', section: 'Window', key: 'TextureQuality', def: 0, choices: [
+    [0, 'Original'], [1, 'Mipmaps'], [2, 'Mipmaps + bicúbico']] },
+  { label: 'Texturas HD', section: 'Window', key: 'HDTextures', def: 0, check: true },
+  { label: 'Antialiasing', section: 'Window', key: 'Antialiasing', def: 0, choices: [
+    [0, 'No'], [1, 'FXAA'], [2, 'MSAA 4x'], [3, 'MSAA 4x + FXAA']] },
+  { label: 'Sombras', section: 'Window', key: 'Shadows', def: 0, choices: [
+    [0, 'No'], [1, '1'], [2, '2']] },
+  { label: 'Luces dinámicas', section: 'Window', key: 'DynamicLights', def: 1, choices: [
+    [0, 'No'], [1, 'Normales'], [2, 'Altas']] },
+  { label: 'Brillo (bloom)', section: 'Window', key: 'Bloom', def: 1, choices: [
+    [0, 'No'], [1, 'Normal'], [2, 'Alto']] },
+  { label: 'Distancia de dibujado', section: 'Window', key: 'DrawDistance', def: 0, choices: [
+    [0, 'Normal'], [1, 'x1.5'], [2, 'x2'], [3, 'x3']] },
+  { label: 'Agua mejorada', section: 'Window', key: 'WorldWater', def: 1, check: true },
+  { label: 'Efecto bajo el agua (Atlans)', section: 'Window', key: 'Underwater', def: 2, choices: [
+    [0, 'No'], [1, 'Sin ondulación'], [2, 'Completo']] },
+  { label: 'Niebla de profundidad', section: 'Window', key: 'DepthFog', def: 0, check: true },
+  { title: 'Cuenta' },
+  { label: 'Usuario', section: 'User', key: 'Username', text: true, max: 10 },
+  { title: 'Sonido' },
+  { label: 'Sonido', section: 'Sound', key: 'EnableSound', def: 1, check: true },
+  { label: 'Música', section: 'Sound', key: 'EnableMusic', def: 1, check: true },
+];
+
+// INI mínimo: conserva líneas, comentarios y claves que el menú no conoce.
+function iniGet(text, section, key) {
+  let current = '';
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (line.startsWith('[') && line.endsWith(']')) { current = line.slice(1, -1).trim().toLowerCase(); continue; }
+    const eq = line.indexOf('=');
+    if (eq > 0 && current === section.toLowerCase() && line.slice(0, eq).trim().toLowerCase() === key.toLowerCase())
+      return line.slice(eq + 1).trim();
+  }
+  return null;
+}
+function iniSet(text, section, key, value) {
+  const lines = text ? text.replace(/\r/g, '').split('\n') : [];
+  if (lines.length && lines[lines.length - 1] === '') lines.pop();
+  let current = '', sectionEnd = -1;
+  for (let i = 0; i < lines.length; ++i) {
+    const line = lines[i].trim();
+    if (line.startsWith('[') && line.endsWith(']')) { current = line.slice(1, -1).trim().toLowerCase(); continue; }
+    if (current !== section.toLowerCase()) continue;
+    sectionEnd = i;
+    const eq = line.indexOf('=');
+    if (eq > 0 && line.slice(0, eq).trim().toLowerCase() === key.toLowerCase()) {
+      lines[i] = key + '=' + value;
+      return lines.join('\r\n') + '\r\n';
+    }
+  }
+  if (sectionEnd < 0) {
+    // La sección puede existir vacía.
+    const at = lines.findIndex((l) => l.trim().toLowerCase() === '[' + section.toLowerCase() + ']');
+    if (at >= 0) sectionEnd = at;
+    else { lines.push('[' + section + ']'); sectionEnd = lines.length - 1; }
+  }
+  lines.splice(sectionEnd + 1, 0, key + '=' + value);
+  return lines.join('\r\n') + '\r\n';
+}
+
+function storageGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+function storageSet(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
+
+function buildMenu(configText) {
+  const box = document.getElementById('options');
+  box.textContent = '';
+  for (const option of OPTIONS) {
+    if (option.title) {
+      const h = document.createElement('h2'); h.textContent = option.title; box.appendChild(h); continue;
+    }
+    const saved = option.local ? storageGet(option.local) : iniGet(configText, option.section, option.key);
+    if (option.text) {
+      const row = document.createElement('label'); row.className = 'row';
+      const name = document.createElement('span'); name.textContent = option.label; row.appendChild(name);
+      const input = document.createElement('input');
+      input.type = 'text'; input.maxLength = option.max; input.value = saved || '';
+      input.autocomplete = 'username'; input.spellcheck = false;
+      option.input = input;
+      row.appendChild(input);
+      box.appendChild(row);
+      continue;
+    }
+    let value = saved === null || saved === '' || isNaN(Number(saved)) ? option.def : Number(saved);
+    const row = document.createElement('label'); row.className = 'row';
+    const name = document.createElement('span'); name.textContent = option.label; row.appendChild(name);
+    let input;
+    if (option.check) {
+      input = document.createElement('input'); input.type = 'checkbox'; input.checked = value !== 0;
+    } else {
+      input = document.createElement('select');
+      // Un valor del INI que no está en la lista se conserva como opción.
+      if (!option.choices.some(([v]) => v === value)) option.choices = option.choices.concat([[value, String(value)]]);
+      for (const [v, text] of option.choices) {
+        const o = document.createElement('option'); o.value = v; o.textContent = text; o.selected = v === value;
+        input.appendChild(o);
+      }
+    }
+    option.input = input;
+    row.appendChild(input);
+    box.appendChild(row);
+  }
+}
+
+function readMenu(configText) {
+  for (const option of OPTIONS) {
+    if (!option.input) continue;
+    const value = option.text ? option.input.value.trim()
+                : option.check ? (option.input.checked ? 1 : 0) : Number(option.input.value);
+    if (option.local) storageSet(option.local, String(value));
+    else configText = iniSet(configText, option.section, option.key, value);
+  }
+  return configText;
+}
+
+// ── Descargas ───────────────────────────────────────────────────────────────
+// El juego pide los archivos de a uno y espera cada uno (WebFiles.cpp): al
+// entrar a un mapa son cientos seguidos, y con la latencia de internet cada uno
+// cuesta una ida y vuelta.  Para que eso no se note:
+//  - Todo lo bajado queda en la caché del navegador (Cache Storage, "mu-files"),
+//    que sobrevive a cerrar la pestaña: la segunda vez no se baja nada.  La
+//    clave lleva el tamaño (?v=), así un archivo cambiado en el server no se
+//    confunde con el viejo.
+//  - Cuando el juego pide un archivo, se pide en paralelo el resto de su
+//    carpeta (los objetos de un mapa, las texturas de un monstruo): el juego
+//    los va a pedir enseguida y los encuentra en camino o listos.
+//  - Después del arranque se baja de fondo todo lo demás, de a poco, a la caché
+//    (no a la memoria del juego).
+// files.txt marca con una tercera columna "b" los que el cliente abre hasta la
+// pantalla de login (tools/web/boot-files.txt): esos se bajan en el menú.
+const CACHE_NAME = 'mu-files';
+let bootTotal = 0, bootDone = 0;
+function showProgress() {
+  document.getElementById('bar').style.width = (bootTotal ? 100 * bootDone / bootTotal : 0) + '%';
+}
+
+// Mensaje fijo encima de todo: el juego no puede seguir.
+function showFatal(text) {
+  let box = document.getElementById('fatal');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'fatal';
+    box.style.cssText = 'position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;' +
+      'padding:24px;text-align:center;font:16px sans-serif;color:#e8d8a8;background:rgba(0,0,0,.88)';
+    document.body.appendChild(box);
+  }
+  box.textContent = text;
+}
+
+var Module = {
+  canvas: document.getElementById('canvas'),
+  locateFile: (path, dir) => dir + path + BUILD_QUERY,
+  arguments: isTouchClient() ? ['--mobile'] : [],
+  // El juego arranca con el botón Jugar (callMain).
+  noInitialRun: true,
+  print: (t) => console.log(t),
+  printErr: (t) => console.warn(t),
+  // Error fatal (sin memoria, fallo del wasm): que no quede la página negra.
+  onAbort: (what) => showFatal('El juego se detuvo por un error' + (what ? ': ' + what : '') + '. Recargá la página para volver a entrar.'),
+  setStatus: (t) => setNote(t),
+  preRun: [function (M) {
+    const FS = M.FS, ENV = M.ENV, IDBFS = M.IDBFS;
+    const addRunDependency = M.addRunDependency, removeRunDependency = M.removeRunDependency;
+    ENV.MU_CLIENT_ROOT = ROOT;
+    FS.mkdirTree(ROOT + '/User');
+    // User/ (debug.log, caché de claves, Config.ini) persiste en IndexedDB.
+    FS.mount(IDBFS, {}, ROOT + '/User');
+    addRunDependency('mu-files');
+
+    const pending = new Map();      // ruta en el FS -> URL (con ?v=versión del archivo)
+    const failed = new Set();       // rutas cuya bajada falló (se reintenta al volver a abrir)
+    const inCache = new Set();      // rutas que seguro están en la caché del navegador
+    const folders = new Map();      // carpeta -> rutas que contiene
+    const inflight = new Map();     // ruta -> promesa de los bytes
+    const seenFolders = new Set();
+    const cacheReady = ('caches' in self) ? caches.open(CACHE_NAME).catch(() => null) : Promise.resolve(null);
+    M.muPending = pending;
+    // Lo que ya está en el FS del juego: ruta -> { url, último uso }.  El juego
+    // lee cada archivo entero y se queda con su copia (textura, modelo,
+    // sonido); la del FS sólo ocupa memoria.  Pasado un rato sin abrirlo se
+    // vacía y vuelve a pending: si hace falta otra vez sale de la caché.
+    const loaded = new Map();
+    const EVICT_AFTER = 60000;
+    M.muTouch = (path) => { const entry = loaded.get(path); if (entry) entry.used = performance.now(); };
+    M.muRequested = [];   // lo que pidió el juego, en orden (para boot-files.txt)
+
+    // Bytes de un archivo: de la caché o de la red (y quedan en la caché).
+    const loadBytes = (path) => {
+      if (inflight.has(path)) return inflight.get(path);
+      const url = pending.get(path);
+      const job = (async () => {
+        const cache = await cacheReady;
+        if (cache) {
+          const hit = await cache.match(url).catch(() => null);
+          if (hit) { inCache.add(path); return new Uint8Array(await hit.arrayBuffer()); }
+        }
+        // Un corte de red no tiene que dejar al juego sin el archivo.
+        let data, error;
+        for (let attempt = 0; attempt < 3 && !data; ++attempt) {
+          if (attempt) await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+          try {
+            const r = await fetch(url);
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            data = await r.arrayBuffer();
+          } catch (e) { error = e; }
+        }
+        if (!data) throw error;
+        if (cache) cache.put(url, new Response(data.slice(0))).then(() => inCache.add(path)).catch(() => {});
+        return new Uint8Array(data);
+      })().finally(() => inflight.delete(path));
+      inflight.set(path, job);
+      return job;
+    };
+    // Al FS del juego: lo que el juego abre (o va a abrir enseguida).
+    const fetchOne = (path) => {
+      if (!pending.has(path)) return Promise.resolve(true);
+      return loadBytes(path)
+        .then((data) => {
+          failed.delete(path);
+          if (pending.has(path)) {
+            loaded.set(path, { url: pending.get(path), used: performance.now() });
+            FS.writeFile(path, data);
+            pending.delete(path);
+          }
+          return true;
+        })
+        .catch((e) => { failed.add(path); console.warn('No se pudo bajar ' + pending.get(path) + ': ' + e.message); return false; });
+    };
+    // Sólo a la caché (descarga de fondo): no ocupa memoria del juego.
+    const warm = async (path) => {
+      if (!pending.has(path) || inflight.has(path)) return;
+      const cache = await cacheReady;
+      if (!cache || await cache.match(pending.get(path)).catch(() => null)) return;
+      await loadBytes(path).catch(() => {});
+    };
+    // Cola con N descargas a la vez.
+    const runQueue = (list, n, fn) =>
+      Promise.all(Array.from({ length: n }, async () => { while (list.length) await fn(list.shift()); }));
+    // El resto de la carpeta del archivo pedido, en paralelo.  No las que son
+    // una colección suelta (sonidos, música): de esas se usa uno por vez.
+    const prefetchFolder = (path) => {
+      const folder = path.substring(0, path.lastIndexOf('/'));
+      if (seenFolders.has(folder)) return;
+      seenFolders.add(folder);
+      if (/\/audio\/|\/monster\/unused/i.test(folder)) return;
+      const list = (folders.get(folder) || []).filter((p) => p !== path && pending.has(p));
+      if (list.length) runQueue(list, 6, fetchOne);
+    };
+    M.muFetch = (path, fromGame) => {
+      if (fromGame) { M.muRequested.push(path.substring(ROOT.length + 1)); prefetchFolder(path); }
+      return fetchOne(path);
+    };
+    // Pedido desde un hilo (WebFiles.cpp): arranca la bajada y no espera.
+    M.muFetchStart = (path) => { if (!pending.has(path)) { M.muTouch(path); return 0; } failed.delete(path); M.muFetch(path, true); return 1; };
+    // Para el hilo que espera: 0 bajando, 1 listo, 2 falló.
+    M.muFetchState = (path) => !pending.has(path) ? 1 : failed.has(path) ? 2 : 0;
+    // Sólo con caché (si no, volver a pedirlo sería otra bajada) y nunca un
+    // archivo abierto (las fuentes quedan abiertas) ni los de texto chicos.
+    cacheReady.then((cache) => {
+      if (!cache) return;
+      setInterval(() => {
+        const now = performance.now(), open = new Set();
+        for (const stream of FS.streams) if (stream && stream.node) open.add(stream.node);
+        for (const [path, entry] of loaded) {
+          if (now - entry.used < EVICT_AFTER || inflight.has(path) || !inCache.has(path)) continue;
+          if (/\.(toml|txt|ini)$/i.test(path)) { loaded.delete(path); continue; }
+          let node;
+          try { node = FS.lookupPath(path).node; } catch (e) { loaded.delete(path); continue; }
+          if (open.has(node)) { entry.used = now; continue; }
+          FS.truncate(path, 0);
+          pending.set(path, entry.url);
+          loaded.delete(path);
+          // La próxima vez que se abra uno, la carpeta vuelve a venir en paralelo.
+          seenFolders.delete(path.substring(0, path.lastIndexOf('/')));
+        }
+      }, 15000);
+    });
+
+    FS.syncfs(true, () => {
+      let configText = '';
+      try { configText = new TextDecoder().decode(FS.readFile(SAVED_CONFIG)); } catch (e) {}
+      buildMenu(configText);
+      M.muConfigText = configText;
+      fetch(BASE + 'files.txt', { cache: 'no-cache' })
+        .then((r) => { if (!r.ok) throw new Error('files.txt ' + r.status); return r.text(); })
+        .then(async (text) => {
+          // Cada archivo nace vacío y anotado en pending; el cliente lo baja al
+          // abrirlo.  Los de texto chicos (.toml, .txt, .ini) se bajan ya, todos
+          // juntos: el cliente los lee al arrancar y de a uno serían cientos de
+          // idas y vueltas.
+          const eager = [], boot = [];
+          for (const line of text.split('\n')) {
+            // ruta, bytes, "b" si es del arranque, versión (hash del contenido).
+            const [path, size, flag, version] = line.split('\t');
+            if (!path) continue;
+            const slash = path.lastIndexOf('/');
+            FS.mkdirTree(ROOT + '/' + path.substring(0, slash));
+            const full = ROOT + '/' + path;
+            FS.writeFile(full, new Uint8Array(0));
+            pending.set(full, BASE + path.split('/').map(encodeURIComponent).join('/') + '?v=' + (version || size));
+            const folder = full.substring(0, full.lastIndexOf('/'));
+            if (!folders.has(folder)) folders.set(folder, []);
+            folders.get(folder).push(full);
+            if (/\.(toml|txt|ini)$/i.test(path) && Number(size) < 256 * 1024) eager.push(full);
+            else if (flag === 'b') boot.push(full);
+          }
+          bootTotal = eager.length + boot.length;
+          // Lo que quedó en la caché de una versión anterior de un archivo (o
+          // de uno que ya no existe) se borra: si no, la caché sólo crece.
+          const current = new Set([...pending.values()].map((url) => new URL(url, location.href).href));
+          cacheReady.then(async (cache) => {
+            if (!cache) return;
+            for (const request of await cache.keys()) if (!current.has(request.url)) cache.delete(request);
+          }).catch(() => {});
+          const worker = (list) => async () => {
+            while (list.length) { await M.muFetch(list.shift()); ++bootDone; showProgress(); }
+          };
+          setNote('Cargando datos…');
+          await Promise.all(Array.from({ length: 8 }, worker(eager)));
+          removeRunDependency('mu-files');
+          // Lo del login sigue de fondo, aunque el jugador ya haya entrado.
+          await Promise.all(Array.from({ length: 4 }, worker(boot)));
+          if (!M.muStarted) setNote('Listo');
+          // Después, todo lo demás a la caché, de a dos: primero lo que se ve
+          // (mapas, monstruos, efectos), la música al final.  Las HD sólo si
+          // están activadas.
+          const hdOption = OPTIONS.find((o) => o.key === 'HDTextures');
+          const hd = hdOption && hdOption.input ? hdOption.input.checked : false;
+          const rank = (p) => /\/audio\/music\//i.test(p) ? 3 : /\/audio\//i.test(p) ? 2 : /\/monster\/unused/i.test(p) ? 4 : 1;
+          const rest = [...pending.keys()].filter((p) => hd || !/-hd\.[^.\/]+$/i.test(p))
+            .sort((a, b) => rank(a) - rank(b)).filter((p) => rank(p) < 4);
+          runQueue(rest, 2, warm);
+        })
+        .catch((e) => setNote('No se pudo cargar la lista de archivos (' + e.message + '). Recargá la página.'));
+    });
+
+    // El cliente escribe Config.ini en la raíz (al cambiar una opción): cada
+    // segundo, si cambió, se copia a User/ y se guarda.  Las opciones, también
+    // las que piden reiniciar, valen al recargar la página.
+    let lastConfig = null;
+    setInterval(() => {
+      if (!M.muStarted) return;
+      let text;
+      try { text = new TextDecoder().decode(FS.readFile(CONFIG)); } catch (e) { return; }
+      if (text === lastConfig) return;
+      lastConfig = text;
+      FS.writeFile(SAVED_CONFIG, text);
+      FS.syncfs(false, () => {});
+    }, 1000);
+    // debug.log y el resto de User/, cada tanto.
+    setInterval(() => { if (M.muStarted) FS.syncfs(false, () => {}); }, 15000);
+  }],
+  onRuntimeInitialized() {
+    const play = document.getElementById('play');
+    // Sin WebGPU o sin aislamiento de origen (hilos) el juego no arranca.
+    if (!navigator.gpu) { setNote('Este navegador no tiene WebGPU: probá con Chrome o Edge actualizados.'); return; }
+    if (!crossOriginIsolated) { setNote('La página no quedó aislada (faltan cabeceras del sitio): el juego no puede arrancar.'); return; }
+    play.disabled = false;
+    if (bootDone < bootTotal) setNote('Bajando datos de fondo; ya podés jugar');
+    else setNote('Listo');
+  },
+};
+
+// ── Controles táctiles ──────────────────────────────────────────────────────
+// En celular y tablet (--mobile) los toques no llegan a SDL: una capa encima
+// del canvas los convierte en mouse sintético, y los botones de #pad en teclas.
+//  - Un toque mueve el cursor y recién después aprieta: el juego elige el
+//    objetivo con lo que estaba bajo el cursor el cuadro anterior.  Sostener es
+//    tener el botón apretado (caminar, atacar seguido).
+//  - "Skill" hace que los toques sean clic derecho (lanzar el skill elegido).
+//  - "Tecl." abre el teclado del celular con un <input> en una barra arriba
+//    (los campos del juego pueden quedar tapados por el teclado).  Lo que se
+//    escribe se manda como texto (keypress) y lo borrado como Backspace,
+//    comparando con lo ya mandado: así funciona también con teclados que
+//    arman la palabra de a poco (Gboard).  Enter, Tab y *** (ocultar, para la
+//    contraseña) están en la barra.  Para chatear: Enter abre el renglón.
+function startTouchControls() {
+  document.body.classList.add('touch');
+  const canvas = document.getElementById('canvas');
+  const layer = document.getElementById('touch');
+  const textin = document.getElementById('textin');
+  const KEYCODES = { Enter: 13, Escape: 27, Backspace: 8, Tab: 9 };
+  const keyCodeOf = (code) => KEYCODES[code] || code.charCodeAt(code.length - 1);
+  const keyNameOf = (code) => KEYCODES[code] ? code : code.slice(-1).toLowerCase();
+  // Las propiedades viejas (keyCode, which, charCode) no se pueden pasar en
+  // todos los navegadores al crear el evento: se pisan en la instancia.
+  const keyEvent = (type, code, charCode) => {
+    const keyCode = charCode ? 0 : keyCodeOf(code);
+    const e = new KeyboardEvent(type, { code, key: charCode ? String.fromCodePoint(charCode) : keyNameOf(code),
+                                        bubbles: true, cancelable: true });
+    for (const [name, value] of [['keyCode', keyCode], ['which', charCode || keyCode], ['charCode', charCode || 0]])
+      Object.defineProperty(e, name, { get: () => value });
+    window.dispatchEvent(e);
+  };
+  const tapKey = (code) => { keyEvent('keydown', code); setTimeout(() => keyEvent('keyup', code), 60); };
+  const typeText = (text) => { for (const ch of text) keyEvent('keypress', '', ch.codePointAt(0)); };
+
+  // Toques -> mouse.
+  let rightMode = false, finger = null, last = null, pressed = -1, pressTimer = 0;
+  const mouse = (type, point, button) => canvas.dispatchEvent(new MouseEvent(type, {
+    bubbles: true, cancelable: true, view: window, clientX: point.clientX, clientY: point.clientY,
+    button: button < 0 ? 0 : button, buttons: type === 'mouseup' ? 0 : button === 2 ? 2 : button === 0 ? 1 : 0 }));
+  const press = () => { pressTimer = 0; pressed = rightMode ? 2 : 0; mouse('mousedown', last, pressed); };
+  const own = (e) => [...e.changedTouches].find((t) => t.identifier === finger);
+  layer.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (finger !== null) return;
+    const t = e.changedTouches[0];
+    finger = t.identifier; last = { clientX: t.clientX, clientY: t.clientY };
+    mouse('mousemove', last, -1);
+    pressTimer = setTimeout(press, 50);
+  }, { passive: false });
+  layer.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const t = own(e);
+    if (!t) return;
+    last = { clientX: t.clientX, clientY: t.clientY };
+    mouse('mousemove', last, pressed);
+  }, { passive: false });
+  const release = (e) => {
+    e.preventDefault();
+    if (!own(e)) return;
+    finger = null;
+    if (pressTimer) { clearTimeout(pressTimer); press(); }
+    // SDLInput ya demora la suelta si llega en el mismo cuadro que el apretón.
+    const button = pressed; pressed = -1;
+    mouse('mouseup', last, button);
+  };
+  layer.addEventListener('touchend', release, { passive: false });
+  layer.addEventListener('touchcancel', release, { passive: false });
+
+  // Botones: el apretón no saca el foco (si no, se cierra el teclado del chat).
+  for (const button of document.querySelectorAll('#pad button, #padtoggle'))
+    button.addEventListener('pointerdown', (e) => e.preventDefault());
+  for (const button of document.querySelectorAll('#pad [data-key]')) {
+    const code = button.dataset.key;
+    button.addEventListener('pointerdown', () => { button.dataset.down = '1'; keyEvent('keydown', code); });
+    for (const type of ['pointerup', 'pointercancel', 'pointerleave'])
+      button.addEventListener(type, () => { if (button.dataset.down) { delete button.dataset.down; keyEvent('keyup', code); } });
+  }
+  const rightButton = document.getElementById('rightmode');
+  rightButton.addEventListener('pointerup', () => { rightMode = !rightMode; rightButton.classList.toggle('on', rightMode); });
+  document.getElementById('padtoggle').addEventListener('pointerup', () => document.body.classList.toggle('padhidden'));
+
+  // Teclado: el foco al <input> lo saca (tiene que ser en el pointerup: es lo
+  // que el navegador cuenta como gesto).
+  let sent = '';
+  const clearText = () => { textin.value = sent = ''; };
+  const openKeyboard = () => { clearText(); document.body.classList.add('typing'); textin.focus(); };
+  const closeKeyboard = () => { textin.blur(); document.body.classList.remove('typing'); };
+  document.getElementById('keyboard').addEventListener('pointerup', () => {
+    if (document.body.classList.contains('typing')) closeKeyboard(); else openKeyboard();
+  });
+  // Los botones de la barra no sacan el foco (el teclado sigue abierto).
+  for (const button of document.querySelectorAll('#textbar button'))
+    button.addEventListener('pointerdown', (e) => e.preventDefault());
+  document.getElementById('textenter').addEventListener('pointerup', () => { tapKey('Enter'); clearText(); });
+  document.getElementById('texttab').addEventListener('pointerup', () => { tapKey('Tab'); clearText(); });
+  document.getElementById('textclose').addEventListener('pointerup', closeKeyboard);
+  const mask = document.getElementById('textmask');
+  mask.addEventListener('pointerup', () => mask.classList.toggle('on', textin.classList.toggle('masked')));
+  // El teclado se cerró desde el celular (atrás): la barra también.
+  textin.addEventListener('blur', () => setTimeout(() => {
+    if (document.activeElement !== textin) document.body.classList.remove('typing');
+  }, 100));
+  textin.addEventListener('input', () => {
+    const now = textin.value;
+    let same = 0;
+    while (same < sent.length && same < now.length && sent[same] === now[same]) ++same;
+    for (let i = [...sent.slice(same)].length; i > 0; --i) tapKey('Backspace');
+    typeText(now.slice(same));
+    sent = now;
+  });
+  // Las teclas del <input> no tienen que llegar también al juego por window.
+  for (const type of ['keydown', 'keyup', 'keypress'])
+    textin.addEventListener(type, (e) => {
+      e.stopPropagation();
+      if (type === 'keydown' && e.key === 'Enter') { e.preventDefault(); tapKey('Enter'); clearText(); }
+    });
+}
+
+document.getElementById('play').addEventListener('click', () => {
+  const M = Module, FS = M.FS;
+  const configText = readMenu(M.muConfigText || '');
+  FS.writeFile(CONFIG, configText);
+  FS.writeFile(SAVED_CONFIG, configText);
+  FS.syncfs(false, () => {});
+  // El click del jugador habilita pedir la pantalla completa.  En el celular
+  // siempre, y acostado si el navegador deja trabar la orientación.
+  const touch = M.arguments.indexOf('--mobile') >= 0;
+  if (touch) {
+    startTouchControls();
+    window.muSetFullscreen(true).then(() => {
+      if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+    });
+  } else if (storageGet('mu-fullscreen') === '1') window.muSetFullscreen(true);
+  document.body.classList.remove('menu');
+  document.getElementById('canvas').focus();
+  M.muStarted = true;
+  // Un error al arrancar (o en el bucle del juego) no tiene que dejar la
+  // página en negro sin explicación.
+  const failed = (e) => {
+    if (!e || e === 'unwind' || e.name === 'ExitStatus') return;
+    console.error(e);
+    showFatal('El juego se detuvo por un error: ' + (e.message || e) + '. Recargá la página para volver a entrar.');
+  };
+  try {
+    const run = M.callMain(M.arguments);
+    if (run && run.catch) run.catch(failed);
+  } catch (e) { failed(e); }
+});
+</script>
+<!-- {{{ SCRIPT }}} : se carga abajo, según lo que soporte el navegador -->
+<script>
+// JSPI (WebAssembly.Suspending) deja pausar el juego sin reescribir el wasm:
+// el frame cuesta como sin pausas.  Sin él, el build con ASYNCIFY.
+{
+  const script = document.createElement('script');
+  // ?asyncify fuerza el de respaldo (pruebas).
+  const jspi = ('Suspending' in WebAssembly) && !new URLSearchParams(location.search).has('asyncify');
+  script.src = (jspi ? 'main.js' : 'main-asyncify.js') + BUILD_QUERY;
+  script.async = true;
+  script.onerror = () => setNote('No se pudo bajar el juego. Recargá la página.');
+  document.body.appendChild(script);
+}
+</script>
+</body>
+</html>

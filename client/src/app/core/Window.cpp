@@ -145,6 +145,10 @@ bool CWindow::Create(HINSTANCE hInst, WNDPROC wndProc)
     // DESVIACION: backend de render elegido en Config.ini ([Window] RenderBackend).
     RenderBackend::active = gUserSettings.GetRenderBackend() == RenderBackendPreference::OpenGL
         ? RenderBackend::Kind::OpenGL : RenderBackend::Kind::WebGPU;
+#ifdef __EMSCRIPTEN__
+    // Navegador: el backend GL es OpenGL 3.3 de escritorio, que WebGL2 no tiene.
+    RenderBackend::active = RenderBackend::Kind::WebGPU;
+#endif
 #endif
     return Platform::GetWindow().Create({m_Width, m_Height, m_WindowMode, m_Borderless, !RenderBackend::IsWebGPU(), Gfx::Multisample()});
 }

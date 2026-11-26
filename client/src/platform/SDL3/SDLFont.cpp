@@ -1,3 +1,4 @@
+#include "platform/Web/WebFiles.h"
 #include "platform/SDL3/SDLFont.h"
 #include "platform/SessionLog.h"
 #include <ft2build.h>
@@ -212,6 +213,7 @@ bool SDLFont::Open(std::unique_ptr<Impl> next, const char* path, int height, std
     if (FT_Property_Set(next->library, "truetype", "interpreter-version", &interpreter)) {
         error = "No se pudo seleccionar el intérprete TrueType"; return false;
     }
+    if (path) WebFiles::Ensure(path);
     const FT_Error opened = path
         ? FT_New_Face(next->library, path, FT_Long(faceIndex), &next->face)
         : FT_New_Memory_Face(next->library, next->bytes.data(), FT_Long(next->bytes.size()), FT_Long(faceIndex), &next->face);
@@ -560,6 +562,7 @@ const InstalledFontTable& InstalledFonts()
             long faces = 1;
             for (long index = 0; index < faces; ++index) {
                 FT_Face face = nullptr;
+                if (isCollection) WebFiles::Ensure(path);
                 const FT_Error opened = isCollection
                     ? FT_New_Face(library, path.c_str(), FT_Long(index), &face)
                     : FT_New_Memory_Face(library, bytes.data(), FT_Long(bytes.size()), FT_Long(index), &face);

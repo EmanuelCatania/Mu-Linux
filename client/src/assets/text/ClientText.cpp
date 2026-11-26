@@ -100,7 +100,7 @@ const char* const English[] = {
     "MU-Guard protection is not active. Close the game and open it again."
 };
 constexpr size_t Count = (size_t)ClientTextId::Count;
-static_assert(sizeof(English) / sizeof(English[0]) == Count, "Faltan textos en ingl\xC3\xA9s");
+static_assert(sizeof(English) / sizeof(English[0]) == Count, "Faltan textos en inglés");
 
 // Textos del server, por id.  Vacío = no hay: se usa el inglés.
 std::string s_ServerText[Count];

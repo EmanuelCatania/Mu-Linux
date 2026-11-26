@@ -13,6 +13,8 @@
 
 #include <math.h>
 #include <chrono>
+#include <cstring>
+#include <vector>
 
 extern "C" void DbgLogPublic(const char* msg);
 
@@ -25,20 +27,67 @@ constexpr int kMaxLevel = 9;
 // nombre directo a miniaudio no servía en Linux: los nombres del binario traen
 // barras invertidas y no respetan mayúsculas (Data\Music\Tarkan.mp3 vs tarkan.mp3), y
 // sólo IFileSystem::Open resuelve las dos cosas.
+//
+// En el navegador el archivo se carga entero en memoria: miniaudio decodifica
+// en el hilo de audio (un AudioWorklet), que no puede leer archivos.  Leyendo
+// del FILE* desde ahí, sonaba lo que ya estaba decodificado y se cortaba.
 struct MusicStream {
     FILE* file = nullptr;
+    std::vector<unsigned char> memory;
+    size_t position = 0;
     ma_decoder decoder;
+
+    bool Open(const char* name)
+    {
+        file = Platform::GetFileSystem().Open(name, "rb");
+        if (!file) return false;
+#ifdef __EMSCRIPTEN__
+        if (fseek(file, 0, SEEK_END) == 0) {
+            const long size = ftell(file);
+            if (size > 0 && fseek(file, 0, SEEK_SET) == 0) {
+                memory.resize(size_t(size));
+                if (fread(memory.data(), 1, memory.size(), file) != memory.size()) memory.clear();
+            }
+        }
+        fclose(file);
+        file = nullptr;
+        return !memory.empty();
+#else
+        return true;
+#endif
+    }
+    void Close()
+    {
+        if (file) fclose(file);
+        file = nullptr;
+    }
 };
 ma_result ReadMusic(ma_decoder* decoder, void* out, size_t bytes, size_t* read)
 {
     auto* stream = static_cast<MusicStream*>(decoder->pUserData);
-    const size_t count = fread(out, 1, bytes, stream->file);
+    size_t count;
+    if (stream->file) {
+        count = fread(out, 1, bytes, stream->file);
+    } else {
+        count = stream->position < stream->memory.size() ? stream->memory.size() - stream->position : 0;
+        if (count > bytes) count = bytes;
+        if (count) memcpy(out, stream->memory.data() + stream->position, count);
+        stream->position += count;
+    }
     if (read) *read = count;
     return count == 0 && bytes > 0 ? MA_AT_END : MA_SUCCESS;
 }
 ma_result SeekMusic(ma_decoder* decoder, ma_int64 offset, ma_seek_origin origin)
 {
     auto* stream = static_cast<MusicStream*>(decoder->pUserData);
+    if (!stream->file) {
+        const ma_int64 base = origin == ma_seek_origin_current ? ma_int64(stream->position)
+                            : origin == ma_seek_origin_end ? ma_int64(stream->memory.size()) : 0;
+        const ma_int64 target = base + offset;
+        if (target < 0 || target > ma_int64(stream->memory.size())) return MA_ERROR;
+        stream->position = size_t(target);
+        return MA_SUCCESS;
+    }
     const int whence = origin == ma_seek_origin_current ? SEEK_CUR : origin == ma_seek_origin_end ? SEEK_END : SEEK_SET;
     return fseek(stream->file, long(offset), whence) == 0 ? MA_SUCCESS : MA_ERROR;
 }
@@ -58,7 +107,7 @@ void ReleaseVoice(EmoteVoice& v)
 {
     v.fading = false;
     if (v.sound) { ma_sound_stop(v.sound); ma_sound_uninit(v.sound); delete v.sound; v.sound = nullptr; }
-    if (v.stream) { ma_decoder_uninit(&v.stream->decoder); fclose(v.stream->file); delete v.stream; v.stream = nullptr; }
+    if (v.stream) { ma_decoder_uninit(&v.stream->decoder); v.stream->Close(); delete v.stream; v.stream = nullptr; }
 }
 }
 
@@ -74,10 +123,9 @@ int CSound::PlayEmoteSound(const char* fileName, float gain, bool loop)
     if (voice < 0) return -1;
 
     auto* stream = new MusicStream;
-    stream->file = Platform::GetFileSystem().Open(fileName, "rb");
     const ma_decoder_config config = ma_decoder_config_init_default();
-    if (!stream->file || ma_decoder_init(ReadMusic, SeekMusic, stream, &config, &stream->decoder) != MA_SUCCESS) {
-        if (stream->file) fclose(stream->file);
+    if (!stream->Open(fileName) || ma_decoder_init(ReadMusic, SeekMusic, stream, &config, &stream->decoder) != MA_SUCCESS) {
+        stream->Close();
         delete stream;
         return -1;
     }
@@ -86,7 +134,7 @@ int CSound::PlayEmoteSound(const char* fileName, float gain, bool loop)
                                        MA_SOUND_FLAG_NO_SPATIALIZATION, nullptr, sound) != MA_SUCCESS) {
         delete sound;
         ma_decoder_uninit(&stream->decoder);
-        fclose(stream->file);
+        stream->Close();
         delete stream;
         return -1;
     }
@@ -202,10 +250,9 @@ bool CSound::PlayMusic(const char* fileName)
 
     // Streaming: el archivo se decodifica de a poco, sin cargarlo entero.
     auto* stream = new MusicStream;
-    stream->file = Platform::GetFileSystem().Open(fileName, "rb");
     const ma_decoder_config config = ma_decoder_config_init_default();
-    if (!stream->file || ma_decoder_init(ReadMusic, SeekMusic, stream, &config, &stream->decoder) != MA_SUCCESS) {
-        if (stream->file) fclose(stream->file);
+    if (!stream->Open(fileName) || ma_decoder_init(ReadMusic, SeekMusic, stream, &config, &stream->decoder) != MA_SUCCESS) {
+        stream->Close();
         delete stream;
         return false;
     }
@@ -214,7 +261,7 @@ bool CSound::PlayMusic(const char* fileName)
                                        MA_SOUND_FLAG_NO_SPATIALIZATION, nullptr, sound) != MA_SUCCESS) {
         delete sound;
         ma_decoder_uninit(&stream->decoder);
-        fclose(stream->file);
+        stream->Close();
         delete stream;
         return false;
     }
@@ -239,7 +286,7 @@ void CSound::StopMusic()
     m_Music = nullptr;
     if (auto* stream = static_cast<MusicStream*>(m_MusicStream)) {
         ma_decoder_uninit(&stream->decoder);
-        fclose(stream->file);
+        stream->Close();
         delete stream;
         m_MusicStream = nullptr;
     }

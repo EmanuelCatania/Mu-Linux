@@ -378,7 +378,10 @@ void __cdecl RenderLinkObject(float param_1, float param_2, float param_3,
         }
 
         // -- Insert ref slot --
-        pbStack_26c = (unsigned char*)operator new(2);
+        // El bloque no se guarda en ningún lado ni se liberaba: perdía 2 bytes
+        // por llamada (alas, helpers y armas de cada personaje, cada cuadro).
+        static unsigned char refBlock[2];
+        pbStack_26c = refBlock;
         pbStack_26c[1] = 1;
         uVar3 = (**(unsigned int(__cdecl**)(unsigned char*))(MAIN_HASH_CLASS + 3 * sizeof(void*)))(pbVar1);
         local_23c_f = 0.0f; // local_23c = null

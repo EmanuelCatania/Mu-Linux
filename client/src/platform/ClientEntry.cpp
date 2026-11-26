@@ -48,6 +48,11 @@
 #else
 #include "platform/SDL3/SDLPlatform.h"
 #include "net/Ping.h"
+#ifdef __EMSCRIPTEN__
+#include "platform/Web/WebPage.h"
+#include <emscripten.h>
+#include <emscripten/console.h>
+#endif
 #include "game/core/FrameLimiter.h"
 #endif
 #include "net/HWID.h"
@@ -409,6 +414,9 @@ static void DbgLog(const char* msg)
         }();
         if (!log || std::fwrite(buf, 1, n, log) != static_cast<size_t>(n)) s_killed = 1;
         if (log) std::fflush(log);
+#ifdef __EMSCRIPTEN__
+        emscripten_out(buf);
+#endif
 #endif
     }
     s_inside = false;
@@ -850,6 +858,12 @@ int main(int, [[maybe_unused]] char** argv)
             }
             // No hay mensajes pendientes: ejecutar frame
             Scene_Dispatch(gWindow.GetHdc());
+#ifdef __EMSCRIPTEN__
+            // Navegador: el bucle no puede quedarse con el hilo principal; se
+            // cede una vez por cuadro del navegador (eventos, red, presentación).
+            WebPage::Tick();
+            WebPage::WaitFrame();
+#endif
         }
     }
 

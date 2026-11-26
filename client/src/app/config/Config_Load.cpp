@@ -43,6 +43,7 @@
 //     SetByte(0x0041EFB5, 0xEB);  // Crack gg init
 
 #include "stdafx.h"
+#include "platform/Web/WebPage.h"
 #include "platform/UserPath.h"
 #include "platform/ClientSettings.h"
 #include "platform/Text.h"
@@ -175,6 +176,11 @@ int Config_Load(void)
         case 4: width = 1600; height = 1200; break;
         }
     }
+
+#ifdef __EMSCRIPTEN__
+    // Navegador: la ventana es el espacio de la página (WebPage.h).
+    WebPage::Size(width, height);
+#endif
 
     // --- 6. Escalas de pixel -> layout lógico 640x480 ---
     // CWindow::SetResolution las calcula con las fórmulas de IDA (L144-145).

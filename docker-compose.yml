@@ -62,6 +62,9 @@ services:
       MU_GUARD_ENABLED: ${MU_GUARD_ENABLED:-0}
       MU_GUARD_REQUIRED: ${MU_GUARD_REQUIRED:-0}
       MU_GUARD_PORT: ${MU_GUARD_PORT:-28980}
+      # Versión web del cliente: puerto interno (puerto + 100) para el puente de
+      # mu-web.  La misma clave va en mu-web; vacía, no hay versión web.
+      MU_WEB_GATEWAY_KEY: ${MU_WEB_GATEWAY_KEY:-}
     depends_on:
       mysql:
         condition: service_healthy
@@ -106,6 +109,13 @@ services:
       ADMIN_USER: ${ADMIN_USER}
       ADMIN_PASS: ${ADMIN_PASS}
       TRUST_PROXY: ${TRUST_PROXY}
+      # Versión web del cliente (lib/play-gateway.js).
+      MU_WEB_GATEWAY_KEY: ${MU_WEB_GATEWAY_KEY:-}
+      MU_WEB_SERVER_HOST: mu-server
+      MU_WEB_ORIGINS: ${MU_WEB_ORIGINS:-}
+      # Archivos de la versión web en /jugar (lib/play-files.js): el build y, en
+      # game/, los del juego.  Sin build en la carpeta, /jugar no se publica.
+      MU_WEB_CLIENT_DIR: /app/jugar
       WEB_RATE_LIMIT_PER_MINUTE: ${WEB_RATE_LIMIT_PER_MINUTE:-600}
       MU_UPDATE_ENABLED: ${MU_UPDATE_ENABLED:-0}
       UPDATES_RATE_LIMIT_PER_MINUTE: ${UPDATES_RATE_LIMIT_PER_MINUTE:-120}
@@ -118,6 +128,7 @@ services:
       # Sólo lectura, y sólo los parches: nunca montar los datos del server
       # enteros acá (ahí está la clave privada).
       - mu_patches:/app/updates:ro
+      - ${MU_WEB_CLIENT_PATH:-./web-client}:/app/jugar:ro
     ports:
       - "8085:8080"
     networks:

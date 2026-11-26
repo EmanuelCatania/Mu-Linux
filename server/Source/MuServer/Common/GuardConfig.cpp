@@ -258,6 +258,8 @@ GuardSettings ReadGuardSettings(const std::string& dataPath)
 
 			settings.FilesCloses = table["FilesCloses"].value_or(true);
 
+			settings.WebClients = table["WebClients"].value_or(true);
+
 			const std::int64_t challenge = table["ChallengeSeconds"].value_or(std::int64_t(30));
 
 			settings.ChallengeSeconds = (int)(challenge < 5 ? 5 : (challenge > 300 ? 300 : challenge));

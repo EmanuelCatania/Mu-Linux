@@ -609,13 +609,40 @@ void CGuardLink::ProcessKicks()
 }
 
 GuardLogin CGuardLink::CheckLogin(const char* ip, const std::uint8_t* ticket, const std::uint8_t* mac,
-                                  const std::uint8_t* transcript)
+                                  const std::uint8_t* transcript, bool web)
 {
 	const GuardSettings settings = ReadGuardSettings(this->m_Data);
 
 	if (!settings.Enabled)
 	{
 		return GuardLogin::Accept;
+	}
+
+	// Versión web: en el navegador no puede correr el guardián.  Sólo se mira
+	// el ban de IP; el resto lo controla el server (velocidad, movimiento,
+	// paquetes).  Con WebClients = false no se entra.
+	if (web)
+	{
+		if (!settings.WebClients)
+		{
+			LogAdd(LOG_RED, "[MU-Guard] [%s] Login rechazado: cliente web (WebClients = false)", ip);
+
+			return GuardLogin::Reject;
+		}
+
+		if (this->m_State != Down)
+		{
+			const std::uint8_t none[GuardProto::TicketIdSize + GuardProto::MacSize + GuardProto::TranscriptSize] = {};
+
+			if (this->Verify(ip, none, none + GuardProto::TicketIdSize, none + GuardProto::TicketIdSize + GuardProto::MacSize) == GuardProto::BannedIp)
+			{
+				return GuardLogin::Banned;
+			}
+		}
+
+		LogAdd(LOG_BLUE, "[MU-Guard] [%s] Login web: sin guardián, controles del server", ip);
+
+		return GuardLogin::Unvalidated;
 	}
 
 	// Caído (lo decide este GameServer, no el cliente): se entra sin validar.

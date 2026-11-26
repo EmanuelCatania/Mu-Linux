@@ -17,3 +17,6 @@ client/bin/Client/Content/audio/sound/Dances/*
 
 # Credenciales locales.
 .env
+
+# Archivos de la versión web que sirve mu-web en /jugar (MU_WEB_CLIENT_PATH).
+/web-client/

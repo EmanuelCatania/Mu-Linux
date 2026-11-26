@@ -69,6 +69,10 @@ ToolCloses = true
 MaxPerMachine = 0
 # true: un archivo del juego distinto de Files.txt (mu-guard files) lo cierra.
 FilesCloses = true
+# true: se puede entrar con la versión web (navegador), que no puede tener
+# guardián: entra sin ticket aunque Required esté en true, sólo con los
+# controles del server.  false: la versión web no entra.
+WebClients = true
 
 # Avisos (los cuenta mu-guard en la base): una detección que cierra el juego
 # suma uno.  A los `limit` avisos dentro de `window_days` se banea.

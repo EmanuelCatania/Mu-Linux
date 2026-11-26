@@ -111,6 +111,37 @@
         "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/mingw-x64.cmake",
         "VCPKG_APPLOCAL_DEPS": "OFF"
       }
+    },
+    {
+      "name": "web-release",
+      "description": "Cliente para el navegador con JSPI (Chrome, Edge): Emscripten (wasm32), SDL3 y WebGPU (emdawnwebgpu). Requiere la variable de entorno EMSDK (emsdk activado). Sale a bin/Web.",
+      "binaryDir": "${sourceDir}/build/web-release",
+      "generator": "Ninja",
+      "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "MU_PLATFORM_BACKEND": "SDL3",
+        "MU_RENDER_WEBGPU": "ON",
+        "MU_GUARD": "OFF",
+        "CMAKE_C_FLAGS": "-pthread -msimd128 -msse2",
+        "CMAKE_CXX_FLAGS": "-pthread -msimd128 -msse2"
+      }
+    },
+    {
+      "name": "web-release-asyncify",
+      "description": "Cliente para el navegador con ASYNCIFY, para navegadores sin JSPI (más lento). Sale a bin/Web junto al de web-release.",
+      "binaryDir": "${sourceDir}/build/web-release-asyncify",
+      "generator": "Ninja",
+      "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "MU_PLATFORM_BACKEND": "SDL3",
+        "MU_RENDER_WEBGPU": "ON",
+        "MU_GUARD": "OFF",
+        "CMAKE_C_FLAGS": "-pthread -msimd128 -msse2",
+        "CMAKE_CXX_FLAGS": "-pthread -msimd128 -msse2",
+        "MU_WEB_ASYNC": "ASYNCIFY"
+      }
     }
   ],
   "buildPresets": [
@@ -152,6 +183,16 @@
     {
       "name": "mingw-x64-webgpu-release",
       "configurePreset": "mingw-x64-webgpu-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "web-release",
+      "configurePreset": "web-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "web-release-asyncify",
+      "configurePreset": "web-release-asyncify",
       "configuration": "Release"
     }
   ]

@@ -55,9 +55,10 @@ public:
 	void Start(const std::string& dataPath);
 
 	// ticket/mac: nullptr si el F1:01 no los trae.  transcript: hash del saludo
-	// del canal de esta conexión (nullptr si no hay canal).
+	// del canal de esta conexión (nullptr si no hay canal).  web: entró por el
+	// puerto web (versión del navegador, sin guardián posible).
 	GuardLogin CheckLogin(const char* ip, const std::uint8_t* ticket, const std::uint8_t* mac,
-	                      const std::uint8_t* transcript);
+	                      const std::uint8_t* transcript, bool web);
 
 	// Ata el ticket a la conexión que entró con él.
 	void Bind(const std::uint8_t* ticket, int aIndex);

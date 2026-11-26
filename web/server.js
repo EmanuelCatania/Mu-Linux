@@ -26,6 +26,7 @@ const summonsLib = require('./lib/summons');
 const zonesLib = require('./lib/zones');
 const mapFoldersLib = require('./lib/map-folders');
 const muGuard = require('./lib/mu-guard');
+const playGateway = require('./lib/play-gateway');
 
 // Se pone en true cuando ensureSchema confirma que memb__pwd tiene 60 bytes.
 let passwordColumnWide = false;
@@ -102,6 +103,12 @@ const pool = mysql.createPool({
 });
 
 const sessionStore = new MySQLStore({}, pool);
+
+// Versión web del cliente (lib/play-files.js).  Antes de helmet, que pondría su
+// CSP (sin wasm ni hilos), y del tope por IP: al jugar se bajan miles de
+// archivos.
+const playFiles = require('./lib/play-files').router(process.env.MU_WEB_CLIENT_DIR);
+if (playFiles) app.use('/jugar', playFiles);
 
 // CSP: los scripts inline y los onclick de las vistas obligan a 'unsafe-inline'.
 // Las noticias pueden traer imágenes de cualquier origen y videos de YouTube/Vimeo
@@ -4244,9 +4251,11 @@ app.post('/admin/news/:id/delete', requireAdmin, requireAdminPasswordChange, asy
 
 ensureSchema()
   .then(() => {
-    app.listen(Number(WEB_PORT), () => {
+    const server = app.listen(Number(WEB_PORT), () => {
       console.log(`mu-web listening on ${WEB_PORT}`);
     });
+    // Versión web del cliente: WebSocket del navegador <-> TCP del server.
+    playGateway.attach(server, { trustProxy: trustProxyEnabled });
   })
   .catch((err) => {
     console.error('Failed to start mu-web', err);

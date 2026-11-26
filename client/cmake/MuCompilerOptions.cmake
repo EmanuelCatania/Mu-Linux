@@ -3,6 +3,14 @@ set(CMAKE_CONFIGURATION_TYPES Debug Release CACHE STRING "" FORCE)
 
 # Conservar los flags inicializados por el toolchain (especialmente -m32).
 # El ejecutable Linux sigue en integración; sus presets públicos son platform-only.
+if(EMSCRIPTEN)
+    # -msse2 + -msimd128: los intrínsecos SSE del cliente se traducen a SIMD de
+    # wasm.  Los hilos (texturas, prefetch, transformaciones) van con pthreads,
+    # que en el navegador piden aislamiento de origen (COOP/COEP).  clang trata
+    # como error los estrechamientos DWORD->int que GCC y MSVC sólo avisan.
+    set(MU_COMMON_COMPILE_OPTIONS -fsigned-char -msimd128 -msse2 -pthread -Wno-c++11-narrowing)
+    return()
+endif()
 if(NOT MSVC)
     set(MU_COMMON_COMPILE_OPTIONS -fsigned-char -mfpmath=sse -msse2)
     return()

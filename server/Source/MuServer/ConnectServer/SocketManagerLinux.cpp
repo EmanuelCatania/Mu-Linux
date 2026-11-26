@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "SocketManager.h"
+#include "WebGateway.h"
 #include "ClientManager.h"
 #include "ConnectServerProtocol.h"
 #include "IpManager.h"
@@ -34,6 +35,7 @@ CSocketManager::CSocketManager()
 	this->m_ServerWorkerThreadCount = 0;
 	this->m_ServerQueueSemaphore = 0;
 	this->m_ServerQueueThread = 0;
+	this->m_webListen = INVALID_SOCKET;
 	this->m_epollFd = -1;
 	this->m_running = false;
 	this->m_queueStop = false;
@@ -54,6 +56,16 @@ bool CSocketManager::Start(WORD port)
 	{
 		this->Clean();
 		return false;
+	}
+
+	if (WebGateway::Enabled())
+	{
+		const WORD webPort = WebGateway::Port(this->m_port);
+		this->m_webListen = WebGateway::Listen(webPort);
+		if (this->m_webListen == INVALID_SOCKET)
+			LogAdd(LOG_GREEN, "[SocketManager] No se pudo abrir el puerto web [%d]", webPort);
+		else
+			LogAdd(LOG_GREEN, "[SocketManager] Clientes web por el puerto [%d]", webPort);
 	}
 
 	if (!this->CreateCompletionPort())
@@ -98,6 +110,12 @@ void CSocketManager::Clean()
 	{
 		closesocket(this->m_listen);
 		this->m_listen = INVALID_SOCKET;
+	}
+
+	if (this->m_webListen != INVALID_SOCKET)
+	{
+		closesocket(this->m_webListen);
+		this->m_webListen = INVALID_SOCKET;
 	}
 
 	if (this->m_epollFd != -1)
@@ -587,27 +605,35 @@ DWORD CSocketManager::ServerAcceptThread(CSocketManager* lpSocketManager)
 		SOCKADDR_IN SocketAddr {};
 		socklen_t SocketAddrSize = sizeof(SocketAddr);
 		SOCKET socket = accept(lpSocketManager->m_listen, (sockaddr*)&SocketAddr, &SocketAddrSize);
+		char IPAddress[INET_ADDRSTRLEN];
+		bool web = false;
 
 		if (socket == SOCKET_ERROR)
 		{
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 			{
-				Sleep(1);
+				socket = WebGateway::Accept(lpSocketManager->m_webListen, IPAddress, sizeof(IPAddress));
+				if (socket == INVALID_SOCKET)
+				{
+					Sleep(1);
+					continue;
+				}
+				web = true;
+			}
+			else
+			{
+				LogAdd(LOG_RED, "[SocketManager] accept() failed with error: %d", WSAGetLastError());
 				continue;
 			}
-
-			LogAdd(LOG_RED, "[SocketManager] accept() failed with error: %d", WSAGetLastError());
-			continue;
 		}
 
-		if (!SetNonBlocking(socket))
+		if (!web && !SetNonBlocking(socket))
 		{
 			closesocket(socket);
 			continue;
 		}
 
-		char IPAddress[INET_ADDRSTRLEN];
-		if (inet_ntop(AF_INET, &SocketAddr.sin_addr, IPAddress, INET_ADDRSTRLEN) == NULL)
+		if (!web && inet_ntop(AF_INET, &SocketAddr.sin_addr, IPAddress, INET_ADDRSTRLEN) == NULL)
 		{
 			closesocket(socket);
 			continue;
@@ -631,6 +657,7 @@ DWORD CSocketManager::ServerAcceptThread(CSocketManager* lpSocketManager)
 
 		CClientManager* lpClientManager = &gClientManager[index];
 		lpClientManager->AddClient(index, IPAddress, socket);
+		lpClientManager->m_web = web;
 
 		epoll_event ev {};
 		ev.events = EPOLLIN | EPOLLRDHUP;
