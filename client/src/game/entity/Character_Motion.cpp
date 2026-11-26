@@ -480,7 +480,12 @@ void __cdecl MoveCharacterPosition(CHARACTER* character) {
     *(float*)(param_1 + 0x14) = out[1] + *(float*)(param_1 + 0x14);
     *(float*)(param_1 + 0x18) = out[2] + *(float*)(param_1 + 0x18);
     float terrainH = RequestTerrainHeight(*(float*)(param_1 + 0x10), *(float*)(param_1 + 0x14));
-    if (*(short*)&((CHARACTER*)(uintptr_t)(param_1))->Helper.Type == 0x333) {
+    // IDA: `if (World == -1 || Helper != 819 || SafeZone) altura del terreno;`
+    // En zona segura se desmonta (SetPlayerStop/Walk usan la anim a pie), así
+    // que el Dinorant no levanta al personaje: sin este gate quedaba flotando.
+    if (gMapManager.GetCurrentMap() != -1 &&
+        *(short*)&((CHARACTER*)(uintptr_t)(param_1))->Helper.Type == 0x333 &&
+        !AsCharacter(param_1)->SafeZone) {
         if (gMapManager.Current().mountFlies)
             terrainH += 90.0f;
         else
