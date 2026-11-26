@@ -60,13 +60,22 @@ EM_JS(void, mu_page_set_fullscreen, (int on), { if (window.muSetFullscreen) wind
 extern "C" int __cdecl sub_482E40(int a1);
 extern "C" int __cdecl GetScreenWidth(void);   // cantidad del ítem rápido Q / W / E
 
-// Contraseña cargada en el menú de la página (interfaz táctil); 0 si no hay.
-EM_JS(int, mu_page_password, (char* out, int size), {
-    const pass = Module.muPassword || "";
-    if (!pass) return 0;
-    let n = 0;
-    for (; n < pass.length && n < size - 1; n++) HEAPU8[out + n] = pass.charCodeAt(n) & 255;
-    HEAPU8[out + n] = 0;
+// Ingreso con la sesión del sitio.  Le avisa a la página si está a la vista el
+// cuadro de usuario y contraseña (Module.muLoginDialog); la página pide un pase
+// de un solo uso al sitio y lo deja en Module.muLogin = { user, pass }.  Devuelve
+// 1 cuando hay uno para usar (y lo consume); user y pass son de 11 bytes.
+EM_JS(int, mu_page_login, (int visible, char* user, char* pass), {
+    if (Module.muLoginDialog) Module.muLoginDialog(!!visible);
+    const login = Module.muLogin;
+    if (!visible || !login) return 0;
+    Module.muLogin = null;
+    const put = (text, out) => {
+        let n = 0;
+        for (; n < text.length && n < 10; n++) HEAPU8[out + n] = text.charCodeAt(n) & 255;
+        HEAPU8[out + n] = 0;
+    };
+    put(String(login.user || ""), user);
+    put(String(login.pass || ""), pass);
     return 1;
 });
 
@@ -79,29 +88,28 @@ constexpr DWORD MinWidth = 480, MinHeight = 360;
 constexpr int TouchMaxHeight = 720;
 DWORD s_pendingWidth = 0, s_pendingHeight = 0, s_pendingSince = 0, s_lastCheck = 0;
 
+// Con el cuadro de usuario y contraseña a la vista, la página puede traer un
+// pase del sitio (el jugador ya inició sesión ahí): se cargan los dos campos y
+// se confirma, como si hubiera apretado Enter.
+void LoginAssist() {
+    char user[11] = {}, pass[11] = {};
+    const bool dialog = SceneFlag == 2 && LoginSubState == 2 && ErrorMessage == MESSAGE_NONE;
+    if (!mu_page_login(dialog ? 1 : 0, user, pass) || !user[0] || !pass[0]) return;
+    memcpy(InputText[0], user, sizeof(user));
+    memcpy(InputText[1], pass, sizeof(pass));
+    InputLength[0] = (int)strlen(user);
+    InputLength[1] = (int)strlen(pass);
+    InputIndex = 1;
+    DAT_055ca038 = 1;   // Enter: Game_SceneUpdate manda el login
+}
+
 // Diez veces por segundo: lo que la página dibuja en su barra.
 void PushHud() {
     const BYTE* attribute = (const BYTE*)CharacterAttribute;
     const bool inGame = SceneFlag == 5 && Hero && attribute;
     // Fuera del juego sólo se avisa si está el cuadro de usuario y contraseña
     // (en el campo "chat"): la página ofrece ahí la cuenta guardada.
-    if (!inGame) {
-        // Interfaz táctil: al aparecer el cuadro de usuario y contraseña se
-        // pone la contraseña del menú de la página, para no abrir el teclado.
-        // El usuario ya lo recuerda el juego.
-        static bool dialog = false;
-        const bool now = SceneFlag == 2 && LoginSubState == 2;
-        if (now && !dialog && InputLength[1] == 0) {
-            char pass[11] = {};
-            if (mu_page_password(pass, sizeof(pass))) {
-                memcpy(InputText[1], pass, sizeof(pass));
-                InputLength[1] = (int)strlen(pass);
-            }
-        }
-        dialog = now;
-        mu_page_hud(0, now ? 1 : 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, nullptr, nullptr, 0, 0, 0, 0);
-        return;
-    }
+    if (!inGame) { mu_page_hud(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, nullptr, nullptr, 0, 0, 0, 0); return; }
     const CHARACTER* hero = AsCharacter(Hero);
     // Misma cuenta que RenderExperience (0x4BF990): lo ganado dentro del nivel.
     const int level = *(const unsigned short*)(attribute + 0xE);
@@ -156,6 +164,7 @@ void Tick() {
     const DWORD now = Platform::GetTimer().Ticks();
     if (now - s_lastCheck < 100) return;
     s_lastCheck = now;
+    LoginAssist();
     if (IsTouch()) { gWindow.SetTouchHud(true); PushHud(); }
     // La pantalla completa la maneja la página (su botón, Escape, F11): el
     // juego sólo refleja el estado, que es lo que muestra Opciones.
