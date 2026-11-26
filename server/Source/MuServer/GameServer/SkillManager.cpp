@@ -2141,9 +2141,15 @@ void CSkillManager::CGDurationSkillAttackRecv(PMSG_DURATION_SKILL_ATTACK_RECV* l
 		}
 	}
 
-	lpObj->MultiSkillIndex = 0;
+	// Mismo skill de área que el casteo anterior: el cupo de impactos se
+	// conserva y MultiSkillAttack le suma el de este casteo.  Otro skill
+	// arranca de cero, como antes.
+	if (lpObj->MultiSkillIndex != lpSkill->m_index)
+	{
+		lpObj->MultiSkillIndex = 0;
 
-	lpObj->MultiSkillCount = 0;
+		lpObj->MultiSkillCount = 0;
+	}
 
 	short bIndex = MAKE_NUMBERW(lpMsg->index[0], lpMsg->index[1]);
 
