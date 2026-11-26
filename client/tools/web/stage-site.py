@@ -11,6 +11,7 @@ actualizar una carpeta ya armada.  Lo que no se redistribuye queda afuera
 
 Uso: stage-site.py <carpeta del build> <carpeta del cliente> <salida>
 """
+import hashlib
 import importlib.util
 import os
 import shutil
@@ -40,12 +41,28 @@ def main():
         return 2
     build, client, out = (os.path.abspath(p) for p in sys.argv[1:])
     copied = 0
+    digest = hashlib.sha1()
     for name in BUILD_FILES:
         src = os.path.join(build, name)
         if not os.path.isfile(src):
             print('Falta %s en el build' % src)
             return 1
+        if name == 'main.html':
+            continue
+        with open(src, 'rb') as f:
+            digest.update(f.read())
         copied += copy_if_changed(src, os.path.join(out, name))
+    # La página pide main.js y main.wasm con ?v=<hash del build> (ver BUILD en
+    # shell.html): un proxy que guarda los .js no mezcla versiones.
+    with open(os.path.join(build, 'main.html'), encoding='utf-8') as f:
+        page = f.read().replace('%MU_BUILD%', digest.hexdigest()[:12])
+    page_out = os.path.join(out, 'main.html')
+    old = open(page_out, encoding='utf-8').read() if os.path.isfile(page_out) else None
+    if page != old:
+        os.makedirs(out, exist_ok=True)
+        with open(page_out, 'w', encoding='utf-8', newline='') as f:
+            f.write(page)
+        copied += 1
 
     game = os.path.join(out, 'game')
     wanted = set()

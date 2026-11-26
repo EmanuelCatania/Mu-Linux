@@ -152,6 +152,13 @@ addEventListener('beforeunload', (e) => {
   e.preventDefault(); e.returnValue = '';
 });
 
+// Versión del build en las URLs de main.js y main.wasm: un proxy que guarda los
+// .js sin mirar las cabeceras (el Asset Caching de nginx-proxy-manager) podría
+// servir un main.js viejo con un main.wasm nuevo.  tools/web/stage-site.py
+// cambia la marca por un hash del build; sin cambiar (pruebas locales), nada.
+const BUILD = '%MU_BUILD%';
+const BUILD_QUERY = BUILD.includes('%') ? '' : '?v=' + BUILD;
+
 // Red: el cliente abre sockets TCP comunes y Emscripten los convierte en
 // WebSocket a ws://<host>:<puerto>/.  Acá se mandan todos al puente de mu-web
 // (/play/ws, web/lib/play-gateway.js), que sólo deja pasar los puertos del
@@ -319,6 +326,7 @@ function showProgress() {
 
 var Module = {
   canvas: document.getElementById('canvas'),
+  locateFile: (path, dir) => dir + path + BUILD_QUERY,
   arguments: isTouchClient() ? ['--mobile'] : [],
   // El juego arranca con el botón Jugar (callMain).
   noInitialRun: true,
@@ -602,7 +610,7 @@ document.getElementById('play').addEventListener('click', () => {
   const script = document.createElement('script');
   // ?asyncify fuerza el de respaldo (pruebas).
   const jspi = ('Suspending' in WebAssembly) && !new URLSearchParams(location.search).has('asyncify');
-  script.src = jspi ? 'main.js' : 'main-asyncify.js';
+  script.src = (jspi ? 'main.js' : 'main-asyncify.js') + BUILD_QUERY;
   script.async = true;
   document.body.appendChild(script);
 }
