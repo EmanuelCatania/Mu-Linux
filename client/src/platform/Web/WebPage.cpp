@@ -60,6 +60,16 @@ EM_JS(void, mu_page_set_fullscreen, (int on), { if (window.muSetFullscreen) wind
 extern "C" int __cdecl sub_482E40(int a1);
 extern "C" int __cdecl GetScreenWidth(void);   // cantidad del ítem rápido Q / W / E
 
+// Contraseña cargada en el menú de la página (interfaz táctil); 0 si no hay.
+EM_JS(int, mu_page_password, (char* out, int size), {
+    const pass = Module.muPassword || "";
+    if (!pass) return 0;
+    let n = 0;
+    for (; n < pass.length && n < size - 1; n++) HEAPU8[out + n] = pass.charCodeAt(n) & 255;
+    HEAPU8[out + n] = 0;
+    return 1;
+});
+
 namespace WebPage {
 namespace {
 // Por debajo de esto la interfaz 640x480 se achica demasiado.
@@ -76,8 +86,20 @@ void PushHud() {
     // Fuera del juego sólo se avisa si está el cuadro de usuario y contraseña
     // (en el campo "chat"): la página ofrece ahí la cuenta guardada.
     if (!inGame) {
-        mu_page_hud(0, (SceneFlag == 2 && LoginSubState == 2) ? 1 : 0,
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, nullptr, nullptr, 0, 0, 0, 0);
+        // Interfaz táctil: al aparecer el cuadro de usuario y contraseña se
+        // pone la contraseña del menú de la página, para no abrir el teclado.
+        // El usuario ya lo recuerda el juego.
+        static bool dialog = false;
+        const bool now = SceneFlag == 2 && LoginSubState == 2;
+        if (now && !dialog && InputLength[1] == 0) {
+            char pass[11] = {};
+            if (mu_page_password(pass, sizeof(pass))) {
+                memcpy(InputText[1], pass, sizeof(pass));
+                InputLength[1] = (int)strlen(pass);
+            }
+        }
+        dialog = now;
+        mu_page_hud(0, now ? 1 : 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, nullptr, nullptr, 0, 0, 0, 0);
         return;
     }
     const CHARACTER* hero = AsCharacter(Hero);

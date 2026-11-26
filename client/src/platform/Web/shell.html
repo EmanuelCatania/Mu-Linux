@@ -54,8 +54,6 @@
   #account input[type=text], #account input[type=password] { width: 48%; box-sizing: border-box; padding: 8px; margin: 4px 1% 6px 0;
             font: 15px sans-serif; color: #eee; background: #14161c; border: 1px solid #5a4a2c; border-radius: 4px; }
   #account label { display: block; font: 12px sans-serif; color: #b8ac8c; }
-  body:not(.login) #tbar #loginbtn { display: none; }
-  #tbar #loginbtn { color: #9fe89a; }
   #touch, #joy, #ring, #hud, #tbar, #padtoggle, #skillpick, #social, #toast, #rotate { display: none; }
   body.touch:not(.menu) #touch { display: block; position: fixed; inset: 0; z-index: 1; touch-action: none;
                                  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
@@ -63,7 +61,7 @@
                                  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   /* Con un panel del juego abierto (inventario, personaje, mapas) el anillo
      no se muestra: los paneles van de ese lado. */
-  body.touch.ingame.panel #ring { display: none; }
+  body.touch.ingame.panel:not(.menu) #ring { display: none !important; }
   /* Joystick: abajo a la izquierda.  Sólo dentro del juego (.ingame). */
   body.touch.ingame:not(.menu) #joy { display: block; left: 3vh; bottom: 8vh; width: 36vh; height: 36vh;
                                background: url(touch/joy-base.png) center / contain no-repeat; opacity: .8; }
@@ -170,8 +168,7 @@
     <p class="sub">Elegí las opciones mientras se prepara el juego</p>
     <div id="options"></div>
     <div id="account">
-      <p class="sub">Cuenta (opcional): para entrar sin escribirla en el juego</p>
-      <input id="accountuser" type="text" placeholder="Usuario" maxlength="10" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <p class="sub">Contraseña (opcional): aparece ya puesta en el cuadro de ingreso</p>
       <input id="accountpass" type="password" placeholder="Contraseña" maxlength="10" autocomplete="current-password">
       <label><input id="accountkeep" type="checkbox"> Recordar en este dispositivo (queda guardada sin cifrar en este navegador)</label>
     </div>
@@ -211,7 +208,6 @@
   <button class="game" data-icon="Party" id="socialbtn" title="Party, guild y trade">Social</button>
   <button class="game" data-icon="Moves" data-key="KeyM" title="Menú de mapas">Mapas</button>
   <button class="game" data-icon="Events" data-key="KeyH" title="Horarios de eventos">Eventos</button>
-  <button id="loginbtn" title="Escribe el usuario y la contraseña guardados">Entrar</button>
   <button id="keyboard" data-icon="Chat" title="Abre el teclado del celular">Chat</button>
   <button data-key="Escape" data-icon="Settings" title="Menú del juego">Menú</button>
 </div>
@@ -949,16 +945,8 @@ function startTouchControls() {
   const agFill = document.querySelector('#hudag i'), expFill = document.querySelector('#hudexp i');
   const info = document.getElementById('hudinfo'), counts = [...document.querySelectorAll('#hud button small')];
   const part = (now, max) => max > 0 ? Math.max(0, Math.min(1, now / max)) : 0;
-  // Cuenta guardada: con el cuadro de usuario y contraseña a la vista, el
-  // botón Entrar los escribe (usuario, Tab, contraseña, Enter).
-  const account = { user: document.getElementById('accountuser').value.trim(), pass: document.getElementById('accountpass').value };
-  document.getElementById('loginbtn').addEventListener('pointerup', () => {
-    typeText(account.user);
-    setTimeout(() => { tapKey('Tab'); setTimeout(() => { typeText(account.pass); setTimeout(() => tapKey('Enter'), 150); }, 200); }, 150);
-  });
   Module.muHudChanged = (state) => {
     hud = state;
-    body.classList.toggle('login', !state.inGame && state.chat && !!account.user && !!account.pass);
     body.classList.toggle('ingame', state.inGame);
     body.classList.toggle('chatting', state.inGame && state.chat);
     body.classList.toggle('panel', state.inGame && state.panel);
@@ -1015,17 +1003,17 @@ function startTouchControls() {
 // Cuenta guardada (celular): se carga al abrir la página.
 if (isTouchClient()) {
   document.body.classList.add('touchclient');
-  document.getElementById('accountuser').value = storageGet('mu-account-user') || '';
   document.getElementById('accountpass').value = storageGet('mu-account-pass') || '';
-  document.getElementById('accountkeep').checked = !!storageGet('mu-account-user');
+  document.getElementById('accountkeep').checked = !!storageGet('mu-account-pass');
+  try { localStorage.removeItem('mu-account-user'); } catch (e) {}
 }
 document.getElementById('play').addEventListener('click', () => {
   const M = Module, FS = M.FS;
   if (isTouchClient()) {
-    const keep = document.getElementById('accountkeep').checked;
-    for (const [key, id] of [['mu-account-user', 'accountuser'], ['mu-account-pass', 'accountpass']]) {
-      try { if (keep) localStorage.setItem(key, document.getElementById(id).value); else localStorage.removeItem(key); } catch (e) {}
-    }
+    // El juego la pone en su cuadro de ingreso (mu_page_password).
+    const pass = document.getElementById('accountpass').value;
+    M.muPassword = pass;
+    try { if (document.getElementById('accountkeep').checked && pass) localStorage.setItem('mu-account-pass', pass); else localStorage.removeItem('mu-account-pass'); } catch (e) {}
   }
   const configText = readMenu(M.muConfigText || '');
   FS.writeFile(CONFIG, configText);
