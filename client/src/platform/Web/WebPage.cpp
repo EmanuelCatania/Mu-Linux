@@ -7,6 +7,8 @@
 #include "platform/ITimer.h"
 #include "game/core/FrameLimiter.h"
 #include "game/core/HeroVitals.h"
+#include "ui/MoveList.h"
+#include "ui/PanelAnchor.h"
 #include "globals.h"
 #include "functions.h"
 #include <emscripten.h>
@@ -42,20 +44,21 @@ EM_JS(int, mu_page_fullscreen, (), { return document.fullscreenElement ? 1 : 0; 
 // lee de Module.muHud y se entera por muHudChanged.
 EM_JS(void, mu_page_hud, (int inGame, int chat, double hp, double maxHp, double mp, double maxMp,
                           double ag, double maxAg, int level, double exp, int x, int y, int current,
-                          const unsigned char* skills, const char* name, int q, int w, int e), {
+                          const unsigned char* skills, const char* name, int q, int w, int e, int panel), {
     const hud = Module.muHud || (Module.muHud = {});
     hud.inGame = !!inGame; hud.chat = !!chat;
     hud.hp = hp; hud.maxHp = maxHp; hud.mp = mp; hud.maxMp = maxMp; hud.ag = ag; hud.maxAg = maxAg;
     hud.level = level; hud.exp = exp; hud.x = x; hud.y = y; hud.current = current;
     hud.skills = skills ? Array.from(HEAPU8.subarray(skills, skills + 20)) : [];
     hud.name = name ? UTF8ToString(name) : "";
-    hud.potions = [q, w, e];
+    hud.potions = [q, w, e]; hud.panel = !!panel;
     if (Module.muHudChanged) Module.muHudChanged(hud);
 });
 // muSetFullscreen es de la página (shell.html): la misma que usa su botón.
 EM_JS(void, mu_page_set_fullscreen, (int on), { if (window.muSetFullscreen) window.muSetFullscreen(!!on); });
 
-extern "C" int __cdecl sub_482E40(int a1);   // cantidad del ítem rápido Q / W / E
+extern "C" int __cdecl sub_482E40(int a1);
+extern "C" int __cdecl GetScreenWidth(void);   // cantidad del ítem rápido Q / W / E
 
 namespace WebPage {
 namespace {
@@ -70,7 +73,7 @@ DWORD s_pendingWidth = 0, s_pendingHeight = 0, s_pendingSince = 0, s_lastCheck =
 void PushHud() {
     const BYTE* attribute = (const BYTE*)CharacterAttribute;
     const bool inGame = SceneFlag == 5 && Hero && attribute;
-    if (!inGame) { mu_page_hud(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, nullptr, nullptr, 0, 0, 0); return; }
+    if (!inGame) { mu_page_hud(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, nullptr, nullptr, 0, 0, 0, 0); return; }
     const CHARACTER* hero = AsCharacter(Hero);
     // Misma cuenta que RenderExperience (0x4BF990): lo ganado dentro del nivel.
     const int level = *(const unsigned short*)(attribute + 0xE);
@@ -90,7 +93,10 @@ void PushHud() {
                 (double)gHeroVitals.GetCurrent(VITAL_MANA), (double)gHeroVitals.GetMax(VITAL_MANA),
                 (double)gHeroVitals.GetCurrent(VITAL_AG), (double)gHeroVitals.GetMax(VITAL_AG),
                 level, exp, hero->PositionX, hero->PositionY, hero->CurrentSkill,
-                attribute + 87, name, sub_482E40(0), sub_482E40(1), sub_482E40(2));
+                attribute + 87, name, sub_482E40(0), sub_482E40(1), sub_482E40(2),
+                // Un panel abierto (inventario, personaje, mapas...) ocupa el
+                // lugar del anillo: la página lo esconde.
+                (GetScreenWidth() != gWindow.PanelOrigin(Ui::WindowRight) || gMoveList.IsOpen()) ? 1 : 0);
 }
 }
 

@@ -48,12 +48,14 @@
 
   /* Controles táctiles (celular y tablet): una capa sobre el canvas que pasa
      los toques al juego como mouse, y botones para las teclas. */
-  #touch, #joy, #ring, #hud, #tbar, #padtoggle, #skillpick, #rotate { display: none; }
+  #touch, #joy, #ring, #hud, #tbar, #padtoggle, #skillpick, #social, #toast, #rotate { display: none; }
   body.touch:not(.menu) #touch { display: block; position: fixed; inset: 0; z-index: 1; touch-action: none;
                                  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  #joy, #ring, #hud, #tbar, #padtoggle, #skillpick { position: fixed; z-index: 2; touch-action: none;
+  #joy, #ring, #hud, #tbar, #padtoggle, #skillpick, #social, #toast { position: fixed; z-index: 2; touch-action: none;
                                  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  body.touch.padhidden #joy, body.touch.padhidden #ring, body.touch.padhidden #hud, body.touch.padhidden #tbar { display: none; }
+  /* Con un panel del juego abierto (inventario, personaje, mapas) el anillo
+     no se muestra: los paneles van de ese lado. */
+  body.touch.ingame.panel #ring { display: none; }
   /* Joystick: abajo a la izquierda.  Sólo dentro del juego (.ingame). */
   body.touch.ingame:not(.menu) #joy { display: block; left: 3vh; bottom: 8vh; width: 36vh; height: 36vh;
                                background: url(touch/joy-base.png) center / contain no-repeat; opacity: .8; }
@@ -100,6 +102,21 @@
              font: 600 2.2vh sans-serif; color: #e8d8a8; text-shadow: 0 0 3px #000, 0 0 3px #000; }
   /* Paneles y menú, arriba a la derecha. */
   body.touch:not(.menu) #tbar { display: flex; right: 12vh; top: 1vh; gap: 1vh; }
+  /* Dentro del juego la barra está plegada: la abre el botón de los tres puntos. */
+  body.touch.ingame:not(.baropen) #tbar { display: none; }
+  #tbar button.icon { color: transparent; background: center / auto 78% no-repeat, url(touch/button.png) center / 100% 100% no-repeat; }
+  #tbar #movebtn { background-image: url(touch/icon-move.png), url(touch/button.png); }
+  #tbar #eventbtn { background-image: url(touch/icon-event.png), url(touch/button.png); }
+  /* Acciones sobre otro jugador (en esta versión son comandos de chat). */
+  body.touch.ingame.socializing #social { display: flex; z-index: 3; flex-direction: column; gap: 1.2vh; right: 12vh; top: 11vh;
+               padding: 1.5vh; background: rgba(8, 10, 16, .92); border: .3vh solid rgba(190, 160, 100, .7); border-radius: 1.5vh; }
+  #social button { height: 8.5vh; min-width: 30vh; padding: 0 2vh; border: 0; touch-action: none;
+               font: 600 2.4vh sans-serif; letter-spacing: .05em; text-transform: uppercase; color: #d8bf86;
+               background: url(touch/button.png) center / 100% 100% no-repeat; }
+  #social button:active { filter: brightness(1.6); }
+  body.touch.toasting #toast { display: block; z-index: 3; left: 50%; top: 11vh; transform: translateX(-50%); max-width: 80vw;
+               padding: 1.2vh 2.5vh; background: rgba(8, 10, 16, .9); border: .3vh solid rgba(120, 255, 140, .8);
+               border-radius: 1.5vh; color: #e8f8e0; font: 500 2.5vh sans-serif; text-align: center; pointer-events: none; }
   #tbar button, #padtoggle { height: 8.5vh; min-width: 12vh; padding: 0 1.2vh; touch-action: none;
                             font: 600 2.4vh sans-serif; letter-spacing: .05em; text-transform: uppercase; color: #d8bf86;
                             background: url(touch/button.png) center / 100% 100% no-repeat; border: 0; }
@@ -173,12 +190,21 @@
   <button class="game" data-key="KeyV" title="Inventario">Bolso</button>
   <button class="game" data-key="KeyC" title="Personaje">Pj</button>
   <button class="game" id="skillsbtn" title="Elegir skill">Skills</button>
-  <button class="game" data-key="KeyM" title="Menú de mapas">Mapas</button>
-  <button class="game" data-key="KeyH" title="Horarios de eventos">Eventos</button>
+  <button class="game" id="socialbtn" title="Party, guild y comercio">Social</button>
+  <button class="game icon" id="movebtn" data-key="KeyM" title="Menú de mapas">Mapas</button>
+  <button class="game icon" id="eventbtn" data-key="KeyH" title="Horarios de eventos">Eventos</button>
   <button id="keyboard" title="Abre el teclado del celular">Chat</button>
   <button data-key="Escape" title="Menú">Menú</button>
 </div>
 <button id="padtoggle" title="Mostrar u ocultar los controles">⋯</button>
+<div id="social">
+  <button data-command="/party">Invitar a party</button>
+  <button data-command="/trade">Comerciar</button>
+  <button data-command="/guild">Invitar a guild</button>
+  <button data-tap="KeyP">Ver party</button>
+  <button data-tap="KeyG">Ver guild</button>
+</div>
+<div id="toast"></div>
 <div id="skillpick"><span id="skillhint"></span><div class="grid"></div></div>
 <div id="textbar">
   <input id="textin" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="send">
@@ -691,9 +717,23 @@ function startTouchControls() {
     button: button < 0 ? 0 : button, buttons: type === 'mouseup' ? 0 : button === 2 ? 2 : button === 0 ? 1 : 0 }));
   const press = () => { pressTimer = 0; pressed = 0; mouse('mousedown', last, pressed); };
   const own = (e) => [...e.changedTouches].find((t) => t.identifier === finger);
+  // Comando de chat que espera un jugador (/party, /trade, /guild): el
+  // próximo toque sólo lo señala (el juego toma al que está bajo el cursor) y
+  // el comando se escribe solo.
+  let command = '', commandTimer = 0;
+  const toast = (text) => { document.getElementById('toast').textContent = text; document.body.classList.toggle('toasting', !!text); };
+  const cancelCommand = () => { command = ''; clearTimeout(commandTimer); toast(''); };
   layer.addEventListener('touchstart', (e) => {
     e.preventDefault();
     if (finger !== null) return;
+    if (command) {
+      const point = e.changedTouches[0], text = command;
+      cancelCommand();
+      mouse('mousemove', { clientX: point.clientX, clientY: point.clientY }, -1);
+      // Dos cuadros del juego para que tome al jugador señalado.
+      setTimeout(() => { tapKey('Enter'); setTimeout(() => { typeText(text); setTimeout(() => tapKey('Enter'), 120); }, 200); }, 200);
+      return;
+    }
     const t = e.changedTouches[0];
     finger = t.identifier; last = { clientX: t.clientX, clientY: t.clientY };
     mouse('mousemove', last, -1);
@@ -719,7 +759,7 @@ function startTouchControls() {
   layer.addEventListener('touchcancel', release, { passive: false });
 
   // Botones: el apretón no saca el foco (si no, se cierra el teclado del chat).
-  const controls = '#ring button, #hud button, #tbar button, #padtoggle, #joy, #skillpick';
+  const controls = '#ring button, #hud button, #tbar button, #padtoggle, #joy, #skillpick, #social';
   for (const element of document.querySelectorAll(controls))
     element.addEventListener('pointerdown', (e) => e.preventDefault());
   // Sostener: `down` al apoyar el dedo, `up` al levantarlo (o si se va del botón).
@@ -741,7 +781,22 @@ function startTouchControls() {
     const code = button.dataset.key;
     hold(button, () => keyEvent('keydown', code), () => keyEvent('keyup', code));
   }
-  document.getElementById('padtoggle').addEventListener('pointerup', () => document.body.classList.toggle('padhidden'));
+  // Los tres puntos despliegan o pliegan la barra de arriba.
+  document.getElementById('padtoggle').addEventListener('pointerdown', () => {
+    document.body.classList.toggle('baropen');
+    document.body.classList.remove('socializing', 'picking');
+  });
+  document.getElementById('socialbtn').addEventListener('pointerup', () => document.body.classList.toggle('socializing'));
+  for (const button of document.querySelectorAll('#social button')) {
+    button.addEventListener('pointerdown', (e) => e.preventDefault());
+    button.addEventListener('pointerup', () => {
+      document.body.classList.remove('socializing', 'baropen');
+      if (button.dataset.tap) { tapKey(button.dataset.tap); return; }
+      command = button.dataset.command;
+      toast('Parate al lado del jugador y tocalo.');
+      clearTimeout(commandTimer); commandTimer = setTimeout(cancelCommand, 15000);
+    });
+  }
 
   // Joystick y anillo: estado de mando que lee el cliente.  buttons: bit 0
   // golpe básico, bit 1 skill.  select: ranura de skill a dejar elegida.
@@ -869,6 +924,7 @@ function startTouchControls() {
     hud = state;
     body.classList.toggle('ingame', state.inGame);
     body.classList.toggle('chatting', state.inGame && state.chat);
+    body.classList.toggle('panel', state.inGame && state.panel);
     if (!state.inGame) { closePicker(); return; }
     loadAtlas();
     // Las gemas se vacían de arriba hacia abajo.

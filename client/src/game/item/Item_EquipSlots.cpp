@@ -183,6 +183,8 @@ extern "C" void __cdecl Equipment_SlotHitTest(float sx, float sy, float w, float
             unequipTarget = RightClickMove_FindInventorySlot(type);
             if (unequipTarget < 0) return;
         }
+        // Táctil: el primer toque sólo muestra la descripción.
+        if (MouseLButtonPush && !rightClick && !TouchControls_ConfirmPickup(slot)) { /* queda en hover */ }
         if (!MouseLButtonPush && !rightClick) {                 // MouseLButtonPush
             slot[64] = 2;                                   // Color: hover
             DAT_07ea9844 = 0;                               // byte_7EA9844

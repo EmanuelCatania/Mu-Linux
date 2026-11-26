@@ -31,6 +31,7 @@
 // una entidad válida in-game; acá Hero=NULL en login si aún no se asignó.
 // IDA: RenderCursor
 void __cdecl Cursor_Render(void) {
+    if (TouchControls_CursorHidden()) return;
     GL_SetBlendSrcOver('\x01');  // EnableAlphaTest(1)
     Gfx::Color3f(1.0f, 1.0f, 1.0f);
 

@@ -444,6 +444,12 @@ void  __cdecl Player_ProcessInput(void); // IDA: Player_InputTick
 // mientras se sostiene atacar o skill (-1 = ninguno), y si alguno está sostenido.
 int   PadControls_Target(void);
 bool  PadControls_ActionHeld(void);
+// Interfaz táctil.  CursorHidden: se manejó con el joystick o el anillo y
+// todavía no se tocó el mundo (el cursor no se dibuja).  ConfirmPickup: levantar
+// un ítem de un panel pide dos toques seguidos sobre el mismo; el primero sólo
+// muestra su descripción (devuelve false y consume el click).
+bool  TouchControls_CursorHidden(void);
+bool  TouchControls_ConfirmPickup(const void* slot);
 void  __cdecl Mouse_UpdateHoverTargets(void);                                    // IDA: FUN_004b0310
 char  __cdecl SelectSkillByHotkey(int number);                              // SelectSkillByHotkey (0x4B0E80)
 void  __cdecl Chat_InputTick(void);

@@ -616,6 +616,7 @@ Platform::PadState s_pad;
 bool s_padLeft = false, s_padRight = false;
 int  s_padTarget = -1;
 int  s_padWalkWait = 0;
+bool s_cursorHidden = false; DWORD s_cursorX = 0, s_cursorY = 0;
 constexpr int PadTargetRange = 10;   // casillas
 
 bool Pad_TargetValid(int index) {
@@ -653,6 +654,11 @@ void Pad_Apply() {
         MouseX = gWindow.IsWide() ? 320 : (DWORD)(GetScreenWidth() / 2);
         MouseY = 180;
     }
+    // El cursor se esconde al manejar con el joystick o el anillo y vuelve
+    // con el próximo toque en el mundo (que lo mueve).
+    const bool padInUse = s_pad.attack || s_pad.skill || s_pad.moveX != 0 || s_pad.moveY != 0;
+    if (padInUse) { s_cursorHidden = true; s_cursorX = MouseX; s_cursorY = MouseY; }
+    else if (MouseX != s_cursorX || MouseY != s_cursorY) s_cursorHidden = false;
     if (s_pad.attack != s_padLeft) {
         s_padLeft = s_pad.attack;
         MouseLButton = s_padLeft ? 1 : 0;
@@ -709,6 +715,20 @@ void Pad_Walk(unsigned char* ent) {
 }
 
 bool PadControls_ActionHeld(void) { return s_pad.attack || s_pad.skill; }
+
+bool TouchControls_CursorHidden(void) { return gWindow.IsTouchHud() && s_cursorHidden; }
+
+bool TouchControls_ConfirmPickup(const void* slot) {
+    if (!gWindow.IsTouchHud()) return true;
+    static const void* lastSlot = nullptr;
+    static DWORD lastTick = 0;
+    const DWORD now = Platform::GetTimer().Ticks();
+    const bool second = slot == lastSlot && now - lastTick < 700;
+    lastSlot = second ? nullptr : slot;
+    lastTick = now;
+    if (!second) MouseLButtonPush = 0;
+    return second;
+}
 
 int PadControls_Target(void) {
     if (!PadControls_ActionHeld() || !Hero) { s_padTarget = -1; return -1; }

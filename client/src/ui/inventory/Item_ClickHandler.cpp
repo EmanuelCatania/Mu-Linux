@@ -780,7 +780,8 @@ void __cdecl InventoryGrid_Tick(char* origin_x, int origin_y, short* inv_base,
             }
 
             // ── BRANCH D: Left-click → PICKUP ──────────────────────────────
-            if (MouseLButtonPush != 0) {     // MouseLButtonPush
+            // Táctil: el primer toque sólo muestra la descripción.
+            if (MouseLButtonPush != 0 && TouchControls_ConfirmPickup(rowSlot)) {     // MouseLButtonPush
                 int sx = ((BYTE*)rowSlot)[62];
                 int sy = ((BYTE*)rowSlot)[63];
                 int abs = grid_w * sy + sx;
