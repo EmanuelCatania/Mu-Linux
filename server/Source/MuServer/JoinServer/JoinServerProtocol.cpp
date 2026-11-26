@@ -8,6 +8,9 @@
 #include "SocketManager.h"
 #include "SocketManagerUdp.h"
 #include "Util.h"
+#include <cctype>
+#include <cstring>
+#include <ctime>
 #include "../Common/PasswordHash.h"
 
 // Contraseñas con bcrypt (Fase 5). Lo que ya está guardado como hash se
@@ -85,6 +88,97 @@ static void PasswordHashUpgrade(const char* account, const char* password)
 #endif
 
 	gQueryManager.Close();
+}
+
+// Pase de un solo uso de la web (web/lib/play-ticket.js): el jugador que inició
+// sesión en el sitio entra al juego desde /jugar sin escribir la contraseña.
+// La página manda el pase en el campo de contraseña; acá se acepta una sola
+// vez, mientras esté vigente, y se borra.  En la tabla está su SHA-256.
+//
+// La tabla la crea el panel web.  Si no está (server sin panel, o el panel
+// todavía no arrancó) no se consulta; se vuelve a mirar cada minuto.
+static bool WebTicketTableExists()
+{
+	static bool exists = false;
+	static time_t checked = 0;
+
+	if (exists != false)
+	{
+		return true;
+	}
+
+	const time_t now = time(NULL);
+
+	if (checked != 0 && now - checked < 60)
+	{
+		return false;
+	}
+
+	checked = now;
+
+#ifndef MYSQL
+	if (gQueryManager.ExecQuery("SELECT 1 AS found FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'web_play_ticket'") != false && gQueryManager.Fetch() != SQL_NO_DATA)
+#else
+	if (gQueryManager.ExecResultQuery("SELECT 1 AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'web_play_ticket'") != false && gQueryManager.Fetch() != false)
+#endif
+	{
+		exists = true;
+	}
+
+	gQueryManager.Close();
+
+	return exists;
+}
+
+// account ya pasó CheckTextSyntax.  El pase son 10 caracteres [0-9A-Za-z]:
+// cualquier otra cosa no es un pase y no llega a la consulta.
+static bool WebTicketConsume(const char* account, const char* password)
+{
+	if (strlen(password) != 10)
+	{
+		return false;
+	}
+
+	for (int n = 0; n < 10; n++)
+	{
+		if (isalnum((unsigned char)password[n]) == 0)
+		{
+			return false;
+		}
+	}
+
+	if (WebTicketTableExists() == false)
+	{
+		return false;
+	}
+
+	bool found = false;
+
+#ifndef MYSQL
+	if (gQueryManager.ExecQuery("SELECT account_id FROM web_play_ticket WHERE account_id = '%s' AND token_hash = LOWER(CONVERT(VARCHAR(64), HASHBYTES('SHA2_256', '%s'), 2)) AND expires_at > GETDATE()", account, password) != false && gQueryManager.Fetch() != SQL_NO_DATA)
+#else
+	if (gQueryManager.ExecResultQuery("SELECT account_id FROM web_play_ticket WHERE account_id = '%s' AND token_hash = SHA2('%s', 256) AND expires_at > NOW()", account, password) != false && gQueryManager.Fetch() != false)
+#endif
+	{
+		found = true;
+	}
+
+	gQueryManager.Close();
+
+	if (found == false)
+	{
+		return false;
+	}
+
+#ifndef MYSQL
+	gQueryManager.ExecQuery("DELETE FROM web_play_ticket WHERE account_id = '%s'", account);
+#else
+	gQueryManager.ExecUpdateQuery("DELETE FROM web_play_ticket WHERE account_id = '%s'", account);
+#endif
+
+	gQueryManager.Close();
+
+	return true;
 }
 
 void JoinServerProtocolCore(int index, BYTE head, BYTE* lpMsg, int size)
@@ -234,7 +328,17 @@ void GJConnectAccountRecv(SDHP_CONNECT_ACCOUNT_RECV* lpMsg, int index)
 
 		const bool valid = (hashed != false) ? PasswordHash::Check(lpMsg->password, stored) : (strcmp(lpMsg->password, password) == 0);
 
+		// La contraseña no coincide: puede ser un pase de la web.
+		bool ticket = false;
+
 		if (valid == false && IsGlobalPassword(lpMsg->password) == false)
+		{
+			gQueryManager.Close();
+
+			ticket = WebTicketConsume(lpMsg->account, lpMsg->password);
+		}
+
+		if (valid == false && ticket == false && IsGlobalPassword(lpMsg->password) == false)
 		{
 			gQueryManager.Close();
 
@@ -252,7 +356,7 @@ void GJConnectAccountRecv(SDHP_CONNECT_ACCOUNT_RECV* lpMsg, int index)
 			PasswordHashUpgrade(lpMsg->account, lpMsg->password);
 		}
 
-		if (valid == false)
+		if (valid == false && ticket == false)
 		{
 			LogAdd(LOG_RED, "IP [%s] has logged in '%s' account with global password!", lpMsg->IpAddress, lpMsg->account);
 		}
@@ -295,7 +399,17 @@ void GJConnectAccountRecv(SDHP_CONNECT_ACCOUNT_RECV* lpMsg, int index)
 			    : MD5Hash.MD5_CheckValue(lpMsg->password, (char*)password);
 		}
 
+		// La contraseña no coincide: puede ser un pase de la web.
+		bool ticket = false;
+
 		if (valid == false && IsGlobalPassword(lpMsg->password) == false)
+		{
+			gQueryManager.Close();
+
+			ticket = WebTicketConsume(lpMsg->account, lpMsg->password);
+		}
+
+		if (valid == false && ticket == false && IsGlobalPassword(lpMsg->password) == false)
 		{
 			gQueryManager.Close();
 
@@ -313,7 +427,7 @@ void GJConnectAccountRecv(SDHP_CONNECT_ACCOUNT_RECV* lpMsg, int index)
 			PasswordHashUpgrade(lpMsg->account, lpMsg->password);
 		}
 
-		if (valid == false)
+		if (valid == false && ticket == false)
 		{
 			LogAdd(LOG_RED, "IP [%s] has logged in '%s' account with global password!", lpMsg->IpAddress, lpMsg->account);
 		}
