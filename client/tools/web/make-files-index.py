@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Arma files.txt para la versión web: una línea por archivo de Content/ y
-System/ con su tamaño ("ruta<TAB>bytes"), rutas relativas a la carpeta del
-cliente y con barras '/'.  La página crea con esto el árbol de archivos del
+System/ ("ruta<TAB>bytes<TAB>arranque<TAB>versión"), rutas relativas a la carpeta del
+cliente y con barras '/'.  La versión es un hash del contenido: la página la
+pone en la URL, así un archivo cambiado (aunque pese lo mismo) no sale de la
+caché del navegador.  La página crea con esto el árbol de archivos del
 wasm; el contenido se baja recién cuando el juego abre cada archivo.
 
 Los que lista boot-files.txt (junto a este script: lo que el cliente abre hasta
-la pantalla de login) llevan una tercera columna "b": la página los baja de
+la pantalla de login) llevan "b" en la tercera columna: la página los baja de
 fondo mientras el jugador está en el menú previo.  Para rehacer esa lista,
 llegar al login en el navegador y copiar Module.muRequested (una ruta por
 línea).
@@ -13,6 +15,7 @@ línea).
 Uso: make-files-index.py <carpeta del cliente> [<salida>]
      (por defecto la salida es <carpeta>/files.txt)
 """
+import hashlib
 import os
 import sys
 
@@ -39,10 +42,9 @@ def main():
             for name in files:
                 full = os.path.join(current, name)
                 rel = os.path.relpath(full, root).replace(os.sep, '/')
-                line = '%s\t%d' % (rel, os.path.getsize(full))
-                if rel.lower() in boot:
-                    line += '\tb'
-                lines.append(line)
+                with open(full, 'rb') as f:
+                    version = hashlib.sha1(f.read()).hexdigest()[:10]
+                lines.append('%s\t%d\t%s\t%s' % (rel, os.path.getsize(full), 'b' if rel.lower() in boot else '', version))
     lines.sort(key=str.lower)
     with open(out, 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')

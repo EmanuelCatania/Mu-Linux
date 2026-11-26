@@ -126,14 +126,15 @@ public:
             for (const auto& candidate : ContentLayers::Candidates(path)) {
                 const auto resolved = Resolve(candidate.path.c_str());
                 if (!resolved.empty()) {
-                    WebFiles::Ensure(resolved.string());
+                    // Si la bajada falló (web) el archivo está vacío: mejor "no está".
+                    if (!WebFiles::Ensure(resolved.string())) return nullptr;
                     return std::fopen(resolved.string().c_str(), mode);
                 }
             }
         }
         const auto resolved = Resolve(path, write);
         if (resolved.empty()) return nullptr;
-        if (!write) WebFiles::Ensure(resolved.string());
+        if (!write && !WebFiles::Ensure(resolved.string())) return nullptr;
         return std::fopen(resolved.string().c_str(), mode);
     }
     bool EnsureDirectory(const char* path) override {

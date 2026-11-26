@@ -180,8 +180,10 @@ const BUILD_QUERY = BUILD.includes('%') ? '' : '?v=' + BUILD;
 // Red: el cliente abre sockets TCP comunes y Emscripten los convierte en
 // WebSocket a ws://<host>:<puerto>/.  Acá se mandan todos al puente de mu-web
 // (/play/ws, web/lib/play-gateway.js), que sólo deja pasar los puertos del
-// server.  ?gw=<url> usa otro puente (pruebas).
-const GATEWAY = new URLSearchParams(location.search).get('gw')
+// server.  ?gw=<url> usa otro puente, sólo en pruebas locales (en el sitio
+// un link armado podría mandar el login del jugador por un puente ajeno).
+const LOCAL_PAGE = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+const GATEWAY = (LOCAL_PAGE && new URLSearchParams(location.search).get('gw'))
   || (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/play/ws';
 {
   const NativeWebSocket = window.WebSocket;
@@ -345,6 +347,19 @@ function showProgress() {
   document.getElementById('bar').style.width = (bootTotal ? 100 * bootDone / bootTotal : 0) + '%';
 }
 
+// Mensaje fijo encima de todo: el juego no puede seguir.
+function showFatal(text) {
+  let box = document.getElementById('fatal');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'fatal';
+    box.style.cssText = 'position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;' +
+      'padding:24px;text-align:center;font:16px sans-serif;color:#e8d8a8;background:rgba(0,0,0,.88)';
+    document.body.appendChild(box);
+  }
+  box.textContent = text;
+}
+
 var Module = {
   canvas: document.getElementById('canvas'),
   locateFile: (path, dir) => dir + path + BUILD_QUERY,
@@ -353,6 +368,8 @@ var Module = {
   noInitialRun: true,
   print: (t) => console.log(t),
   printErr: (t) => console.warn(t),
+  // Error fatal (sin memoria, fallo del wasm): que no quede la página negra.
+  onAbort: (what) => showFatal('El juego se detuvo por un error' + (what ? ': ' + what : '') + '. Recargá la página para volver a entrar.'),
   setStatus: (t) => setNote(t),
   preRun: [function (M) {
     const FS = M.FS, ENV = M.ENV, IDBFS = M.IDBFS;
@@ -363,7 +380,9 @@ var Module = {
     FS.mount(IDBFS, {}, ROOT + '/User');
     addRunDependency('mu-files');
 
-    const pending = new Map();      // ruta en el FS -> URL (con ?v=tamaño)
+    const pending = new Map();      // ruta en el FS -> URL (con ?v=versión del archivo)
+    const failed = new Set();       // rutas cuya bajada falló (se reintenta al volver a abrir)
+    const inCache = new Set();      // rutas que seguro están en la caché del navegador
     const folders = new Map();      // carpeta -> rutas que contiene
     const inflight = new Map();     // ruta -> promesa de los bytes
     const seenFolders = new Set();
@@ -386,12 +405,20 @@ var Module = {
         const cache = await cacheReady;
         if (cache) {
           const hit = await cache.match(url).catch(() => null);
-          if (hit) return new Uint8Array(await hit.arrayBuffer());
+          if (hit) { inCache.add(path); return new Uint8Array(await hit.arrayBuffer()); }
         }
-        const r = await fetch(url);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const data = await r.arrayBuffer();
-        if (cache) cache.put(url, new Response(data.slice(0))).catch(() => {});
+        // Un corte de red no tiene que dejar al juego sin el archivo.
+        let data, error;
+        for (let attempt = 0; attempt < 3 && !data; ++attempt) {
+          if (attempt) await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+          try {
+            const r = await fetch(url);
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            data = await r.arrayBuffer();
+          } catch (e) { error = e; }
+        }
+        if (!data) throw error;
+        if (cache) cache.put(url, new Response(data.slice(0))).then(() => inCache.add(path)).catch(() => {});
         return new Uint8Array(data);
       })().finally(() => inflight.delete(path));
       inflight.set(path, job);
@@ -402,6 +429,7 @@ var Module = {
       if (!pending.has(path)) return Promise.resolve(true);
       return loadBytes(path)
         .then((data) => {
+          failed.delete(path);
           if (pending.has(path)) {
             loaded.set(path, { url: pending.get(path), used: performance.now() });
             FS.writeFile(path, data);
@@ -409,7 +437,7 @@ var Module = {
           }
           return true;
         })
-        .catch((e) => { console.warn('No se pudo bajar ' + pending.get(path) + ': ' + e.message); return false; });
+        .catch((e) => { failed.add(path); console.warn('No se pudo bajar ' + pending.get(path) + ': ' + e.message); return false; });
     };
     // Sólo a la caché (descarga de fondo): no ocupa memoria del juego.
     const warm = async (path) => {
@@ -436,7 +464,9 @@ var Module = {
       return fetchOne(path);
     };
     // Pedido desde un hilo (WebFiles.cpp): arranca la bajada y no espera.
-    M.muFetchStart = (path) => { if (!pending.has(path)) { M.muTouch(path); return 0; } M.muFetch(path, true); return 1; };
+    M.muFetchStart = (path) => { if (!pending.has(path)) { M.muTouch(path); return 0; } failed.delete(path); M.muFetch(path, true); return 1; };
+    // Para el hilo que espera: 0 bajando, 1 listo, 2 falló.
+    M.muFetchState = (path) => !pending.has(path) ? 1 : failed.has(path) ? 2 : 0;
     // Sólo con caché (si no, volver a pedirlo sería otra bajada) y nunca un
     // archivo abierto (las fuentes quedan abiertas) ni los de texto chicos.
     cacheReady.then((cache) => {
@@ -445,7 +475,7 @@ var Module = {
         const now = performance.now(), open = new Set();
         for (const stream of FS.streams) if (stream && stream.node) open.add(stream.node);
         for (const [path, entry] of loaded) {
-          if (now - entry.used < EVICT_AFTER || inflight.has(path)) continue;
+          if (now - entry.used < EVICT_AFTER || inflight.has(path) || !inCache.has(path)) continue;
           if (/\.(toml|txt|ini)$/i.test(path)) { loaded.delete(path); continue; }
           let node;
           try { node = FS.lookupPath(path).node; } catch (e) { loaded.delete(path); continue; }
@@ -473,13 +503,14 @@ var Module = {
           // idas y vueltas.
           const eager = [], boot = [];
           for (const line of text.split('\n')) {
-            const [path, size, flag] = line.split('\t');
+            // ruta, bytes, "b" si es del arranque, versión (hash del contenido).
+            const [path, size, flag, version] = line.split('\t');
             if (!path) continue;
             const slash = path.lastIndexOf('/');
             FS.mkdirTree(ROOT + '/' + path.substring(0, slash));
             const full = ROOT + '/' + path;
             FS.writeFile(full, new Uint8Array(0));
-            pending.set(full, BASE + path.split('/').map(encodeURIComponent).join('/') + '?v=' + size);
+            pending.set(full, BASE + path.split('/').map(encodeURIComponent).join('/') + '?v=' + (version || size));
             const folder = full.substring(0, full.lastIndexOf('/'));
             if (!folders.has(folder)) folders.set(folder, []);
             folders.get(folder).push(full);
@@ -487,6 +518,13 @@ var Module = {
             else if (flag === 'b') boot.push(full);
           }
           bootTotal = eager.length + boot.length;
+          // Lo que quedó en la caché de una versión anterior de un archivo (o
+          // de uno que ya no existe) se borra: si no, la caché sólo crece.
+          const current = new Set([...pending.values()].map((url) => new URL(url, location.href).href));
+          cacheReady.then(async (cache) => {
+            if (!cache) return;
+            for (const request of await cache.keys()) if (!current.has(request.url)) cache.delete(request);
+          }).catch(() => {});
           const worker = (list) => async () => {
             while (list.length) { await M.muFetch(list.shift()); ++bootDone; showProgress(); }
           };
@@ -506,7 +544,7 @@ var Module = {
             .sort((a, b) => rank(a) - rank(b)).filter((p) => rank(p) < 4);
           runQueue(rest, 2, warm);
         })
-        .catch((e) => setNote('No se pudo cargar la lista de archivos: ' + e.message));
+        .catch((e) => setNote('No se pudo cargar la lista de archivos (' + e.message + '). Recargá la página.'));
     });
 
     // El cliente escribe Config.ini en la raíz (al cambiar una opción): cada
@@ -527,6 +565,9 @@ var Module = {
   }],
   onRuntimeInitialized() {
     const play = document.getElementById('play');
+    // Sin WebGPU o sin aislamiento de origen (hilos) el juego no arranca.
+    if (!navigator.gpu) { setNote('Este navegador no tiene WebGPU: probá con Chrome o Edge actualizados.'); return; }
+    if (!crossOriginIsolated) { setNote('La página no quedó aislada (faltan cabeceras del sitio): el juego no puede arrancar.'); return; }
     play.disabled = false;
     if (bootDone < bootTotal) setNote('Bajando datos de fondo; ya podés jugar');
     else setNote('Listo');
@@ -682,6 +723,7 @@ document.getElementById('play').addEventListener('click', () => {
   const jspi = ('Suspending' in WebAssembly) && !new URLSearchParams(location.search).has('asyncify');
   script.src = (jspi ? 'main.js' : 'main-asyncify.js') + BUILD_QUERY;
   script.async = true;
+  script.onerror = () => setNote('No se pudo bajar el juego. Recargá la página.');
   document.body.appendChild(script);
 }
 </script>

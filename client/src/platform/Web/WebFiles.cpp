@@ -42,9 +42,13 @@ bool Ensure(const std::string& path) {
     }, path.c_str());
     if (!started) return true;
     for (int i = 0; i < 600; ++i) {   // hasta 30 s
-        struct stat st;
-        if (stat(path.c_str(), &st) == 0 && st.st_size > 0) return true;
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::this_thread::sleep_for(std::chrono::milliseconds(i < 10 ? 5 : 50));
+        // 0 bajando, 1 listo, 2 falló (no tiene sentido seguir esperando).
+        const int state = MAIN_THREAD_EM_ASM_INT({
+            return Module.muFetchState ? Module.muFetchState(UTF8ToString($0)) : 1;
+        }, path.c_str());
+        if (state == 1) return true;
+        if (state == 2) return false;
     }
     return false;
 }

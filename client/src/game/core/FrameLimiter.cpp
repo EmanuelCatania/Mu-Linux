@@ -25,7 +25,8 @@ uint32_t CFrameLimiter::Wait(const StartTime& start)
     double minimum = !m_RenderDecoupled ? 40.0 : (m_FpsLimit ? 1000.0 / m_FpsLimit : 0.0);
 #ifdef __EMSCRIPTEN__
     // Navegador: el ritmo lo pone el cuadro del navegador (WebPage::WaitFrame,
-    // al refresco del monitor).  Esperar acá además sumaba las dos esperas.
+    // al refresco del monitor, o al límite de FPS si es más bajo).  Esperar
+    // acá además sumaba las dos esperas.
     if (m_RenderDecoupled) minimum = 0.0;
 #endif
     const double elapsed = Platform::GetTimer().Wait(start, minimum) + m_FractionMilliseconds;

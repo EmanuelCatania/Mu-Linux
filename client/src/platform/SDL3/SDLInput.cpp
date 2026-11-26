@@ -16,6 +16,14 @@ float wheelRemainder = 0;
 // corrido un frame con el botón apretado (dos bombeos después del apretar).
 unsigned pumpSerial = 0;
 struct HeldButton { unsigned downSerial = 0; bool upPending = false; InputEvent up{}; int key = 0; };
+// Navegador: un toque llega como apretar y soltar casi juntos, y el juego
+// necesita ver el botón apretado al menos un cuadro.  En escritorio el mouse
+// se entrega tal cual llega.
+#ifdef __EMSCRIPTEN__
+constexpr bool DeferQuickRelease = true;
+#else
+constexpr bool DeferQuickRelease = false;
+#endif
 std::array<HeldButton, 3> buttons{};   // izquierdo, derecho, medio
 int VirtualKey(SDL_Scancode key) {
     if (key >= SDL_SCANCODE_A && key <= SDL_SCANCODE_Z) return 'A' + key - SDL_SCANCODE_A;
@@ -128,7 +136,7 @@ bool SDLCALL Watch(void*, SDL_Event* event) {
             if (button.upPending) { SetKey(button.key, false); DeliverSDLInput(button.up); button.upPending = false; }
             button.downSerial = pumpSerial;
             SetKey(button.key, true);
-        } else if (pumpSerial < button.downSerial + 2) {
+        } else if (DeferQuickRelease && pumpSerial < button.downSerial + 2) {
             button.up = input; button.upPending = true;
             return true;
         } else {

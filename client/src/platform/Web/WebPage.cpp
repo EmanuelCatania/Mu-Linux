@@ -5,6 +5,7 @@
 #include "app/config/UserSettings.h"
 #include "platform/IWindow.h"
 #include "platform/ITimer.h"
+#include "game/core/FrameLimiter.h"
 #include <emscripten.h>
 
 // Con la pestaña oculta el documento puede medir 0: se usa la ventana.
@@ -15,8 +16,20 @@ EM_JS(int, mu_page_height, (), { return (document.documentElement.clientHeight |
 EM_JS(double, mu_page_pixel_ratio, (), { return window.devicePixelRatio || 1; });
 // Con la pestaña oculta el navegador no da cuadros: el tope de 100 ms deja
 // correr la red y la lógica (si no, el server corta por inactividad).
-EM_ASYNC_JS(void, mu_wait_frame, (), {
-    await new Promise((resolve) => { requestAnimationFrame(resolve); setTimeout(resolve, 100); });
+// minMs: con un límite de FPS más bajo que el refresco del monitor se dejan
+// pasar cuadros del navegador hasta cumplirlo (2 ms de margen: los cuadros
+// no llegan exactos).
+EM_ASYNC_JS(void, mu_wait_frame, (double minMs), {
+    const wait = () => new Promise((resolve) => {
+        let frame = 0, timer = 0;
+        frame = requestAnimationFrame(() => { clearTimeout(timer); resolve(); });
+        timer = setTimeout(() => { cancelAnimationFrame(frame); resolve(); }, 100);
+    });
+    // El próximo cuadro se agenda desde el anterior, no desde ahora: así el
+    // promedio da el límite aunque no sea divisor del refresco (60 en 144 Hz).
+    do { await wait(); } while (minMs > 0 && !document.hidden && performance.now() < (Module.muNextFrame || 0) - 2);
+    const now = performance.now(), next = (Module.muNextFrame || 0) + minMs;
+    Module.muNextFrame = next < now ? now + minMs : next;
 });
 EM_JS(int, mu_page_touch, (), {
     return (Module.arguments || []).indexOf('--mobile') >= 0 ? 1 : 0;
@@ -74,7 +87,11 @@ void Tick() {
     gWindow.ChangeMode(true, false, width, height);
 }
 
-void WaitFrame() { mu_wait_frame(); }
+void WaitFrame() {
+    // Con el dibujo ligado al paso de 40 ms ya espera el limitador.
+    const int limit = gFrameLimiter.IsRenderDecoupled() ? gFrameLimiter.FpsLimit() : 0;
+    mu_wait_frame(limit > 0 ? 1000.0 / limit : 0.0);
+}
 
 bool IsTouch() { return mu_page_touch() != 0; }
 
