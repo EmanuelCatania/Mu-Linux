@@ -11,7 +11,6 @@ endif()
 # caching_sha2_password, que fuera del caché del server lo necesita.
 #
 # Define MU_MARIADB_INCLUDE_DIRS y deja el target `mariadbclient`.
-# Compartido por el build de CMake y por los proyectos MSBuild (cmake/mysql).
 set(MU_MARIADB_VERSION 3.4.11)
 set(MU_MARIADB_SHA256 7cdb35c571dd0c187f806f569285829d31b4aba4feb93957a034b0b1e887e276)
 set(MU_MARIADB_PATCH "${CMAKE_CURRENT_LIST_DIR}/mariadb/patch-variadic-stdcall.cmake")

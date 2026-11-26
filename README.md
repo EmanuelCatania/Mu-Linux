@@ -318,7 +318,7 @@ guardar.
 
 ## Novedades de 0.97.30 — cierre de la Fase 3
 
-- El server compila con CMake en Windows x86 y x64, además de Linux x64 y ARM64. El CI cubre las cuatro combinaciones en Debug y Release.
+- El server compila con CMake en Windows x64, Linux x64 y Linux ARM64 (sólo 64 bits). El CI cubre las tres en Debug y Release.
 - MySQL Connector/C++ se descarga en el configure con versión y hash fijos; sus binarios ya no se versionan.
 - Correcciones del ancho de puntero en callbacks de sockets, IOCP y timers, necesarias para x64.
 - Cola de envío ampliada para el catálogo de items que el server manda al iniciar sesión.
@@ -365,22 +365,15 @@ Para fijar la versión, usá la imagen `emapupi/mu-linux-97k:0.97.30` (amd64 y a
 
 El cliente trae compilada la dirección `mu.server-pups.space`. Para apuntarlo a un server propio sin recompilar, agregar en `C:\Windows\System32\drivers\etc\hosts` (como administrador) la línea `127.0.0.1 mu.server-pups.space`, y sacarla al terminar.
 
-#### Windows x86 y dependencias
+#### Dependencias en Windows
 
-x64 es el build recomendado. x86 (Win32) queda como base histórica: es la arquitectura del MuEmu original y sigue compilando en el CI, pero ya no es el camino de esta guía. Para compilarlo, también desde `server`:
+El server sólo se compila en 64 bits: los builds x86 del MuEmu original (y su solución MSBuild) se quitaron. También está `windows-x64-debug`. JoinServer y DataServer hablan con MySQL por la API en C (`mysql.h`): CMake descarga el código fuente de **MariaDB Connector/C 3.4.11** (SHA256 fijado en `server/cmake/MuMySQLPackages.cmake`) y lo compila como biblioteca estática, con Schannel para TLS. Al ser API en C sirve igual con MSVC y con MinGW. MySQL 8.4 autentica con `caching_sha2_password`, que necesita TLS; el conector lo pide sin verificar el certificado autofirmado del server. En Linux se usa `libmysqlclient-dev` (o `libmariadb-dev`) del sistema. El primer configure requiere acceso a GitHub.
 
-```powershell
-cmake --preset windows-x86-release
-cmake --build --preset windows-x86-release --parallel 4
-```
-
-También están disponibles `windows-x86-debug` y `windows-x64-debug`; los ejecutables quedan en la misma carpeta que los de x64. JoinServer y DataServer hablan con MySQL por la API en C (`mysql.h`): CMake descarga el código fuente de **MariaDB Connector/C 3.4.11** (SHA256 fijado en `server/cmake/MuMySQLPackages.cmake`) y lo compila como biblioteca estática, con Schannel para TLS. Al ser API en C sirve igual con MSVC y con MinGW. MySQL 8.4 autentica con `caching_sha2_password`, que necesita TLS; el conector lo pide sin verificar el certificado autofirmado del server. En Linux se usa `libmysqlclient-dev` (o `libmariadb-dev`) del sistema. El primer configure requiere acceso a GitHub. Los proyectos MSBuild históricos compilan el mismo conector en `Debug_MySQL` y `Release_MySQL`, con el toolset del proyecto; necesitan CMake en PATH.
-
-Los cuatro servicios compilan en el CI para Windows x86/x64 y Linux x64/ARM64, Debug y Release. ARM64 sigue como compilado, no probado en partida. Fase 3 incluye correcciones del ancho de puntero en callbacks, IOCP y timers, y una cola de envío de 256 KiB para el catálogo de login; el límite individual sigue en 8 KiB. La prueba local de Windows x64 cubrió login, partida, reset, compra/venta y Chaos; no equivale a una prueba de carga.
+Los cuatro servicios compilan en el CI para Windows x64 y Linux x64/ARM64, Debug y Release. ARM64 sigue como compilado, no probado en partida. Fase 3 incluye correcciones del ancho de puntero en callbacks, IOCP y timers, y una cola de envío de 256 KiB para el catálogo de login; el límite individual sigue en 8 KiB. La prueba local de Windows x64 cubrió login, partida, reset, compra/venta y Chaos; no equivale a una prueba de carga.
 
 #### Compilar con MinGW
 
-Los cuatro servicios y `mu-data` también compilan con MinGW-w64 (GCC), en x64 y x86. Los presets son para compilación cruzada desde Linux; en Debian/Ubuntu hacen falta `g++-mingw-w64-x86-64-posix`, `g++-mingw-w64-i686-posix` y `ninja-build`:
+Los cuatro servicios y `mu-data` también compilan con MinGW-w64 (GCC), en x64. El preset es para compilación cruzada desde Linux; en Debian/Ubuntu hacen falta `g++-mingw-w64-x86-64-posix` y `ninja-build`:
 
 ```sh
 cd server
@@ -388,7 +381,7 @@ cmake --preset mingw-x64-release
 cmake --build --preset mingw-x64-release --parallel 4
 ```
 
-Los `.exe` quedan en `server/out/build/mingw-x64-release/bin/` (`mingw-x86-release` para 32 bits) y salen estáticos: no piden las DLL del toolchain. Se copian a `server/MuServer/` igual que los de MSVC. Compilar con MSYS2 desde Windows todavía no está probado.
+Los `.exe` quedan en `server/out/build/mingw-x64-release/bin/` y salen estáticos: no piden las DLL del toolchain. Se copian a `server/MuServer/` igual que los de MSVC. Compilar con MSYS2 desde Windows todavía no está probado.
 
 ### Administración: eventos GM y recargas
 
