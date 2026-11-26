@@ -710,7 +710,17 @@ document.getElementById('play').addEventListener('click', () => {
   document.body.classList.remove('menu');
   document.getElementById('canvas').focus();
   M.muStarted = true;
-  M.callMain(M.arguments);
+  // Un error al arrancar (o en el bucle del juego) no tiene que dejar la
+  // página en negro sin explicación.
+  const failed = (e) => {
+    if (!e || e === 'unwind' || e.name === 'ExitStatus') return;
+    console.error(e);
+    showFatal('El juego se detuvo por un error: ' + (e.message || e) + '. Recargá la página para volver a entrar.');
+  };
+  try {
+    const run = M.callMain(M.arguments);
+    if (run && run.catch) run.catch(failed);
+  } catch (e) { failed(e); }
 });
 </script>
 <!-- {{{ SCRIPT }}} : se carga abajo, según lo que soporte el navegador -->
