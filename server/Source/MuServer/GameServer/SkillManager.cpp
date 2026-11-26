@@ -1017,6 +1017,8 @@ bool CSkillManager::MultiSkillAttack(int aIndex, int bIndex, CSkill* lpSkill)
 
 		lpObj->MultiSkillIndex = lpSkill->m_index;
 
+		lpObj->MultiSkillTime = GetTickCount();
+
 		switch (lpSkill->m_skill)
 		{
 			case SKILL_FLAME:
@@ -1893,9 +1895,9 @@ void CSkillManager::CGMultiSkillAttackRecv(PMSG_MULTI_SKILL_ATTACK_RECV* lpMsg, 
 		return;
 	}
 
-	if (lpObj->Type == OBJECT_USER && (lpObj->MultiSkillIndex == 0 || lpObj->MultiSkillIndex != lpSkill->m_index || lpObj->MultiSkillCount == 0))
+	if (lpObj->Type == OBJECT_USER && (lpObj->MultiSkillIndex == 0 || lpObj->MultiSkillIndex != lpSkill->m_index || lpObj->MultiSkillCount == 0 || (GetTickCount() - lpObj->MultiSkillTime) > MULTI_SKILL_HIT_WINDOW))
 	{
-		TRACE_REJECT(aIndex, 0x1D, -1, "skill %d: sin 0x1E previo o sin cupo de impactos (MultiSkillIndex=%d esperado=%d cupo=%d)", lpSkill->m_skill, lpObj->MultiSkillIndex, lpSkill->m_index, lpObj->MultiSkillCount);
+		TRACE_REJECT(aIndex, 0x1D, -1, "skill %d: sin 0x1E previo, sin cupo o fuera de ventana (MultiSkillIndex=%d esperado=%d cupo=%d hace=%lu ms)", lpSkill->m_skill, lpObj->MultiSkillIndex, lpSkill->m_index, lpObj->MultiSkillCount, (unsigned long)(GetTickCount() - lpObj->MultiSkillTime));
 		GCRejectSend(aIndex, 0x1D, REJECT_SKILL_SEQUENCE);
 		return;
 	}
@@ -2078,10 +2080,8 @@ void CSkillManager::CGSkillAttackRecv(PMSG_SKILL_ATTACK_RECV* lpMsg, int aIndex)
 		}
 	}
 
-	lpObj->MultiSkillIndex = 0;
-
-	lpObj->MultiSkillCount = 0;
-
+	// No se toca el cupo de impactos del skill de área anterior: sus proyectiles
+	// siguen en el aire y lo acota la ventana MULTI_SKILL_HIT_WINDOW.
 	this->UseAttackSkill(aIndex, bIndex, lpSkill);
 }
 

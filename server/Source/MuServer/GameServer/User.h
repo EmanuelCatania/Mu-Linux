@@ -497,6 +497,7 @@ struct OBJECTSTRUCT
 	CSkill* Skill;
 	WORD MultiSkillIndex;
 	WORD MultiSkillCount;
+	DWORD MultiSkillTime;
 	BYTE CharSet[11];
 	BYTE Resistance[MAX_RESISTANCE_TYPE];
 	BYTE AddResistance[MAX_RESISTANCE_TYPE];
