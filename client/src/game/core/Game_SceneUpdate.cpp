@@ -422,6 +422,15 @@ int Game_SceneUpdate(void)
 
     // ── STATE 0: SERVER SELECT ────────────────────────────────────────────────
     if (LoginSubState == 0) {
+        // Interfaz táctil: la lista se dibuja ampliada (Scene_Login_ServerSelect.cpp,
+        // mismo punto fijo y factor); el cursor se lleva al layout original.
+        if (gWindow.IsTouchHud()) {
+            const DWORD realX = MouseX, realY = MouseY;
+            MouseX = (DWORD)(int)(185.0f + ((float)(int)realX - 185.0f) / 1.7f);
+            MouseY = (DWORD)(int)(228.0f + ((float)(int)realY - 228.0f) / 1.7f);
+            CServerSelWin_UpdateWhileActive();
+            MouseX = realX; MouseY = realY;
+        } else
         CServerSelWin_UpdateWhileActive();  // Scene_Login_ServerSelect
     }
 

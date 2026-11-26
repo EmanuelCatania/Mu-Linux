@@ -73,7 +73,13 @@ DWORD s_pendingWidth = 0, s_pendingHeight = 0, s_pendingSince = 0, s_lastCheck =
 void PushHud() {
     const BYTE* attribute = (const BYTE*)CharacterAttribute;
     const bool inGame = SceneFlag == 5 && Hero && attribute;
-    if (!inGame) { mu_page_hud(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, nullptr, nullptr, 0, 0, 0, 0); return; }
+    // Fuera del juego sólo se avisa si está el cuadro de usuario y contraseña
+    // (en el campo "chat"): la página ofrece ahí la cuenta guardada.
+    if (!inGame) {
+        mu_page_hud(0, (SceneFlag == 2 && LoginSubState == 2) ? 1 : 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, nullptr, nullptr, 0, 0, 0, 0);
+        return;
+    }
     const CHARACTER* hero = AsCharacter(Hero);
     // Misma cuenta que RenderExperience (0x4BF990): lo ganado dentro del nivel.
     const int level = *(const unsigned short*)(attribute + 0xE);
