@@ -7,7 +7,12 @@ struct InputEvent { InputEventType type; int x = 0; int y = 0; int wheel = 0; ui
 struct ImeState { uint32_t conversion = 0; uint32_t sentence = 0; };
 // Mando (gamepad) o joystick táctil.  move: palanca en pantalla, -1..1 (y hacia
 // abajo).  attack / skill: botones sostenidos (golpe básico / skill elegido).
-struct PadState { float moveX = 0; float moveY = 0; bool attack = false; bool skill = false; };
+// selectSkill: ranura de skill a dejar elegida (-1 = ninguna).  cycleSkill: +1 /
+// -1 = pasar al skill siguiente / anterior.  Los dos valen por una lectura.
+struct PadState {
+    float moveX = 0; float moveY = 0; bool attack = false; bool skill = false;
+    int selectSkill = -1; int cycleSkill = 0;
+};
 class IInput {
 public:
     virtual ~IInput() = default;

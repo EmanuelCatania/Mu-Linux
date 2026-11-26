@@ -71,6 +71,11 @@ public:
     // Píxeles de la ventana a la izquierda del área de interfaz (0 en 4:3).
     int       GetUiOffsetX()   const { return m_UiOffsetX; }
     bool      IsWide()         const { return m_UiWidth != m_Width; }
+    // DESVIACION (versión web en celular): la barra de abajo (esferas, pociones,
+    // experiencia, botones) la dibuja la página con controles para el dedo
+    // (shell.html, #hud); el cliente no la dibuja ni atiende sus clicks.
+    bool      IsTouchHud()     const { return m_TouchHud; }
+    void      SetTouchHud(bool on) { m_TouchHud = on; }
 
     // DESVIACION (Fase 4, pantalla ancha): rectángulo de un viewport 3D dado en
     // la grilla 640x480, en píxeles reales.  Lo que toca el borde izquierdo
@@ -98,6 +103,7 @@ private:
 
     DWORD m_Width       = 640;
     DWORD m_Height      = 480;
+    bool  m_TouchHud    = false;
     DWORD m_UiWidth     = 640;    // = m_Width salvo en pantalla ancha
     int   m_UiOffsetX   = 0;
     float m_ScreenRateX = 1.0f;   // ancho / 640

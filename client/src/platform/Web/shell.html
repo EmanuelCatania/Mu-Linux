@@ -48,40 +48,73 @@
 
   /* Controles táctiles (celular y tablet): una capa sobre el canvas que pasa
      los toques al juego como mouse, y botones para las teclas. */
-  #touch, #joy, #ring, #quick, #bar, #padtoggle, #rotate { display: none; }
+  #touch, #joy, #ring, #hud, #tbar, #padtoggle, #skillpick, #rotate { display: none; }
   body.touch:not(.menu) #touch { display: block; position: fixed; inset: 0; z-index: 1; touch-action: none;
                                  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  #joy, #ring, #quick, #bar, #padtoggle { position: fixed; z-index: 2; touch-action: none;
-                                          -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  body.touch.padhidden #joy, body.touch.padhidden #ring, body.touch.padhidden #quick, body.touch.padhidden #bar { display: none; }
-  /* Joystick: abajo a la izquierda, por encima de la barra del juego. */
-  body.touch:not(.menu) #joy { display: block; left: 3vh; bottom: 14vh; width: 36vh; height: 36vh;
+  #joy, #ring, #hud, #tbar, #padtoggle, #skillpick { position: fixed; z-index: 2; touch-action: none;
+                                 -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  body.touch.padhidden #joy, body.touch.padhidden #ring, body.touch.padhidden #hud, body.touch.padhidden #tbar { display: none; }
+  /* Joystick: abajo a la izquierda.  Sólo dentro del juego (.ingame). */
+  body.touch.ingame:not(.menu) #joy { display: block; left: 3vh; bottom: 8vh; width: 36vh; height: 36vh;
                                background: url(touch/joy-base.png) center / contain no-repeat; opacity: .8; }
   #joy.on { background-image: url(touch/joy-active.png); opacity: 1; }
   #joy i { position: absolute; left: 50%; top: 50%; width: 38%; height: 38%; margin: -19% 0 0 -19%;
            background: url(touch/joy-knob.png) center / contain no-repeat; pointer-events: none; }
-  /* Anillo: el centro ataca, los cinco de alrededor lanzan los skills 1..5. */
-  body.touch:not(.menu) #ring { display: block; right: 1vh; bottom: 9vh; width: 46vh; height: 46vh;
+  /* Anillo: el centro lanza el skill elegido; alrededor, cinco skills a
+     elección; en la esquina, el golpe básico. */
+  body.touch.ingame:not(.menu) #ring { display: block; right: 1vh; bottom: 5vh; width: 46vh; height: 46vh;
                                 background: url(touch/ring.png) center / contain no-repeat; pointer-events: none; }
   #ring button { position: absolute; width: 22%; height: 22%; margin: -11% 0 0 -11%; padding: 0; border: 0;
-                 border-radius: 50%; background: transparent; pointer-events: auto; touch-action: none;
-                 font: 700 3.6vh sans-serif; color: #e8cf96; text-shadow: 0 0 4px #000; }
-  #ring #attack { width: 35%; height: 35%; margin: -17.5% 0 0 -17.5%; font-size: 3vh; letter-spacing: .1em;
-                  background: url(touch/joy-knob.png) center / 86% no-repeat; }
-  #ring button.on { box-shadow: 0 0 0 .5vh rgba(240, 200, 110, .9) inset; }
-  #ring #attack.on { filter: brightness(1.4); box-shadow: none; }
-  /* Pociones (Q W E), a la izquierda del anillo. */
-  body.touch:not(.menu) #quick { display: flex; right: 49vh; bottom: 13vh; gap: 1.5vh; }
-  #quick button { width: 10vh; height: 10vh; padding: 0; border-radius: 50%; touch-action: none;
-                  font: 700 3.4vh sans-serif; color: #e8cf96; background: rgba(12, 16, 26, .7);
-                  border: .3vh solid rgba(190, 160, 100, .7); }
+                 border-radius: 50%; background: rgba(8, 10, 16, .35) center no-repeat; pointer-events: auto;
+                 touch-action: none; font: 700 3.4vh sans-serif; color: #e8cf96; text-shadow: 0 0 4px #000; }
+  #ring #cast { width: 35%; height: 35%; margin: -17.5% 0 0 -17.5%; background-color: rgba(8, 10, 16, .6);
+                box-shadow: 0 0 0 .6vh rgba(190, 160, 100, .75); }
+  #ring #basic { width: 20%; height: 20%; margin: -10% 0 0 -10%; font-size: 4.4vh;
+                 background-color: rgba(12, 16, 26, .75); box-shadow: 0 0 0 .3vh rgba(190, 160, 100, .7); }
+  #ring button.on { box-shadow: 0 0 0 .5vh rgba(240, 200, 110, .95) inset; filter: brightness(1.4); }
+  #ring button.current { box-shadow: 0 0 0 .4vh rgba(120, 220, 255, .9); }
+  body.assigning #ring button[data-slot] { box-shadow: 0 0 0 .5vh rgba(120, 255, 140, .9); }
+  /* Barra del héroe (texturas del pack): vida, maná, AG, experiencia y los
+     tres ítems rápidos.  Reemplaza a la barra del juego, que acá no se dibuja. */
+  body.touch.ingame:not(.menu) #hud { display: block; left: 50%; bottom: 0; height: 15vh; width: 78.87vh;
+                               transform: translateX(-50%); pointer-events: none;
+                               background: url(touch/hud-main.png) center / 100% 100% no-repeat; }
+  body.touch.chatting #hud { opacity: .25; }
+  #hud .gem { position: absolute; top: 12.9%; width: 12.27%; height: 61.3%; }
+  #hud .gem i { position: absolute; inset: 0; background-position: center; background-size: 100% 100%; background-repeat: no-repeat; }
+  #hud .gem b { position: absolute; left: -30%; right: -30%; top: 34%; text-align: center;
+                font: 700 2.5vh sans-serif; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  #hudhp { left: 24.4%; } #hudhp i { background-image: url(touch/hud-hp.png); }
+  #hudmp { left: 63.3%; } #hudmp i { background-image: url(touch/hud-mp.png); }
+  #hud button { position: absolute; top: 19.4%; width: 7.4%; height: 43.5%; padding: 0; border: 0;
+                background: transparent; pointer-events: auto; touch-action: none;
+                font: 700 2.6vh sans-serif; color: #e8cf96; text-shadow: 0 0 3px #000; }
+  #hud button small { display: block; font: 600 2vh sans-serif; color: #fff; }
+  #hud button.on { background: rgba(240, 200, 110, .35); }
+  #hudag, #hudexp { position: absolute; overflow: hidden; }
+  #hudag { left: 39.3%; top: 67.5%; width: 21.5%; height: 10.5%; background: rgba(0, 0, 0, .6); }
+  #hudag i { display: block; height: 100%; width: 0; background: url(touch/hud-ag.png) left / 16.8vh 100% no-repeat; }
+  #hudexp { left: 35.9%; top: 83.9%; width: 28.2%; height: 8.9%; }
+  #hudexp i { display: block; height: 100%; width: 0; background: linear-gradient(#f4dc7c, #b8862c); }
+  #hudinfo { position: absolute; left: 0; right: 0; top: -2.8vh; text-align: center;
+             font: 600 2.2vh sans-serif; color: #e8d8a8; text-shadow: 0 0 3px #000, 0 0 3px #000; }
   /* Paneles y menú, arriba a la derecha. */
-  body.touch:not(.menu) #bar { display: flex; right: 12vh; top: 1vh; gap: 1vh; }
-  #bar button, #padtoggle { height: 8.5vh; min-width: 15vh; padding: 0 1.5vh; touch-action: none;
-                            font: 600 2.8vh sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #d8bf86;
+  body.touch:not(.menu) #tbar { display: flex; right: 12vh; top: 1vh; gap: 1vh; }
+  #tbar button, #padtoggle { height: 8.5vh; min-width: 12vh; padding: 0 1.2vh; touch-action: none;
+                            font: 600 2.4vh sans-serif; letter-spacing: .05em; text-transform: uppercase; color: #d8bf86;
                             background: url(touch/button.png) center / 100% 100% no-repeat; border: 0; }
+  body:not(.ingame) #tbar .game { display: none; }
   body.touch:not(.menu) #padtoggle { display: block; right: 1vh; top: 1vh; min-width: 9vh; }
-  #quick button.on, #bar button.on, #bar button:active, #padtoggle:active { filter: brightness(1.6); }
+  #tbar button.on, #tbar button:active, #padtoggle:active { filter: brightness(1.6); }
+  /* Lista de skills del personaje: elegir el que lanza el botón grande y
+     armar las cinco ranuras del anillo. */
+  body.touch.ingame.picking #skillpick { display: block; z-index: 3; left: 50%; top: 12vh; transform: translateX(-50%);
+               max-width: 92vw; padding: 2vh; background: rgba(8, 10, 16, .92); border: .3vh solid rgba(190, 160, 100, .7);
+               border-radius: 1.5vh; color: #e8d8a8; font: 500 2.4vh sans-serif; text-align: center; }
+  #skillpick .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.5vh; margin-top: 1.5vh; max-width: 80vh; }
+  #skillpick .grid button { width: 12vh; height: 13.5vh; padding: 0; border: .3vh solid rgba(190, 160, 100, .5);
+               background: #111 center no-repeat; touch-action: none; }
+  #skillpick .grid button.current { border-color: rgba(120, 220, 255, .95); }
   /* Barra de texto: lo que se escribe con el teclado del celular, arriba (el
      campo del juego puede quedar tapado por el teclado). */
   #textbar { display: none; position: fixed; z-index: 5; left: 50%; top: 6px; transform: translateX(-50%);
@@ -118,23 +151,35 @@
 <div id="touch"></div>
 <div id="joy"><i></i></div>
 <div id="ring">
-  <button id="attack" style="left:56%;top:56%" title="Atacar al monstruo más cercano"></button>
-  <button data-skill="Digit1" style="left:26.5%;top:85%">1</button>
-  <button data-skill="Digit2" style="left:14.5%;top:56%">2</button>
-  <button data-skill="Digit3" style="left:26.5%;top:26.5%">3</button>
-  <button data-skill="Digit4" style="left:56%;top:14.5%">4</button>
-  <button data-skill="Digit5" style="left:85%;top:26.5%">5</button>
+  <button id="cast" style="left:56%;top:56%" title="Lanzar el skill elegido al monstruo más cercano"></button>
+  <button data-slot="0" style="left:26.5%;top:85%"></button>
+  <button data-slot="1" style="left:14.5%;top:56%"></button>
+  <button data-slot="2" style="left:26.5%;top:26.5%"></button>
+  <button data-slot="3" style="left:56%;top:14.5%"></button>
+  <button data-slot="4" style="left:85%;top:26.5%"></button>
+  <button id="basic" style="left:89%;top:89%" title="Golpe básico">&#9876;</button>
 </div>
-<div id="quick">
-  <button data-key="KeyQ">Q</button><button data-key="KeyW">W</button><button data-key="KeyE">E</button>
+<div id="hud">
+  <div id="hudinfo"></div>
+  <div id="hudhp" class="gem"><i></i><b></b></div>
+  <div id="hudmp" class="gem"><i></i><b></b></div>
+  <button data-key="KeyQ" style="left:37.9%">Q<small></small></button>
+  <button data-key="KeyW" style="left:46.3%">W<small></small></button>
+  <button data-key="KeyE" style="left:54.6%">E<small></small></button>
+  <div id="hudag"><i></i></div>
+  <div id="hudexp"><i></i></div>
 </div>
-<div id="bar">
-  <button data-key="KeyV" title="Inventario">Bolso</button>
-  <button data-key="KeyC" title="Personaje">Pj</button>
+<div id="tbar">
+  <button class="game" data-key="KeyV" title="Inventario">Bolso</button>
+  <button class="game" data-key="KeyC" title="Personaje">Pj</button>
+  <button class="game" id="skillsbtn" title="Elegir skill">Skills</button>
+  <button class="game" data-key="KeyM" title="Menú de mapas">Mapas</button>
+  <button class="game" data-key="KeyH" title="Horarios de eventos">Eventos</button>
   <button id="keyboard" title="Abre el teclado del celular">Chat</button>
   <button data-key="Escape" title="Menú">Menú</button>
 </div>
 <button id="padtoggle" title="Mostrar u ocultar los controles">⋯</button>
+<div id="skillpick"><span id="skillhint"></span><div class="grid"></div></div>
 <div id="textbar">
   <input id="textin" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="send">
   <button id="textmask" title="Ocultar lo que se escribe (contraseñas)">***</button>
@@ -533,6 +578,7 @@ var Module = {
             const full = ROOT + '/' + path;
             FS.writeFile(full, new Uint8Array(0));
             pending.set(full, BASE + path.split('/').map(encodeURIComponent).join('/') + '?v=' + (version || size));
+            if (/(^|\/)interface\/skill\.ozj$/i.test(path)) M.muSkillAtlasUrl = pending.get(full);
             const folder = full.substring(0, full.lastIndexOf('/'));
             if (!folders.has(folder)) folders.set(folder, []);
             folders.get(folder).push(full);
@@ -605,8 +651,12 @@ var Module = {
 //    un NPC, levantar un item o elegir un monstruo puntual.
 //  - El joystick (#joy) y el anillo (#ring) no pasan por el mouse: escriben
 //    Module.muPad, que el cliente lee como un mando (SDLInput.cpp).  El centro
-//    del anillo ataca al monstruo más cercano; los de alrededor eligen el
-//    skill 1..5 y lo lanzan mientras se sostienen.
+//    del anillo lanza el skill elegido al monstruo más cercano; los cinco de
+//    alrededor son skills a elección (botón Skills: se toca uno de la lista
+//    y queda elegido; tocando después una ranura del anillo, queda ahí).
+//  - La barra de abajo (#hud) la dibuja la página con lo que el cliente le
+//    pasa diez veces por segundo en Module.muHud (WebPage.cpp); la del juego
+//    no se dibuja.
 //  - "Chat" abre el teclado del celular con un <input> en una barra arriba
 //    (los campos del juego pueden quedar tapados por el teclado).  Lo que se
 //    escribe se manda como texto (keypress) y lo borrado como Backspace,
@@ -669,7 +719,7 @@ function startTouchControls() {
   layer.addEventListener('touchcancel', release, { passive: false });
 
   // Botones: el apretón no saca el foco (si no, se cierra el teclado del chat).
-  const controls = '#ring button, #quick button, #bar button, #padtoggle, #joy';
+  const controls = '#ring button, #hud button, #tbar button, #padtoggle, #joy, #skillpick';
   for (const element of document.querySelectorAll(controls))
     element.addEventListener('pointerdown', (e) => e.preventDefault());
   // Sostener: `down` al apoyar el dedo, `up` al levantarlo (o si se va del botón).
@@ -693,8 +743,9 @@ function startTouchControls() {
   }
   document.getElementById('padtoggle').addEventListener('pointerup', () => document.body.classList.toggle('padhidden'));
 
-  // Joystick y anillo: estado de mando que lee el cliente.
-  const pad = Module.muPad = { x: 0, y: 0, buttons: 0 };
+  // Joystick y anillo: estado de mando que lee el cliente.  buttons: bit 0
+  // golpe básico, bit 1 skill.  select: ranura de skill a dejar elegida.
+  const pad = Module.muPad = { x: 0, y: 0, buttons: 0, select: -1 };
   const joy = document.getElementById('joy'), knob = joy.firstElementChild;
   let joyPointer = null;
   const joyMove = (e) => {
@@ -718,20 +769,118 @@ function startTouchControls() {
       joyPointer = null; joy.classList.remove('on');
       pad.x = pad.y = 0; knob.style.transform = '';
     });
-  hold(document.getElementById('attack'), () => { pad.buttons |= 1; }, () => { pad.buttons &= ~1; });
-  // Skill: la tecla lo elige y, un instante después (el juego la tiene que
-  // ver primero), se sostiene el lanzamiento.
-  for (const button of document.querySelectorAll('[data-skill]')) {
-    const code = button.dataset.skill;
-    let timer = 0;
+  hold(document.getElementById('basic'), () => { pad.buttons |= 1; }, () => { pad.buttons &= ~1; });
+  hold(document.getElementById('cast'), () => { pad.buttons |= 2; }, () => { pad.buttons &= ~2; });
+
+  // Skills.  hud.skills son las 20 ranuras del personaje (id de skill, 0 =
+  // vacía); ring[] dice qué ranura lanza cada botón del anillo (-1 = libre) y
+  // se guarda por personaje.
+  const body = document.body, picker = document.getElementById('skillpick');
+  const grid = picker.querySelector('.grid'), hint = document.getElementById('skillhint');
+  const ringButtons = [...document.querySelectorAll('#ring [data-slot]')], cast = document.getElementById('cast');
+  let hud = { skills: [], current: -1, name: '' }, ring = [-1, -1, -1, -1, -1], ringOwner = null;
+  let atlas = '', assigning = -1, assignTimer = 0, drawn = '';
+  // El atlas (Interface/Skill.OZJ) es un JPG con 24 bytes de cabecera delante:
+  // 8 columnas de íconos de 32x36 en 256x256.
+  const loadAtlas = () => {
+    if (atlas || !Module.muSkillAtlasUrl) return;
+    atlas = 'pending';
+    fetch(Module.muSkillAtlasUrl).then((r) => r.arrayBuffer()).then((data) => {
+      atlas = URL.createObjectURL(new Blob([data.slice(24)], { type: 'image/jpeg' }));
+      drawn = ''; drawSkills();
+    }).catch(() => { atlas = ''; });
+  };
+  const paint = (button, slot) => {
+    const id = slot >= 0 ? hud.skills[slot] || 0 : 0;
+    if (id > 0 && atlas && atlas !== 'pending') {
+      const index = id - 1;
+      button.style.backgroundImage = 'url(' + atlas + ')';
+      button.style.backgroundSize = '800% 711.11%';
+      button.style.backgroundPosition = ((index % 8) / 7 * 100) + '% ' + (Math.floor(index / 8) / 6.1111 * 100) + '%';
+      button.textContent = '';
+    } else {
+      button.style.backgroundImage = '';
+      button.textContent = id > 0 ? String(id) : slot === -2 ? '' : '+';
+    }
+  };
+  const saveRing = () => storageSet('mu-ring:' + hud.name, ring.join(','));
+  const stopAssigning = () => { assigning = -1; clearTimeout(assignTimer); body.classList.remove('assigning'); };
+  const closePicker = () => { body.classList.remove('picking'); };
+  function drawSkills() {
+    const key = hud.name + '|' + hud.skills.join(',') + '|' + hud.current + '|' + ring.join(',') + '|' + atlas;
+    if (key === drawn) return;
+    drawn = key;
+    if (ringOwner !== hud.name) {
+      // Otro personaje: sus ranuras guardadas, o sus primeros skills.
+      ringOwner = hud.name;
+      const saved = (storageGet('mu-ring:' + hud.name) || '').split(',').map(Number);
+      const learned = hud.skills.map((id, slot) => id ? slot : -1).filter((slot) => slot >= 0);
+      ring = ring.map((_, i) => saved.length === 5 && Number.isInteger(saved[i]) ? saved[i] : (learned[i] ?? -1));
+    }
+    ringButtons.forEach((button, i) => {
+      if (ring[i] >= 0 && !hud.skills[ring[i]]) ring[i] = -1;
+      paint(button, ring[i]);
+      button.classList.toggle('current', ring[i] >= 0 && ring[i] === hud.current);
+    });
+    paint(cast, hud.skills[hud.current] ? hud.current : -2);
+    grid.textContent = '';
+    hud.skills.forEach((id, slot) => {
+      if (!id) return;
+      const button = document.createElement('button');
+      paint(button, slot);
+      button.classList.toggle('current', slot === hud.current);
+      button.addEventListener('pointerup', () => {
+        // Queda elegido; durante unos segundos, tocar una ranura del anillo
+        // lo deja ahí.
+        pad.select = slot;
+        assigning = slot; body.classList.add('assigning');
+        clearTimeout(assignTimer); assignTimer = setTimeout(stopAssigning, 5000);
+        closePicker();
+      });
+      grid.appendChild(button);
+    });
+    hint.textContent = grid.childElementCount
+      ? 'Tocá un skill para elegirlo.  Después, tocá un círculo del anillo si querés dejarlo ahí.'
+      : 'Este personaje todavía no tiene skills.';
+  }
+  ringButtons.forEach((button, i) => {
     hold(button, () => {
-      keyEvent('keydown', code);
-      timer = setTimeout(() => { timer = 0; keyEvent('keyup', code); pad.buttons |= 2; }, 90);
+      if (assigning >= 0) { ring[i] = assigning; saveRing(); stopAssigning(); drawSkills(); return; }
+      if (ring[i] < 0) { body.classList.add('picking'); return; }
+      // Primero se elige; el lanzamiento se sostiene un instante después
+      // (el cliente tiene que haber leído la elección).
+      pad.select = ring[i];
+      button.castTimer = setTimeout(() => { button.castTimer = 0; pad.buttons |= 2; }, 60);
     }, () => {
-      if (timer) { clearTimeout(timer); timer = 0; keyEvent('keyup', code); pad.buttons |= 2; setTimeout(() => { pad.buttons &= ~2; }, 90); }
+      if (button.castTimer) { clearTimeout(button.castTimer); button.castTimer = 0; pad.buttons |= 2; setTimeout(() => { pad.buttons &= ~2; }, 120); }
       else pad.buttons &= ~2;
     });
-  }
+  });
+  document.getElementById('skillsbtn').addEventListener('pointerup', () => { stopAssigning(); body.classList.toggle('picking'); });
+  layer.addEventListener('touchstart', closePicker, { passive: true });
+
+  // Barra del héroe.
+  const hpFill = document.querySelector('#hudhp i'), mpFill = document.querySelector('#hudmp i');
+  const hpText = document.querySelector('#hudhp b'), mpText = document.querySelector('#hudmp b');
+  const agFill = document.querySelector('#hudag i'), expFill = document.querySelector('#hudexp i');
+  const info = document.getElementById('hudinfo'), counts = [...document.querySelectorAll('#hud button small')];
+  const part = (now, max) => max > 0 ? Math.max(0, Math.min(1, now / max)) : 0;
+  Module.muHudChanged = (state) => {
+    hud = state;
+    body.classList.toggle('ingame', state.inGame);
+    body.classList.toggle('chatting', state.inGame && state.chat);
+    if (!state.inGame) { closePicker(); return; }
+    loadAtlas();
+    // Las gemas se vacían de arriba hacia abajo.
+    hpFill.style.clipPath = 'inset(' + ((1 - part(state.hp, state.maxHp)) * 100) + '% 0 0 0)';
+    mpFill.style.clipPath = 'inset(' + ((1 - part(state.mp, state.maxMp)) * 100) + '% 0 0 0)';
+    hpText.textContent = state.hp; mpText.textContent = state.mp;
+    agFill.style.width = (part(state.ag, state.maxAg) * 100) + '%';
+    expFill.style.width = (state.exp * 100) + '%';
+    info.textContent = 'Nv ' + state.level + '  ·  ' + state.x + ', ' + state.y + '  ·  AG ' + state.ag;
+    counts.forEach((label, i) => { label.textContent = state.potions[i] > 0 ? state.potions[i] : ''; });
+    drawSkills();
+  };
 
   // Teclado: el foco al <input> lo saca (tiene que ser en el pointerup: es lo
   // que el navegador cuenta como gesto).

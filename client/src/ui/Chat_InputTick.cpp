@@ -491,7 +491,9 @@ void __cdecl Chat_InputTick(void)
             // El cuerpo fiel vive en `HUD_BottomBarButtons_HitTest`
             // (src/game/core/Player_InputTick.cpp), que ya trae los cuatro botones
             // con sus sonidos, paquetes y efectos sobre los otros flags.
-            HUD_BottomBarButtons_HitTest();
+            // Interfaz táctil: esos botones y el ícono del skill no se
+            // dibujan (los tiene la página), así que tampoco se atienden.
+            if (!gWindow.IsTouchHud()) HUD_BottomBarButtons_HitTest();
 
             // ── 5. Hotkey assignment grid ────────────────────────────────────
             // chardata+0x56 != 0: item grid is visible.
@@ -499,7 +501,7 @@ void __cdecl Chat_InputTick(void)
             // Hotkey area: X=[0x12f..0x150], Y=[0x1bb..0x1e0] — click → open grid.
             // Item cells: stride 0x20, hit Y=[0x171..0x19c].
             // Keys 1-9: write to chardata+0xd7+slot (value 1..9); clear old.
-            if (*(char *)((char *)CharacterAttribute + 0x56) != '\0')
+            if (*(char *)((char *)CharacterAttribute + 0x56) != '\0' && !gWindow.IsTouchHud())
             {
                 // Outer click area (open toggle)
                 if ((0x12f < mouseX) && (mouseX < 0x150) &&

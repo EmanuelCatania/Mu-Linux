@@ -325,6 +325,7 @@ void Render_HudPass_4BCD20_(void)
     // Nuestro `GL_End2D` esta balanceado a proposito, asi que al salir de
     // sub_4BD650 la proyeccion vuelve a la perspectiva 3D y todo lo que dibuja
     // esta funcion caeria fuera de pantalla.
+    if (gWindow.IsTouchHud()) return;   // la barra de AG la dibuja la página
     GL_Begin2D();
 
     // Anti-tamper #1 — skipped.

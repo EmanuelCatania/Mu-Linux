@@ -245,6 +245,8 @@ extern "C" void __cdecl Render_HudPass_4BD650_(void);
 void __cdecl Render_HudPass_4BD650_(void)
 {
     if (!CharacterAttribute) return;
+    // Interfaz táctil: sólo queda el cierre del 2D que hace este pase.
+    if (gWindow.IsTouchHud()) { DAT_07db870c = 0; GL_End2D(); return; }
 
     // Keep the quick potion categories aligned with the real inventory state.
 

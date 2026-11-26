@@ -104,7 +104,8 @@ static void MouseOnWindow_Update(void)
     if (EmoteMenu::Contains(mx, my)) { MouseOnWindow = 1; return; }
 
     // Bottom HUD (y >= 432) — per IDA Game_CharSelectTick:298.
-    if (my >= 432) { MouseOnWindow = 1; return; }
+    // Con la interfaz táctil la barra no se dibuja: ahí abajo hay mundo.
+    if (my >= 432 && !gWindow.IsTouchHud()) { MouseOnWindow = 1; return; }
 
     // Top quick buttons / small HUD icons rendered by Render_QuickButtons.
     if (HUD_IsGuildCreationRuntime()) {
@@ -629,6 +630,23 @@ bool Pad_TargetValid(int index) {
 // Lee el mando y lo vuelca a los flags de mouse del juego.
 void Pad_Apply() {
     s_pad = Platform::GetInput().Pad();
+    // Skill elegido desde el mando o la página: las ranuras son las 20 de
+    // CharacterAttribute + 87 (0 = vacía), como en la lista del juego.
+    const BYTE* skills = CharacterAttribute ? (const BYTE*)CharacterAttribute + 87 : nullptr;
+    if (skills && Hero && SceneFlag == 5) {
+        CHARACTER* hero = AsCharacter(Hero);
+        if (s_pad.selectSkill >= 0 && s_pad.selectSkill < 20 && skills[s_pad.selectSkill])
+            hero->CurrentSkill = (BYTE)s_pad.selectSkill;
+        if (s_pad.cycleSkill != 0) {
+            int slot = hero->CurrentSkill < 20 ? hero->CurrentSkill : 0;
+            for (int tries = 0; tries < 20; ++tries) {
+                slot = (slot + s_pad.cycleSkill + 20) % 20;
+                if (skills[slot]) { hero->CurrentSkill = (BYTE)slot; PlayBuffer(0x19, 0, 0); break; }
+            }
+        }
+        // Sin ningún skill aprendido, el botón de skill es el golpe básico.
+        if (s_pad.skill && skills[-1] == 0) { s_pad.skill = false; s_pad.attack = true; }
+    }
     if (s_pad.attack || s_pad.skill) {
         // El cursor va al héroe: así un panel o un botón bajo el cursor real
         // no recibe el "click".
