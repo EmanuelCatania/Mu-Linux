@@ -95,6 +95,7 @@ static void PasswordHashUpgrade(const char* account, const char* password)
 // La página manda el pase en el campo de contraseña; acá se acepta una sola
 // vez, mientras esté vigente, y se borra.  En la tabla está su SHA-256.
 //
+// Sólo MySQL: es la base de todos los builds del server.
 // La tabla la crea el panel web.  Si no está (server sin panel, o el panel
 // todavía no arrancó) no se consulta; se vuelve a mirar cada minuto.
 static bool WebTicketTableExists()
@@ -116,11 +117,7 @@ static bool WebTicketTableExists()
 
 	checked = now;
 
-#ifndef MYSQL
-	if (gQueryManager.ExecQuery("SELECT 1 AS found FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'web_play_ticket'") != false && gQueryManager.Fetch() != SQL_NO_DATA)
-#else
 	if (gQueryManager.ExecResultQuery("SELECT 1 AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'web_play_ticket'") != false && gQueryManager.Fetch() != false)
-#endif
 	{
 		exists = true;
 	}
@@ -154,11 +151,7 @@ static bool WebTicketConsume(const char* account, const char* password)
 
 	bool found = false;
 
-#ifndef MYSQL
-	if (gQueryManager.ExecQuery("SELECT account_id FROM web_play_ticket WHERE account_id = '%s' AND token_hash = LOWER(CONVERT(VARCHAR(64), HASHBYTES('SHA2_256', '%s'), 2)) AND expires_at > GETDATE()", account, password) != false && gQueryManager.Fetch() != SQL_NO_DATA)
-#else
 	if (gQueryManager.ExecResultQuery("SELECT account_id FROM web_play_ticket WHERE account_id = '%s' AND token_hash = SHA2('%s', 256) AND expires_at > NOW()", account, password) != false && gQueryManager.Fetch() != false)
-#endif
 	{
 		found = true;
 	}
@@ -170,11 +163,7 @@ static bool WebTicketConsume(const char* account, const char* password)
 		return false;
 	}
 
-#ifndef MYSQL
-	gQueryManager.ExecQuery("DELETE FROM web_play_ticket WHERE account_id = '%s'", account);
-#else
 	gQueryManager.ExecUpdateQuery("DELETE FROM web_play_ticket WHERE account_id = '%s'", account);
-#endif
 
 	gQueryManager.Close();
 
