@@ -1,0 +1,21 @@
+<%- include('partials/site_head', { pageTitle, page }) %>
+
+<main class="flex-grow-1">
+  <div class="container my-5">
+    <div class="row justify-content-center">
+      <div class="col-12 col-lg-5">
+        <div class="bg-white border p-4 shadow-sm rounded-3 text-center">
+          <h3 class="fw-bold mb-2"><%= t("Jugar en el navegador") %></h3>
+          <p class="text-muted mb-4"><%= t("Ya tenes una cuenta?") %></p>
+          <a class="btn btn-primary w-100 mb-2" href="/login?next=play"><%= t("Si, ingresar") %></a>
+          <a class="btn btn-outline-dark w-100" href="/register?next=play"><%= t("No, crear cuenta") %></a>
+          <div class="mt-3">
+            <a href="/jugar/"><%= t("Entrar al juego sin iniciar sesion") %></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<%- include('partials/site_footer') %>

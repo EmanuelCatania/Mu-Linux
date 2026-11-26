@@ -27,6 +27,7 @@ const zonesLib = require('./lib/zones');
 const mapFoldersLib = require('./lib/map-folders');
 const muGuard = require('./lib/mu-guard');
 const playGateway = require('./lib/play-gateway');
+const playTicket = require('./lib/play-ticket');
 
 // Se pone en true cuando ensureSchema confirma que memb__pwd tiene 60 bytes.
 let passwordColumnWide = false;
@@ -956,6 +957,8 @@ async function ensureSchema() {
       )
     `);
 
+    await conn.query(playTicket.TABLE_SQL);
+
     await conn.query(`
       CREATE TABLE IF NOT EXISTS web_account_source (
         account_id VARCHAR(10) NOT NULL,
@@ -1015,6 +1018,11 @@ async function verifyTurnstile(token, remoteIp) {
 app.use((req, res, next) => {
   res.locals.turnstileSiteKey = TURNSTILE_SITE_KEY;
   res.locals.session = req.session;
+  // Versión web del cliente publicada: el menú muestra "Jugar".
+  res.locals.playEnabled = !!playFiles;
+  // "play": el login o el registro se abrieron desde Jugar y vuelven al juego.
+  const nextPage = (req.body && req.body.next) || req.query.next;
+  res.locals.next = nextPage === 'play' && playFiles ? 'play' : '';
   res.locals.appName = 'MuLinux';
   res.locals.year = new Date().getFullYear();
   res.locals.timeZone = resolvedTimeZone;
@@ -1238,7 +1246,7 @@ app.post('/register', authLimiter, async (req, res) => {
     await rememberAccountSource(conn, account, sourceFromRequest(req), true);
 
     await conn.commit();
-    return res.redirect('/login');
+    return res.redirect(res.locals.next ? '/login?next=play' : '/login');
   } catch (err) {
     await conn.rollback();
     return res.render('register', { error: 'Error al crear la cuenta.', page: 'register', pageTitle: `${res.locals.appName} - ${res.locals.t('Registro')}` });
@@ -1291,7 +1299,30 @@ app.post('/login', authLimiter, async (req, res) => {
   }
 
   req.session.user = { id: account };
-  return res.redirect('/account');
+  return res.redirect(res.locals.next ? '/jugar/' : '/account');
+});
+
+// Jugar en el navegador.  Con sesión va directo al juego; sin sesión pregunta
+// si tiene cuenta (ingresar o registrarse) y después vuelve acá.
+app.get('/play', (req, res) => {
+  if (!playFiles) return res.redirect('/');
+  if (req.session.user) return res.redirect('/jugar/');
+  return res.render('play', { page: 'play', pageTitle: `${res.locals.appName} - ${res.locals.t('Jugar')}` });
+});
+
+// Pase de un solo uso para que la página del juego entre con la cuenta de la
+// sesión (lib/play-ticket.js).  La cookie es SameSite=Lax: otro sitio no puede
+// pedirlo con la sesión del jugador.
+app.post('/play/ticket', authLimiter, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  if (!playFiles || !req.session.user) return res.status(401).json({ error: 'no-session' });
+  try {
+    const result = await playTicket.issue(pool, req.session.user.id);
+    if (!result) return res.status(401).json({ error: 'no-account' });
+    return res.json(result);
+  } catch {
+    return res.status(500).json({ error: 'failed' });
+  }
 });
 
 app.get('/logout', (req, res) => {

@@ -45,6 +45,7 @@
           <li class="nav-item"><a href="/" class="nav-link text-white <%= page === 'home' ? 'active' : '' %>"><%= t("Inicio") %></a></li>
           <li class="nav-item"><a href="/rankings" class="nav-link text-white <%= page === 'rankings' ? 'active' : '' %>">Rankings</a></li>
           <li class="nav-item"><a href="/download" class="nav-link text-white <%= page === 'download' ? 'active' : '' %>"><%= t("Descargas") %></a></li>
+          <% if (playEnabled) { %><li class="nav-item"><a href="/play" class="nav-link text-white <%= page === 'play' ? 'active' : '' %>"><%= t("Jugar") %></a></li><% } %>
         </ul>
       </div>
     </div>
@@ -61,6 +62,7 @@
         <li class="nav-item"><a href="/" class="nav-link"><%= t("Inicio") %></a></li>
         <li class="nav-item"><a href="/rankings" class="nav-link">Rankings</a></li>
         <li class="nav-item"><a href="/download" class="nav-link"><%= t("Descargas") %></a></li>
+        <% if (playEnabled) { %><li class="nav-item"><a href="/play" class="nav-link"><%= t("Jugar") %></a></li><% } %>
       </ul>
 
       <div class="mt-3">

@@ -10,6 +10,7 @@
             <div class="alert alert-danger"><%= t(error) %></div>
           <% } %>
           <form action="/register" method="POST">
+            <% if (next) { %><input type="hidden" name="next" value="<%= next %>"><% } %>
             <div class="mb-3">
               <input type="text" class="form-control" name="account" placeholder="<%= t("Usuario (4-10 caracteres)") %>" required>
             </div>
