@@ -1,15 +1,13 @@
 # CMakeLists.txt — build del cliente Mu Online 0.97k.
 #
-# Replica mu97k.vcxproj (Win32, toolset v143). Los flags se fijan a mano en vez
-# de usar los defaults de CMake para que la linea de comandos de cl/link sea la
-# misma que la del .vcxproj. .github/scripts/check_cmake_sources.py verifica en CI que la
-# lista de fuentes coincide con los ClCompile/ClInclude del .vcxproj.
+# Un solo camino: SDL3 con WebGPU (y OpenGL de respaldo), de 64 bits, en Windows,
+# Linux y la web.  Se compila con los presets (CMakePresets.json):
 #
-# Uso:
-#   cmake -S . -B build -A Win32
-#   cmake --build build --config Release
+#   cmake --preset windows-sdl3-x64-release   (Windows, requiere VCPKG_ROOT)
+#   cmake --preset linux-x64-release          (Linux, requiere VCPKG_ROOT)
+#   cmake --preset web-release                (navegador, con emsdk)
 #
-# Salida: bin/Client/main.exe + bin/Client/main.map (igual que el .vcxproj).
+# Salida en Windows: bin/Client/main.exe + bin/Client/main.map.
 
 cmake_minimum_required(VERSION 3.25)
 
@@ -32,18 +30,13 @@ if(MU_PLATFORM_ONLY)
 endif()
 include(MuCompilerOptions)
 include(MuWebGPU)
-if(MU_PLATFORM_BACKEND STREQUAL "SDL3")
-    include(MuSDLDependencies)
-    add_subdirectory(src/platform/SDL3)
-else()
-    set(MU_MINIAUDIO_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib/miniaudio")
-endif()
+include(MuSDLDependencies)
+add_subdirectory(src/platform/SDL3)
 
 
 # ── Fuentes ─────────────────────────────────────────────────────────────
-# Copiadas de los <ClCompile> del .vcxproj, en el mismo orden. NO usar glob:
-# la lista explícita es la que se compara contra el .vcxproj
-# (.github/scripts/check_cmake_sources.py).
+# Lista explícita, sin glob: .github/scripts/check_cmake_sources.py verifica en
+# CI que estén todos los .cpp y .h de src/ y que no falte ni sobre ninguno.
 set(MU_SOURCES
     src/stdafx.cpp
     src/platform/ClientEntry.cpp
@@ -98,7 +91,6 @@ set(MU_SOURCES
     src/ui/UIState.cpp
     src/assets/text/ClientText.cpp
     src/app/core/Window.cpp
-    src/platform/Win32/Win32NativeBridge.cpp
     src/platform/SDL3/SDLWindow.cpp
     src/platform/SDL3/SDLInput.cpp
     src/platform/SDL3/SDLGLContext.cpp
@@ -109,13 +101,6 @@ set(MU_SOURCES
     src/platform/SDL3/SDLSocket.cpp
     src/platform/SDL3/SDLFont.cpp
     src/render/text/TextShaper.cpp
-    src/platform/Win32/Win32Audio.cpp
-    src/platform/Win32/Win32Timer.cpp
-    src/platform/Win32/Win32Input.cpp
-    src/platform/Win32/Win32Window.cpp
-    src/platform/Win32/Win32FileSystem.cpp
-    src/platform/Win32/Win32Socket.cpp
-    src/platform/Win32/Win32GLContext.cpp
     src/platform/FontFrontend.cpp
     src/audio/SoundManager.cpp
     src/game/core/MapManager.cpp
@@ -419,7 +404,7 @@ set(MU_SOURCES
     src/app/debug/Benchmark.cpp
 )
 
-# <ClInclude> del .vcxproj: sólo para que aparezcan en el IDE.
+# Encabezados: sólo para que aparezcan en el IDE.
 set(MU_HEADERS
     src/platform/IClientSettings.h
     src/platform/ClientSettings.h
@@ -499,7 +484,6 @@ set(MU_HEADERS
     src/platform/ITimer.h
     src/platform/IInput.h
     src/platform/IWindow.h
-    src/platform/Win32/Win32Window.h
     src/platform/IFileSystem.h
     src/platform/ContentLayers.h
     src/platform/RunningLock.h
@@ -532,7 +516,6 @@ set(MU_HEADERS
     src/platform/IGLContext.h
     src/platform/GLFunctions.h
     src/platform/GL/glad.h
-    src/platform/Win32/Win32GLContext.h
     src/app/core/Font.h
     src/ui/PanelAnchor.h
     src/ui/EventTimer.h
@@ -635,8 +618,8 @@ set(MU_RESOURCES
 )
 
 # El .rc va en una librería OBJECT aparte: el generador de Visual Studio copia
-# los defines de C++ al ResourceCompile del mismo target, y el .vcxproj no le
-# pasa ningún define a rc.exe. El .res resultante se enlaza igual en main.exe.
+# los defines de C++ al ResourceCompile del mismo target, y a rc.exe no se le
+# pasa ningún define. El .res resultante se enlaza igual en main.exe.
 if(WIN32)
 add_library(mu97k_res OBJECT ${MU_RESOURCES})
 set_target_properties(mu97k_res PROPERTIES FOLDER lib)
@@ -650,9 +633,6 @@ list(FILTER MU_SOURCES EXCLUDE REGEX "src/platform/SDL3/")
 list(REMOVE_ITEM MU_SOURCES src/render/text/TextShaper.cpp)
 if(NOT WIN32)
     list(FILTER MU_SOURCES EXCLUDE REGEX "src/platform/Win32/")
-endif()
-if(MU_PLATFORM_BACKEND STREQUAL "SDL3")
-    list(FILTER MU_SOURCES EXCLUDE REGEX "src/platform/Win32/Win32(Window|Input|GLContext|Timer|FileSystem|NativeBridge|Audio|Socket)\\.cpp$")
 endif()
 if(WIN32)
     add_executable(mu97k WIN32 ${MU_SOURCES} ${MU_HEADERS} $<TARGET_OBJECTS:mu97k_res>)
@@ -668,7 +648,7 @@ set_target_properties(mu97k PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
     CXX_EXTENSIONS OFF
-    # Igual que el .vcxproj: se enlaza directo sobre bin/Client/, donde están
+    # Se enlaza directo sobre bin/Client/, donde están
     # Data/ y Config.ini.
     RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_CURRENT_SOURCE_DIR}/bin/Client"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/bin/Client"
@@ -860,8 +840,7 @@ if(MU_RENDER_WEBGPU)
 endif()
 # MU-Guard (Fase 5, doc-port/diseno-seguridad-fase5.md): rol guardián y ticket
 # en el login (src/guard).  Con OFF no se compila nada de eso y el cliente no le
-# pregunta nada al server.  Va fuera de MU_SOURCES como WebGPU: el .vcxproj
-# (Win32) no lo tiene.
+# pregunta nada al server.  Va fuera de MU_SOURCES, como WebGPU.
 option(MU_GUARD "MU-Guard: guardian del cliente y ticket en el login" ON)
 if(MU_GUARD)
     target_sources(mu97k PRIVATE src/guard/Guardian.cpp src/guard/GuardSocket.cpp src/guard/GuardBanner.cpp src/guard/GuardDetect.cpp

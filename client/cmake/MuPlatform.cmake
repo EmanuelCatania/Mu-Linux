@@ -1,29 +1,19 @@
-set(MU_PLATFORM_BACKEND "SDL3" CACHE STRING "Backend de plataforma del cliente")
-set_property(CACHE MU_PLATFORM_BACKEND PROPERTY STRINGS SDL3 Win32)
-option(MU_PLATFORM_ONLY "Compilar sólo la biblioteca de plataforma (Linux en esta tanda)" OFF)
-if(NOT MU_PLATFORM_BACKEND MATCHES "^(Win32|SDL3)$")
-    message(FATAL_ERROR "MU_PLATFORM_BACKEND debe ser Win32 o SDL3")
+# El cliente tiene un solo backend de plataforma, SDL3, y sólo se compila en
+# 64 bits (el navegador es wasm32, aparte).  El backend Win32 del 0.97k y los
+# builds x86 se quitaron: confundían a quien compilaba por primera vez y nadie
+# los probaba.  La variable queda por compatibilidad con scripts que la pasan.
+set(MU_PLATFORM_BACKEND "SDL3" CACHE STRING "Backend de plataforma del cliente (sólo SDL3)")
+if(NOT MU_PLATFORM_BACKEND STREQUAL "SDL3")
+    message(FATAL_ERROR "El único backend del cliente es SDL3 (el backend Win32 se quitó)")
 endif()
-if(MU_PLATFORM_BACKEND STREQUAL "Win32" AND NOT WIN32)
-    message(FATAL_ERROR "El backend Win32 requiere Windows")
-endif()
-# El backend Win32 (ventana, entrada y texto GDI del 0.97k) queda como base
-# histórica: no tiene presets ni CI, y su texto sólo cubre Windows-1252.
-# Los builds de 32 bits quedan como base histórica: compilan con OpenGL pero no
-# se prueban ni reciben WebGPU. Los publicados son x64.
-if(CMAKE_SIZEOF_VOID_P EQUAL 4)
-    message(WARNING "Build x86 (32 bits): base histórica sin mantenimiento; los builds publicados son x64")
-endif()
-if(MU_PLATFORM_BACKEND STREQUAL "Win32")
-    message(WARNING "Backend Win32: base histórica sin mantenimiento; los builds publicados usan SDL3")
+option(MU_PLATFORM_ONLY "Compilar sólo la biblioteca de plataforma" OFF)
+if(CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT EMSCRIPTEN)
+    message(FATAL_ERROR "El cliente se compila sólo en 64 bits: usá los presets windows-sdl3-x64-release o linux-x64-release")
 endif()
 if(NOT MU_PLATFORM_ONLY)
     if(WIN32)
         if(NOT MSVC AND NOT MINGW)
             message(FATAL_ERROR "El ejecutable Windows requiere MSVC o MinGW-w64")
-        endif()
-        if(MINGW AND NOT MU_PLATFORM_BACKEND STREQUAL "SDL3")
-            message(FATAL_ERROR "Con MinGW el cliente usa el backend SDL3")
         endif()
         enable_language(RC)
     else()

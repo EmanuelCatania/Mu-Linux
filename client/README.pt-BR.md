@@ -34,7 +34,7 @@ baú, trade, chat, party, guild, combate, skills, efeitos, eventos, som e músic
 |---|---|---|
 | Windows x64 | OpenGL 3.3 e WebGPU (DirectX 12, DirectX 11, Vulkan) | Completo; é o build publicado |
 | Linux x64 | OpenGL 3.3 e WebGPU (Vulkan) | Completo; é o build publicado |
-| Windows x86, Linux x86 | OpenGL 3.3 | Base histórica: compila, mas não é testada nem recebe WebGPU |
+| Navegador | WebGPU | Em beta (`/jugar` do site) |
 
 ### Novidades da 0.97.46
 
@@ -91,8 +91,7 @@ de outra versão, o login mostra *"versão incorreta"*.
 
 - **64 bits.** O cliente é compilado e publicado em x64. Os layouts de 32 bits
   do binário original (entidades, modelos, pools, ponteiros guardados em
-  inteiros) foram migrados para seus tamanhos nativos. O x86 fica como base
-  histórica.
+  inteiros) foram migrados para seus tamanhos nativos.
 - **Timing real.** A simulação roda a 25 passos por segundo, como no original,
   e o desenho é separado: mais FPS não aceleram o jogo. Limite de FPS e VSync
   configuráveis.
@@ -148,9 +147,11 @@ O cliente usa **SDL3** para janela, entrada, som e rede, e FreeType, HarfBuzz e
 SheenBidi para o texto. Tudo é baixado ao configurar, em versões fixas, então a
 primeira configuração precisa de internet.
 
-Os builds publicados são **x64**. O backend `Win32` (a janela e o texto GDI do
-binário original) e os builds de 32 bits ficam como base histórica: compilam,
-mas não têm CI nem são testados.
+Há um só caminho: **SDL3 com WebGPU, em 64 bits**, para Windows, Linux e o
+navegador. Os builds x86 e o backend `Win32` do binário original (com o seu
+`mu97k.sln`) foram removidos: confundiam quem compilava pela primeira vez e
+ninguém os testava. Os testes que comparam com o binário original, que é de 32
+bits, continuam compilando seus próprios programas de teste em x86.
 
 ### Windows x64
 
@@ -222,32 +223,17 @@ não tem `__try`/`__except`: os pontos que com MSVC capturam um acesso inválido
 rodam sem essa proteção, como no Linux. Compilar com MSYS2 no Windows ainda não
 foi testado.
 
-### Builds históricos (x86 e Win32)
-
-Continuam disponíveis para comparar com o binário original, que é de 32 bits.
-Usam só OpenGL:
-
-- **Windows x86:** `cmake --preset windows-sdl3-x86-release` e
-  `cmake --build --preset windows-sdl3-x86-release`. Também sai em
-  `bin/Client/main.exe`, então sobrescreve o de x64.
-- **Linux x86:** presets `linux-x86-release` e `linux-x86-debug`, com as
-  bibliotecas de 32 bits e `PKG_CONFIG_LIBDIR` apontando para elas (por exemplo,
-  `/usr/lib32/pkgconfig:/usr/share/pkgconfig` no Arch).
-- **Backend Win32:** `cmake -S . -B build -A Win32 -T v143 -DMU_PLATFORM_BACKEND=Win32`
-  ou `mu97k.sln` no Visual Studio. O texto dele é GDI e só cobre Windows-1252.
-
 ### Para colaborar
 
-- Enquanto o `.sln` e o CMake convivem, um `.cpp` novo é adicionado no
-  `.vcxproj` **e** no `CMakeLists.txt`. O CI falha se as duas listas não
-  coincidirem; dá para checar localmente com
-  `python .github/scripts/check_cmake_sources.py`.
+- Um `.cpp` novo é adicionado no `CMakeLists.txt` (a lista é explícita). O CI
+  falha se uma entrada estiver repetida ou não existir; dá para checar
+  localmente com `python .github/scripts/check_cmake_sources.py`.
 - Dependências incluídas no repo: `lib/stb` (texturas `.ozj`/`.ozt` e
   capturas), `lib/miniaudio` (música), `lib/utf8proc` (normalização Unicode) e
   `lib/libunibreak` (onde uma linha pode ser quebrada). SDL3, FreeType,
   HarfBuzz e SheenBidi são baixados ao configurar; o Dawn, com o vcpkg.
-- O CI compila Windows x64 com WebGPU, Linux x64 com WebGPU e as bases SDL3
-  históricas, roda os testes unitários e monta os pacotes Linux.
+- O CI compila Windows x64 e Linux x64 com WebGPU, roda os testes unitários e
+  os isolados, e monta os pacotes Linux.
 
 ---
 
@@ -404,21 +390,6 @@ Outros detalhes do Linux:
   (`noto-fonts-emoji` no Arch, `fonts-noto-color-emoji` no Debian/Ubuntu).
 - A captura de tela é com **Print Screen**. No KDE o Spectacle a pega antes de
   chegar ao jogo.
-
-### Build x86 no Linux: Wayland e GPUs NVIDIA
-
-Isto afeta só o build histórico de 32 bits. Com NVIDIA há duas consequências no
-Wayland nativo (encontradas no Arch, KDE Plasma, RTX 3080 Ti, driver 615):
-
-- **Sem a plataforma EGL Wayland de 32 bits, o Wayland usa render por
-  software.** A NVIDIA só distribui o `egl-wayland` para x64. Sem
-  `libnvidia-egl-wayland.so.1` em `/usr/lib32`, o contexto GL do Wayland cai no
-  Mesa `llvmpipe`. O cliente detecta isso ao iniciar (`Renderer por software en
-  wayland`) e passa sozinho para X11/XWayland, onde o GLX usa a GPU.
-- **Com essa plataforma instalada, o Wayland nativo funciona mas rende muito
-  menos**: o driver EGL da NVIDIA em 32 bits resolve variáveis thread-local em
-  cada chamada GL. Com NVIDIA, rode o build x86 em X11
-  (`SDL_VIDEODRIVER=x11 ./launch.sh`).
 
 ---
 
@@ -799,11 +770,9 @@ apagados. `MapFog.txt` e `CustomMonster.txt` continuam em `Custom/Encoder`.
 
 ```
 mu97k-src/
-├── CMakeLists.txt       build do cliente (SDL3 no Windows e no Linux, x64 e x86)
+├── CMakeLists.txt       build do cliente (SDL3 + WebGPU, x64 e navegador)
 ├── CMakePresets.json    presets de Windows e Linux
 ├── vcpkg.json           Dawn (WebGPU), só para os builds x64
-├── mu97k.sln            solução do VS2022 (backend Win32 histórico)
-├── mu97k.vcxproj        projeto (Win32 histórico)
 ├── cmake/               módulos do CMake, toolchains e o triplet do vcpkg
 ├── tests/               testes unitários que o CI roda
 ├── lib/stb/             decodifica as texturas .ozj/.ozt e salva as capturas

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Verifica que las listas de fuentes de CMake coincidan con los .vcxproj.
+"""Verifica las listas de fuentes del CMakeLists.txt del cliente.
 
-Compara, en orden y sin duplicados:
-  - CMakeLists.txt (MU_SOURCES / MU_HEADERS)  vs  mu97k.vcxproj (ClCompile / ClInclude)
+MU_SOURCES y MU_HEADERS son listas explícitas (sin glob): este script falla si
+alguna entrada está repetida o apunta a un archivo que no existe.  Antes las
+comparaba contra mu97k.vcxproj; el proyecto de Visual Studio se quitó junto con
+los builds x86 y CMake quedó como única fuente.
 
-Sale con código 1 si hay cualquier diferencia. Lo corre el CI.
+Sale con código 1 si hay cualquier problema. Lo corre el CI.
 
 Uso: python .github/scripts/check_cmake_sources.py
 """
@@ -13,12 +15,6 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-def vcxproj_items(path, kind):
-    with open(path, encoding="utf-8-sig") as f:
-        text = f.read()
-    return [s.replace("\\", "/") for s in re.findall(r'<%s Include="([^"]+)"' % kind, text)]
 
 
 def cmake_list(path, name):
@@ -35,39 +31,25 @@ def cmake_list(path, name):
     return items
 
 
-def compare(label, expected, actual):
+def check(label, items):
     ok = True
-    if len(set(actual)) != len(actual):
-        dups = sorted({x for x in actual if actual.count(x) > 1})
-        print("[%s] duplicados en CMake: %s" % (label, dups))
+    dups = sorted({x for x in items if items.count(x) > 1})
+    if dups:
+        print("[%s] duplicados: %s" % (label, dups))
         ok = False
-    missing = [x for x in expected if x not in actual]
-    extra = [x for x in actual if x not in expected]
-    for x in missing:
-        print("[%s] falta en CMake: %s" % (label, x))
-    for x in extra:
-        print("[%s] sobra en CMake (no está en el .vcxproj): %s" % (label, x))
-    if missing or extra:
-        ok = False
-    elif expected != actual:
-        print("[%s] mismo contenido pero distinto orden" % label)
-        ok = False
-    for x in actual:
+    for x in items:
         if not os.path.isfile(os.path.join(ROOT, x)):
             print("[%s] el archivo no existe: %s" % (label, x))
             ok = False
-    print("[%s] %d entradas: %s" % (label, len(actual), "OK" if ok else "ERROR"))
+    print("[%s] %d entradas: %s" % (label, len(items), "OK" if ok else "ERROR"))
     return ok
 
 
 def main():
+    cmake = os.path.join(ROOT, "CMakeLists.txt")
     results = [
-        compare("mu97k ClCompile",
-                vcxproj_items(os.path.join(ROOT, "mu97k.vcxproj"), "ClCompile"),
-                cmake_list(os.path.join(ROOT, "CMakeLists.txt"), "MU_SOURCES")),
-        compare("mu97k ClInclude",
-                vcxproj_items(os.path.join(ROOT, "mu97k.vcxproj"), "ClInclude"),
-                cmake_list(os.path.join(ROOT, "CMakeLists.txt"), "MU_HEADERS")),
+        check("MU_SOURCES", cmake_list(cmake, "MU_SOURCES")),
+        check("MU_HEADERS", cmake_list(cmake, "MU_HEADERS")),
     ]
     return 0 if all(results) else 1
 
