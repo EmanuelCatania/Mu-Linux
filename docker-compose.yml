@@ -113,6 +113,9 @@ services:
       MU_WEB_GATEWAY_KEY: ${MU_WEB_GATEWAY_KEY:-}
       MU_WEB_SERVER_HOST: mu-server
       MU_WEB_ORIGINS: ${MU_WEB_ORIGINS:-}
+      # Archivos de la versión web en /jugar (lib/play-files.js): el build y, en
+      # game/, los del juego.  Sin build en la carpeta, /jugar no se publica.
+      MU_WEB_CLIENT_DIR: /app/jugar
       WEB_RATE_LIMIT_PER_MINUTE: ${WEB_RATE_LIMIT_PER_MINUTE:-600}
       MU_UPDATE_ENABLED: ${MU_UPDATE_ENABLED:-0}
       UPDATES_RATE_LIMIT_PER_MINUTE: ${UPDATES_RATE_LIMIT_PER_MINUTE:-120}
@@ -125,6 +128,7 @@ services:
       # Sólo lectura, y sólo los parches: nunca montar los datos del server
       # enteros acá (ahí está la clave privada).
       - mu_patches:/app/updates:ro
+      - ${MU_WEB_CLIENT_PATH:-./web-client}:/app/jugar:ro
     ports:
       - "8085:8080"
     networks:

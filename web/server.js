@@ -104,6 +104,12 @@ const pool = mysql.createPool({
 
 const sessionStore = new MySQLStore({}, pool);
 
+// Versión web del cliente (lib/play-files.js).  Antes de helmet, que pondría su
+// CSP (sin wasm ni hilos), y del tope por IP: al jugar se bajan miles de
+// archivos.
+const playFiles = require('./lib/play-files').router(process.env.MU_WEB_CLIENT_DIR);
+if (playFiles) app.use('/jugar', playFiles);
+
 // CSP: los scripts inline y los onclick de las vistas obligan a 'unsafe-inline'.
 // Las noticias pueden traer imágenes de cualquier origen y videos de YouTube/Vimeo
 // (los mismos hosts que permite sanitizeHtml), y el captcha es Turnstile. Sin
