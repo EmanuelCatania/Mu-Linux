@@ -237,6 +237,14 @@ function isTouchClient() {
   if (navigator.userAgentData && navigator.userAgentData.mobile) return true;
   return window.matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0;
 }
+// Teléfono modesto: 4 GB de memoria o menos (navigator.deviceMemory, sólo en
+// Chrome) o pocos núcleos.  Arranca con los gráficos al mínimo ("touchLow" en
+// OPTIONS); el jugador puede subirlos en el menú.
+function isLowEndTouch() {
+  if (!isTouchClient()) return false;
+  if (navigator.deviceMemory) return navigator.deviceMemory <= 4;
+  return (navigator.hardwareConcurrency || 8) <= 4;
+}
 
 // Raíz del cliente dentro del sistema de archivos del wasm.  Content/ y System/
 // se crean como archivos "perezosos": existen en el árbol (las búsquedas y los
@@ -246,7 +254,9 @@ const BASE = new URL('game/', document.baseURI).href;
 const CONFIG = ROOT + '/Config.ini', SAVED_CONFIG = ROOT + '/User/Config.ini';
 
 function setStatus(text) { document.getElementById('status').textContent = text || ''; }
-function setNote(text) { document.getElementById('note').textContent = text || ''; }
+// Un motivo por el que el juego no puede arrancar queda fijo en la nota.
+let blockedNote = '';
+function setNote(text) { document.getElementById('note').textContent = blockedNote || text || ''; }
 
 // Pantalla completa.  Fuera de ella el navegador se queda con algunas teclas
 // (Ctrl+W cierra la pestaña, Ctrl+1..9 cambian de pestaña, Ctrl+T/N abren otra)
@@ -312,11 +322,11 @@ const GATEWAY = (LOCAL_PAGE && new URLSearchParams(location.search).get('gw'))
 // que cualquier página común).
 const OPTIONS = [
   { title: 'Pantalla' },
-  { label: 'Resolución', section: 'Window', key: 'Resolution', def: 8, choices: [
+  { label: 'Resolución', section: 'Window', key: 'Resolution', def: 8, touchLow: 1, choices: [
     [8, 'Automática (la de la página)'], [0, '480 de alto'], [1, '600 de alto'], [4, '720 de alto'],
     [2, '768 de alto'], [6, '900 de alto'], [7, '1080 de alto']] },
   { label: 'Pantalla completa al entrar', local: 'mu-fullscreen', def: 0, check: true },
-  { label: 'Límite de FPS', section: 'Window', key: 'FpsLimit', def: 60, choices: [
+  { label: 'Límite de FPS', section: 'Window', key: 'FpsLimit', def: 60, touchLow: 30, choices: [
     [30, '30'], [60, '60'], [120, '120'], [144, '144'], [0, 'Sin límite']] },
   { title: 'Gráficos' },
   { label: 'Calidad de texturas', section: 'Window', key: 'TextureQuality', def: 0, choices: [
@@ -326,14 +336,14 @@ const OPTIONS = [
     [0, 'No'], [1, 'FXAA'], [2, 'MSAA 4x'], [3, 'MSAA 4x + FXAA']] },
   { label: 'Sombras', section: 'Window', key: 'Shadows', def: 0, choices: [
     [0, 'No'], [1, '1'], [2, '2']] },
-  { label: 'Luces dinámicas', section: 'Window', key: 'DynamicLights', def: 1, choices: [
+  { label: 'Luces dinámicas', section: 'Window', key: 'DynamicLights', def: 1, touchLow: 0, choices: [
     [0, 'No'], [1, 'Normales'], [2, 'Altas']] },
-  { label: 'Brillo (bloom)', section: 'Window', key: 'Bloom', def: 1, choices: [
+  { label: 'Brillo (bloom)', section: 'Window', key: 'Bloom', def: 1, touch: 0, choices: [
     [0, 'No'], [1, 'Normal'], [2, 'Alto']] },
   { label: 'Distancia de dibujado', section: 'Window', key: 'DrawDistance', def: 0, choices: [
     [0, 'Normal'], [1, 'x1.5'], [2, 'x2'], [3, 'x3']] },
-  { label: 'Agua mejorada', section: 'Window', key: 'WorldWater', def: 1, check: true },
-  { label: 'Efecto bajo el agua (Atlans)', section: 'Window', key: 'Underwater', def: 2, choices: [
+  { label: 'Agua mejorada', section: 'Window', key: 'WorldWater', def: 1, touchLow: 0, check: true },
+  { label: 'Efecto bajo el agua (Atlans)', section: 'Window', key: 'Underwater', def: 2, touch: 1, touchLow: 0, choices: [
     [0, 'No'], [1, 'Sin ondulación'], [2, 'Completo']] },
   { label: 'Niebla de profundidad', section: 'Window', key: 'DepthFog', def: 0, check: true },
   { title: 'Cuenta' },
@@ -402,7 +412,11 @@ function buildMenu(configText) {
       box.appendChild(row);
       continue;
     }
-    let value = saved === null || saved === '' || isNaN(Number(saved)) ? option.def : Number(saved);
+    // En celular algunos efectos arrancan apagados; en uno modesto, más.
+    let def = option.def;
+    if (isTouchClient() && option.touch !== undefined) def = option.touch;
+    if (isLowEndTouch() && option.touchLow !== undefined) def = option.touchLow;
+    let value = saved === null || saved === '' || isNaN(Number(saved)) ? def : Number(saved);
     const row = document.createElement('label'); row.className = 'row';
     const name = document.createElement('span'); name.textContent = option.label; row.appendChild(name);
     let input;
@@ -675,11 +689,19 @@ var Module = {
   onRuntimeInitialized() {
     const play = document.getElementById('play');
     // Sin WebGPU o sin aislamiento de origen (hilos) el juego no arranca.
-    if (!navigator.gpu) { setNote('Este navegador no tiene WebGPU: probá con Chrome o Edge actualizados.'); return; }
+    const noGpu = 'Este navegador o dispositivo no tiene WebGPU, que el juego necesita para dibujar. '
+                + 'Hace falta Chrome o Edge actualizados; en celular, Android 12 o más nuevo.';
+    if (!navigator.gpu) { setNote(blockedNote = noGpu); return; }
     if (!crossOriginIsolated) { setNote('La página no quedó aislada (faltan cabeceras del sitio): el juego no puede arrancar.'); return; }
-    play.disabled = false;
-    if (bootDone < bootTotal) setNote('Bajando datos de fondo; ya podés jugar');
-    else setNote('Listo');
+    // El navegador puede tener WebGPU y no darle placa a este dispositivo
+    // (GPU vieja o bloqueada): sin esto el juego arrancaba y fallaba con un
+    // cartel de OpenGL que no tenía nada que ver.
+    navigator.gpu.requestAdapter().catch(() => null).then((adapter) => {
+      if (!adapter) { setNote(blockedNote = noGpu); return; }
+      play.disabled = false;
+      if (bootDone < bootTotal) setNote('Bajando datos de fondo; ya podés jugar');
+      else setNote(isLowEndTouch() ? 'Listo (gráficos al mínimo para este teléfono; se cambian arriba)' : 'Listo');
+    });
   },
 };
 
