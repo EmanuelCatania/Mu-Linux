@@ -685,6 +685,7 @@
   "Mostrando {shown} de {total}. Afiná la búsqueda para ver el resto.": "Показано {shown} з {total}. Уточніть пошук, щоб побачити решту.",
   "Los %d, %s y similares tienen que ser los mismos que en inglés. Si no, el cliente descarta el texto.": "%d, %s та подібні мають збігатися з англійськими. Інакше клієнт відкидає текст.",
   "Dejá vacío para usar el nombre que trae el cliente. Máximo {max} bytes (un acento o una letra no latina ocupan más de uno).": "Залиште порожнім, щоб використати назву з клієнта. Максимум {max} байтів (акцент чи нелатинська літера займають більше одного).",
+  "Dejá vacío para usar el nombre que trae el cliente.": "Залиште порожнім, щоб використати назву з клієнта.",
   "Hay {n} líneas del archivo que no se entienden y no se van a reescribir (la primera es la {line}).": "{n} рядків файлу не розпізнано, їх не буде переписано (перший — рядок {line}).",
   "Hay cambios sin guardar. ¿Descartarlos?": "Є незбережені зміни. Відкинути їх?",
   "No hay cambios para guardar.": "Немає змін для збереження.",

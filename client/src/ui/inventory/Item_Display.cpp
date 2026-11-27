@@ -93,9 +93,8 @@ void __cdecl RenderItemName(int i, const OBJECT* object, int ItemLevel, int Item
         // modelo = tipo + 400; el catálogo da el tipo de ese modelo.
         int attrIdx = gContentCatalog.GetModelItemType((int)v7);
         if (attrIdx < 0) attrIdx = (int)v7 - ITEM_MODEL_BASE;
-        std::uintptr_t abase = ItemAttribute_Base();
-        if (abase && attrIdx >= 0 && attrIdx < ITEM_MAX_EX)
-            name = (const char*)(uintptr_t)(abase + (unsigned int)attrIdx * 64u);
+        if (ItemAttribute_Base() && attrIdx >= 0 && attrIdx < ITEM_MAX_EX)
+            name = gContentCatalog.GetItemName(attrIdx);
     }
 
     switch (v7) {
@@ -161,7 +160,8 @@ void __cdecl RenderItemName(int i, const OBJECT* object, int ItemLevel, int Item
         // (WinMain reserva 0xA00 = 64 entradas y el anti-tamper copia de a
         // 0x28), así que el índice es 40 * (v6 + 30) y el nombre va en offset 0.
         int v45 = 8 * (5 * v6 + 150);
-        const char* skillName = (const char*)((const char*)&SkillAttribute + v45);
+        (void)v45;
+        const char* skillName = gContentCatalog.GetSkillName(30 + v6);
         sprintf(String, "%s %s", skillName, GlobalText[102]);
         goto renderLabel;
     }

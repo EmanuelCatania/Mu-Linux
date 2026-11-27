@@ -475,6 +475,43 @@ const ITEM_POSE_INFO* CContentCatalog::GetPose(int index) const
 	return (it == this->m_ItemPose.end()) ? 0 : &it->second;
 }
 
+// Agrega un texto a la tabla F3:F0.  Si no entra en Text[64] va partido en
+// registros de 64 bytes con CATALOG_TEXT_CONTINUED; el último lleva el 0.
+static void AppendCatalogText(std::vector<CATALOG_TEXT>& out, BYTE table, BYTE reserved, WORD index, const std::string& text)
+{
+	CATALOG_TEXT entry;
+
+	memset(&entry, 0, sizeof(entry));
+
+	entry.Table = table;
+
+	entry.Reserved = reserved;
+
+	entry.Index = index;
+
+	if (text.size() < sizeof(entry.Text))
+	{
+		memcpy(entry.Text, text.data(), text.size());
+
+		out.push_back(entry);
+
+		return;
+	}
+
+	entry.Table = (BYTE)(table | CATALOG_TEXT_CONTINUED);
+
+	for (size_t offset = 0; offset <= text.size(); offset += sizeof(entry.Text))
+	{
+		memset(entry.Text, 0, sizeof(entry.Text));
+
+		const size_t part = (text.size() - offset < sizeof(entry.Text)) ? text.size() - offset : sizeof(entry.Text);
+
+		memcpy(entry.Text, text.data() + offset, part);
+
+		out.push_back(entry);
+	}
+}
+
 void CContentCatalog::BuildSection(BYTE subh, const BYTE* records, int recordSize, int count, std::vector<std::vector<BYTE>>& packets)
 {
 	int perPacket = (CATALOG_MAX_PACKET_SIZE - (int)sizeof(PMSG_CATALOG_HEAD)) / recordSize;
@@ -1006,7 +1043,37 @@ void CContentCatalog::Build()
 	{
 		this->m_TextPackets[lang].clear();
 
-		const std::vector<CATALOG_TEXT>& texts = this->m_Texts[lang];
+		std::vector<CATALOG_TEXT> texts = this->m_Texts[lang];
+
+		// Un item agregado cuyo nombre de Item.txt no entra en los 31 bytes del
+		// E7 va entero acá, salvo que el idioma ya lo traduzca.  Los vanilla no:
+		// su nombre sale del item.bmd del idioma del cliente.
+		for (const auto& name : gItemManager.GetLongNames())
+		{
+			if (name.first < MAX_ITEM_VANILLA || name.first > 0xFFFF)
+			{
+				continue;
+			}
+
+			bool translated = false;
+
+			for (const CATALOG_TEXT& text : this->m_Texts[lang])
+			{
+				if ((text.Table & ~CATALOG_TEXT_CONTINUED) == CATALOG_TEXT_ITEM && text.Index == name.first)
+				{
+					translated = true;
+
+					break;
+				}
+			}
+
+			const std::string display = TextName::ToDisplay(name.second.c_str(), name.second.size());
+
+			if (!translated && !display.empty())
+			{
+				AppendCatalogText(texts, CATALOG_TEXT_ITEM, 0, (WORD)name.first, display);
+			}
+		}
 
 		if (!texts.empty())
 		{
@@ -1351,11 +1418,14 @@ namespace
 
 				memset(&entry, 0, sizeof(entry));
 
-				// Los textos del cliente no tienen máximo: el cliente los guarda
-				// en un std::string.  Los nombres sí, porque el cliente los copia
-				// a las tablas del 0.97k, y una línea de tooltip entra en el
-				// Text[60] de CATALOG_TOOLTIP (59 bytes y el 0).
-				const size_t maxText = (table == CATALOG_TEXT_CLIENT) ? (size_t)-1 : (table == CATALOG_TEXT_TOOLTIP) ? sizeof(CATALOG_TOOLTIP::Text) : sizeof(entry.Text);
+				// Los textos del cliente y los nombres de items y skills no tienen
+				// máximo: el cliente los guarda enteros aparte de las tablas del
+				// 0.97k.  Los de monstruos sí (los copia al nombre de la entidad),
+				// y una línea de tooltip entra en el Text[60] de CATALOG_TOOLTIP
+				// (59 bytes y el 0).
+				const bool unlimited = (table == CATALOG_TEXT_CLIENT || table == CATALOG_TEXT_ITEM || table == CATALOG_TEXT_SKILL);
+
+				const size_t maxText = unlimited ? (size_t)-1 : (table == CATALOG_TEXT_TOOLTIP) ? sizeof(CATALOG_TOOLTIP::Text) : sizeof(entry.Text);
 
 				const bool badLine = (table == CATALOG_TEXT_TOOLTIP && (line < 0 || line >= CATALOG_TOOLTIP_MAX_LINES));
 
@@ -1368,34 +1438,7 @@ namespace
 					continue;
 				}
 
-				entry.Table = table;
-
-				entry.Reserved = (BYTE)line;
-
-				entry.Index = (WORD)index;
-
-				if (text.size() < sizeof(entry.Text))
-				{
-					memcpy(entry.Text, text.data(), text.size());
-
-					out.push_back(entry);
-				}
-				else
-				{
-					// Partido en registros de 64 bytes; el último lleva el 0.
-					entry.Table = (BYTE)(table | CATALOG_TEXT_CONTINUED);
-
-					for (size_t offset = 0; offset <= text.size(); offset += sizeof(entry.Text))
-					{
-						memset(entry.Text, 0, sizeof(entry.Text));
-
-						const size_t part = (text.size() - offset < sizeof(entry.Text)) ? text.size() - offset : sizeof(entry.Text);
-
-						memcpy(entry.Text, text.data() + offset, part);
-
-						out.push_back(entry);
-					}
-				}
+				AppendCatalogText(out, table, (BYTE)line, (WORD)index, text);
 
 				loaded++;
 			}

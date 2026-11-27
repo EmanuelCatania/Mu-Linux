@@ -86,6 +86,10 @@ PendingSection s_PendingMoveList;
 constexpr int MAX_SKILL_NAME = 64;            // SkillAttribute: 64 entradas x 40
 constexpr int SKILL_NAME_SIZE = 32;
 char s_VanillaSkillNames[MAX_SKILL_NAME][SKILL_NAME_SIZE];
+// Nombres del server que no entran en las tablas del 0.97k (Name[30] del item y
+// los 32 bytes del skill); la tabla queda con el nombre cortado para el resto.
+std::map<int, std::string> s_LongItemNames;
+std::map<int, std::string> s_LongSkillNames;
 bool s_HasVanillaSkillNames = false;
 char s_MonsterTexts[512][64];                 // índice de monstruo -> nombre
 std::map<int, std::vector<Proto::CATALOG_TOOLTIP>> s_Tooltips;   // item -> líneas
@@ -794,6 +798,14 @@ void CContentCatalog::ReceiveTexts(const BYTE* msg, int size)
 namespace {
 char* SkillName(char* table, int index) { return table + index * 0x28; }
 
+// Un texto del server saneado entero, sin el corte de las tablas del binario.
+std::string LongName(const std::string& text)
+{
+    std::vector<char> clean(text.size() + 1);
+    NetText::FromServer(clean.data(), clean.size(), text.data(), text.size());
+    return std::string(clean.data());
+}
+
 // Vuelve a los nombres de item.bmd / skill.bmd y aplica los textos recibidos.
 void ApplyTexts(ITEM_ATTRIBUTE* attr)
 {
@@ -811,6 +823,8 @@ void ApplyTexts(ITEM_ATTRIBUTE* attr)
         memcpy(attr[i].Name, vanilla[i].Name, sizeof(attr[i].Name));
     memset(s_MonsterTexts, 0, sizeof(s_MonsterTexts));
     s_TooltipTexts.clear();
+    s_LongItemNames.clear();
+    s_LongSkillNames.clear();
 
     const int textSize = s_PendingTexts.recordSize;
     if (!SectionComplete(s_PendingTexts) || textSize <= 0) return;
@@ -842,6 +856,7 @@ void ApplyTexts(ITEM_ATTRIBUTE* attr)
         case Proto::CATALOG_TEXT_ITEM:
             if (row.Index >= ITEM_MAX_EX) continue;
             NetText::FromServer(attr[row.Index].Name, sizeof(attr[row.Index].Name), text.data(), text.size());
+            if (text.size() >= sizeof(attr[row.Index].Name)) s_LongItemNames[row.Index] = LongName(text);
             break;
         case Proto::CATALOG_TEXT_MONSTER:
             if (row.Index >= 512) continue;
@@ -851,6 +866,7 @@ void ApplyTexts(ITEM_ATTRIBUTE* attr)
             if (row.Index >= MAX_SKILL_NAME) continue;
             NetText::FromServer(SkillName(SkillAttribute.Raw, row.Index), SKILL_NAME_SIZE, text.data(), text.size());
             NetText::FromServer(SkillName((char*)DAT_07cf1ff8, row.Index), SKILL_NAME_SIZE, text.data(), text.size());
+            if (text.size() >= SKILL_NAME_SIZE) s_LongSkillNames[row.Index] = LongName(text);
             break;
         case Proto::CATALOG_TEXT_CLIENT: {
             // Sin máximo: se guarda en un std::string.
@@ -914,6 +930,8 @@ void CContentCatalog::Clear()
     s_PendingTooltips = PendingSection();
     s_Tooltips.clear();
     s_PendingTexts = PendingSection();
+    s_LongItemNames.clear();
+    s_LongSkillNames.clear();
     s_SyncHash.clear();
     s_PendingGates = PendingSection();
     if (s_HasGates && s_HasVanillaGates && GateAttribute)
@@ -1360,6 +1378,25 @@ const CatalogItemPose* CContentCatalog::GetItemPose(int type) const
 {
     if (type < 0 || type >= ITEM_MAX_EX || !s_Items[type].HasPose) return nullptr;
     return &s_Items[type].Pose;
+}
+
+const char* CContentCatalog::GetItemName(int type) const
+{
+    const std::map<int, std::string>::const_iterator it = s_LongItemNames.find(type);
+    if (it != s_LongItemNames.end()) return it->second.c_str();
+    const ITEM_ATTRIBUTE* attr = Attributes();
+    if (!attr || type < 0 || type >= ITEM_MAX_EX) return "";
+    // Name[30] puede venir sin el 0 de un item.bmd ajeno.
+    return memchr(attr[type].Name, 0, sizeof(attr[type].Name)) ? attr[type].Name : "";
+}
+
+const char* CContentCatalog::GetSkillName(int index) const
+{
+    const std::map<int, std::string>::const_iterator it = s_LongSkillNames.find(index);
+    if (it != s_LongSkillNames.end()) return it->second.c_str();
+    if (index < 0 || index >= MAX_SKILL_NAME) return "";
+    const char* name = SkillName(SkillAttribute.Raw, index);
+    return memchr(name, 0, SKILL_NAME_SIZE) ? name : "";
 }
 
 char* CContentCatalog::GetMonsterText(int index) const

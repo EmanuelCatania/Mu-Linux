@@ -163,6 +163,11 @@ public:
     const CatalogMonster* GetMonster(int index) const;
     // Nombre traducido de un monstruo o NPC, o nullptr si el server no lo mandó.
     char* GetMonsterText(int index) const;
+    // Nombre de un item o de un skill para mostrar: el que mandó el server si
+    // no entra en el campo de la tabla del 0.97k (29 y 31 bytes), si no el de
+    // la tabla.  Nunca devuelve nullptr.
+    const char* GetItemName(int type) const;
+    const char* GetSkillName(int index) const;
 
     // Niebla del mapa: colores de día y de noche (0..1).  false = sin fila.
     bool GetMapFog(int map, float day[3], float night[3]) const;

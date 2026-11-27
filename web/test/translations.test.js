@@ -165,8 +165,10 @@ test('tooltips: la clave son sección, índice y línea, y el máximo es de 59 b
   assert.deepEqual(parsed.entries.map((e) => e.key), [[13, 400, 0], [13, 400, 1]]);
   assert.equal(parsed.errors.length, 0);
   assert.equal(maxBytesFor('tooltips'), 59);
-  assert.equal(maxBytesFor('items'), 63);
-  // Client.txt no tiene máximo: el server parte los textos largos.
+  assert.equal(maxBytesFor('monsters'), 63);
+  // Items, skills y Client.txt no tienen máximo: el server parte los textos largos.
+  assert.equal(maxBytesFor('items'), 0);
+  assert.equal(maxBytesFor('skills'), 0);
   assert.equal(maxBytesFor('client'), 0);
   assert.ok(validateName('a'.repeat(300), { maxBytes: maxBytesFor('client') }).name);
   const ok = applyEdits(parsed, [{ key: [13, 400, 2], name: 'a'.repeat(59) }], 'tooltips');

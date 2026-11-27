@@ -276,64 +276,68 @@ static void RII_RequireLine(int textIdx, int required, int have)
 static void RII_FormatName(const ITEM* ip, const ITEM_ATTRIBUTE* p, short type, int Level,
                            bool exc, char* name, int& color)
 {
+    // El nombre puede ser largo (el server lo manda sin tope): la línea del
+    // tooltip es de 100 bytes.
+    const char* itemName = gContentCatalog.GetItemName(ip->Type);
+    (void)p;
     if (type >= 471 && type <= 474) {
-        sprintf(name, "%s", p->Name);
+        snprintf(name, 100, "%s", itemName);
         color = 3;
     } else switch (type) {
     case 460:
-        if      (Level == 0) sprintf(name, "%s", GlobalText[100]);
-        else if (Level == 1) sprintf(name, "%s", GlobalText[101]);
-        else if (Level == 2 && ip->Durability < 10) sprintf(name, "%s", kRII_ChaosEventName[ip->Durability]);
+        if      (Level == 0) snprintf(name, 100, "%s", GlobalText[100]);
+        else if (Level == 1) snprintf(name, 100, "%s", GlobalText[101]);
+        else if (Level == 2 && ip->Durability < 10) snprintf(name, 100, "%s", kRII_ChaosEventName[ip->Durability]);
         break;
     case 459:
         switch (Level) {
-        case 0: sprintf(name, "%s", p->Name); break;
-        case 1: sprintf(name, "%s", GlobalText[105]); break;
-        case 2: sprintf(name, "%s", GlobalText[106]); break;
-        case 3: sprintf(name, "%s", GlobalText[107]); break;
-        case 5: sprintf(name, "%s", GlobalText[109]); break;
-        case 6: sprintf(name, "%s", GlobalText[110]); break;
-        case 7: sprintf(name, "%s", GlobalText[111]); break;
+        case 0: snprintf(name, 100, "%s", itemName); break;
+        case 1: snprintf(name, 100, "%s", GlobalText[105]); break;
+        case 2: snprintf(name, 100, "%s", GlobalText[106]); break;
+        case 3: snprintf(name, 100, "%s", GlobalText[107]); break;
+        case 5: snprintf(name, 100, "%s", GlobalText[109]); break;
+        case 6: snprintf(name, 100, "%s", GlobalText[110]); break;
+        case 7: snprintf(name, 100, "%s", GlobalText[111]); break;
         case 8: case 9: case 10: case 11: case 12:
-            sprintf(name, "%s +%d", GlobalText[115], Level - 7); break;
+            snprintf(name, 100, "%s +%d", GlobalText[115], Level - 7); break;
         default: break;
         }
         break;
     case 431: {
         color = 3;
         static const int kText[4] = { 168, 169, 167, 166 };
-        if (Level < 4) sprintf(name, "%s %s", GlobalText[kText[Level]], p->Name);
+        if (Level < 4) snprintf(name, 100, "%s %s", GlobalText[kText[Level]], itemName);
         break;
     }
     case 430:
         color = 3;
-        sprintf(name, "%s", p->Name);
+        snprintf(name, 100, "%s", itemName);
         break;
     case 469:
         color = 3;
-        if      (Level == 0) sprintf(name, "%s", p->Name);
-        else if (Level == 1) sprintf(name, "%s", GlobalText[810]);
+        if      (Level == 0) snprintf(name, 100, "%s", itemName);
+        else if (Level == 1) snprintf(name, 100, "%s", GlobalText[810]);
         break;
     case 435:
         color = 3;
-        if      (Level == 0) sprintf(name, "%s", GlobalText[811]);
-        else if (Level == 1) sprintf(name, "%s", GlobalText[812]);
-        else if (Level == 2) sprintf(name, "%s", GlobalText[817]);
+        if      (Level == 0) snprintf(name, 100, "%s", GlobalText[811]);
+        else if (Level == 1) snprintf(name, 100, "%s", GlobalText[812]);
+        else if (Level == 2) snprintf(name, 100, "%s", GlobalText[817]);
         break;
     case 457:
-        if      (Level == 0) sprintf(name, "%s", p->Name);
-        else if (Level == 1) sprintf(name, "%s", GlobalText[108]);
+        if      (Level == 0) snprintf(name, 100, "%s", itemName);
+        else if (Level == 1) snprintf(name, 100, "%s", GlobalText[108]);
         break;
     case 395:
         // Entrada 30 + Level de SkillAttribute (40 bytes, nombre en +0).
-        sprintf(name, "%s %s", (const char*)&SkillAttribute + 8 * (5 * Level + 150), GlobalText[102]);
+        snprintf(name, 100, "%s %s", gContentCatalog.GetSkillName(30 + Level), GlobalText[102]);
         break;
     case 426:
         if (Level < 6) {       // el original lee SommonTable sin tope
             const MONSTER_SCRIPT* monsters = (const MONSTER_SCRIPT*)&MonsterScript;
             for (int i = 0; i < MAX_MONSTER; ++i) {
                 if (monsters[i].Type == kRII_SommonTable[Level]) {
-                    sprintf(name, "%s %s", monsters[i].Name, GlobalText[103]);
+                    snprintf(name, 100, "%s %s", monsters[i].Name, GlobalText[103]);
                     break;
                 }
             }
@@ -341,11 +345,11 @@ static void RII_FormatName(const ITEM* ip, const ITEM_ATTRIBUTE* p, short type, 
         break;
     default:
         if ((type < 387 || type > 390) && type != 19 && type != 146 && type != 170 && exc) {
-            if (Level) sprintf(name, "%s %s +%d", GlobalText[620], p->Name, Level);
-            else       sprintf(name, "%s %s", GlobalText[620], p->Name);
+            if (Level) snprintf(name, 100, "%s %s +%d", GlobalText[620], itemName, Level);
+            else       snprintf(name, 100, "%s %s", GlobalText[620], itemName);
         } else {
-            if (Level) sprintf(name, "%s +%d", p->Name, Level);
-            else       sprintf(name, "%s", p->Name);
+            if (Level) snprintf(name, 100, "%s +%d", itemName, Level);
+            else       snprintf(name, 100, "%s", itemName);
         }
         break;
     }
@@ -840,7 +844,7 @@ extern "C" void __cdecl RenderRepairInfo_impl(void* param_1, int param_2, void* 
     // Slot 3: nombre del item
     {
         char* dst = TextList + TextNum * 100;
-        const char* itemName = ((ITEM_ATTRIBUTE*)(uintptr_t)attrBase)->Name;
+        const char* itemName = gContentCatalog.GetItemName(itemType);
         unsigned char optFlags = *(unsigned char*)((char*)param_3 + 0x1b) & 0x3f;
 
         if (itemType >= 0x183 && itemType <= 0x186) {

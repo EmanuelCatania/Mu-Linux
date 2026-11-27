@@ -450,10 +450,10 @@ int RenderEquipedHelperLife_(bool a2)
         // comportamiento sólo decide la lógica de pet o montura.
         const short helperItem = CharacterMachine ? *(const short*)((const BYTE*)CharacterMachine + 1080) : -1;
         if (helperItem >= ITEM_MAX_VANILLA && helperItem < ITEM_MAX_EX && ItemAttribute)
-            text = ItemAttribute[helperItem].Name;
+            text = gContentCatalog.GetItemName(helperItem);
         else if (helperType == MODEL_HELPER_UNIRIA) text = GlobalText[355];
         else if (helperType == MODEL_HELPER_DINORANT) text = GlobalText[354];
-        else if (ItemAttribute)     text = ItemAttribute[helperType - ITEM_MODEL_BASE].Name;
+        else if (ItemAttribute)     text = gContentCatalog.GetItemName(helperType - ITEM_MODEL_BASE);
         if (!text) text = "";
 
         gFont.SelectFont(gFont.GetTextDC(), gFont.GetFont(FONT_NORMAL));
@@ -597,21 +597,7 @@ void RenderBrokenItem_(int a1)
                 }
 
                 CHAR Buffer[100];
-                // Name es un campo inline de 30 bytes de la fila validada.
-                // No depender de una terminacion NUL dentro del archivo BMD.
-                char nameLocal[31];
-                if (!Platform::RunValidatedOperation([&]() {
-                    int ni = 0;
-                    for (; ni < 30; ++ni) {
-                        char c = v19->Name[ni];
-                        nameLocal[ni] = c;
-                        if (c == '\0') break;
-                    }
-                    nameLocal[30] = '\0';
-                })) {
-                    nameLocal[0] = '\0';
-                }
-                Platform::TextFormat(Buffer, "%s (%d/%d)", nameLocal, v21, v30);
+                Platform::TextFormat(Buffer, "%s (%d/%d)", gContentCatalog.GetItemName((int)v12), v21, v30);
                 byte_7E11D6E = 1;
                 Text_MeasureBox((int)v38, v34 + (int)v37, Buffer, 0, 0, 0);
                 v34 += 12;

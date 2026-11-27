@@ -168,7 +168,9 @@
     const hint = root.querySelector('#texts-hint');
     hint.textContent = state.table === 'client'
       ? t('Los %d, %s y similares tienen que ser los mismos que en inglés. Si no, el cliente descarta el texto.')
-      : t('Dejá vacío para usar el nombre que trae el cliente. Máximo {max} bytes (un acento o una letra no latina ocupan más de uno).', { max: state.maxBytes });
+      : state.maxBytes > 0
+        ? t('Dejá vacío para usar el nombre que trae el cliente. Máximo {max} bytes (un acento o una letra no latina ocupan más de uno).', { max: state.maxBytes })
+        : t('Dejá vacío para usar el nombre que trae el cliente.');
     if (state.parseErrors.length > 0) {
       hint.textContent += ' ' + t('Hay {n} líneas del archivo que no se entienden y no se van a reescribir (la primera es la {line}).',
         { n: state.parseErrors.length, line: state.parseErrors[0].line });

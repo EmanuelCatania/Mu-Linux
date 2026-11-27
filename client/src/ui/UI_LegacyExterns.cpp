@@ -23,6 +23,7 @@ void __fastcall Cloth_Integrate(int*, float);
 int  __cdecl    Cloth_Solve(DWORD *a1);
 
 #include "net/Net.h"
+#include "assets/data/ContentCatalog.h"
 
 extern "C" BYTE OffsetInventoryItems[];
 extern void __cdecl operator_delete(void* ptr);
@@ -162,15 +163,11 @@ void __cdecl RenderSkillTooltip(float a1, int a2, int a3)
 
     unsigned char* skillBaseRec = skillBaseTbl ? skillBaseTbl + (int)skillType * 0x28 : nullptr;
     unsigned char* skillStatRec = skillStatTbl ? skillStatTbl + (int)skillType * 0x28 : skillBaseRec;
-    const char* skillName = "";
-    if (skillBaseRec && ((const char*)skillBaseRec)[0] != '\0')
-        skillName = (const char*)skillBaseRec;
-    else if (skillStatRec && ((const char*)skillStatRec)[0] != '\0')
+    const char* skillName = gContentCatalog.GetSkillName((int)skillType);
+    if (!skillName[0] && skillStatRec && memchr(skillStatRec, 0, 32) && ((const char*)skillStatRec)[0] != '\0')
         skillName = (const char*)skillStatRec;
-    if (skillName && skillName[0]) {
-        Platform::TextCopySecure(szName, sizeof(szName), skillName, 31);
-        szName[31] = '\0';
-    }
+    if (skillName[0])
+        Platform::TextCopySecure(szName, sizeof(szName), skillName, sizeof(szName) - 1);
     GetSkillInformation((int)skillType, 1, szName[0] ? NULL : szName, &piMana, &piDistance, &piSkillMana);
 
     if (skillStatRec) {

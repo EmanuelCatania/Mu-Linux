@@ -148,7 +148,7 @@ void CBuffBar::RenderTooltip(const Buff& buff, int x, int y) const
     };
     // El nombre del skill sale de skill.bmd (traducido); si no hay skill, el
     // que manda el server.
-    char name[64] = {};
+    char name[256] = {};   // GetSkillInformation copia hasta 256
     if (buff.skill > 0 && buff.skill < 256) {
         int mana = 0, distance = 0, skillMana = 0;
         GetSkillInformation(buff.skill, 1, name, &mana, &distance, &skillMana);

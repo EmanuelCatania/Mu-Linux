@@ -7,19 +7,20 @@
 // cliente (ClientText::SetServerText), para que el panel no deje guardar nada que
 // después se descarte en silencio:
 //   - UTF-8 en NFC, sin caracteres de control ni saltos de línea.
-//   - Hasta 63 bytes en los nombres (no caracteres: el cliente los copia a las
-//     tablas del 0.97k) y 59 en las líneas de tooltip.  Client.txt no tiene
-//     máximo: el server parte los textos largos en varios registros del F3:F0.
+//   - Hasta 63 bytes en los nombres de monstruos (no caracteres: el cliente los
+//     copia al nombre de la entidad) y 59 en las líneas de tooltip.  Items,
+//     skills y Client.txt no tienen máximo: el server parte los textos largos en
+//     varios registros del F3:F0 y el cliente los guarda enteros.
 //   - En Client.txt, los %d/%s/%u/%.0f tienen que ser los del inglés, en el mismo
 //     orden, porque el cliente los usa como formato de printf.
 
 const LANGS = ['Eng', 'Spn', 'Por'];
 
 const TABLES = {
-  items: { file: 'Item.txt', keyFields: 2 },
+  // maxBytes 0 = sin máximo.
+  items: { file: 'Item.txt', keyFields: 2, maxBytes: 0 },
   monsters: { file: 'Monster.txt', keyFields: 1 },
-  skills: { file: 'Skill.txt', keyFields: 1 },
-  // 0 = sin máximo.
+  skills: { file: 'Skill.txt', keyFields: 1, maxBytes: 0 },
   client: { file: 'Client.txt', keyFields: 1, maxBytes: 0 },
   // Líneas del tooltip de los items custom: sección, índice y número de línea. Entran
   // en el Text[60] de la línea del JSON (59 bytes).
