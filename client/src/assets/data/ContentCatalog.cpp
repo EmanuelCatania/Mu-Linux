@@ -13,6 +13,7 @@
 #include "game/item/ItemOptionTable.h"
 #include "ui/MoveList.h"
 #include "game/core/MapManager.h"
+#include "app/config/UserSettings.h"
 #include "assets/text/ClientText.h"
 #include <array>
 #include "app/util/Sha256.h"
@@ -1218,17 +1219,26 @@ int CContentCatalog::LoadTexture(const char* path)
     return slot;
 }
 
-void CContentCatalog::RunEquippedEffects(const void* c, int model, void* modelPtr) const
+namespace {
+// Cómo sale cada efecto según dónde está el item.
+enum class EffectPlace { Equipped, Ground, Inventory };
+}
+
+static void RunItemEffects(const std::map<int, std::vector<ItemEffect>>& effects, int itemType,
+                           EffectPlace place, const void* c, void* modelPtr, float gridScale)
 {
-    if (s_Effects.empty() || !modelPtr) return;
-    const int itemType = GetModelItemType(model);
-    if (itemType < 0) return;
-    std::map<int, std::vector<ItemEffect>>::const_iterator it = s_Effects.find(itemType);
-    if (it == s_Effects.end()) return;
+    if (itemType < 0 || !modelPtr) return;
+    std::map<int, std::vector<ItemEffect>>::const_iterator it = effects.find(itemType);
+    if (it == effects.end()) return;
+    const std::uint8_t on = (place == EffectPlace::Equipped) ? Proto::CATALOG_EFFECT_ON_EQUIPPED
+                          : (place == EffectPlace::Ground)   ? Proto::CATALOG_EFFECT_ON_GROUND
+                                                             : Proto::CATALOG_EFFECT_ON_INVENTORY;
+    if (place == EffectPlace::Inventory && gUserSettings.GetAntilag(ANTILAG_STATIC_EFFECTS)) return;
+    bool blendSet = false;
 
     for (const ItemEffect& effect : it->second) {
         const Proto::CATALOG_EFFECT& data = effect.Data;
-        if (!(data.On & Proto::CATALOG_EFFECT_ON_EQUIPPED)) continue;
+        if (!(data.On & on)) continue;
         const float pulse = (data.PulseSpeed != 0.0f) ? fabsf(sinf(WorldTime * data.PulseSpeed)) : 0.0f;
         const float scale = data.Scale + pulse * data.PulseScale;
         float light[3] = { data.Color[0] + pulse * data.PulseColor,
@@ -1240,12 +1250,42 @@ void CContentCatalog::RunEquippedEffects(const void* c, int model, void* modelPt
             float position[3];
             BMD_TransformPosition(modelPtr, (float*)(g_BoneScratch + data.Bones[b] * 0x30), offset, position, '\x01');
             if (data.Type == Proto::CATALOG_EFFECT_SPRITE) {
-                Equipment_AddSprite((unsigned short)effect.Bitmap, position, scale, light, (intptr_t)c, 0.0f, 0);
-            } else if (data.Type == Proto::CATALOG_EFFECT_PARTICLE) {
+                if (place == EffectPlace::Equipped) {
+                    Equipment_AddSprite((unsigned short)effect.Bitmap, position, scale, light, (intptr_t)c, 0.0f, 0);
+                } else if (place == EffectPlace::Ground) {
+                    CreateSprite((unsigned short)effect.Bitmap, position, scale, light, (intptr_t)c, 0.0f, 0);
+                } else {
+                    // Como RenderSprite (0x479670), pero en el momento: el pool
+                    // de sprites se dibuja después, con la cámara del mundo.
+                    if (!blendSet) { GL_SetBlendAdditive(); blendSet = true; }
+                    const char* bitmap = (const char*)&DAT_083a7cc0 + effect.Bitmap * TEXTURE_STRIDE;
+                    const float size = scale * gridScale;
+                    RenderSprite_0(effect.Bitmap, position, size * *(const float*)bitmap,
+                                   size * *(const float*)(bitmap + 4), light, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+                }
+            } else if (data.Type == Proto::CATALOG_EFFECT_PARTICLE && place != EffectPlace::Inventory) {
                 Particle_Spawn(data.Particle, position, (float*)((BYTE*)c + 28), light, data.SubType, scale, 0);
             }
         }
     }
+}
+
+void CContentCatalog::RunEquippedEffects(const void* c, int model, void* modelPtr) const
+{
+    if (s_Effects.empty()) return;
+    RunItemEffects(s_Effects, GetModelItemType(model), EffectPlace::Equipped, c, modelPtr, 1.0f);
+}
+
+void CContentCatalog::RunGroundEffects(const void* object, int model, void* modelPtr) const
+{
+    if (s_Effects.empty()) return;
+    RunItemEffects(s_Effects, GetModelItemType(model), EffectPlace::Ground, object, modelPtr, 1.0f);
+}
+
+void CContentCatalog::RunInventoryEffects(int model, void* modelPtr, float scale) const
+{
+    if (s_Effects.empty()) return;
+    RunItemEffects(s_Effects, GetModelItemType(model), EffectPlace::Inventory, nullptr, modelPtr, scale);
 }
 
 int CContentCatalog::GetItemSkill(int type) const

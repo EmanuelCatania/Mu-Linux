@@ -667,6 +667,11 @@ effects = [
 ]
 ```
 
+`on` diz onde o efeito aparece: `"equipped"` (equipado, o padrão), `"ground"`
+(largado no chão) ou `"inventory"` (no inventário, baú, loja ou trade). Também
+aceita uma lista, por exemplo `on = ["equipped", "ground"]`. Em `inventory` só
+vão sprites: as partículas são desenhadas no mundo e não apareceriam na grade.
+
 No repositório do server há um caso real: `[000]` de `03-spears.toml` corrige a
 posição da Light Spear (vanilla) na sua casa, com a correção do 5.2.
 

@@ -20,7 +20,9 @@
 
 // Efectos de un item (Data/Custom/Items/*.json).  El cliente trae un juego
 // fijo de primitivas; el JSON elige cuáles usa cada item y con qué datos.
-#define CATALOG_EFFECT_ON_EQUIPPED 0x01
+#define CATALOG_EFFECT_ON_EQUIPPED  0x01  // puesto en el personaje
+#define CATALOG_EFFECT_ON_GROUND    0x02  // tirado en el suelo
+#define CATALOG_EFFECT_ON_INVENTORY 0x04  // en una grilla (inventario, baúl, tienda, trade); sólo sprites
 
 #define CATALOG_EFFECT_SPRITE   1  // sprite en huesos, cada frame
 #define CATALOG_EFFECT_PARTICLE 2  // partícula vanilla en huesos, con probabilidad

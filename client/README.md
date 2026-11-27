@@ -671,6 +671,12 @@ effects = [
 ]
 ```
 
+`on` dice dónde se ve el efecto: `"equipped"` (puesto, el valor por defecto),
+`"ground"` (tirado en el suelo) o `"inventory"` (en el inventario, el baúl, la
+tienda o el trade). Acepta una lista, por ejemplo `on = ["equipped", "ground"]`.
+En `inventory` sólo van sprites: las partículas se dibujan en el mundo y no se
+verían en la grilla.
+
 En el repo del server hay un caso real: `[000]` de `03-spears.toml` corrige la
 posición del Light Spear (vanilla) en su casilla, con la corrección del 5.2.
 

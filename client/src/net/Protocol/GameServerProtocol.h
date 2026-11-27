@@ -708,7 +708,9 @@ struct CATALOG_MAP_FOG
 static_assert(sizeof(CATALOG_MAP_FOG) == 12, "F3:E9 entrada");
 
 // F3:EC — efectos de un item (Data/Custom/Items/*.json del server).
-const std::uint8_t CATALOG_EFFECT_ON_EQUIPPED = 0x01;
+const std::uint8_t CATALOG_EFFECT_ON_EQUIPPED = 0x01;   // puesto en el personaje
+const std::uint8_t CATALOG_EFFECT_ON_GROUND = 0x02;     // tirado en el suelo
+const std::uint8_t CATALOG_EFFECT_ON_INVENTORY = 0x04;  // en una grilla; sólo sprites
 const std::uint8_t CATALOG_EFFECT_SPRITE = 1;      // sprite en huesos, cada frame
 const std::uint8_t CATALOG_EFFECT_PARTICLE = 2;    // partícula vanilla en huesos
 const std::int32_t  CATALOG_EFFECT_MAX_BONES = 32;

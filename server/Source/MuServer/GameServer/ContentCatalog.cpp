@@ -1499,17 +1499,60 @@ namespace
 			return false;
 		}
 
-		std::string on = effect.GetString("on", "equipped");
+		// "on": un texto o una lista ("equipped", "ground", "inventory").
+		// Sin "on", sólo puesto.
+		const JsonValue* on = effect.Get("on");
 
-		if (on == "equipped")
+		if (on == nullptr)
 		{
 			out.On = CATALOG_EFFECT_ON_EQUIPPED;
 		}
 		else
 		{
-			error = "'on' no soportado: " + on + " (por ahora sólo 'equipped')";
+			std::vector<const JsonValue*> places;
 
-			return false;
+			if (on->IsArray())
+			{
+				for (size_t n = 0; n < on->items.size(); n++)
+				{
+					places.push_back(&on->items[n]);
+				}
+			}
+			else
+			{
+				places.push_back(on);
+			}
+
+			for (size_t n = 0; n < places.size(); n++)
+			{
+				const std::string place = places[n]->IsString() ? places[n]->text : std::string();
+
+				if (place == "equipped")
+				{
+					out.On |= CATALOG_EFFECT_ON_EQUIPPED;
+				}
+				else if (place == "ground")
+				{
+					out.On |= CATALOG_EFFECT_ON_GROUND;
+				}
+				else if (place == "inventory")
+				{
+					out.On |= CATALOG_EFFECT_ON_INVENTORY;
+				}
+				else
+				{
+					error = "'on' no soportado: '" + place + "' (equipped, ground o inventory)";
+
+					return false;
+				}
+			}
+
+			if (out.On == 0)
+			{
+				error = "'on' no puede estar vacío";
+
+				return false;
+			}
 		}
 
 		std::string type = effect.GetString("type", "");
@@ -1538,6 +1581,15 @@ namespace
 		else
 		{
 			error = "'type' tiene que ser 'sprite' o 'particle'";
+
+			return false;
+		}
+
+		// Las grillas se dibujan con su propia cámara: las partículas viven en el
+		// mundo y no se verían ahí.
+		if (out.Type == CATALOG_EFFECT_PARTICLE && (out.On & CATALOG_EFFECT_ON_INVENTORY) != 0)
+		{
+			error = "'inventory' sólo admite sprites (las partículas se dibujan en el mundo)";
 
 			return false;
 		}

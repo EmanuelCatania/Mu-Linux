@@ -668,6 +668,12 @@ effects = [
 ]
 ```
 
+`on` says where the effect shows: `"equipped"` (worn, the default), `"ground"`
+(dropped on the floor) or `"inventory"` (in the inventory, vault, shop or
+trade). It takes a list too, for example `on = ["equipped", "ground"]`.
+`inventory` only takes sprites: particles are drawn in the world and would not
+show in the grid.
+
 The server repo has a real case: `[000]` in `03-spears.toml` fixes the position
 of the (vanilla) Light Spear in its slot, with the 5.2 correction.
 

@@ -140,6 +140,13 @@ public:
     // que dejó el último render del modelo (g_BoneScratch).  Se llama desde
     // RenderLinkObject después de dibujar la pieza.
     void RunEquippedEffects(const void* c, int model, void* modelPtr) const;
+    // Lo mismo para un item tirado en el suelo (`object` es el del suelo) o
+    // dibujado en una grilla (inventario, baúl, tienda, trade).  Se llama
+    // después del RenderPartObject del item.  En la grilla los sprites se
+    // dibujan en el momento, con la cámara de esa pasada, y escalados con el
+    // modelo (`scale`, la escala del objeto de la grilla).
+    void RunGroundEffects(const void* object, int model, void* modelPtr) const;
+    void RunInventoryEffects(int model, void* modelPtr, float scale) const;
 
     // Wear slot (0..11) de un agregado sin comportamiento vanilla (columna
     // Slot de Item.txt), o -1.
