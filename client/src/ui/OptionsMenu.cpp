@@ -336,6 +336,7 @@ void COptionsMenu::RenderGeneral()
     RenderLabel((float)Layout::X, (float)RowY(row++), (float)Layout::Width, GlobalText[919]);
     if (LanguageRowVisible()) RenderLanguage((float)RowY(row++));
     RenderToggle((float)RowY(row++), GlobalText[936], gUserSettings.GetPvPWithoutControl());
+    RenderToggle((float)RowY(row++), gClientText.Get(ClientTextId::MountAsPet), gUserSettings.GetMountAsPet());
     RenderToggle((float)RowY(row++), GlobalText[386], m_bAutoAttack != 0);
     RenderToggle((float)RowY(row++), GlobalText[387], m_bWhisperSound != 0);
     RenderLevelBar((float)RowY(row++), GlobalText[922], g_EnableSound != 0, gSound.GetSoundLevel());
@@ -361,6 +362,10 @@ bool COptionsMenu::UpdateGeneral()
     bool clicked;
     if (UpdateToggle(RowY(row++), clicked)) {
         if (clicked) gUserSettings.SetPvPWithoutControl(!gUserSettings.GetPvPWithoutControl());
+        return true;
+    }
+    if (UpdateToggle(RowY(row++), clicked)) {
+        if (clicked) gUserSettings.SetMountAsPet(!gUserSettings.GetMountAsPet());
         return true;
     }
     int y = RowY(row++);

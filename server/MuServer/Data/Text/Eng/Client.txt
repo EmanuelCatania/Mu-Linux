@@ -188,4 +188,6 @@
 92	"No wobble"
 //WorldWater
 93	"Improved water"
+//MountAsPet
+96	"Mounts as pets in safe zones"
 end

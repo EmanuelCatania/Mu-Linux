@@ -172,6 +172,7 @@ std::vector<OptionTab> BuildOptionTabs()
 	gfx.rows.push_back(Toggle("Cielo", Opt::kSky));
 	gfx.rows.push_back(Levels("Bajo el agua", Opt::kUnderwater, { "Apagado", "Sin ondulación", "Completo" }));
 	gfx.rows.push_back(Toggle("Agua mejorada", Opt::kWorldWater));
+	gfx.rows.push_back(Toggle("Monturas como pet en zona segura", Opt::kMountAsPet));
 	tabs.push_back(gfx);
 
 	OptionTab perf{ "Rendimiento", {} };

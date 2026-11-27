@@ -64,6 +64,8 @@ enum class ClientTextId {
     LauncherRequired,
     // El GameServer exige MU-Guard y el login no trajo un ticket válido (0xE0).
     GuardRequired,
+    // Opciones > General.
+    MountAsPet,
     Count
 };
 // Los textos salen del server (F3/F0, tabla 4, Data/Text/<idioma>/Client.txt).
