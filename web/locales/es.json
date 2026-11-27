@@ -161,5 +161,10 @@
   "Origen": "Origen",
   "Todos los origenes": "Todos los orígenes",
   "Creado": "Creado",
-  "Ultimo login": "Último login"
+  "Ultimo login": "Último login",
+  "Jugar": "Jugar",
+  "Ya tenes una cuenta?": "¿Ya tenés una cuenta?",
+  "Si, ingresar": "Sí, ingresar",
+  "No, crear cuenta": "No, crear cuenta",
+  "Entrar al juego sin iniciar sesion": "Entrar al juego sin iniciar sesión"
 }

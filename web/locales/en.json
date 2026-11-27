@@ -877,5 +877,10 @@
   "Ban levantado. MU-Guard lo deja de aplicar en menos de 30 segundos.": "Ban lifted. MU-Guard stops enforcing it within 30 seconds.",
   "Aviso inválido.": "Invalid warning.",
   "Aviso anulado: ya no cuenta.": "Warning voided: it no longer counts.",
-  "Aviso restaurado.": "Warning restored."
+  "Aviso restaurado.": "Warning restored.",
+  "Jugar": "Play",
+  "Ya tenes una cuenta?": "Do you already have an account?",
+  "Si, ingresar": "Yes, log in",
+  "No, crear cuenta": "No, create an account",
+  "Entrar al juego sin iniciar sesion": "Enter the game without logging in"
 }

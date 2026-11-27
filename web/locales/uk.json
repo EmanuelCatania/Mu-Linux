@@ -883,5 +883,10 @@
   "Ban levantado. MU-Guard lo deja de aplicar en menos de 30 segundos.": "Бан знято. MU-Guard перестане його застосовувати менш ніж за 30 секунд.",
   "Aviso inválido.": "Недійсне попередження.",
   "Aviso anulado: ya no cuenta.": "Попередження анульовано: більше не враховується.",
-  "Aviso restaurado.": "Попередження відновлено."
+  "Aviso restaurado.": "Попередження відновлено.",
+  "Jugar": "Грати",
+  "Ya tenes una cuenta?": "У вас уже є акаунт?",
+  "Si, ingresar": "Так, увійти",
+  "No, crear cuenta": "Ні, створити акаунт",
+  "Entrar al juego sin iniciar sesion": "Увійти в гру без входу в акаунт"
 }

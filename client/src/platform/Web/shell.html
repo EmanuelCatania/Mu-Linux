@@ -48,12 +48,6 @@
 
   /* Controles táctiles (celular y tablet): una capa sobre el canvas que pasa
      los toques al juego como mouse, y botones para las teclas. */
-  /* Cuenta guardada: sólo en celular y tablet. */
-  #account { display: none; margin: 10px 0 4px; text-align: left; }
-  body.touchclient #account { display: block; }
-  #account input[type=text], #account input[type=password] { width: 48%; box-sizing: border-box; padding: 8px; margin: 4px 1% 6px 0;
-            font: 15px sans-serif; color: #eee; background: #14161c; border: 1px solid #5a4a2c; border-radius: 4px; }
-  #account label { display: block; font: 12px sans-serif; color: #b8ac8c; }
   #touch, #joy, #ring, #hud, #tbar, #padtoggle, #skillpick, #social, #toast, #rotate { display: none; }
   body.touch:not(.menu) #touch { display: block; position: fixed; inset: 0; z-index: 1; touch-action: none;
                                  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
@@ -167,11 +161,6 @@
     <h1>MU Online</h1>
     <p class="sub">Elegí las opciones mientras se prepara el juego</p>
     <div id="options"></div>
-    <div id="account">
-      <p class="sub">Contraseña (opcional): aparece ya puesta en el cuadro de ingreso</p>
-      <input id="accountpass" type="password" placeholder="Contraseña" maxlength="10" autocomplete="current-password">
-      <label><input id="accountkeep" type="checkbox"> Recordar en este dispositivo (queda guardada sin cifrar en este navegador)</label>
-    </div>
     <div class="progress"><div id="bar"></div></div>
     <div class="note" id="note">Cargando…</div>
     <button id="play" disabled>Jugar</button>
@@ -284,7 +273,7 @@ for (const type of ['keydown', 'keyup'])
   addEventListener(type, (e) => { if (e.key === 'Alt' && !document.body.classList.contains('menu')) e.preventDefault(); }, true);
 // Antes de cerrar la pestaña con el juego andando, el navegador pregunta.
 addEventListener('beforeunload', (e) => {
-  if (document.body.classList.contains('menu')) return;
+  if (document.body.classList.contains('menu') || Module.muLeaving) return;
   e.preventDefault(); e.returnValue = '';
 });
 
@@ -1022,21 +1011,28 @@ function startTouchControls() {
     });
 }
 
-// Cuenta guardada (celular): se carga al abrir la página.
+// Celular y tablet.
 if (isTouchClient()) {
   document.body.classList.add('touchclient');
-  document.getElementById('accountpass').value = storageGet('mu-account-pass') || '';
-  document.getElementById('accountkeep').checked = !!storageGet('mu-account-pass');
-  try { localStorage.removeItem('mu-account-user'); } catch (e) {}
+  // Lo que guardaba la versión anterior (contraseña en el navegador): se borra.
+  try { localStorage.removeItem('mu-account-user'); localStorage.removeItem('mu-account-pass'); } catch (e) {}
 }
 document.getElementById('play').addEventListener('click', () => {
   const M = Module, FS = M.FS;
-  if (isTouchClient()) {
-    // El juego la pone en su cuadro de ingreso (mu_page_password).
-    const pass = document.getElementById('accountpass').value;
-    M.muPassword = pass;
-    try { if (document.getElementById('accountkeep').checked && pass) localStorage.setItem('mu-account-pass', pass); else localStorage.removeItem('mu-account-pass'); } catch (e) {}
-  }
+  // Ingreso con la sesión del sitio: cuando el juego muestra el cuadro de
+  // usuario y contraseña (WebPage.cpp, LoginAssist) se le pide al sitio un pase
+  // de un solo uso para la cuenta de la sesión.  El juego lo manda en lugar de
+  // la contraseña, que nunca pasa por esta página.  Se intenta una sola vez:
+  // sin sesión, o si el pase falla, el jugador escribe sus datos como siempre.
+  let ticketAsked = false;
+  M.muLoginDialog = (visible) => {
+    if (!visible || ticketAsked) return;
+    ticketAsked = true;
+    fetch('/play/ticket', { method: 'POST', credentials: 'same-origin' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => { if (data && data.account && data.ticket) M.muLogin = { user: data.account, pass: data.ticket }; })
+      .catch(() => {});
+  };
   const configText = readMenu(M.muConfigText || '');
   FS.writeFile(CONFIG, configText);
   FS.writeFile(SAVED_CONFIG, configText);
@@ -1053,6 +1049,14 @@ document.getElementById('play').addEventListener('click', () => {
   document.body.classList.remove('menu');
   document.getElementById('canvas').focus();
   M.muStarted = true;
+  // "Salir del juego": se guarda lo pendiente (Config.ini, debug.log) y la
+  // página vuelve al inicio del sitio, en vez de quedar en negro.
+  M.muExited = () => {
+    M.muLeaving = true;   // el aviso de "¿salir de la página?" no corresponde
+    const leave = () => { location.href = '/'; };
+    setTimeout(leave, 1500);   // por si el guardado no contesta
+    try { FS.syncfs(false, leave); } catch (e) { leave(); }
+  };
   // Un error al arrancar (o en el bucle del juego) no tiene que dejar la
   // página en negro sin explicación.
   const failed = (e) => {

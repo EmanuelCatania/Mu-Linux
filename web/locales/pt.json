@@ -877,5 +877,10 @@
   "Ban levantado. MU-Guard lo deja de aplicar en menos de 30 segundos.": "Banimento removido. O MU-Guard deixa de aplicá-lo em menos de 30 segundos.",
   "Aviso inválido.": "Aviso inválido.",
   "Aviso anulado: ya no cuenta.": "Aviso anulado: não conta mais.",
-  "Aviso restaurado.": "Aviso restaurado."
+  "Aviso restaurado.": "Aviso restaurado.",
+  "Jugar": "Jogar",
+  "Ya tenes una cuenta?": "Você já tem uma conta?",
+  "Si, ingresar": "Sim, entrar",
+  "No, crear cuenta": "Não, criar conta",
+  "Entrar al juego sin iniciar sesion": "Entrar no jogo sem iniciar sessão"
 }
