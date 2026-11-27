@@ -229,7 +229,7 @@ static void RII_Gold(char* buf, int v)       // mismo formato que el binario
 }
 // Linea simple: texto + color + negrita, y avanza TextNum.
 #define RII_ADD(color, bold, ...) \
-    do { sprintf(RII_Line(TextNum), __VA_ARGS__); \
+    do { snprintf(RII_Line(TextNum), 100, __VA_ARGS__); \
          RII_Style(TextNum, (color), (bold)); ++TextNum; } while (0)
 // Texto sin argumentos: el binario lo pasa como FORMATO (sprintf(l, GlobalText[N]));
 // CopyCollapsingPercent hace lo mismo (%% -> %) sin leer la pila si el texto trae %d.

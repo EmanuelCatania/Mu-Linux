@@ -1351,8 +1351,11 @@ namespace
 
 				memset(&entry, 0, sizeof(entry));
 
-				// Una línea de tooltip entra en el Text[60] de CATALOG_TOOLTIP (59 bytes y el 0).
-				const size_t maxText = (table == CATALOG_TEXT_TOOLTIP) ? sizeof(CATALOG_TOOLTIP::Text) : sizeof(entry.Text);
+				// Los textos del cliente no tienen máximo: el cliente los guarda
+				// en un std::string.  Los nombres sí, porque el cliente los copia
+				// a las tablas del 0.97k, y una línea de tooltip entra en el
+				// Text[60] de CATALOG_TOOLTIP (59 bytes y el 0).
+				const size_t maxText = (table == CATALOG_TEXT_CLIENT) ? (size_t)-1 : (table == CATALOG_TEXT_TOOLTIP) ? sizeof(CATALOG_TOOLTIP::Text) : sizeof(entry.Text);
 
 				const bool badLine = (table == CATALOG_TEXT_TOOLTIP && (line < 0 || line >= CATALOG_TOOLTIP_MAX_LINES));
 
@@ -1371,9 +1374,28 @@ namespace
 
 				entry.Index = (WORD)index;
 
-				memcpy(entry.Text, text.data(), text.size());
+				if (text.size() < sizeof(entry.Text))
+				{
+					memcpy(entry.Text, text.data(), text.size());
 
-				out.push_back(entry);
+					out.push_back(entry);
+				}
+				else
+				{
+					// Partido en registros de 64 bytes; el último lleva el 0.
+					entry.Table = (BYTE)(table | CATALOG_TEXT_CONTINUED);
+
+					for (size_t offset = 0; offset <= text.size(); offset += sizeof(entry.Text))
+					{
+						memset(entry.Text, 0, sizeof(entry.Text));
+
+						const size_t part = (text.size() - offset < sizeof(entry.Text)) ? text.size() - offset : sizeof(entry.Text);
+
+						memcpy(entry.Text, text.data() + offset, part);
+
+						out.push_back(entry);
+					}
+				}
 
 				loaded++;
 			}

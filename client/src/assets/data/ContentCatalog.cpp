@@ -815,33 +815,55 @@ void ApplyTexts(ITEM_ATTRIBUTE* attr)
     const int textSize = s_PendingTexts.recordSize;
     if (!SectionComplete(s_PendingTexts) || textSize <= 0) return;
     int applied = 0;
+    std::string longText;        // texto partido (CATALOG_TEXT_CONTINUED) que se está juntando
+    std::uint32_t longKey = 0;   // 0 = ninguno (las claves llevan el bit 0x80 de Table)
     for (size_t off = 0; off + textSize <= s_PendingTexts.records.size(); off += textSize) {
         Proto::CATALOG_TEXT row = {};
         memcpy(&row, &s_PendingTexts.records[off], (std::min)((int)sizeof(row), textSize));
+        const size_t used = strnlen(row.Text, sizeof(row.Text));
+        std::string text(row.Text, used);
+        if (row.Table & Proto::CATALOG_TEXT_CONTINUED) {
+            // Los registros de un texto partido van seguidos y comparten tabla e índice.
+            const std::uint32_t key = ((std::uint32_t)row.Table << 24) | ((std::uint32_t)row.Reserved << 16) | row.Index;
+            if (key != longKey) { longText.clear(); longKey = key; }
+            longText.append(row.Text, used);
+            if (used == sizeof(row.Text)) continue;   // sigue en el registro siguiente
+            text.swap(longText);
+            longText.clear();
+            longKey = 0;
+            row.Table &= (std::uint8_t)~Proto::CATALOG_TEXT_CONTINUED;
+        } else {
+            longText.clear();
+            longKey = 0;
+        }
         // Los campos de las tablas del binario son más cortos que el texto:
         // FromServer corta sin partir un grapheme cluster.
         switch (row.Table) {
         case Proto::CATALOG_TEXT_ITEM:
             if (row.Index >= ITEM_MAX_EX) continue;
-            NetText::FromServer(attr[row.Index].Name, sizeof(attr[row.Index].Name), row.Text, sizeof(row.Text));
+            NetText::FromServer(attr[row.Index].Name, sizeof(attr[row.Index].Name), text.data(), text.size());
             break;
         case Proto::CATALOG_TEXT_MONSTER:
             if (row.Index >= 512) continue;
-            NetText::FromServer(s_MonsterTexts[row.Index], sizeof(s_MonsterTexts[row.Index]), row.Text, sizeof(row.Text));
+            NetText::FromServer(s_MonsterTexts[row.Index], sizeof(s_MonsterTexts[row.Index]), text.data(), text.size());
             break;
         case Proto::CATALOG_TEXT_SKILL:
             if (row.Index >= MAX_SKILL_NAME) continue;
-            NetText::FromServer(SkillName(SkillAttribute.Raw, row.Index), SKILL_NAME_SIZE, row.Text, sizeof(row.Text));
-            NetText::FromServer(SkillName((char*)DAT_07cf1ff8, row.Index), SKILL_NAME_SIZE, row.Text, sizeof(row.Text));
+            NetText::FromServer(SkillName(SkillAttribute.Raw, row.Index), SKILL_NAME_SIZE, text.data(), text.size());
+            NetText::FromServer(SkillName((char*)DAT_07cf1ff8, row.Index), SKILL_NAME_SIZE, text.data(), text.size());
             break;
-        case Proto::CATALOG_TEXT_CLIENT:
-            if (!gClientText.SetServerText(row.Index, row.Text)) continue;
+        case Proto::CATALOG_TEXT_CLIENT: {
+            // Sin máximo: se guarda en un std::string.
+            std::vector<char> clean(text.size() + 1);
+            NetText::FromServer(clean.data(), clean.size(), text.data(), text.size());
+            if (!gClientText.SetServerText(row.Index, clean.data())) continue;
             break;
+        }
         case Proto::CATALOG_TEXT_TOOLTIP: {
             // Reemplaza el texto de esa línea del tooltip (el color y el orden son los del JSON).
             if (row.Index >= ITEM_MAX_EX || row.Reserved >= TOOLTIP_TEXT_LINES) continue;
             char line[sizeof(Proto::CATALOG_TOOLTIP::Text)];
-            NetText::FromServer(line, sizeof(line), row.Text, sizeof(row.Text));
+            NetText::FromServer(line, sizeof(line), text.data(), text.size());
             if (line[0] == 0) continue;
             s_TooltipTexts[row.Index * TOOLTIP_TEXT_LINES + row.Reserved] = line;
             break;

@@ -7,7 +7,9 @@
 // cliente (ClientText::SetServerText), para que el panel no deje guardar nada que
 // después se descarte en silencio:
 //   - UTF-8 en NFC, sin caracteres de control ni saltos de línea.
-//   - Hasta 63 bytes (no caracteres: el campo del paquete F3:F0 es de 64 con el 0).
+//   - Hasta 63 bytes en los nombres (no caracteres: el cliente los copia a las
+//     tablas del 0.97k) y 59 en las líneas de tooltip.  Client.txt no tiene
+//     máximo: el server parte los textos largos en varios registros del F3:F0.
 //   - En Client.txt, los %d/%s/%u/%.0f tienen que ser los del inglés, en el mismo
 //     orden, porque el cliente los usa como formato de printf.
 
@@ -17,7 +19,8 @@ const TABLES = {
   items: { file: 'Item.txt', keyFields: 2 },
   monsters: { file: 'Monster.txt', keyFields: 1 },
   skills: { file: 'Skill.txt', keyFields: 1 },
-  client: { file: 'Client.txt', keyFields: 1 },
+  // 0 = sin máximo.
+  client: { file: 'Client.txt', keyFields: 1, maxBytes: 0 },
   // Líneas del tooltip de los items custom: sección, índice y número de línea. Entran
   // en el Text[60] de la línea del JSON (59 bytes).
   tooltips: { file: 'Tooltip.txt', keyFields: 3, maxBytes: 59 }
@@ -54,7 +57,9 @@ function defaultHeader(table, lang) {
     : TABLES[table].keyFields === 2 ? 'Sección\tÍndice\tNombre' : (table === 'client' ? 'Índice\tTexto' : 'Índice\tNombre');
   return [
     `//Textos traducidos (${lang}). Se mandan a los clientes con ese idioma; lo que no esté acá`,
-    `//sale de los datos del cliente. UTF-8 sin BOM, hasta ${maxBytesFor(table)} bytes por texto.`,
+    maxBytesFor(table) > 0
+      ? `//sale de los datos del cliente. UTF-8 sin BOM, hasta ${maxBytesFor(table)} bytes por texto.`
+      : '//sale de los datos del cliente. UTF-8 sin BOM.',
     `//${columns}`
   ];
 }
@@ -79,7 +84,7 @@ function validKey(table, key) {
   return key[0] <= MAX_ID;
 }
 
-// Máximo de bytes de un texto de esa tabla.
+// Máximo de bytes de un texto de esa tabla (0 = sin máximo).
 function maxBytesFor(table) {
   return TABLES[table].maxBytes ?? MAX_BYTES;
 }
@@ -195,7 +200,7 @@ function validateName(name, { reference, maxBytes = MAX_BYTES } = {}) {
   if (/["\r\n\t]/.test(normalized)) return { error: 'No puede llevar comillas, tabulaciones ni saltos de línea' };
   if (/[\p{Cc}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}]/u.test(normalized)) return { error: 'Lleva caracteres de control o inválidos' };
   const bytes = Buffer.byteLength(normalized, 'utf8');
-  if (bytes > maxBytes) return { error: `Mide ${bytes} bytes y el máximo es ${maxBytes}` };
+  if (maxBytes > 0 && bytes > maxBytes) return { error: `Mide ${bytes} bytes y el máximo es ${maxBytes}` };
   if (reference != null && !sameFormatSpecifiers(normalized, reference)) {
     return { error: 'Los %d/%s del texto no coinciden con los del inglés' };
   }

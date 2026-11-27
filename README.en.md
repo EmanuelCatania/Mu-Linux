@@ -305,7 +305,7 @@ empty file breaks nothing. Rules, which the server and the editor check:
 
 - UTF-8 without BOM, one line per text, no quotes or line breaks inside.
 - Up to 63 bytes per name (the client cuts item names to 29 and skill names to
-  31) and 59 per tooltip line.
+  31) and 59 per tooltip line. `Client.txt` texts have no limit.
 - In `Client.txt`, each line's `%d`/`%s`/`%u` must be the same as the English
   ones and in the same order: otherwise the client discards the line.
 

@@ -47,7 +47,7 @@
     if (/["\r\n\t]/.test(value)) return t('No puede llevar comillas, tabulaciones ni saltos de línea');
     if (/[\p{Cc}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}]/u.test(value)) return t('Lleva caracteres de control');
     const bytes = byteLength(value);
-    if (bytes > state.maxBytes) return t('Mide {bytes} bytes y el máximo es {max}', { bytes, max: state.maxBytes });
+    if (state.maxBytes > 0 && bytes > state.maxBytes) return t('Mide {bytes} bytes y el máximo es {max}', { bytes, max: state.maxBytes });
     if (state.table === 'client' && state.lang !== 'Eng' && !sameFormat(value, row.reference)) {
       return t('Los %d/%s del texto no coinciden con los del inglés');
     }
@@ -128,7 +128,7 @@
     tr.classList.toggle('texts-dirty', isDirty(row));
     tr.classList.toggle('texts-invalid', msg !== '');
     const counter = tr.querySelector('.texts-bytes');
-    counter.textContent = row.value.trim() === '' ? '' : `${bytes}/${state.maxBytes}`;
+    counter.textContent = row.value.trim() === '' ? '' : state.maxBytes > 0 ? `${bytes}/${state.maxBytes}` : `${bytes}`;
     counter.title = msg;
     tr.querySelector('input').title = msg;
   }
@@ -180,7 +180,7 @@
     const res = await fetch(`/admin/server-editor/api/texts?lang=${encodeURIComponent(state.lang)}&table=${encodeURIComponent(state.table)}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || t('No se pudo cargar'));
-    state.maxBytes = data.maxBytes || 63;
+    state.maxBytes = data.maxBytes ?? 63;   // 0 = sin máximo (Client.txt)
     state.parseErrors = data.errors || [];
     const saved = new Map(data.translations.map((entry) => [entry.key.join('\t'), entry.name]));
     const rows = data.reference.map((entry) => ({

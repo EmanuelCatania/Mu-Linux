@@ -308,7 +308,7 @@ verifican:
 
 - UTF-8 sin BOM, una línea por texto, sin comillas ni saltos de línea adentro.
 - Hasta 63 bytes por nombre (el cliente corta los de items a 29 y los de skills
-  a 31) y 59 por línea de tooltip.
+  a 31) y 59 por línea de tooltip. Los de `Client.txt` no tienen máximo.
 - En `Client.txt`, los `%d`/`%s`/`%u` de cada línea tienen que ser los mismos que
   los del inglés y en el mismo orden: si no, el cliente descarta la línea.
 

@@ -161,7 +161,7 @@
 //RejectRepairNoShop
 79	"Abra a loja para consertar"
 //ServerKeyMismatch
-80	"O servidor não provou sua identidade. Conexão encerrada."
+80	"Este servidor não conseguiu provar sua identidade. A conexão foi fechada."
 //ItemOptionHuntLife
 81	"Aumenta a vida obtida ao matar monstros +%d%% da vida máxima"
 //ItemOptionHuntMana
