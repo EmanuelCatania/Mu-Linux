@@ -161,7 +161,7 @@
 //RejectRepairNoShop
 79	"Open the shop to repair"
 //ServerKeyMismatch
-80	"This server could not prove its identity. The connection was closed."
+80	"This server could not prove its identity. Connection closed."
 //ItemOptionHuntLife
 81	"Increase life gained when killing monsters +%d%% of max life"
 //ItemOptionHuntMana

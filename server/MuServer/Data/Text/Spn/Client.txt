@@ -161,11 +161,11 @@
 //RejectRepairNoShop
 79	"Abrí la tienda para reparar"
 //ServerKeyMismatch
-80	"Este server no pudo demostrar su identidad. Se cerró la conexión."
+80	"El server no pudo demostrar su identidad. Conexión cerrada."
 //ItemOptionHuntLife
-81	"Incrementa la vida obtenida al matar monstruos +%d%% de la vida máxima"
+81	"Aumenta la vida al matar monstruos +%d%% de la vida máxima"
 //ItemOptionHuntMana
-82	"Incrementa el mana obtenido al matar monstruos +%d%% del mana máximo"
+82	"Aumenta el mana al matar monstruos +%d%% del mana máximo"
 //ItemOptionMaxAG
 83	"Incrementa el AG máximo +%d%%"
 //HelperDamageIncrease
