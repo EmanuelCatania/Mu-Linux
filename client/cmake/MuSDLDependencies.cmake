@@ -13,7 +13,7 @@ if(EMSCRIPTEN)
     # la estructura del dispositivo).
     target_compile_definitions(miniaudio PUBLIC MA_ENABLE_AUDIO_WORKLETS)
 endif()
-# SDL enlaza la biblioteca miniaudio; Win32 conserva la implementación de CSound.
+# SDL enlaza la biblioteca miniaudio.
 set(MU_MINIAUDIO_INCLUDE_DIR "${mu_miniaudio_SOURCE_DIR}")
 
 # FreeType se construye desde fuentes, también en Linux -m32; sin SDL_ttf.

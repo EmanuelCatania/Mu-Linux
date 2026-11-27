@@ -19,7 +19,7 @@ if(EMSCRIPTEN)
     return()
 endif()
 if(CMAKE_SIZEOF_VOID_P EQUAL 4)
-    message(FATAL_ERROR "WebGPU sólo se soporta en 64 bits; x86 usa el backend OpenGL")
+    message(FATAL_ERROR "WebGPU sólo se soporta en 64 bits")
 endif()
 if(MINGW AND _VCPKG_INSTALLED_DIR AND VCPKG_TARGET_TRIPLET)
     # MinGW (preset mingw-x64-webgpu-release): la toolchain busca paquetes sólo

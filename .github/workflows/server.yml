@@ -35,7 +35,6 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - { os: windows-2022, preset: windows-x86 }
           - { os: windows-2022, preset: windows-x64 }
           - { os: ubuntu-24.04, preset: linux-x64 }
           - { os: ubuntu-24.04-arm, preset: linux-arm64 }
@@ -56,6 +55,11 @@ jobs:
       - name: Verificar paquete de mass teleport
         if: matrix.config == 'release'
         run: python -B tests/recall_packet_layout.py --architecture ${{ matrix.target.preset == 'windows-x64' && 'x64' || 'Win32' }}
+      # Contra el layout de 32 bits del cliente original: prueba interna, el
+      # server ya no se compila en x86.
+      - name: Verificar paquete de mass teleport (layout de 32 bits)
+        if: matrix.config == 'release' && runner.os == 'Windows'
+        run: python -B tests/recall_packet_layout.py --architecture Win32
       - name: Verificar el manifiesto de MU-Guard (mu-guard build)
         if: runner.os == 'Linux' && matrix.config == 'release'
         run: |
@@ -68,13 +72,12 @@ jobs:
   mingw:
     needs: changes
     if: needs.changes.outputs.server == 'true'
-    name: MinGW (${{ matrix.arch }})
+    name: MinGW (x64)
     strategy:
       fail-fast: false
       matrix:
         include:
           - { arch: x64, prefix: x86_64-w64-mingw32 }
-          - { arch: x86, prefix: i686-w64-mingw32 }
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -82,7 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Instalar MinGW-w64
-        run: sudo apt-get update && sudo apt-get install -y g++-mingw-w64-x86-64-posix g++-mingw-w64-i686-posix ninja-build
+        run: sudo apt-get update && sudo apt-get install -y g++-mingw-w64-x86-64-posix ninja-build
       - name: Configurar
         run: cmake --preset mingw-${{ matrix.arch }}-release
       - name: Compilar
