@@ -168,6 +168,10 @@ public:
     // la tabla.  Nunca devuelve nullptr.
     const char* GetItemName(int type) const;
     const char* GetSkillName(int index) const;
+    // Sólo el nombre largo que mandó el server, o nullptr: para los lugares que
+    // leen la tabla con su propio cuidado y sólo lo reemplazan si existe.
+    const char* GetLongItemName(int type) const;
+    const char* GetLongSkillName(int index) const;
 
     // Niebla del mapa: colores de día y de noche (0..1).  false = sin fila.
     bool GetMapFog(int map, float day[3], float night[3]) const;

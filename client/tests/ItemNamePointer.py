@@ -53,6 +53,9 @@ struct NameWindow { unsigned GetWidth() { const unsigned sizes[]={640,800,1024,1
 struct Catalog {
     int GetItemBehavior(int type) { return type; }
     int GetModelItemType(int model) { Require(model==activeModel); return catalogMode==0?-1:catalogMode==1?42:8192; }
+    // Sin nombres largos del server (0.97.50): la tabla manda, como antes.
+    const char* GetLongItemName(int) const { return nullptr; }
+    const char* GetLongSkillName(int) const { return nullptr; }
 } gContentCatalog;
 namespace Platform { int TextLength(const char* text) { ++textCalls; return static_cast<int>(std::strlen(text)); } }
 namespace Gfx { void Color3f(float r,float g,float b) { colors.push_back(r); colors.push_back(g); colors.push_back(b); } }
