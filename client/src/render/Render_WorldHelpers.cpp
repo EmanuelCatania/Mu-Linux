@@ -13,6 +13,7 @@
 #include "render/EffectIds.h"
 #include "render/ResourceTables.h"
 #include "assets/model/ModelTypes.h"
+#include "assets/data/ContentCatalog.h"
 #include "game/entity/EntityName.h"
 #include "render/Gfx.h"
 #include "render/BufferedDraw.h"
@@ -276,6 +277,12 @@ void __cdecl Entity_Render(void)
                              *(float*)&((OBJECT*)(uintptr_t)(v1))->Alpha,
                              *(DWORD*)(v0 - 325), *(v0 - 302),
                              1, 1, 1, 0, 2);
+                // DESVIACION: efectos del catálogo con on = "ground".
+                {
+                    const int drawn = *(short*)(v1 + 2);
+                    gContentCatalog.RunGroundEffects((const void*)v1, drawn,
+                        (void*)((uintptr_t)Models + (uintptr_t)drawn * BMD_STRIDE));
+                }
 
                 *(float*)(v1 + 24) = v22;
                 *(float*)(v1 + 16) = v20;

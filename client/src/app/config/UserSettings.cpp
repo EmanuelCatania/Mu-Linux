@@ -115,6 +115,7 @@ void CUserSettings::Load(const char* iniPath)
     m_Sky = ReadOption(Opt::kSky, iniPath) != 0;
     m_Underwater = ReadOption(Opt::kUnderwater, iniPath);
     m_WorldWater = ReadOption(Opt::kWorldWater, iniPath) != 0;
+    m_MountAsPet = ReadOption(Opt::kMountAsPet, iniPath) != 0;
     m_DrawDistance = ReadOption(Opt::kDrawDistance, iniPath);
     if (m_Resolution < -1 || m_Resolution >= MAX_USER_RESOLUTION) {
         char line[96];
@@ -302,6 +303,12 @@ void CUserSettings::SetSky(bool enabled)
 {
     m_Sky = enabled;
     SaveInt(Opt::kSky.section, Opt::kSky.key, enabled ? 1 : 0);
+}
+
+void CUserSettings::SetMountAsPet(bool enabled)
+{
+    m_MountAsPet = enabled;
+    SaveInt(Opt::kMountAsPet.section, Opt::kMountAsPet.key, enabled ? 1 : 0);
 }
 
 void CUserSettings::SetUnderwater(int level)

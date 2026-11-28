@@ -475,6 +475,43 @@ const ITEM_POSE_INFO* CContentCatalog::GetPose(int index) const
 	return (it == this->m_ItemPose.end()) ? 0 : &it->second;
 }
 
+// Agrega un texto a la tabla F3:F0.  Si no entra en Text[64] va partido en
+// registros de 64 bytes con CATALOG_TEXT_CONTINUED; el último lleva el 0.
+static void AppendCatalogText(std::vector<CATALOG_TEXT>& out, BYTE table, BYTE reserved, WORD index, const std::string& text)
+{
+	CATALOG_TEXT entry;
+
+	memset(&entry, 0, sizeof(entry));
+
+	entry.Table = table;
+
+	entry.Reserved = reserved;
+
+	entry.Index = index;
+
+	if (text.size() < sizeof(entry.Text))
+	{
+		memcpy(entry.Text, text.data(), text.size());
+
+		out.push_back(entry);
+
+		return;
+	}
+
+	entry.Table = (BYTE)(table | CATALOG_TEXT_CONTINUED);
+
+	for (size_t offset = 0; offset <= text.size(); offset += sizeof(entry.Text))
+	{
+		memset(entry.Text, 0, sizeof(entry.Text));
+
+		const size_t part = (text.size() - offset < sizeof(entry.Text)) ? text.size() - offset : sizeof(entry.Text);
+
+		memcpy(entry.Text, text.data() + offset, part);
+
+		out.push_back(entry);
+	}
+}
+
 void CContentCatalog::BuildSection(BYTE subh, const BYTE* records, int recordSize, int count, std::vector<std::vector<BYTE>>& packets)
 {
 	int perPacket = (CATALOG_MAX_PACKET_SIZE - (int)sizeof(PMSG_CATALOG_HEAD)) / recordSize;
@@ -1006,7 +1043,37 @@ void CContentCatalog::Build()
 	{
 		this->m_TextPackets[lang].clear();
 
-		const std::vector<CATALOG_TEXT>& texts = this->m_Texts[lang];
+		std::vector<CATALOG_TEXT> texts = this->m_Texts[lang];
+
+		// Un item agregado cuyo nombre de Item.txt no entra en los 31 bytes del
+		// E7 va entero acá, salvo que el idioma ya lo traduzca.  Los vanilla no:
+		// su nombre sale del item.bmd del idioma del cliente.
+		for (const auto& name : gItemManager.GetLongNames())
+		{
+			if (name.first < MAX_ITEM_VANILLA || name.first > 0xFFFF)
+			{
+				continue;
+			}
+
+			bool translated = false;
+
+			for (const CATALOG_TEXT& text : this->m_Texts[lang])
+			{
+				if ((text.Table & ~CATALOG_TEXT_CONTINUED) == CATALOG_TEXT_ITEM && text.Index == name.first)
+				{
+					translated = true;
+
+					break;
+				}
+			}
+
+			const std::string display = TextName::ToDisplay(name.second.c_str(), name.second.size());
+
+			if (!translated && !display.empty())
+			{
+				AppendCatalogText(texts, CATALOG_TEXT_ITEM, 0, (WORD)name.first, display);
+			}
+		}
 
 		if (!texts.empty())
 		{
@@ -1351,8 +1418,14 @@ namespace
 
 				memset(&entry, 0, sizeof(entry));
 
-				// Una línea de tooltip entra en el Text[60] de CATALOG_TOOLTIP (59 bytes y el 0).
-				const size_t maxText = (table == CATALOG_TEXT_TOOLTIP) ? sizeof(CATALOG_TOOLTIP::Text) : sizeof(entry.Text);
+				// Los textos del cliente y los nombres de items y skills no tienen
+				// máximo: el cliente los guarda enteros aparte de las tablas del
+				// 0.97k.  Los de monstruos sí (los copia al nombre de la entidad),
+				// y una línea de tooltip entra en el Text[60] de CATALOG_TOOLTIP
+				// (59 bytes y el 0).
+				const bool unlimited = (table == CATALOG_TEXT_CLIENT || table == CATALOG_TEXT_ITEM || table == CATALOG_TEXT_SKILL);
+
+				const size_t maxText = unlimited ? (size_t)-1 : (table == CATALOG_TEXT_TOOLTIP) ? sizeof(CATALOG_TOOLTIP::Text) : sizeof(entry.Text);
 
 				const bool badLine = (table == CATALOG_TEXT_TOOLTIP && (line < 0 || line >= CATALOG_TOOLTIP_MAX_LINES));
 
@@ -1365,15 +1438,7 @@ namespace
 					continue;
 				}
 
-				entry.Table = table;
-
-				entry.Reserved = (BYTE)line;
-
-				entry.Index = (WORD)index;
-
-				memcpy(entry.Text, text.data(), text.size());
-
-				out.push_back(entry);
+				AppendCatalogText(out, table, (BYTE)line, (WORD)index, text);
 
 				loaded++;
 			}
@@ -1499,17 +1564,60 @@ namespace
 			return false;
 		}
 
-		std::string on = effect.GetString("on", "equipped");
+		// "on": un texto o una lista ("equipped", "ground", "inventory").
+		// Sin "on", sólo puesto.
+		const JsonValue* on = effect.Get("on");
 
-		if (on == "equipped")
+		if (on == nullptr)
 		{
 			out.On = CATALOG_EFFECT_ON_EQUIPPED;
 		}
 		else
 		{
-			error = "'on' no soportado: " + on + " (por ahora sólo 'equipped')";
+			std::vector<const JsonValue*> places;
 
-			return false;
+			if (on->IsArray())
+			{
+				for (size_t n = 0; n < on->items.size(); n++)
+				{
+					places.push_back(&on->items[n]);
+				}
+			}
+			else
+			{
+				places.push_back(on);
+			}
+
+			for (size_t n = 0; n < places.size(); n++)
+			{
+				const std::string place = places[n]->IsString() ? places[n]->text : std::string();
+
+				if (place == "equipped")
+				{
+					out.On |= CATALOG_EFFECT_ON_EQUIPPED;
+				}
+				else if (place == "ground")
+				{
+					out.On |= CATALOG_EFFECT_ON_GROUND;
+				}
+				else if (place == "inventory")
+				{
+					out.On |= CATALOG_EFFECT_ON_INVENTORY;
+				}
+				else
+				{
+					error = "'on' no soportado: '" + place + "' (equipped, ground o inventory)";
+
+					return false;
+				}
+			}
+
+			if (out.On == 0)
+			{
+				error = "'on' no puede estar vacío";
+
+				return false;
+			}
 		}
 
 		std::string type = effect.GetString("type", "");
@@ -1538,6 +1646,15 @@ namespace
 		else
 		{
 			error = "'type' tiene que ser 'sprite' o 'particle'";
+
+			return false;
+		}
+
+		// Las grillas se dibujan con su propia cámara: las partículas viven en el
+		// mundo y no se verían ahí.
+		if (out.Type == CATALOG_EFFECT_PARTICLE && (out.On & CATALOG_EFFECT_ON_INVENTORY) != 0)
+		{
+			error = "'inventory' sólo admite sprites (las partículas se dibujan en el mundo)";
 
 			return false;
 		}

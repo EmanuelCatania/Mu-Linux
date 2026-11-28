@@ -708,7 +708,9 @@ struct CATALOG_MAP_FOG
 static_assert(sizeof(CATALOG_MAP_FOG) == 12, "F3:E9 entrada");
 
 // F3:EC — efectos de un item (Data/Custom/Items/*.json del server).
-const std::uint8_t CATALOG_EFFECT_ON_EQUIPPED = 0x01;
+const std::uint8_t CATALOG_EFFECT_ON_EQUIPPED = 0x01;   // puesto en el personaje
+const std::uint8_t CATALOG_EFFECT_ON_GROUND = 0x02;     // tirado en el suelo
+const std::uint8_t CATALOG_EFFECT_ON_INVENTORY = 0x04;  // en una grilla; sólo sprites
 const std::uint8_t CATALOG_EFFECT_SPRITE = 1;      // sprite en huesos, cada frame
 const std::uint8_t CATALOG_EFFECT_PARTICLE = 2;    // partícula vanilla en huesos
 const std::int32_t  CATALOG_EFFECT_MAX_BONES = 32;
@@ -896,6 +898,9 @@ const std::uint8_t CATALOG_TEXT_MONSTER = 2;
 const std::uint8_t CATALOG_TEXT_SKILL = 3;
 const std::uint8_t CATALOG_TEXT_CLIENT = 4;   // textos propios del cliente (ClientTextId)
 const std::uint8_t CATALOG_TEXT_TOOLTIP = 5;  // línea de tooltip de un item: Index = item, Reserved = línea (0 a 5)
+// Texto partido en varios registros seguidos: cada uno lleva 64 bytes y el que
+// tiene un 0 adentro lo cierra.  Server: ContentCatalog.h.
+const std::uint8_t CATALOG_TEXT_CONTINUED = 0x80;
 
 struct CATALOG_TEXT
 {

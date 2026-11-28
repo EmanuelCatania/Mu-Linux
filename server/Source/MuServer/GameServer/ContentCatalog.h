@@ -20,7 +20,9 @@
 
 // Efectos de un item (Data/Custom/Items/*.json).  El cliente trae un juego
 // fijo de primitivas; el JSON elige cuáles usa cada item y con qué datos.
-#define CATALOG_EFFECT_ON_EQUIPPED 0x01
+#define CATALOG_EFFECT_ON_EQUIPPED  0x01  // puesto en el personaje
+#define CATALOG_EFFECT_ON_GROUND    0x02  // tirado en el suelo
+#define CATALOG_EFFECT_ON_INVENTORY 0x04  // en una grilla (inventario, baúl, tienda, trade); sólo sprites
 
 #define CATALOG_EFFECT_SPRITE   1  // sprite en huesos, cada frame
 #define CATALOG_EFFECT_PARTICLE 2  // partícula vanilla en huesos, con probabilidad
@@ -183,6 +185,13 @@ struct CATALOG_PET
 #define CATALOG_TEXT_SKILL   3
 #define CATALOG_TEXT_CLIENT  4   // textos propios del cliente (ClientTextId)
 #define CATALOG_TEXT_TOOLTIP 5   // línea del tooltip de un item: Index = item, Reserved = línea (0 a 5)
+
+// Un texto que no entra en Text[64] viaja en varios registros seguidos con este
+// bit en Table: cada uno lleva 64 bytes del texto y el último, el que tiene un
+// 0 adentro, lo cierra.  Los clientes anteriores a la 0.97.50 no conocen esas
+// tablas y los ignoran: muestran su propio texto, como cuando el server
+// descartaba los largos.
+#define CATALOG_TEXT_CONTINUED 0x80
 
 struct CATALOG_TEXT
 {

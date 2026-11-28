@@ -140,6 +140,13 @@ public:
     // que dejó el último render del modelo (g_BoneScratch).  Se llama desde
     // RenderLinkObject después de dibujar la pieza.
     void RunEquippedEffects(const void* c, int model, void* modelPtr) const;
+    // Lo mismo para un item tirado en el suelo (`object` es el del suelo) o
+    // dibujado en una grilla (inventario, baúl, tienda, trade).  Se llama
+    // después del RenderPartObject del item.  En la grilla los sprites se
+    // dibujan en el momento, con la cámara de esa pasada, y escalados con el
+    // modelo (`scale`, la escala del objeto de la grilla).
+    void RunGroundEffects(const void* object, int model, void* modelPtr) const;
+    void RunInventoryEffects(int model, void* modelPtr, float scale) const;
 
     // Wear slot (0..11) de un agregado sin comportamiento vanilla (columna
     // Slot de Item.txt), o -1.
@@ -156,6 +163,15 @@ public:
     const CatalogMonster* GetMonster(int index) const;
     // Nombre traducido de un monstruo o NPC, o nullptr si el server no lo mandó.
     char* GetMonsterText(int index) const;
+    // Nombre de un item o de un skill para mostrar: el que mandó el server si
+    // no entra en el campo de la tabla del 0.97k (29 y 31 bytes), si no el de
+    // la tabla.  Nunca devuelve nullptr.
+    const char* GetItemName(int type) const;
+    const char* GetSkillName(int index) const;
+    // Sólo el nombre largo que mandó el server, o nullptr: para los lugares que
+    // leen la tabla con su propio cuidado y sólo lo reemplazan si existe.
+    const char* GetLongItemName(int type) const;
+    const char* GetLongSkillName(int index) const;
 
     // Niebla del mapa: colores de día y de noche (0..1).  false = sin fila.
     bool GetMapFog(int map, float day[3], float night[3]) const;

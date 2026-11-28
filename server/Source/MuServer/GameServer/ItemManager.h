@@ -265,6 +265,10 @@ public:
 
 	const std::map<int, ITEM_INFO>& GetInfoMap() const { return this->m_ItemInfo; }
 
+	// Nombres de Item.txt que no entran en ITEM_INFO::Name (31 bytes); Name
+	// queda con el nombre cortado.  El catálogo los manda enteros (F3:F0).
+	const std::map<int, std::string>& GetLongNames() const { return this->m_LongName; }
+
 	// Vanilla cuyo comportamiento usa el item (el propio si no tiene columna).
 	int GetBehavior(int index);
 
@@ -429,6 +433,8 @@ public:
 private:
 
 	std::map<int, ITEM_INFO> m_ItemInfo;
+
+	std::map<int, std::string> m_LongName;
 };
 
 extern CItemManager gItemManager;

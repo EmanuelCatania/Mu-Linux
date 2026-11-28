@@ -304,8 +304,8 @@ O que não estiver traduzido o cliente resolve com seus próprios arquivos, ent�
 um arquivo vazio não quebra nada. Regras, que o servidor e o editor verificam:
 
 - UTF-8 sem BOM, uma linha por texto, sem aspas nem quebras de linha dentro.
-- Até 63 bytes por nome (o cliente corta os de itens em 29 e os de skills em 31)
-  e 59 por linha de tooltip.
+- Até 63 bytes por nome de monstro e 59 por linha de tooltip. Os nomes de itens
+  e skills e os textos do `Client.txt` não têm limite.
 - No `Client.txt`, os `%d`/`%s`/`%u` de cada linha precisam ser os mesmos do
   inglês e na mesma ordem: senão o cliente descarta a linha.
 

@@ -96,6 +96,7 @@ void __cdecl RenderItemName(int i, const OBJECT* object, int ItemLevel, int Item
         std::uintptr_t abase = ItemAttribute_Base();
         if (abase && attrIdx >= 0 && attrIdx < ITEM_MAX_EX)
             name = (const char*)(uintptr_t)(abase + (unsigned int)attrIdx * 64u);
+        if (const char* longName = gContentCatalog.GetLongItemName(attrIdx)) name = longName;
     }
 
     switch (v7) {
@@ -162,6 +163,7 @@ void __cdecl RenderItemName(int i, const OBJECT* object, int ItemLevel, int Item
         // 0x28), así que el índice es 40 * (v6 + 30) y el nombre va en offset 0.
         int v45 = 8 * (5 * v6 + 150);
         const char* skillName = (const char*)((const char*)&SkillAttribute + v45);
+        if (const char* longName = gContentCatalog.GetLongSkillName(30 + v6)) skillName = longName;
         sprintf(String, "%s %s", skillName, GlobalText[102]);
         goto renderLabel;
     }

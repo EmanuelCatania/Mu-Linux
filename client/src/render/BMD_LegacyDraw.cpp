@@ -241,4 +241,6 @@ void __cdecl RenderObjectScreen(int Type, unsigned int ItemLevel, unsigned char 
     // by this client; all OpenGL state setup/teardown stays inside that renderer.
     RenderPartObject((intptr_t)object, drawType, 0, light, 1.0f, ItemLevel, Option1,
                  '\x01', 1, '\x01', 0, 2);
+    // DESVIACION: efectos del catálogo con on = "inventory".
+    gContentCatalog.RunInventoryEffects(drawType, (void*)(Models + (int)drawType * BMD_STRIDE), scale);
 }
