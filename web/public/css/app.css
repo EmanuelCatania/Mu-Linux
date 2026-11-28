@@ -1296,3 +1296,8 @@ textarea.invalid {
     grid-template-columns: 1fr;
   }
 }
+
+/* Editor de recetas del Chaos: texto que no entra en el panel del cliente. */
+.chaos-recipe-over {
+  color: var(--danger);
+}

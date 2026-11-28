@@ -1,0 +1,28 @@
+<%- include('partials/header') %>
+
+<section class="card">
+  <div class="row-between">
+    <h2><%= t("Recetas del Chaos") %></h2>
+    <div class="admin-links">
+      <a class="button-link" href="/admin/server-editor"><%= t("Editor servidor") %></a>
+      <a class="button-link" href="/admin/server-editor/chaosmix"><%= t("Abrir CFG chaos mix") %></a>
+      <a class="button-link" href="/admin/logout"><%= t("Salir") %></a>
+    </div>
+  </div>
+
+  <% if (!editorEnabled) { %>
+    <div class="alert">
+      <%= t("El editor del servidor esta deshabilitado. Para activarlo, inicia el stack con") %>
+      <code>EDITOR_ENABLED=1</code> <%= t("y el compose del editor.") %>
+    </div>
+  <% } else { %>
+    <p class="muted"><%= t("Recetas nuevas para la máquina del Chaos, guardadas en Data/ChaosMix/Recipes.toml. Las nueve del 0.97k siguen en el server y ganan si el chaos box coincide con una de ellas. Si la mezcla falla se pierden los ingredientes.") %></p>
+    <div id="chaos-recipes-editor"></div>
+  <% } %>
+</section>
+
+<% if (editorEnabled) { %>
+<script src="/js/chaos-recipes-editor.js"></script>
+<% } %>
+
+<%- include('partials/footer') %>

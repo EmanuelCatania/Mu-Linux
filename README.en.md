@@ -104,6 +104,8 @@ and server, server authority and security. 0.97.50 completes it.
   `Util/GameMaster.txt`: 1 is GM and 2 or more is administrator.
 - **Elf summons:** scaling, +7 to +10 orbs and a panel in the admin.
 - **Web panel:** per-map editor, with spawns in visual and text mode.
+- **Added Chaos recipes** in `Data/ChaosMix/Recipes.toml`, with their own page
+  in the web panel.
 - **Fonts:** `.ttc` collections, system CJK fonts and simulated bold when the
   family has none.
 - **Release builds without test tools.** `debug.log` and `fonts.log` live in

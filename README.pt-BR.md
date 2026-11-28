@@ -104,6 +104,8 @@ cliente e servidor, autoridade do servidor e segurança. A 0.97.50 a conclui.
   `Util/GameMaster.txt`: 1 é GM e 2 ou mais, administrador.
 - **Invocações da elfa:** escalonamento, orbes +7 a +10 e painel no admin.
 - **Painel web:** editor por mapa, com os spawns em modo visual e em texto.
+- **Receitas do Chaos adicionadas** em `Data/ChaosMix/Recipes.toml`, com sua
+  página no painel web.
 - **Fontes:** coleções `.ttc`, fontes CJK do sistema e negrito simulado quando a
   família não o tem.
 - **Release sem ferramentas de teste.** `debug.log` e `fonts.log` ficam em

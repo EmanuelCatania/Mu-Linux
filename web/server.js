@@ -23,6 +23,7 @@ const mapsLib = require('./lib/maps');
 const dropsLib = require('./lib/drops');
 const gatesLib = require('./lib/gates');
 const summonsLib = require('./lib/summons');
+const chaosRecipes = require('./lib/chaos-recipes');
 const zonesLib = require('./lib/zones');
 const mapFoldersLib = require('./lib/map-folders');
 const muGuard = require('./lib/mu-guard');
@@ -1971,6 +1972,67 @@ app.post('/admin/server-editor/api/summons', requireAdmin, requireAdminPasswordC
     return res.json({ ok: true, backups: data.backups || [] });
   } catch (err) {
     const status = err instanceof summonsLib.SummonError ? 400 : (err.status || 502);
+    return res.status(status).json({ error: err.message });
+  }
+});
+
+// Recetas del Chaos agregadas (Data/ChaosMix/Recipes.toml, ver
+// lib/chaos-recipes.js). Sin el archivo no hay recetas: se crea al guardar.
+async function readChaosRecipes() {
+  const dir = chaosRecipes.RECIPES_FILE.split('/').slice(0, -1).join('/');
+  const name = chaosRecipes.RECIPES_FILE.split('/').pop();
+  const entries = (await listEditorDir(dir)) || [];
+  if (!entries.some((e) => e.type === 'file' && e.name === name)) return '';
+  return readEditorFile(chaosRecipes.RECIPES_FILE);
+}
+
+app.get('/admin/server-editor/chaos-recipes', requireAdmin, requireAdminPasswordChange, (req, res) => {
+  res.render('admin_chaos_recipes_editor');
+});
+
+app.get('/admin/server-editor/api/chaos-recipes', requireAdmin, requireAdminPasswordChange, async (req, res) => {
+  if (!editorEnabled) {
+    return res.status(503).json({ error: 'Editor disabled' });
+  }
+  try {
+    const [content, items] = await Promise.all([readChaosRecipes(), readItemList()]);
+    const { recipes } = chaosRecipes.parse(content);
+    return res.json({
+      recipes,
+      items: items.map((item) => ({ section: item.key[0], index: item.key[1], name: item.name })),
+      limits: {
+        firstId: chaosRecipes.FIRST_ID,
+        lastId: chaosRecipes.LAST_ID,
+        textBytes: chaosRecipes.TEXT_BYTES,
+        helpLines: chaosRecipes.HELP_LINES,
+        maxIngredients: chaosRecipes.MAX_INGREDIENTS
+      }
+    });
+  } catch (err) {
+    const status = err instanceof chaosRecipes.RecipeError ? 422 : (err.status || 502);
+    return res.status(status).json({ error: err.message });
+  }
+});
+
+app.post('/admin/server-editor/api/chaos-recipes', requireAdmin, requireAdminPasswordChange, async (req, res) => {
+  if (!editorEnabled) {
+    return res.status(503).json({ error: 'Editor disabled' });
+  }
+  try {
+    const recipes = chaosRecipes.validate(req.body);
+    const current = await readChaosRecipes();
+    // Si el archivo actual no se puede leer, se conserva igual su encabezado.
+    let header = chaosRecipes.DEFAULT_HEADER;
+    try {
+      header = chaosRecipes.parse(current).header;
+    } catch {
+      header = chaosRecipes.DEFAULT_HEADER;
+    }
+    const content = chaosRecipes.build(recipes, header);
+    const data = await editorRequest('POST', '/api/file', { path: chaosRecipes.RECIPES_FILE, content });
+    return res.json({ ok: true, backups: data.backups || [] });
+  } catch (err) {
+    const status = err instanceof chaosRecipes.RecipeError ? 400 : (err.status || 502);
     return res.status(status).json({ error: err.message });
   }
 });
