@@ -34,6 +34,7 @@
 //   WaterTextureNumber  — frame index mod 32
 
 #include "stdafx.h"
+#include "game/item/ItemServerInfo.h"
 #include <algorithm>
 #include "platform/UserPath.h"
 #include "game/entity/EntityName.h"
@@ -253,6 +254,7 @@ void __cdecl Game_MainLoop(HDC param_1)
 
     // ── PRE-RENDER SETUP ──────────────────────────────────────────────────────
     gReconnect.Tick();   // DESVIACION (DLL Reconnect.cpp, 0x00525995)
+    ItemServerInfo::Tick();   // DESVIACION 0.97.50: pedidos de valores de items
     Sound_Update3DPositions();
     {
         const auto st = Platform::GetTimer().LocalTime();

@@ -55,6 +55,10 @@ unsigned int Item_CalculateRepairCost(int gold,int dur,int max,short type,char* 
     events.push_back({2,slot,type,0,dur,max}); text[0]=0;
     return static_cast<unsigned>(gold+dur+max+type);
 }
+// Sin valores del server (0.97.50): la fórmula local, como antes.
+unsigned int Item_CalculateRepairCostFor(const void*,int gold,int dur,int max,short type,char* text) {
+    return Item_CalculateRepairCost(gold,dur,max,type,text);
+}
 '''
 
 MAIN = r'''

@@ -152,7 +152,15 @@ def harness(revision=None):
         prefix+=optional_definition(re.search(rf"extern [^;\n]*\b{name}\s*;",header))
         prefix+=optional_definition(re.search(rf"^[^/\n]*\b{name}\s*=\s*[^;]+;",definitions,re.M))
     prefix+=SERVICES+function(catalog,"ItemBehaviorType")
-    convert=function(read_source("src/game/item/Item_LegacyLinker.cpp",revision),"ItemConvert")
+    source=read_source("src/game/item/Item_LegacyLinker.cpp",revision)
+    # Desde la 0.97.50 ItemConvert es un envoltorio que después aplica los
+    # requisitos del server (C1:F3:EB); el cálculo local está en ItemConvert_Local.
+    if "ItemConvert_Local" in source:
+        # La declaración va primero: los tests que reusan este arnés lo cortan
+        # en "void __cdecl ItemConvert(".
+        convert="void __cdecl ItemConvert(ITEM* ip,int a1,int a2);\n"+function(source,"ItemConvert_Local")+"\nvoid __cdecl ItemConvert(ITEM* ip,int a1,int a2){ItemConvert_Local(ip,a1,a2);}\n"
+    else:
+        convert=function(source,"ItemConvert")
     arg="item" if "ITEM* ip" in convert.split("{",1)[0] else "static_cast<int>(reinterpret_cast<std::uintptr_t>(item))"
     return prefix+convert+MAIN.replace("ARG",arg)
 

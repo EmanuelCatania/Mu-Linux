@@ -2,6 +2,7 @@
 // Item_Durability.cpp
 
 #include "stdafx.h"
+#include "game/item/ItemServerInfo.h"
 #include "assets/data/ContentCatalog.h"
 #include "game/item/ItemDefines.h"
 #include "globals.h"
@@ -27,6 +28,8 @@ unsigned int __cdecl Item_CalculateMaxDurability(void* item, ITEM_ATTRIBUTE* att
     if (item == nullptr || (uintptr_t)item < 0x100000) return 255;
     ITEM* ip          = (ITEM*)item;
     ITEM_ATTRIBUTE* p = attr;
+    // DESVIACION 0.97.50: la del server si ya respondió por este item.
+    if (const ItemServerValues* server = ItemServerInfo::Find(ip)) return server->MaxDurability;
 
     // Base durability per type (Magic items 160..191 use MagicDurability)
     unsigned int result = (unsigned int)(unsigned char)p->Durability;
@@ -370,6 +373,17 @@ unsigned int __cdecl Item_CalculateRepairCost(int Gold, int Durability, int MaxD
     return ConvertRepairGold_MuEmu(Gold, Durability, MaxDurability, Type, Text);
 }
 
+unsigned int __cdecl FormatRepairGold_MuEmu(int money, char* Text);
+
+// DESVIACION 0.97.50: el costo que calcula el server para este item si ya
+// respondió; si no, la fórmula de arriba.
+unsigned int __cdecl Item_CalculateRepairCostFor(const void* item, int Gold, int Durability, int MaxDurability, short Type, char* Text)
+{
+    if (const ItemServerValues* server = ItemServerInfo::Find((const ITEM*)item))
+        return FormatRepairGold_MuEmu((int)(RepairEnable == 1 ? server->RepairMoneySelf : server->RepairMoney), Text);
+    return Item_CalculateRepairCost(Gold, Durability, MaxDurability, Type, Text);
+}
+
 // Port de IDA, sin uso mientras el server sea MuEmu.
 unsigned int __cdecl ConvertRepairGold_Vanilla(int Gold, int Durability, int MaxDurability, short Type, char* Text)
 {
@@ -457,7 +471,7 @@ void __cdecl Item_RecalculateRepairCost(void)
                 curDur < maxDur) {
                 char local_68[104]; // buffer for text
                 int gold = Item_CalculateValue((void*)psVar12, 2);
-                unsigned int repairGold = Item_CalculateRepairCost(gold, (int)curDur, (int)maxDur, itemType, local_68);
+                unsigned int repairGold = Item_CalculateRepairCostFor(psVar12, gold, (int)curDur, (int)maxDur, itemType, local_68);
                 DAT_07eaa0f8 += (int)repairGold;
                 (void)uVar8;
             }
@@ -485,7 +499,7 @@ void __cdecl Item_RecalculateRepairCost(void)
                 curDur < maxDur) {
                 char local_68[104];
                 int gold = Item_CalculateValue((void*)psVar12, 2);
-                unsigned int repairGold = Item_CalculateRepairCost(gold, (int)curDur, (int)maxDur, itemType, local_68);
+                unsigned int repairGold = Item_CalculateRepairCostFor(psVar12, gold, (int)curDur, (int)maxDur, itemType, local_68);
                 DAT_07eaa0f8 += (int)repairGold;
                 (void)uVar8;
             }

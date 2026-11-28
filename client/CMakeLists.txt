@@ -118,6 +118,7 @@ set(MU_SOURCES
     src/net/Ping.cpp
     src/net/ServerCharacterStats.cpp
     src/game/item/ChaosMixRates.cpp
+    src/game/item/ItemServerInfo.cpp
     src/ui/HealthBar.cpp
     src/net/Recv/Recv_Account.cpp
     src/net/Recv/Recv_Character.cpp
@@ -552,6 +553,7 @@ set(MU_HEADERS
     src/net/Ping.h
     src/net/ServerCharacterStats.h
     src/game/item/ChaosMixRates.h
+    src/game/item/ItemServerInfo.h
     src/ui/HealthBar.h
     src/net/Recv/NetRecv.h
     src/game/combat/Combat.h

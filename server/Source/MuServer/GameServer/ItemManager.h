@@ -51,6 +51,52 @@ constexpr int GetItemSub(int index)
 //************ Client -> GameServer ************//
 //**********************************************//
 
+// C1:F3:EB — el cliente pregunta por los valores de hasta 6 items que tiene a
+// la vista (inventario, tienda, baúl, trade) y el server responde lo que
+// calcula él: requisitos, durabilidad máxima, precios y reparación.  El item va
+// como en ItemByteConvert: Level = byte 1, Option1 = byte 3, Durability = byte 2.
+#define MAX_ITEM_INFO_QUERY 6
+
+struct ITEM_INFO_QUERY
+{
+	WORD Index;
+	BYTE Level;
+	BYTE Option1;
+	BYTE Durability;
+	BYTE Reserved[3];   // en la respuesta, Reserved[0] = 1 si el server conoce el item
+};
+
+struct PMSG_ITEM_INFO_QUERY_RECV
+{
+	PSBMSG_HEAD header; // C1:F3:EB
+	BYTE count;
+	BYTE reserved[3];
+	ITEM_INFO_QUERY item[MAX_ITEM_INFO_QUERY];
+};
+
+struct ITEM_INFO_ANSWER
+{
+	ITEM_INFO_QUERY Item;
+	WORD RequireStrength;
+	WORD RequireDexterity;
+	WORD RequireVitality;
+	WORD RequireEnergy;
+	WORD RequireLevel;
+	WORD MaxDurability;
+	DWORD BuyMoney;
+	DWORD SellMoney;
+	DWORD RepairMoney;	  // en el NPC
+	DWORD RepairMoneySelf;  // reparación propia (x2.5)
+};
+
+struct PMSG_ITEM_INFO_ANSWER_SEND
+{
+	PSBMSG_HEAD header; // C1:F3:EB
+	BYTE count;
+	BYTE reserved[3];
+	ITEM_INFO_ANSWER item[MAX_ITEM_INFO_QUERY];
+};
+
 struct PMSG_ITEM_GET_RECV
 {
 	PBMSG_HEAD header; // C1:22
@@ -279,6 +325,8 @@ public:
 	int GetItemDurability(int index, int level, int ExceOption);
 
 	int GetItemRepairMoney(CItem* lpItem, int type);
+
+	void CGItemInfoQueryRecv(PMSG_ITEM_INFO_QUERY_RECV* lpMsg, int size, int aIndex);
 
 	int GetInventoryItemSlot(LPOBJ lpObj, int index, int level);
 

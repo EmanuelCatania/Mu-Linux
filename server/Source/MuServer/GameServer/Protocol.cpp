@@ -577,6 +577,13 @@ void ProtocolCore(BYTE head, BYTE* lpMsg, int size, int aIndex, int encrypt, int
 
 					break;
 				}
+
+				case 0xEB:
+				{
+					gItemManager.CGItemInfoQueryRecv((PMSG_ITEM_INFO_QUERY_RECV*)lpMsg, size, aIndex);
+
+					break;
+				}
 			}
 
 			break;

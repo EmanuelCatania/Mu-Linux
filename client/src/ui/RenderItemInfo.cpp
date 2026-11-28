@@ -823,7 +823,7 @@ extern "C" void __cdecl RenderRepairInfo_impl(void* param_1, int param_2, void* 
         RepairEnable_0 = 2;
         // Same ItemValue/ConvertRepairGold pair.
         int gold = Item_CalculateValue((void*)param_3, 2);
-        Item_CalculateRepairCost(gold, (int)curDur, (int)maxDur, (short)itemType, repairGold);
+        Item_CalculateRepairCostFor(param_3, gold, (int)curDur, (int)maxDur, (short)itemType, repairGold);
     } else {
         RepairEnable_0 = 1;
     }
