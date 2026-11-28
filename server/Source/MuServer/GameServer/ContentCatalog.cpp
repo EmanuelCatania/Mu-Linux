@@ -39,7 +39,7 @@ static_assert(sizeof(CATALOG_EFFECT) == 132, "catalog effect");
 static_assert(sizeof(CATALOG_TOOLTIP) == 64, "catalog tooltip");
 static_assert(sizeof(CATALOG_TEXT) == 68, "catalog text");
 static_assert(sizeof(CATALOG_GATE) == 16, "catalog gate");
-static_assert(sizeof(CATALOG_SKILL) == 8, "catalog skill");
+static_assert(sizeof(CATALOG_SKILL) == 12, "catalog skill");
 static_assert(sizeof(CATALOG_MAP_MUSIC) == 32, "catalog map music");
 static_assert(sizeof(CATALOG_CACHE_ENTRY) == 12, "catalog cache entry");
 static_assert(sizeof(PMSG_CATALOG_SYNC_SEND) == 8 + 12 * CATALOG_CACHE_MAX, "catalog sync");
@@ -846,6 +846,8 @@ void CContentCatalog::Build()
 		entry.BP = (WORD)((info.BP < 0) ? 0 : info.BP);
 
 		entry.Range = (BYTE)((info.Range < 0) ? 0 : ((info.Range > 255) ? 255 : info.Range));
+
+		entry.Damage = (WORD)((info.Damage < 0) ? 0 : ((info.Damage > 65535) ? 65535 : info.Damage));
 
 		skills.push_back(entry);
 	}

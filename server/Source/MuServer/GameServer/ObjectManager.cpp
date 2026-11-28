@@ -1275,6 +1275,13 @@ bool CObjectManager::CharacterUseScroll(LPOBJ lpObj, CItem* lpItem)
 		return 0;
 	}
 
+	// La energía que pide el pergamino u orbe (la del tooltip).  MuEmu no la
+	// revisaba: sólo la de Skill.txt, que en estos datos es 0.
+	if (lpObj->Energy < lpItem->m_RequireEnergy)
+	{
+		return 0;
+	}
+
 	if (lpItem->GetKind() >= GET_ITEM(12, 8) && lpItem->GetKind() <= GET_ITEM(12, 24))
 	{
 		if (lpObj->Level < lpItem->m_RequireLevel)

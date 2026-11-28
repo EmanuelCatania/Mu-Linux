@@ -825,8 +825,10 @@ struct CATALOG_SKILL
     std::uint16_t BP;           // AG
     std::uint8_t Range;         // en casillas
     std::uint8_t Reserved;
+    std::uint16_t Damage;       // 0.97.50: el de Skill.txt (un server anterior manda 8 bytes)
+    std::uint16_t Reserved2;
 };
-static_assert(sizeof(CATALOG_SKILL) == 8, "F3:F4 entrada");
+static_assert(sizeof(CATALOG_SKILL) == 12, "F3:F4 entrada");
 
 // F3:F7 — música por mapa (Fase 5, `music` de Map.toml).  Sólo viajan los
 // mapas que la fijan; el resto usa la del cliente.  Music es el nombre del

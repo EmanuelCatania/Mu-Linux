@@ -2136,7 +2136,9 @@ const ITEM* __cdecl Stats_CalcMagicDmgRange(BYTE* param_1) {
 // al rango magico de CHARACTER_MACHINE (+70 / +72); el maximo lleva +50%.
 void __cdecl GetMagicSkillDamage(const BYTE* This, int iType, int* piMinDamage, int* piMaxDamage)
 {
-    const BYTE damage = (BYTE)SkillAttribute.Raw[40 * (iType & 0xFF) + 0x21];
+    // 0.97.50: el daño de Skill.txt si el server lo mandó (puede pasar de 255).
+    int damage = gContentCatalog.GetSkillDamage(iType & 0xFF);
+    if (damage < 0) damage = (BYTE)SkillAttribute.Raw[40 * (iType & 0xFF) + 0x21];
     *piMinDamage = damage + *(unsigned short*)(This + 70);
     *piMaxDamage = (damage >> 1) + damage + *(unsigned short*)(This + 72);
 }

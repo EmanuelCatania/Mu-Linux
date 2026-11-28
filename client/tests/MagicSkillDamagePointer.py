@@ -66,6 +66,9 @@ def harness(revision=None):
     prefix += re.search(r"struct _SkillAttrEntry\s*\{.*?\};", read_source("src/globals.h", revision), re.S).group()
     prefix += "\n_SkillAttrEntry SkillAttribute{};\nstatic_assert(sizeof(SkillAttribute.Raw) == 64 * 40);\n"
     damage = function(read_source("src/scenes/Scene_CharSelect_Nav.cpp", revision), "GetMagicSkillDamage")
+    if "gContentCatalog" in damage:
+        # Sin daño del server (F3/F4): vale el byte de la tabla, que es lo que se verifica.
+        prefix += "struct { int GetSkillDamage(int) const { return -1; } } gContentCatalog;\n"
     arg = "machine" if "const BYTE* This" in damage else "static_cast<DWORD>(reinterpret_cast<std::uintptr_t>(machine))"
     return prefix + damage + MAIN.replace("CALL_DAMAGE", f"GetMagicSkillDamage({arg}, type, low, high)")
 

@@ -675,6 +675,19 @@ void CItemManager::CGItemInfoQueryRecv(PMSG_ITEM_INFO_QUERY_RECV* lpMsg, int siz
 
 		answer.RequireLevel = (WORD)item.m_RequireLevel;
 
+		// Un pergamino u orbe también pide el nivel y la energía del skill
+		// que enseña (Skill.txt, CSkillManager::AddSkill): se muestra el mayor.
+		SKILL_INFO skillInfo;
+
+		int skill = gSkillManager.GetSkillNumber(item.m_Index, item.m_Level);
+
+		if (skill != -1 && gSkillManager.GetInfo(skill, &skillInfo) != 0)
+		{
+			answer.RequireLevel = (WORD)((skillInfo.RequireLevel > (int)answer.RequireLevel) ? skillInfo.RequireLevel : answer.RequireLevel);
+
+			answer.RequireEnergy = (WORD)((skillInfo.RequireEnergy > (int)answer.RequireEnergy) ? skillInfo.RequireEnergy : answer.RequireEnergy);
+		}
+
 		answer.MaxDurability = (WORD)item.m_BaseDurability;
 
 		answer.BuyMoney = item.m_BuyMoney;

@@ -227,6 +227,8 @@ struct CATALOG_GATE
 
 // Skills (Fase 5): lo que el cliente usa para decidir si puede lanzar un skill
 // y hasta dónde camina antes de hacerlo. Antes salía de su skill.bmd.
+// 0.97.50: el daño del skill (Damage de Skill.txt), que el cliente suma al daño
+// mágico.  Un cliente anterior lee sólo los primeros 8 bytes del registro.
 struct CATALOG_SKILL
 {
 	WORD Index;
@@ -234,6 +236,8 @@ struct CATALOG_SKILL
 	WORD BP;            // AG
 	BYTE Range;         // en casillas
 	BYTE Reserved;
+	WORD Damage;
+	WORD Reserved2;
 };
 
 // Caché del catálogo en el cliente (Fase 5).  Antes del login el cliente dice

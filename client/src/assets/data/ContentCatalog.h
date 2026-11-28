@@ -172,6 +172,9 @@ public:
     // leen la tabla con su propio cuidado y sólo lo reemplazan si existe.
     const char* GetLongItemName(int type) const;
     const char* GetLongSkillName(int index) const;
+    // Daño de un skill que mandó el server (F3/F4), o -1: entonces vale el de
+    // skill.bmd (un byte, el server puede mandar más).
+    int GetSkillDamage(int index) const;
 
     // Niebla del mapa: colores de día y de noche (0..1).  false = sin fila.
     bool GetMapFog(int map, float day[3], float night[3]) const;

@@ -71,6 +71,14 @@ constexpr int SKILL_DATA = 0x20;                // después del nombre
 BYTE s_VanillaSkillData[MAX_CATALOG_SKILL][SKILL_RECORD - SKILL_DATA];
 bool s_HasVanillaSkillData = false;
 bool s_HasSkills = false;
+int s_SkillDamage[MAX_CATALOG_SKILL];           // -1 = sin dato del server
+bool s_SkillDamageInit = false;
+
+void ClearSkillDamage()
+{
+    for (int& damage : s_SkillDamage) damage = -1;
+    s_SkillDamageInit = true;
+}
 PendingSection s_PendingSkills;
 PendingSection s_PendingMapMusic;
 PendingSection s_PendingItemStacks;
@@ -612,6 +620,8 @@ void CContentCatalog::ApplySkills()
         s_HasVanillaSkillData = true;
     }
     const int skillSize = s_PendingSkills.recordSize;
+    ClearSkillDamage();
+    const bool hasDamage = skillSize >= (int)(offsetof(Proto::CATALOG_SKILL, Damage) + sizeof(std::uint16_t));
     int count = 0;
     for (size_t off = 0; skillSize > 0 && off + skillSize <= s_PendingSkills.records.size(); off += skillSize) {
         Proto::CATALOG_SKILL row = {};
@@ -624,6 +634,10 @@ void CContentCatalog::ApplySkills()
         memcpy(entry + 0x22, &row.Mana, sizeof(row.Mana));
         memcpy(entry + 0x24, &row.BP, sizeof(row.BP));
         entry[0x26] = row.Range;
+        if (hasDamage) {
+            s_SkillDamage[row.Index] = row.Damage;
+            entry[0x21] = (BYTE)(std::min)((int)row.Damage, 255);
+        }
         ++count;
     }
     s_HasSkills = true;
@@ -998,6 +1012,7 @@ void CContentCatalog::Clear()
             memcpy((BYTE*)SkillAttribute.Raw + i * SKILL_RECORD + SKILL_DATA, s_VanillaSkillData[i], sizeof(s_VanillaSkillData[i]));
     }
     s_HasSkills = false;
+    ClearSkillDamage();
     s_PendingMapMusic = PendingSection();
     s_PendingItemOptions = PendingSection();
     s_PendingCombatRates = PendingSection();
@@ -1446,6 +1461,12 @@ const char* CContentCatalog::GetLongSkillName(int index) const
 {
     const std::map<int, std::string>::const_iterator it = s_LongSkillNames.find(index);
     return it != s_LongSkillNames.end() ? it->second.c_str() : nullptr;
+}
+
+int CContentCatalog::GetSkillDamage(int index) const
+{
+    if (!s_SkillDamageInit || index < 0 || index >= MAX_CATALOG_SKILL) return -1;
+    return s_SkillDamage[index];
 }
 
 const char* CContentCatalog::GetItemName(int type) const
