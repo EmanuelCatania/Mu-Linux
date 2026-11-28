@@ -260,6 +260,7 @@ def harness(revision=None):
         match=re.search(rf"^#define\s+{name}\s+[^\n]+",header+structs,re.M)
         if match: prefix+="\n"+match.group()+"\n"
     prefix+="\nchar GlobalText[4000][300];\n"+SERVICES
+    prefix+="\nstruct { const char* GetLongItemName(int) const { return nullptr; } } gContentCatalog;\n"
     prefix+=re.search(r"static __forceinline [^\n]*\bItemAttribute_Base\([^\{]*\{.*?^\}",header,re.M|re.S).group()
     prefix+=function(read_source("src/ui/inventory/Item_Display.cpp",revision),"ConvertGold64")
     source=read_source("src/ui/Quest_Legacy.cpp",revision)

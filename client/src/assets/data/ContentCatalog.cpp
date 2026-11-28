@@ -1436,10 +1436,21 @@ const CatalogItemPose* CContentCatalog::GetItemPose(int type) const
     return &s_Items[type].Pose;
 }
 
-const char* CContentCatalog::GetItemName(int type) const
+const char* CContentCatalog::GetLongItemName(int type) const
 {
     const std::map<int, std::string>::const_iterator it = s_LongItemNames.find(type);
-    if (it != s_LongItemNames.end()) return it->second.c_str();
+    return it != s_LongItemNames.end() ? it->second.c_str() : nullptr;
+}
+
+const char* CContentCatalog::GetLongSkillName(int index) const
+{
+    const std::map<int, std::string>::const_iterator it = s_LongSkillNames.find(index);
+    return it != s_LongSkillNames.end() ? it->second.c_str() : nullptr;
+}
+
+const char* CContentCatalog::GetItemName(int type) const
+{
+    if (const char* name = GetLongItemName(type)) return name;
     const ITEM_ATTRIBUTE* attr = Attributes();
     if (!attr || type < 0 || type >= ITEM_MAX_EX) return "";
     // Name[30] puede venir sin el 0 de un item.bmd ajeno.
@@ -1448,8 +1459,7 @@ const char* CContentCatalog::GetItemName(int type) const
 
 const char* CContentCatalog::GetSkillName(int index) const
 {
-    const std::map<int, std::string>::const_iterator it = s_LongSkillNames.find(index);
-    if (it != s_LongSkillNames.end()) return it->second.c_str();
+    if (const char* name = GetLongSkillName(index)) return name;
     if (index < 0 || index >= MAX_SKILL_NAME) return "";
     const char* name = SkillName(SkillAttribute.Raw, index);
     return memchr(name, 0, SKILL_NAME_SIZE) ? name : "";
