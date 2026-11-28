@@ -4,6 +4,7 @@
 #include "CustomWing.h"
 #include "DevilSquare.h"
 #include "DSProtocol.h"
+#include "ItemOption.h"
 #include "ItemOptionRate.h"
 #include "Log.h"
 #include "RandomManager.h"
@@ -189,7 +190,16 @@ void CChaosBox::CGChaosMixRecv(PMSG_CHAOS_MIX_RECV* lpMsg, int aIndex)
 
 	lpObj->IsChaosMixCompleted = true;
 
-	switch (lpMsg->type)
+	// La receta la decide el server por el contenido del chaos box; el tipo
+	// que manda el cliente queda sólo para el log.
+	const int type = this->GetChaosMixType(lpObj);
+
+	if (type != lpMsg->type)
+	{
+		gLog.Output(LOG_CHAOS_MIX, "[ChaosMix][%s][%s] - El cliente pidió la receta %d y el chaos box es la %d", lpObj->Account, lpObj->Name, lpMsg->type, type);
+	}
+
+	switch (type)
 	{
 		case CHAOS_MIX_CHAOS_ITEM:
 		{
@@ -295,9 +305,197 @@ void CChaosBox::CGChaosMixRateRecv(PMSG_CHAOS_MIX_RATE_RECV* lpMsg, int aIndex)
 
 	pMsg.money = 0;
 
-	this->GetChaosMixRateAndMoney(aIndex, lpMsg->type, pMsg.rate, pMsg.money);
+	// El tipo que manda el cliente es el que reconoció él; el server responde
+	// con el suyo y el porcentaje de esa receta.
+	pMsg.type = this->GetChaosMixType(&gObj[aIndex]);
+
+	if (pMsg.type > 0)
+	{
+		this->GetChaosMixRateAndMoney(aIndex, pMsg.type, pMsg.rate, pMsg.money);
+	}
 
 	DataSend(aIndex, (BYTE*)&pMsg, pMsg.header.size);
+}
+
+// Reconoce la receta por lo que hay en el chaos box, con las reglas del
+// cliente 0.97k (CheckMixRecipe, 0x004E40F0).  Devuelve el CHAOS_MIX_* de la
+// receta, 0 si no hay ninguna, o -CHAOS_MIX_DEVIL_SQUARE / -CHAOS_MIX_BLOOD_CASTLE
+// si están los dos ingredientes pero de distinto nivel.  Las Get*MixRates
+// después validan la receta con sus propias reglas.
+int CChaosBox::GetChaosMixType(LPOBJ lpObj)
+{
+	int total = 0, chaos = 0, optionItems = 0, plainItems = 0, excellentItems = 0, chaosWeapons = 0;
+
+	int level9 = 0, level10 = 0, bless = 0, soul = 0, creation = 0, uniria = 0, feather = 0, wing1 = 0;
+
+	int eye = 0, key = 0, scroll = 0, bone = 0;
+
+	int eyeLevel = 0, keyLevel = 0, scrollLevel = 0, boneLevel = 0;
+
+	for (int n = 0; n < CHAOS_BOX_SIZE; n++)
+	{
+		CItem& item = lpObj->ChaosBox[n];
+
+		if (item.IsItem() == false)
+		{
+			continue;
+		}
+
+		total++;
+
+		const int kind = item.GetKind();
+
+		const int level = item.m_Level;
+
+		// Armas, armaduras y alas.
+		if (kind <= GET_ITEM(12, 6))
+		{
+			if (level == 9)
+			{
+				level9++;
+			}
+			else if (level == 10)
+			{
+				level10++;
+			}
+		}
+
+		switch (kind)
+		{
+			case GET_ITEM(12, 0):
+			case GET_ITEM(12, 1):
+			case GET_ITEM(12, 2):
+				wing1++;
+				break;
+
+			case GET_ITEM(12, 15):
+				chaos++;
+				break;
+
+			case GET_ITEM(13, 2): // Uniria; sólo cuenta con la vida llena
+				if (item.m_Durability == 255.0f)
+				{
+					uniria++;
+				}
+				break;
+
+			case GET_ITEM(13, 14):
+				feather++;
+				break;
+
+			case GET_ITEM(13, 16):
+				scrollLevel = level;
+				scroll++;
+				break;
+
+			case GET_ITEM(13, 17):
+				boneLevel = level;
+				bone++;
+				break;
+
+			case GET_ITEM(14, 13):
+				bless++;
+				break;
+
+			case GET_ITEM(14, 14):
+				soul++;
+				break;
+
+			case GET_ITEM(14, 17):
+				eyeLevel = level;
+				eye++;
+				break;
+
+			case GET_ITEM(14, 18):
+				keyLevel = level;
+				key++;
+				break;
+
+			case GET_ITEM(14, 22):
+				creation++;
+				break;
+
+			default:
+			{
+				// La opción adicional (+4/+8/+12 de daño, magia o defensa).
+				bool hasOption = false;
+
+				for (int i = 0; i < item.m_OptionsQuant && i < MAX_SPECIAL_OPTION; i++)
+				{
+					if (item.m_SpecialIndex[i] >= ITEM_OPTION_ADD_PHYSI_DAMAGE && item.m_SpecialIndex[i] <= ITEM_OPTION_ADD_DEFENSE)
+					{
+						hasOption = true;
+					}
+				}
+
+				if (hasOption)
+				{
+					optionItems++;
+
+					if (kind == GET_ITEM(2, 6) || kind == GET_ITEM(4, 6) || kind == GET_ITEM(5, 7)) // armas de Chaos
+					{
+						chaosWeapons++;
+					}
+				}
+				else
+				{
+					plainItems++;
+				}
+
+				if ((item.m_ExceOption & 0x3F) != 0 && level >= 4)
+				{
+					excellentItems++;
+				}
+
+				break;
+			}
+		}
+	}
+
+	if (total == 3 && chaos == 1)
+	{
+		if (eye == 1 && key == 1)
+		{
+			return (eyeLevel == keyLevel) ? CHAOS_MIX_DEVIL_SQUARE : -CHAOS_MIX_DEVIL_SQUARE;
+		}
+
+		if (scroll == 1 && bone == 1)
+		{
+			return (scrollLevel == boneLevel) ? CHAOS_MIX_BLOOD_CASTLE : -CHAOS_MIX_BLOOD_CASTLE;
+		}
+	}
+
+	if (chaos == 1 && feather == 1 && wing1 == 1 && total == excellentItems + 3)
+	{
+		return CHAOS_MIX_WING2;
+	}
+
+	if (total == 4 && chaos == 1 && level9 == 1 && bless == 1 && soul == 1)
+	{
+		return CHAOS_MIX_PLUS_ITEM_LEVEL1;
+	}
+
+	if (total == 6 && chaos == 1 && level10 == 1 && bless == 2 && soul == 2)
+	{
+		return CHAOS_MIX_PLUS_ITEM_LEVEL2;
+	}
+
+	if (total == 11 && uniria == 10 && chaos == 1)
+	{
+		return CHAOS_MIX_DINORANT;
+	}
+
+	if (total == 2 && creation == 1 && chaos == 1)
+	{
+		return CHAOS_MIX_FRUIT;
+	}
+
+	if (chaos > 0 && optionItems > 0 && eye == 0 && key == 0 && uniria == 0 && plainItems == 0 && creation == 0 && feather == 0 && wing1 == 0 && scroll == 0 && bone == 0)
+	{
+		return (chaosWeapons > 0) ? CHAOS_MIX_WING1 : CHAOS_MIX_CHAOS_ITEM;
+	}
+
+	return 0;
 }
 
 bool CChaosBox::GetChaosMixRateAndMoney(int aIndex, int type, DWORD& rate, DWORD& money)

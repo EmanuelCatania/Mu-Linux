@@ -33,6 +33,9 @@ struct PMSG_CHAOS_MIX_RATE_SEND
 	PBMSG_HEAD header; // C1:88
 	DWORD rate;
 	DWORD money;
+	// Desde la 0.97.50: la receta que reconoció el server (GetChaosMixType).
+	// Un cliente anterior lee sólo los 12 primeros bytes.
+	int type;
 };
 
 //**********************************************//
@@ -80,6 +83,8 @@ public:
 	void CGChaosMixRateRecv(PMSG_CHAOS_MIX_RATE_RECV* lpMsg, int aIndex);
 
 	bool GetChaosMixRateAndMoney(int aIndex, int type, DWORD& rate, DWORD& money);
+
+	int GetChaosMixType(LPOBJ lpObj);
 
 	void ChaosItemMix(LPOBJ lpObj);
 	bool GetChaosItemMixRates(int aIndex, DWORD& rate, DWORD& money);
