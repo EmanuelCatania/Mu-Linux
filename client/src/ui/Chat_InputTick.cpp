@@ -605,7 +605,6 @@ void __cdecl Chat_InputTick(void)
             // ── 7. Chat input — 9 channels ───────────────────────────────────
             // Channels 0-8 each have a 0x100-byte input buffer at MacroText+ch*0x100.
             // FUN_00494520 reads a key press into the buffer, returns ch != '\0' if Enter.
-            // Chat_Validate validates the text (profanity/length); '\0' = ok.
             // Rate-limit: ChatTime starts at 0x46, counts down each frame.
             //             If > 0x32, reject (too fast). Resets to 0x46 on send.
             // Duplicate check: compare buffer vs DAT_05826adc (last sent).
@@ -637,9 +636,6 @@ void __cdecl Chat_InputTick(void)
                              (*(short *)&((CHARACTER*)(uintptr_t)(Hero))->Helper.Type != 0x333)) ||
                              (*(char *)&((CHARACTER*)(uintptr_t)(Hero))->SafeZone != '\0'))
                             CheckChatText((char *)chBuf);   // IDA: sub_497C70
-
-                        if ((char)Chat_Validate((char *)chBuf) != '\0')
-                            continue;  // invalid text
 
                         // Rate-limit and duplicate check
                         if (ChatTime >= 0x33) {
@@ -734,7 +730,7 @@ void __cdecl Chat_InputTick(void)
                              (*(char *)&((CHARACTER*)(uintptr_t)(Hero))->SafeZone != '\0'))
                             CheckChatText(&DAT_07e108c8);   // IDA: sub_497C70
 
-                        if ((char)Chat_Validate(&DAT_07e108c8) == '\0') {
+                        {
                             if (ChatTime < 0x33) {
                                 bool bDupWhisper = (ChatTime > 0) &&
                                                    (strcmp(&DAT_07e108c8, &DAT_05826adc[0]) == 0);

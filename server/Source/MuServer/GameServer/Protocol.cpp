@@ -9,7 +9,6 @@
 #include "DevilSquare.h"
 #include "DSProtocol.h"
 #include "EffectManager.h"
-#include "Filter.h"
 #include "Fruit.h"
 #include "GoldenArcher.h"
 #include "GuardLink.h"
@@ -606,8 +605,6 @@ void CGChatRecv(PMSG_CHAT_RECV* lpMsg, int aIndex)
 
 	gLog.Output(LOG_CHAT, "[General][%s][%s] - (Message: %s)", lpObj->Account, lpObj->Name, lpMsg->message);
 
-	gFilter.CheckSyntax(lpMsg->message);
-
 	if (lpMsg->message[0] == '/')
 	{
 		if (gCommandManager.ManagementCore(&gObj[aIndex], lpMsg->message) == 0)
@@ -723,8 +720,6 @@ void CGChatWhisperRecv(PMSG_CHAT_WHISPER_RECV* lpMsg, int aIndex)
 	lpMsg->message[(sizeof(lpMsg->message) - 1)] = 0;
 
 	gLog.Output(LOG_CHAT, "[Whisper][%s][%s] - (Name: %s, Message: %s)", lpObj->Account, lpObj->Name, name, lpMsg->message);
-
-	gFilter.CheckSyntax(lpMsg->message);
 
 	GCChatWhisperSend(lpTarget->Index, lpObj->Name, lpMsg->message);
 }

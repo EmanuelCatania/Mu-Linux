@@ -8,7 +8,7 @@
 // UI_RenderNotices @ 0x0047fce0 — Chat_DrawMessages
 // UI_RenderChatLogOverlay @ 0x00480980 — UI_DrawPlayerList
 // UI_TickHoverBubbles @ 0x004821a0 — UI_TickTooltips
-// Chat_ValidateInputCommand @ 0x00513570 — Chat_ValidateCommand
+// Chat_ValidateInputCommand @ 0x00513570 — valida nombres de personaje y guild
 //
 // Chat message ring buffer: Notice, 6 slots × 0x108 bytes each
 //   Slot layout: [0x100] char name[], [0x104] flags byte, [0x108] next slot
@@ -442,135 +442,27 @@ void UI_TickHoverBubbles(void)
 
 
 // FUN_00513570 @ 0x00513570 (IDA)
-// Chat_ValidateInputCommand — Chat_ValidateCommand
-// Checks if the text in DAT_07db8710 is a known chat command or valid chat text.
-// Strips spaces, then looks up in two command tables (DAT_07d27610, DAT_07d73104).
-// Also rejects strings matching hard-coded blocked strings (webzen brand names).
-// Returns 1 (non-zero low byte) if the text should be blocked/consumed.
+// Chat_ValidateInputCommand — valida el nombre de InputText (personaje nuevo,
+// guild).  Devuelve 1 si no se acepta: lleva un espacio, un punto o un espacio
+// de doble byte, dice «Webzen», o contiene GlobalText[457]/[458].
+//
+// DESVIACION 0.97.50: el original además rechazaba cualquier nombre que
+// contuviera una palabra de FilterName.bmd o de Filter.bmd.  Las listas de
+// palabras se quitaron: cortaban palabras inocentes («computadora» por «puta»)
+// y se esquivaban cambiando una letra.
 // IDA: FUN_00513570
 char Chat_ValidateInputCommand(void)
 {
-  char cVar1;
-  uint uVar2;
-  int iVar3;
-  int iVar4;
-  char *pcVar5;
-  char local_100 [256];
-
-  uVar2 = 0xffffffff;
-  iVar3 = 0;
-  iVar4 = 0;
-  pcVar5 = (char *)InputText;
-  do {
-    if (uVar2 == 0) break;
-    uVar2 = uVar2 - 1;
-    cVar1 = *pcVar5;
-    pcVar5 = pcVar5 + 1;
-  } while (cVar1 != '\0');
-  if (0 < (int)(~uVar2 - 1)) {
-    do {
-      if (((char*)InputText)[iVar3] != ' ') {
-        local_100[iVar4] = ((char*)InputText)[iVar3];
-        iVar4 = iVar4 + 1;
-      }
-      uVar2 = 0xffffffff;
-      iVar3 = iVar3 + 1;
-      pcVar5 = (char *)InputText;
-      do {
-        if (uVar2 == 0) break;
-        uVar2 = uVar2 - 1;
-        cVar1 = *pcVar5;
-        pcVar5 = pcVar5 + 1;
-      } while (cVar1 != '\0');
-    } while (iVar3 < (int)(~uVar2 - 1));
+  char* const patterns[] = {
+    (char *)&DAT_00561740, (char *)&DAT_00561744, (char *)&DAT_00561748,
+    (char *)&DAT_0056174c, (char *)&DAT_00561750,
+    (char *)"Webzen", (char *)"WebZen", (char *)"webzen", (char *)"WEBZEN",
+    &DAT_07d4b4b0, &DAT_07d4b5dc
+  };
+  for (char* pattern : patterns) {
+    if ((char)FindTextA((char *)InputText, pattern, '\0') != '\0') return 1;
   }
-  local_100[iVar4] = '\0';
-  iVar3 = 0;
-  if (0 < DAT_07d78074) {
-    pcVar5 = DAT_07d27610;
-    do {
-      uVar2 = FindTextA(local_100,pcVar5,'\0');
-      if ((char)uVar2 != '\0') goto LAB_00513792;
-      iVar3 = iVar3 + 1;
-      pcVar5 = pcVar5 + 0x14;
-    } while (iVar3 < DAT_07d78074);
-  }
-  if ((char)(uintptr_t)InputText != '/') {
-    uVar2 = 0xffffffff;
-    iVar3 = 0;
-    iVar4 = 0;
-    pcVar5 = (char *)InputText;
-    do {
-      if (uVar2 == 0) break;
-      uVar2 = uVar2 - 1;
-      cVar1 = *pcVar5;
-      pcVar5 = pcVar5 + 1;
-    } while (cVar1 != '\0');
-    if (0 < (int)(~uVar2 - 1)) {
-      do {
-        if (((char*)InputText)[iVar3] != ' ') {
-          local_100[iVar4] = ((char*)InputText)[iVar3];
-          iVar4 = iVar4 + 1;
-        }
-        uVar2 = 0xffffffff;
-        iVar3 = iVar3 + 1;
-        pcVar5 = (char *)InputText;
-        do {
-          if (uVar2 == 0) break;
-          uVar2 = uVar2 - 1;
-          cVar1 = *pcVar5;
-          pcVar5 = pcVar5 + 1;
-        } while (cVar1 != '\0');
-      } while (iVar3 < (int)(~uVar2 - 1));
-    }
-    local_100[iVar4] = '\0';
-    iVar3 = 0;
-    if (0 < DAT_07d78070) {
-      pcVar5 = DAT_07d73104;
-      do {
-        uVar2 = FindTextA(local_100,pcVar5,'\0');
-        if ((char)uVar2 != '\0') goto LAB_00513792;
-        iVar3 = iVar3 + 1;
-        pcVar5 = pcVar5 + 0x14;
-      } while (iVar3 < DAT_07d78070);
-    }
-  }
-  uVar2 = FindTextA((char *)InputText,(char *)&DAT_00561740,'\0');
-  if ((char)uVar2 == '\0') {
-    uVar2 = FindTextA((char *)InputText,(char *)&DAT_00561744,'\0');
-    if ((char)uVar2 == '\0') {
-      uVar2 = FindTextA((char *)InputText,(char *)&DAT_00561748,'\0');
-      if ((char)uVar2 == '\0') {
-        uVar2 = FindTextA((char *)InputText,(char *)&DAT_0056174c,'\0');
-        if ((char)uVar2 == '\0') {
-          uVar2 = FindTextA((char *)InputText,(char *)&DAT_00561750,'\0');
-          if ((char)uVar2 == '\0') {
-            uVar2 = FindTextA((char *)InputText,"Webzen",'\0');
-            if ((char)uVar2 == '\0') {
-              uVar2 = FindTextA((char *)InputText,"WebZen",'\0');
-              if ((char)uVar2 == '\0') {
-                uVar2 = FindTextA((char *)InputText,"webzen",'\0');
-                if ((char)uVar2 == '\0') {
-                  uVar2 = FindTextA((char *)InputText,"WEBZEN",'\0');
-                  if ((char)uVar2 == '\0') {
-                    uVar2 = FindTextA((char *)InputText,&DAT_07d4b4b0,'\0');
-                    if ((char)uVar2 == '\0') {
-                      uVar2 = FindTextA((char *)InputText,&DAT_07d4b5dc,'\0');
-                      if ((char)uVar2 == '\0') {
-                        return uVar2;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-LAB_00513792:
-  return CONCAT31((uVar2 >> 8),1);
+  return 0;
 }
 
 void ChatListBox_TickPresentation();

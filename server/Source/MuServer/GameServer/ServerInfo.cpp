@@ -15,7 +15,6 @@
 #include "EffectManager.h"
 #include "EventSpawnMonster.h"
 #include "ExperienceTable.h"
-#include "Filter.h"
 #include "GameMaster.h"
 #include "Gate.h"
 #include "GoldenArcher.h"
@@ -542,8 +541,6 @@ void CServerInfo::ReadSkillInfo()
 void CServerInfo::ReadUtilInfo()
 {
 	gExperienceTable.Load(gPath.GetFullPath("Util\\ExperienceTable.txt"));
-
-	gFilter.Load(gPath.GetFullPath("Util\\Filter.txt"));
 
 	gGameMaster.Load(gPath.GetFullPath("Util\\GameMaster.txt"));
 

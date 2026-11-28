@@ -1525,22 +1525,11 @@ DWORD   DAT_00561750   = 0xADA1;    // "\xA1\xAD" (DBCS)
 // ── Chat.cpp missing globals ──────────────────────────────────────────────────
 char    DAT_07db8714    = 0;
 DWORD   DAT_07db8718    = 0;   // PIN data base for char-select second-password
-// Word-filter table (banned chat keywords), 1000 entries × 20 bytes = 20000 bytes.
-// Loaded at boot by OpenFilterFile("Data/Local/Filter.bmd") — 20000 bytes XOR'd
-// with BuxConvert_0 (3-byte key FC CF AB), preceded by a 4-byte ring checksum
-// (seed 0x7cfa00, magic 15997).  Empty first byte terminates the valid range.
-char    DAT_07d73104[20000] = {};
 // GlobalText[] — 1000 × 300 byte localized string table, loaded at boot from
 // Data/Local/Text.bmd by OpenTextData().  Each row holds one null-terminated
 // entry; row index matches the original binary's string IDs.
 char    GlobalText[GLOBALTEXT_ROWS][300] = {};   // ver nota en globals.h
 // DAT_07d4b4b0/5dc = GlobalText[457]/[458] — ahora macros en globals.h (name-filter).
-int     DAT_07d78074    = 0;         // command table A count (name-filter)
-int     DAT_07d78070    = 0;         // command table B count (word-filter)
-// Name-filter table (banned character names), 1000 entries × 20 bytes = 20000 bytes.
-// Loaded at boot by OpenNameFilterFile("Data/Local/FilterName.bmd") — seed 0x578200,
-// magic 11201, same BuxConvert_0 XOR cipher.
-char    DAT_07d27610[20000] = {};
 
 // ── GameGuard globals ─────────────────────────────────────────────────────────
 // Sin usos en el código compilado: los usaba el port de IDA de FUN_0053d890

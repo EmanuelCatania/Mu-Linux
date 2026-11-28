@@ -492,8 +492,7 @@ Al arrancar, cada archivo de esas carpetas pasa a responder por
 El resto de `Content/`:
 
 - `text/<idioma>/` (`spn`, `eng`, `por`, `kor`): `Text.bmd`, `Dialog.bmd` y
-  `NPCName.txt` de cada idioma, sin sufijo en el nombre. `text/filter/` tiene
-  los filtros de palabras del chat y de nombres.
+  `NPCName.txt` de cada idioma, sin sufijo en el nombre.
 - Las tablas van con su tema: `item/item.bmd`, `skill/skill.bmd`, `map/Gate.bmd`
   y `quest/quest.bmd`. Las tres primeras son además el respaldo de lo que manda
   el server en el catálogo.

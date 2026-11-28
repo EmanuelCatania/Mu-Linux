@@ -4,7 +4,6 @@
 #include "ChaosBox.h"
 #include "CommandManager.h"
 #include "CustomWing.h"
-#include "Filter.h"
 #include "FlyingDragons.h"
 #include "Fruit.h"
 #include "GoldenArcher.h"
@@ -1246,8 +1245,6 @@ void DGGlobalWhisperEchoRecv(SDHP_GLOBAL_WHISPER_ECHO_RECV* lpMsg)
 	}
 
 	lpMsg->message[(sizeof(lpMsg->message) - 1)] = ((strlen(lpMsg->message) > (sizeof(lpMsg->message) - 1)) ? 0 : lpMsg->message[(sizeof(lpMsg->message) - 1)]);
-
-	gFilter.CheckSyntax(lpMsg->message);
 
 	GCChatWhisperSend(lpMsg->index, lpMsg->SourceName, lpMsg->message);
 }

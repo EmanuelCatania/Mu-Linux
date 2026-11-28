@@ -65,8 +65,6 @@
 "Local/NPCName.txt" = "text/eng/NPCName.txt"
 "Local/NPCName(kor).txt" = "text/kor/NPCName.txt"
 # Filtro de palabras del chat y de nombres de personaje.
-"Local/Filter.bmd" = "text/filter/Filter.bmd"
-"Local/FilterName.bmd" = "text/filter/FilterName.bmd"
 # Tablas con su tema. item.bmd, skill.bmd y Gate.bmd son además el respaldo de
 # lo que manda el server en el catálogo (si lo manda, gana el catálogo).
 "Local/item.bmd" = "item/item.bmd"

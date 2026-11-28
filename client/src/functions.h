@@ -468,7 +468,6 @@ char  __cdecl Connection_Check(void *ctx, int p1, int p2);              // Conne
 // IDA sub_494520(texto, 1): valida/consume el buffer de texto; 0 = seguir.
 // Los dos únicos call sites (el tick de macros) pasan 2 args.
 DWORD __cdecl FUN_00494520(void *buf, char flag);
-char  __cdecl Chat_Validate(char *buf);                               // Chat_Validate — validate text buf; '\0'=ok
 void  __cdecl CheckChatText(char* text);                             // IDA: sub_497C70 (0x00497C70) gestos por texto del chat
 void  __cdecl SendRequestAction(BYTE actionType); // [C1][05][18][dir][tipo], inline en IDA
 char* __cdecl GetMapName(int iMap); // IDA: GetMapName (0x004EF120)
@@ -582,12 +581,6 @@ void  __cdecl Skill_LoadBMD(const char *path);                     // IDA: FUN_0
 void  __cdecl Gate_LoadTextData(const char *path);                 // IDA: FUN_0047A010
 void  __cdecl Gate_SaveBMD(const char *path);                      // IDA: FUN_0047A170
 void  __cdecl Gate_LoadBMD(const char *path);                      // IDA: FUN_0047A4D0
-void  __cdecl Filter_LoadTextFile(const char *path);                      // Filter_LoadData
-void  __cdecl Filter_SaveBMD(const char *path);                      // Filter_LoadBMD
-void  __cdecl OpenFilterFile(const char *path);                      // Filter_LoadBMD_Alt
-void  __cdecl FilterName_LoadData(const char *path);                      // FilterName_LoadData
-void  __cdecl FilterName_SaveBMD(const char *path);                      // FilterName_LoadBMD
-void  __cdecl OpenNameFilterFile(const char *path);                      // FilterName_LoadBMD_Alt
 void  __cdecl Dialog_LoadBMD(const char *path);                    // IDA: FUN_0047B020
 uint  __cdecl CSQuest_OpenQuestScript(BYTE* quest, const char *path); // IDA: 0x00401040
 void  __cdecl NPCName_LoadTextData(const char *path);              // IDA: FUN_0047D120

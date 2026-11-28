@@ -975,8 +975,6 @@ Content/audio/sound/effect/eCrow.wav
 Content/item/item.bmd
 Content/skill/skill.bmd
 Content/map/Gate.bmd
-Content/text/filter/Filter.bmd
-Content/text/filter/FilterName.bmd
 Content/text/spn/Dialog.bmd
 Content/quest/quest.bmd
 Content/audio/sound/interface/iTitle.wav

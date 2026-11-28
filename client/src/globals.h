@@ -1438,7 +1438,6 @@ extern DWORD   DAT_00561750;
 // ── Chat.cpp missing globals ──────────────────────────────────────────────────
 extern char    DAT_07db8714;         // input field buffer byte +2
 extern DWORD   DAT_07db8718;         // input field buffer dword +8 (char-select PIN data base)
-extern char    DAT_07d73104[20000];  // word-filter table (1000 × 20 bytes, Filter.bmd)
 
 // ── GlobalText[] localized string pool ────────────────────────────────────────
 // 1000 slots × 300 bytes, los carga al arranque OpenTextData() desde
@@ -1468,9 +1467,6 @@ int  __cdecl LoadTextData_Bin(const char *FileName);
 // los nombres de clase.
 #define DAT_07d4b4b0 (GlobalText[457][0])
 #define DAT_07d4b5dc (GlobalText[458][0])
-extern int     DAT_07d78074;         // command table A count (Chat_DrawEntry)
-extern int     DAT_07d78070;         // command table B count (Chat_DrawEntry)
-extern char    DAT_07d27610[20000];  // name-filter table (1000 × 20 bytes, FilterName.bmd)
 
 // ── Terrain map globals ───────────────────────────────────────────────────────
 // La celda original 0x083A0218 pertenece a g_ObjectBucketGrid (ver arriba).
