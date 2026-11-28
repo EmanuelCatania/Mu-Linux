@@ -92,6 +92,30 @@ static_assert(offsetof(PMSG_CHAOS_MIX_RATE_SEND, money) == 8, "C1:88 money");
 // +12, ChaosBox.cpp GetChaosMixType); un server anterior manda 12 bytes.
 const std::int32_t CHAOS_MIX_RATE_TYPE_OFFSET = 12;
 
+// Recetas agregadas del server (Data/ChaosMix/Recipes.toml, números 20 a 127):
+// la misma respuesta trae lo que el cliente no tiene en su Text.bmd.
+// ChaosBox.h::PMSG_CHAOS_MIX_RECIPE_SEND.
+const std::int32_t CHAOS_RECIPE_FIRST_ID = 20;
+const std::int32_t CHAOS_RECIPE_LAST_ID = 127;
+const std::int32_t CHAOS_RECIPE_TEXT_SIZE = 48;
+const std::int32_t CHAOS_RECIPE_HELP_LINES = 3;
+struct PMSG_CHAOS_MIX_RECIPE_SEND
+{
+    PBMSG_HEAD header;      // C1:88
+    std::uint32_t rate;
+    std::uint32_t money;
+    std::int32_t type;
+    std::uint8_t width;     // tamaño del item que sale
+    std::uint8_t height;
+    std::uint8_t lines;     // líneas de ayuda
+    std::uint8_t reserved;
+    char name[CHAOS_RECIPE_TEXT_SIZE];
+    char help[CHAOS_RECIPE_HELP_LINES][CHAOS_RECIPE_TEXT_SIZE];
+};
+static_assert(sizeof(PMSG_CHAOS_MIX_RECIPE_SEND) == 212, "C1:88 receta");
+static_assert(offsetof(PMSG_CHAOS_MIX_RECIPE_SEND, type) == CHAOS_MIX_RATE_TYPE_OFFSET, "C1:88 receta type");
+static_assert(offsetof(PMSG_CHAOS_MIX_RECIPE_SEND, name) == 20, "C1:88 receta name");
+
 // ── C1:8E ─ niveles de Devil Square ── DevilSquare.h:37 ───────────────────────
 // Net/Net_Events.cpp Recv_DevilSquareRequiredLevels.
 const std::int32_t MAX_DS_LEVEL = 4;     // DevilSquare.h:6

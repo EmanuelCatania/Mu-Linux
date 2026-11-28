@@ -46,6 +46,7 @@
 #include "Notice.h"
 #include "PacketManager.h"
 #include "ServerIdentity.h"
+#include "ChaosBox.h"
 #include "Path.h"
 #include "Quest.h"
 #include "QuestObjective.h"
@@ -157,6 +158,9 @@ void CServerInfo::ReloadAll()
 void CServerInfo::ReadChaosMixInfo()
 {
 	this->ReadChaosMixInfo("GameServerInfo", ".\\Data\\GameServerInfo - ChaosMix.dat");
+
+	// Recetas agregadas: Data/ChaosMix/Recipes.toml.
+	gChaosBox.LoadRecipes(gPath.GetFullPath(""));
 
 	LogAdd(LOG_BLUE, "[ServerInfo] ChaosMix loaded successfully");
 }

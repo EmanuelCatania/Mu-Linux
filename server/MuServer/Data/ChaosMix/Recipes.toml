@@ -1,0 +1,39 @@
+# Recetas del Chaos agregadas.
+#
+# Las nueve recetas del 0.97k (Chaos Item, Devil Square, +10, +11, Dinorant,
+# frutas, alas de 1.º y 2.º nivel, Blood Castle) siguen en el server; sus
+# porcentajes y costos están en GameServerInfo - ChaosMix.dat. Acá se agregan
+# recetas nuevas. Si el chaos box coincide con una del 0.97k, gana esa.
+#
+# id           número de la receta, de 20 a 127; no se repite
+# name         nombre que muestra el panel del Chaos: un texto, o
+#              { Eng = "...", Spn = "...", Por = "..." }; un idioma que falta
+#              usa el inglés. Hasta 47 bytes (una letra con acento ocupa 2).
+# help         hasta 3 líneas de ayuda debajo del panel, con las mismas
+#              reglas: ["...", "..."] o { Eng = [...], Spn = [...] }
+# rate         porcentaje de éxito, de 0 a 100
+# money        zen que cuesta mezclar
+# ingredients  lo que tiene que haber en el chaos box, ni más ni menos:
+#              item   [sección, índice] de Item.txt
+#              count  cuántos (sin la clave, 1)
+#              level  [mínimo, máximo] del nivel (+N); sin la clave, cualquiera
+# result       el item que sale: { item = [sección, índice], level = N }
+#
+# Si falla se pierden los ingredientes, como en las recetas del 0.97k. Se
+# revisa con `mu-data validate <Data>` y se recarga con la configuración del
+# Chaos, sin reiniciar el server.
+#
+# Ejemplo (sacale los # para usarlo): 10 Jewel of Bless y una Jewel of Chaos
+# dan una Jewel of Soul.
+#
+# [[recipe]]
+# id = 20
+# name = { Eng = "Jewel of Soul Mix", Spn = "Crear Jewel of Soul", Por = "Criar Jewel of Soul" }
+# help = { Eng = ["10 Jewel of Bless and 1 Jewel of Chaos"], Spn = ["10 Jewel of Bless y 1 Jewel of Chaos"], Por = ["10 Jewel of Bless e 1 Jewel of Chaos"] }
+# rate = 80
+# money = 1000000
+# ingredients = [
+#   { item = [14, 13], count = 10 },
+#   { item = [12, 15] },
+# ]
+# result = { item = [14, 14] }

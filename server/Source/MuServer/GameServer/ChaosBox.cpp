@@ -199,6 +199,19 @@ void CChaosBox::CGChaosMixRecv(PMSG_CHAOS_MIX_RECV* lpMsg, int aIndex)
 		gLog.Output(LOG_CHAOS_MIX, "[ChaosMix][%s][%s] - El cliente pidió la receta %d y el chaos box es la %d", lpObj->Account, lpObj->Name, lpMsg->type, type);
 	}
 
+	// Las mezclas no avisan cuando sus reglas rechazan el chaos box: sin esto
+	// quedaba puesto el ChaosLock y el cliente esperando la respuesta.
+	DWORD rate = 0;
+
+	DWORD money = 0;
+
+	if (type <= 0 || this->GetChaosMixRateAndMoney(aIndex, type, rate, money) == false)
+	{
+		this->GCChaosMixSend(lpObj->Index, 0, 0);
+
+		return;
+	}
+
 	switch (type)
 	{
 		case CHAOS_MIX_CHAOS_ITEM:
@@ -266,7 +279,16 @@ void CChaosBox::CGChaosMixRecv(PMSG_CHAOS_MIX_RECV* lpMsg, int aIndex)
 
 		default:
 		{
-			this->GCChaosMixSend(lpObj->Index, 0, 0);
+			const ChaosRecipeDef* recipe = this->FindRecipe(type);
+
+			if (recipe != nullptr)
+			{
+				this->RecipeMix(lpObj, *recipe);
+			}
+			else
+			{
+				this->GCChaosMixSend(lpObj->Index, 0, 0);
+			}
 
 			break;
 		}
@@ -297,6 +319,8 @@ void CChaosBox::GCChaosMixSend(int aIndex, BYTE result, CItem* lpItem)
 
 void CChaosBox::CGChaosMixRateRecv(PMSG_CHAOS_MIX_RATE_RECV* lpMsg, int aIndex)
 {
+	(void)lpMsg;   // el tipo que pide el cliente ya no decide nada
+
 	PMSG_CHAOS_MIX_RATE_SEND pMsg;
 
 	pMsg.header.set(0x88, sizeof(pMsg));
@@ -314,7 +338,197 @@ void CChaosBox::CGChaosMixRateRecv(PMSG_CHAOS_MIX_RATE_RECV* lpMsg, int aIndex)
 		this->GetChaosMixRateAndMoney(aIndex, pMsg.type, pMsg.rate, pMsg.money);
 	}
 
-	DataSend(aIndex, (BYTE*)&pMsg, pMsg.header.size);
+	const ChaosRecipeDef* recipe = this->FindRecipe(pMsg.type);
+
+	if (recipe == nullptr)
+	{
+		DataSend(aIndex, (BYTE*)&pMsg, pMsg.header.size);
+
+		return;
+	}
+
+	// Una receta agregada: el nombre, la ayuda y el tamaño del resultado, que
+	// el cliente no tiene.
+	PMSG_CHAOS_MIX_RECIPE_SEND pRecipe;
+
+	memset(&pRecipe, 0, sizeof(pRecipe));
+
+	pRecipe.header.set(0x88, sizeof(pRecipe));
+
+	pRecipe.rate = pMsg.rate;
+
+	pRecipe.money = pMsg.money;
+
+	pRecipe.type = pMsg.type;
+
+	ITEM_INFO info;
+
+	if (gItemManager.GetInfo(GET_ITEM(recipe->ResultSection, recipe->ResultIndex), &info))
+	{
+		pRecipe.width = (BYTE)info.Width;
+
+		pRecipe.height = (BYTE)info.Height;
+	}
+
+	const int lang = (gObj[aIndex].Lang >= 0 && gObj[aIndex].Lang < CHAOS_RECIPE_LANGUAGES) ? gObj[aIndex].Lang : 0;
+
+	strcpy_s(pRecipe.name, recipe->Name[lang].c_str());
+
+	for (size_t n = 0; n < recipe->Help[lang].size() && n < CHAOS_RECIPE_HELP_LINES; n++)
+	{
+		strcpy_s(pRecipe.help[n], recipe->Help[lang][n].c_str());
+
+		pRecipe.lines++;
+	}
+
+	DataSend(aIndex, (BYTE*)&pRecipe, pRecipe.header.size);
+}
+
+void CChaosBox::LoadRecipes(const char* dataDir)
+{
+	std::vector<ChaosRecipeDef> recipes;
+
+	std::string error;
+
+	if (!ChaosRecipes_Load(dataDir, recipes, error))
+	{
+		// Como las gates: en una recarga quedan las recetas de antes.
+		LogAdd(LOG_RED, "[ChaosMix] Recipes.toml no se cargó%s: %s", this->m_Recipes.empty() ? "" : " (quedan las recetas de antes)", error.c_str());
+
+		return;
+	}
+
+	for (auto it = recipes.begin(); it != recipes.end();)
+	{
+		ITEM_INFO info;
+
+		bool ok = gItemManager.GetInfo(GET_ITEM(it->ResultSection, it->ResultIndex), &info);
+
+		for (const ChaosRecipeIngredient& ing : it->Ingredients)
+		{
+			ok = ok && gItemManager.GetInfo(GET_ITEM(ing.Section, ing.Index), &info);
+		}
+
+		if (!ok)
+		{
+			LogAdd(LOG_RED, "[ChaosMix] %s: la receta %d usa un item que no está en Item.txt; no se carga", it->Source.c_str(), it->Id);
+
+			it = recipes.erase(it);
+		}
+		else
+		{
+			++it;
+		}
+	}
+
+	this->m_Recipes = recipes;
+
+	LogAdd(LOG_BLUE, "[ChaosMix] %d recetas agregadas", (int)this->m_Recipes.size());
+}
+
+const ChaosRecipeDef* CChaosBox::FindRecipe(int id) const
+{
+	for (const ChaosRecipeDef& recipe : this->m_Recipes)
+	{
+		if (recipe.Id == id)
+		{
+			return &recipe;
+		}
+	}
+
+	return nullptr;
+}
+
+// La primera receta cuyos ingredientes son exactamente los items del chaos
+// box: cada item cuenta para el primer ingrediente de la lista que le sirve.
+const ChaosRecipeDef* CChaosBox::MatchRecipe(LPOBJ lpObj) const
+{
+	for (const ChaosRecipeDef& recipe : this->m_Recipes)
+	{
+		std::vector<int> missing;
+
+		for (const ChaosRecipeIngredient& ing : recipe.Ingredients)
+		{
+			missing.push_back(ing.Count);
+		}
+
+		bool ok = true;
+
+		for (int n = 0; n < CHAOS_BOX_SIZE && ok; n++)
+		{
+			CItem& item = lpObj->ChaosBox[n];
+
+			if (item.IsItem() == false)
+			{
+				continue;
+			}
+
+			ok = false;
+
+			for (size_t i = 0; i < recipe.Ingredients.size(); i++)
+			{
+				const ChaosRecipeIngredient& ing = recipe.Ingredients[i];
+
+				if (missing[i] > 0 && item.m_Index == GET_ITEM(ing.Section, ing.Index) && item.m_Level >= ing.MinLevel && item.m_Level <= ing.MaxLevel)
+				{
+					missing[i]--;
+
+					ok = true;
+
+					break;
+				}
+			}
+		}
+
+		for (int count : missing)
+		{
+			ok = ok && count == 0;
+		}
+
+		if (ok)
+		{
+			return &recipe;
+		}
+	}
+
+	return nullptr;
+}
+
+void CChaosBox::RecipeMix(LPOBJ lpObj, const ChaosRecipeDef& recipe)
+{
+	lpObj->ChaosSuccessRate = recipe.Rate;
+
+	lpObj->ChaosMoney = recipe.Money;
+
+	if (lpObj->Money < ((DWORD)lpObj->ChaosMoney))
+	{
+		this->GCChaosMixSend(lpObj->Index, 2, 0);
+
+		return;
+	}
+
+	lpObj->Money -= lpObj->ChaosMoney;
+
+	GCMoneySend(lpObj->Index, lpObj->Money);
+
+	if ((GetLargeRand() % 100) < lpObj->ChaosSuccessRate)
+	{
+		// La DataServer crea el item y lo pone en el chaos box (DGCreateItemRecv
+		// con mapa 0xFF), que manda el resultado al cliente.
+		GDCreateItemSend(lpObj->Index, 0xFF, 0, 0, GET_ITEM(recipe.ResultSection, recipe.ResultIndex), (BYTE)recipe.ResultLevel, 0, 0, 0, 0, -1, 0);
+
+		gLog.Output(LOG_CHAOS_MIX, "[RecipeMix][Success][%s][%s] - (Recipe: %d, ChaosSuccessRate: %d, ChaosMoney: %d)", lpObj->Account, lpObj->Name, recipe.Id, lpObj->ChaosSuccessRate, lpObj->ChaosMoney);
+	}
+	else
+	{
+		this->ChaosBoxInit(lpObj);
+
+		this->GCChaosBoxSend(lpObj);
+
+		this->GCChaosMixSend(lpObj->Index, 0, 0);
+
+		gLog.Output(LOG_CHAOS_MIX, "[RecipeMix][Failure][%s][%s] - (Recipe: %d, ChaosSuccessRate: %d, ChaosMoney: %d)", lpObj->Account, lpObj->Name, recipe.Id, lpObj->ChaosSuccessRate, lpObj->ChaosMoney);
+	}
 }
 
 // Reconoce la receta por lo que hay en el chaos box, con las reglas del
@@ -495,7 +709,10 @@ int CChaosBox::GetChaosMixType(LPOBJ lpObj)
 		return (chaosWeapons > 0) ? CHAOS_MIX_WING1 : CHAOS_MIX_CHAOS_ITEM;
 	}
 
-	return 0;
+	// Ninguna del 0.97k: las agregadas de Recipes.toml.
+	const ChaosRecipeDef* recipe = this->MatchRecipe(lpObj);
+
+	return (recipe != nullptr) ? recipe->Id : 0;
 }
 
 bool CChaosBox::GetChaosMixRateAndMoney(int aIndex, int type, DWORD& rate, DWORD& money)
@@ -575,7 +792,19 @@ bool CChaosBox::GetChaosMixRateAndMoney(int aIndex, int type, DWORD& rate, DWORD
 
 		default:
 		{
-			return false;
+			// Una receta agregada, si el chaos box todavía es esa receta.
+			const ChaosRecipeDef* recipe = this->FindRecipe(type);
+
+			if (recipe == nullptr || this->MatchRecipe(&gObj[aIndex]) != recipe)
+			{
+				return false;
+			}
+
+			rate = recipe->Rate;
+
+			money = recipe->Money;
+
+			break;
 		}
 	}
 

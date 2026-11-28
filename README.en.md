@@ -146,8 +146,6 @@ The database does not change.
    - `Data/ClientContent/`: only if you want to hand out client `.toml` files
      from the server. See `Data/ClientContent/LEEME.md`.
    - `Data/Text/*/Client.txt`: new client texts.
-   - `Data/Text/*/GlobalText.txt` and `Data/Text/Reference/`: translations of the
-     original interface and the original texts the editor shows.
    - `Data/Skill/Skill.txt`: elf summons 37 to 40.
 3. **Client.** Build it from `client/` with your address and options, as usual
    (see the [client README](client/README.en.md)). The new client no longer

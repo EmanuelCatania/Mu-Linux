@@ -58,7 +58,7 @@ void CChaosMixRates::Update(int type, const ITEM* items)
     gNetwork.SendC1((const BYTE*)&packet, sizeof(packet));
 }
 
-void CChaosMixRates::Receive(const Proto::PMSG_CHAOS_MIX_RATE_SEND& packet, bool hasType, int type)
+void CChaosMixRates::Receive(const Proto::PMSG_CHAOS_MIX_RATE_SEND& packet, bool hasType, int type, const Recipe* recipe)
 {
     if (m_State != State::Waiting) return;
     m_State = State::Idle;
@@ -75,7 +75,15 @@ void CChaosMixRates::Receive(const Proto::PMSG_CHAOS_MIX_RATE_SEND& packet, bool
     m_Money = (int)packet.money;
     m_HasServerType = hasType;
     m_ServerType = hasType ? type : 0;
+    m_HasRecipe = recipe != nullptr && hasType;
+    m_Recipe = m_HasRecipe ? *recipe : Recipe{};
     m_State = State::Ready;
+}
+
+const CChaosMixRates::Recipe* CChaosMixRates::GetRecipe() const
+{
+    if (!m_HasRecipe || m_State != State::Ready || !UIState::CanQueryChaosRate()) return nullptr;
+    return (int)MixType == m_ServerType ? &m_Recipe : nullptr;
 }
 
 int CChaosMixRates::ResolveType(int localType) const

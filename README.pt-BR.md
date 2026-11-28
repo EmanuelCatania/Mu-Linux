@@ -146,8 +146,6 @@ O banco de dados não muda.
    - `Data/ClientContent/`: só se quiser distribuir `.toml` do cliente a partir
      do servidor. Veja `Data/ClientContent/LEEME.md`.
    - `Data/Text/*/Client.txt`: textos novos do cliente.
-   - `Data/Text/*/GlobalText.txt` e `Data/Text/Reference/`: traduções da
-     interface original e os textos originais que o editor mostra.
    - `Data/Skill/Skill.txt`: as invocações 37 a 40 da elfa.
 3. **Cliente.** Compile-o a partir de `client/` com seu endereço e suas opções,
    como sempre (veja o [README do cliente](client/README.pt-BR.md)). O cliente

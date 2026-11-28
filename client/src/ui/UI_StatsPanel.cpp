@@ -2,6 +2,7 @@
 // UI_StatsPanel.cpp
 // RenderErrorMessage @ 0x0051af50 — UI_StatsPanel_Render
 #include "stdafx.h"
+#include "game/item/ChaosMixRates.h"
 #include "game/entity/EntityName.h"
 #include "render/Gfx.h"
 #include "platform/Text.h"
@@ -888,6 +889,8 @@ LAB_0051d2dd:
     }
     ptVar17 = &local_d0;
     pCVar6 = GlobalText[iVar3];
+    // DESVIACION 0.97.50: una receta agregada del server trae su nombre.
+    if (const CChaosMixRates::Recipe* recipe = gChaosMixRates.GetRecipe()) pCVar6 = recipe->Name.c_str();
     iVar3 = Platform::TextLength(pCVar6);
     gFont.MeasureText(gFont.GetTextDC(),pCVar6,iVar3,ptVar17);
     UI_RenderText(0x140 - ((uint)(local_d0.cx * 0x280) / gWindow.GetWidth() >> 1),(unsigned int)(uintptr_t)(pCVar2 + 0x19),pCVar6,
