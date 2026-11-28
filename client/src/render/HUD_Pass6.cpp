@@ -1550,6 +1550,22 @@ static void ChaosMixFormatZen(char* out, size_t outSize, int value)
     else Platform::TextFormatTruncated(out, outSize, Platform::TruncateText, "%d,%03d,%03d,%03d", value / 1000000000, (value / 1000000) % 1000, (value / 1000) % 1000, value % 1000);
 }
 
+// Impuesto por sacar zen del baúl que mandó el server; -1 = todavía no.
+static int s_WarehouseTax = -1;
+
+void WarehouseTax_Receive(const BYTE* msg, int size)
+{
+    if (size < 8) return;   // C1:F3:E3 + DWORD
+    DWORD tax;
+    memcpy(&tax, msg + 4, sizeof(tax));
+    s_WarehouseTax = tax > 0x7FFFFFFFu ? -1 : (int)tax;
+}
+
+void WarehouseTax_Reset()
+{
+    s_WarehouseTax = -1;
+}
+
 extern "C" void __cdecl RenderChaosMix(void)
 {
     if (!ChaosMixOpened) return;
@@ -1755,6 +1771,9 @@ extern "C" void __cdecl RenderWarehouse(void)
     if (tax < 1)            tax = 1;
     else if (tax >= 1000)   tax = 100 * (tax / 100);
     else if (tax >= 100)    tax =  10 * (tax /  10);
+    // DESVIACION 0.97.50: el que cobra el server (C1:F3:E3), si ya lo mandó;
+    // con un server anterior queda la cuenta del 0.97k.
+    if (s_WarehouseTax >= 0) tax = s_WarehouseTax;
 
     CHAR TaxStr[64];
     if      (tax <  1000)       Platform::TextFormat(TaxStr, "%d", tax % 1000);

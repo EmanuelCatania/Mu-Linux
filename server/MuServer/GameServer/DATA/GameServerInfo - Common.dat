@@ -228,6 +228,17 @@ ShopItemBlockSellOnMaxMoney=1
 ShopItemBlockExc=0
 
 ;==================================================
+; Warehouse Tax Settings
+;==================================================
+; Zen charged to take zen out of the warehouse:
+; tax = Level * Level * WarehouseTaxRate / 1000
+; (40 = the 0.97k tax; the client shows what the server charges)
+WarehouseTaxRate=40
+
+; Extra zen per character level when the warehouse is locked
+WarehouseLockTax=2
+
+;==================================================
 ; Level Up Settings
 ;==================================================
 ; Maximum Character Level (MAX: 1000)

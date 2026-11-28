@@ -4,6 +4,7 @@
 #include "GameMain.h"
 #include "NpcTalk.h"
 #include "PacketTrace.h"
+#include "ServerInfo.h"
 #include "Shop.h"
 #include "Util.h"
 
@@ -21,11 +22,13 @@ CWarehouse::~CWarehouse()
 
 int CWarehouse::GetWarehouseTaxMoney(int level, int lock)
 {
-	int tax = (int)(((level * level) * 0.1) * 0.4);
+	// GameServerInfo - Common.dat; con 40 y 2 es la cuenta del 0.97k
+	// ((level * level) * 0.1 * 0.4, más 2 por nivel con el candado).
+	int tax = (int)(((long long)level * level * gServerInfo.m_WarehouseTaxRate) / 1000);
 
 	if (lock != 0)
 	{
-		tax += (level * 2);
+		tax += (level * gServerInfo.m_WarehouseLockTax);
 	}
 
 	if (tax <= 0)
@@ -331,6 +334,9 @@ void CWarehouse::GCWarehouseMoneySend(int aIndex, BYTE result, int InventoryMone
 	pMsg.InventoryMoney = InventoryMoney;
 
 	DataSend(aIndex, (BYTE*)&pMsg, pMsg.header.size);
+
+	// El impuesto depende del nivel: va cada vez que cambia el zen del baúl.
+	this->GCWarehouseTaxSend(aIndex);
 }
 
 void CWarehouse::GCWarehouseStateSend(int aIndex, BYTE state)
@@ -340,6 +346,25 @@ void CWarehouse::GCWarehouseStateSend(int aIndex, BYTE state)
 	pMsg.header.set(0x83, sizeof(pMsg));
 
 	pMsg.state = state;
+
+	DataSend(aIndex, (BYTE*)&pMsg, pMsg.header.size);
+
+	// Con el candado puesto el impuesto sube.
+	this->GCWarehouseTaxSend(aIndex);
+}
+
+void CWarehouse::GCWarehouseTaxSend(int aIndex)
+{
+	if (OBJECT_RANGE(aIndex) == 0)
+	{
+		return;
+	}
+
+	PMSG_WAREHOUSE_TAX_SEND pMsg;
+
+	pMsg.header.set(0xF3, 0xE3, sizeof(pMsg));
+
+	pMsg.tax = (DWORD)this->GetWarehouseTaxMoney(gObj[aIndex].Level, gObj[aIndex].WarehousePW);
 
 	DataSend(aIndex, (BYTE*)&pMsg, pMsg.header.size);
 }
