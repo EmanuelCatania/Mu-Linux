@@ -146,6 +146,8 @@ O banco de dados não muda.
    - `Data/ClientContent/`: só se quiser distribuir `.toml` do cliente a partir
      do servidor. Veja `Data/ClientContent/LEEME.md`.
    - `Data/Text/*/Client.txt`: textos novos do cliente.
+   - `Data/Text/*/GlobalText.txt` e `Data/Text/Reference/`: traduções da
+     interface original e os textos originais que o editor mostra.
    - `Data/Skill/Skill.txt`: as invocações 37 a 40 da elfa.
 3. **Cliente.** Compile-o a partir de `client/` com seu endereço e suas opções,
    como sempre (veja o [README do cliente](client/README.pt-BR.md)). O cliente
@@ -299,15 +301,20 @@ traduções desse idioma junto com o catálogo de conteúdo. Ficam em
 | `Skill.txt` | nomes de skills | índice de `Skill/Skill.txt` |
 | `Tooltip.txt` | linhas do tooltip dos itens custom | item e número da linha do JSON de `Custom/Items` |
 | `Client.txt` | textos próprios do cliente (opções, painel de eventos, barra de buffs, título da janela) | o número de cada texto; o comentário de cima diz qual é |
+| `GlobalText.txt` | textos da interface original (os do `Text.bmd` do cliente: janelas, NPCs, Chaos, avisos) | a linha do `Text.bmd`; as originais estão em `Data/Text/Reference/<idioma>/GlobalText.txt` |
 
 O que não estiver traduzido o cliente resolve com seus próprios arquivos, então
 um arquivo vazio não quebra nada. Regras, que o servidor e o editor verificam:
 
 - UTF-8 sem BOM, uma linha por texto, sem aspas nem quebras de linha dentro.
-- Até 63 bytes por nome de monstro e 59 por linha de tooltip. Os nomes de itens
-  e skills e os textos do `Client.txt` não têm limite.
+- Até 63 bytes por nome de monstro, 59 por linha de tooltip e 299 por linha do
+  `GlobalText.txt`. Os nomes de itens e skills e os textos do `Client.txt` não
+  têm limite.
 - No `Client.txt`, os `%d`/`%s`/`%u` de cada linha precisam ser os mesmos do
-  inglês e na mesma ordem: senão o cliente descarta a linha.
+  inglês e na mesma ordem: senão o cliente descarta a linha. No
+  `GlobalText.txt`, os da linha original do mesmo idioma.
+- Os textos de antes de conectar (login, seleção de servidor) saem sempre do
+  `Text.bmd` do cliente: o servidor só os manda ao entrar.
 
 Dá para editar à mão ou pelo **editor de traduções** do painel web, que mostra
 o nome atual ao lado da tradução e recarrega o servidor ao salvar.

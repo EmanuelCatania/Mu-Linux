@@ -901,6 +901,7 @@ const std::uint8_t CATALOG_TEXT_MONSTER = 2;
 const std::uint8_t CATALOG_TEXT_SKILL = 3;
 const std::uint8_t CATALOG_TEXT_CLIENT = 4;   // textos propios del cliente (ClientTextId)
 const std::uint8_t CATALOG_TEXT_TOOLTIP = 5;  // línea de tooltip de un item: Index = item, Reserved = línea (0 a 5)
+const std::uint8_t CATALOG_TEXT_GLOBAL = 6;   // fila de GlobalText (Text.bmd): Index = fila
 // Texto partido en varios registros seguidos: cada uno lleva 64 bytes y el que
 // tiene un 0 adentro lo cierra.  Server: ContentCatalog.h.
 const std::uint8_t CATALOG_TEXT_CONTINUED = 0x80;

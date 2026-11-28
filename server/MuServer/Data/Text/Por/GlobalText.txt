@@ -1,0 +1,6 @@
+//Textos da interface traduzidos para o português (0.97.50). Substituem a linha do
+//Text.bmd do cliente com esse número nos clientes em português; o que não estiver
+//aqui sai do Text.bmd. As linhas originais estão em Data/Text/Reference/Por/.
+//UTF-8 sem BOM. Até 299 bytes por texto, com os mesmos %d/%s do original.
+//Linha	Texto
+end

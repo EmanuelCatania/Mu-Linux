@@ -111,10 +111,16 @@ void __cdecl OpenTextData(void)
         DbgLogPublic("OpenTextData: plain-text branch requested but not active");
     }
 
-    // Options-panel On/Off labels — original formats them at render time via
-    //   sprintf(buf, "%s  On"/"%s  Off", GlobalText[386/387]).
-    // Our buffers s__s_On_0056184c / s__s_Off_00561854 etc are 32 bytes each,
-    // so pre-compose once to keep the render code path unchanged.
+    ComposeGlobalTextLabels();
+}
+
+// Options-panel On/Off labels — original formats them at render time via
+//   sprintf(buf, "%s  On"/"%s  Off", GlobalText[386/387]).
+// Our buffers s__s_On_0056184c / s__s_Off_00561854 etc are 32 bytes each,
+// so pre-compose once to keep the render code path unchanged.  Se vuelven a
+// armar cuando el server reemplaza filas de GlobalText (catálogo F3:F0).
+void ComposeGlobalTextLabels(void)
+{
     if (GlobalText[386][0]) {
         Platform::TextFormat(s__s_On_0056184c,  "%s  On",  GlobalText[386]);  // Auto-attack
         Platform::TextFormat(s__s_Off_00561854, "%s  Off", GlobalText[386]);

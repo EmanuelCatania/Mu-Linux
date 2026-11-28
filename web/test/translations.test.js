@@ -201,3 +201,30 @@ test('el Tooltip.txt del repo se lee sin errores', () => {
     for (const entry of parsed.entries) assert.equal(validateName(entry.name, { maxBytes: 59 }).error, undefined, lang);
   }
 });
+
+test('GlobalText.txt: filas del Text.bmd, hasta 299 bytes y con los %d/%s del original', () => {
+  assert.equal(pathFor('Spn', 'globaltext'), 'Data/Text/Spn/GlobalText.txt');
+  assert.equal(maxBytesFor('globaltext'), 299);
+  const parsed = parseTranslations('//Fila\tTexto\r\n584\t"Éxito: %d%%"\r\nend\r\n', 'globaltext');
+  assert.equal(parsed.errors.length, 0);
+  assert.deepEqual(parsed.entries.map((e) => e.key), [[584]]);
+  const reference = { 584: 'Success rate: %d%%', 585: 'Required zen : %s' };
+  const referenceFor = (key) => reference[key[0]];
+  assert.equal(applyEdits(parsed, [{ key: [585], name: 'Zen: %s' }], 'globaltext', { referenceFor }).errors, undefined);
+  assert.ok(applyEdits(parsed, [{ key: [585], name: 'Zen: %d' }], 'globaltext', { referenceFor }).errors);
+  assert.ok(applyEdits(parsed, [{ key: [585], name: 'a'.repeat(300) }], 'globaltext', { referenceFor }).errors);
+  // GlobalText del cliente tiene 4000 filas.
+  assert.ok(applyEdits(parsed, [{ key: [4000], name: 'x' }], 'globaltext').errors);
+  assert.equal(applyEdits(parsed, [{ key: [3999], name: 'x' }], 'globaltext').errors, undefined);
+});
+
+test('la referencia de GlobalText (generada del Text.bmd) se lee entera', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  for (const lang of ['Eng', 'Spn', 'Por']) {
+    const content = fs.readFileSync(path.join(__dirname, '..', '..', 'server', 'MuServer', 'Data', 'Text', 'Reference', lang, 'GlobalText.txt'), 'utf8');
+    const reference = parseReference(content, 'globaltext');
+    assert.ok(reference.length > 800, lang);
+    assert.ok(reference.some((e) => e.key[0] === 584 && /%d/.test(e.name)), lang);
+  }
+});

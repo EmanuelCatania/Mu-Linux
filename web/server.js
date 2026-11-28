@@ -2828,7 +2828,10 @@ const TEXT_REFERENCE_FILES = {
   items: 'Data/Item/Item.txt',
   monsters: 'Data/Monster/Monster.txt',
   skills: 'Data/Skill/Skill.txt',
-  client: 'Data/Text/Eng/Client.txt'
+  client: 'Data/Text/Eng/Client.txt',
+  // El texto original de cada fila del Text.bmd, por idioma
+  // (server/tools/gen_globaltext_reference.py).  El server no lo lee.
+  globaltext: (lang) => `Data/Text/Reference/${lang}/GlobalText.txt`
 };
 
 async function readTextBundle(lang, table) {
@@ -2841,12 +2844,23 @@ async function readTextBundle(lang, table) {
   }
   return {
     parsed: translations.parseTranslations(current.content, table),
-    reference: table === 'tooltips' ? await readTooltipReference() : await readFileReference(table)
+    reference: table === 'tooltips' ? await readTooltipReference() : await readFileReference(table, lang)
   };
 }
 
-async function readFileReference(table) {
-  const reference = await editorRequest('GET', `/api/file?path=${encodeURIComponent(TEXT_REFERENCE_FILES[table])}`);
+async function readFileReference(table, lang) {
+  const file = TEXT_REFERENCE_FILES[table];
+  const path = typeof file === 'function' ? file(lang) : file;
+  let reference;
+  try {
+    reference = await editorRequest('GET', `/api/file?path=${encodeURIComponent(path)}`);
+  } catch (err) {
+    // La referencia de GlobalText es un archivo nuevo: en una instalación que ya
+    // existe no está hasta copiarlo al volumen.  Sin ella se editan las filas
+    // que ya tienen traducción.
+    if (table === 'globaltext' && /ENOENT/.test(String(err.message))) return [];
+    throw err;
+  }
   return translations.parseReference(reference.content, table);
 }
 
@@ -2965,9 +2979,11 @@ app.post('/admin/server-editor/api/texts', requireAdmin, requireAdminPasswordCha
   try {
     const { parsed, reference } = await readTextBundle(lang, table);
     // En Client.txt los %d/%s tienen que ser los del inglés. El inglés mismo no
-    // tiene contra qué compararse acá: su referencia es el propio archivo.
+    // tiene contra qué compararse acá: su referencia es el propio archivo.  En
+    // GlobalText.txt, los de la fila original del Text.bmd de ese idioma.
     const byKey = new Map(reference.map((entry) => [entry.key.join('	'), entry.name]));
-    const referenceFor = table === 'client' && lang !== 'Eng' ? (key) => byKey.get(key.join('	')) : undefined;
+    const checkFormat = (table === 'client' && lang !== 'Eng') || table === 'globaltext';
+    const referenceFor = checkFormat ? (key) => byKey.get(key.join('	')) : undefined;
     const result = translations.applyEdits(parsed, edits, table, { referenceFor });
     if (result.errors) {
       return res.status(400).json({ error: 'Hay textos inválidos', errors: result.errors });

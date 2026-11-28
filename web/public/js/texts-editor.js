@@ -51,6 +51,9 @@
     if (state.table === 'client' && state.lang !== 'Eng' && !sameFormat(value, row.reference)) {
       return t('Los %d/%s del texto no coinciden con los del inglés');
     }
+    if (state.table === 'globaltext' && row.reference && !sameFormat(value, row.reference)) {
+      return t('Los %d/%s del texto no coinciden con los del original');
+    }
     return '';
   }
 
@@ -86,6 +89,7 @@
             <option value="skills">Skills</option>
             <option value="client">Textos del cliente</option>
             <option value="tooltips">Tooltips de items custom</option>
+            <option value="globaltext">Textos de la interfaz (Text.bmd)</option>
           </select>
         </div>
         <div class="spawn-toolbar-group">
@@ -168,6 +172,8 @@
     const hint = root.querySelector('#texts-hint');
     hint.textContent = state.table === 'client'
       ? t('Los %d, %s y similares tienen que ser los mismos que en inglés. Si no, el cliente descarta el texto.')
+      : state.table === 'globaltext'
+        ? t('Reemplaza el texto de esa fila del Text.bmd en los clientes de este idioma. Los %d, %s y similares tienen que ser los mismos que en el original. Máximo {max} bytes.', { max: state.maxBytes })
       : state.maxBytes > 0
         ? t('Dejá vacío para usar el nombre que trae el cliente. Máximo {max} bytes (un acento o una letra no latina ocupan más de uno).', { max: state.maxBytes })
         : t('Dejá vacío para usar el nombre que trae el cliente.');
