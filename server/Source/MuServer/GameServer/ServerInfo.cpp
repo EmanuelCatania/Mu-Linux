@@ -159,7 +159,8 @@ void CServerInfo::ReadChaosMixInfo()
 {
 	this->ReadChaosMixInfo("GameServerInfo", ".\\Data\\GameServerInfo - ChaosMix.dat");
 
-	// Recetas agregadas: Data/ChaosMix/Recipes.toml.
+	// Recetas agregadas: Data/ChaosMix/Recipes.toml.  Al arrancar todavía no
+	// está Item.txt: ReadItemInfo las vuelve a cargar y revisa sus items.
 	gChaosBox.LoadRecipes(gPath.GetFullPath(""));
 
 	LogAdd(LOG_BLUE, "[ServerInfo] ChaosMix loaded successfully");
@@ -370,6 +371,9 @@ void CServerInfo::ReadItemInfo()
 
 		gCustomPet.Load(gPath.GetFullPath("Custom\\Pets\\"));
 	}
+
+	// Las recetas del Chaos se revisan contra los items que acaban de cargarse.
+	gChaosBox.LoadRecipes(gPath.GetFullPath(""));
 
 	// El apilado y los precios viajan en el catálogo (F3:F8 y F3:F9).
 	gContentCatalog.Invalidate();

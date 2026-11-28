@@ -398,7 +398,11 @@ void CChaosBox::LoadRecipes(const char* dataDir)
 		return;
 	}
 
-	for (auto it = recipes.begin(); it != recipes.end();)
+	// Sin Item.txt cargado (al arrancar, antes de ReadItemInfo) no hay contra
+	// qué revisar los items: se revisan en la carga siguiente.
+	const bool checkItems = !gItemManager.GetInfoMap().empty();
+
+	for (auto it = recipes.begin(); it != recipes.end() && checkItems;)
 	{
 		ITEM_INFO info;
 
@@ -423,7 +427,10 @@ void CChaosBox::LoadRecipes(const char* dataDir)
 
 	this->m_Recipes = recipes;
 
-	LogAdd(LOG_BLUE, "[ChaosMix] %d recetas agregadas", (int)this->m_Recipes.size());
+	if (checkItems)
+	{
+		LogAdd(LOG_BLUE, "[ChaosMix] %d recetas agregadas", (int)this->m_Recipes.size());
+	}
 }
 
 const ChaosRecipeDef* CChaosBox::FindRecipe(int id) const
