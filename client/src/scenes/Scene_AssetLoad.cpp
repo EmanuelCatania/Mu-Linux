@@ -26,28 +26,15 @@ void __cdecl Scene_LoadGameAssets(void) {
         Skill_SaveBMD("Data/Local/Skill.bmd");
         Gate_LoadTextData("Data2/Gate.txt");
         Gate_SaveBMD("Data/Gate.bmd");
-        crt_sprintf(local_64, "Data2/Local/Filter_%s.txt", (char*)DAT_0055a7a4);
-        Filter_LoadTextFile(local_64);
-        Filter_SaveBMD("Data/Local/Filter.bmd");
-        crt_sprintf(local_64, "Data2/Local/FilterName_%s.txt", (char*)DAT_0055a7a4);
-        FilterName_LoadData(local_64);
-        FilterName_SaveBMD("Data/Local/FilterName.bmd");
-        // OJO: copy-paste sin corregir — esto carga Dialog_%s.txt con el loader
-        // de FilterName y lo guarda encima de FilterName.bmd, o sea pisa el
-        // archivo anterior y nunca produce Dialog.bmd.  Ademas IDA usa
-        // "Data2\\Local\\Dialog(%s).txt" (parentesis, no guion bajo).  No se
-        // corrige porque no existen Dialog_LoadData/Dialog_SaveBMD y toda esta
-        // rama es codigo muerto: DAT_0055a7c4 ya vale 1 (igual que en el
-        // binario), asi que el convertidor Data2 -> .bmd no corre nunca.
-        crt_sprintf(local_64, "Data2/Local/Dialog_%s.txt", (char*)DAT_0055a7a4);
-        FilterName_LoadData(local_64);
-        FilterName_SaveBMD("Data/Local/FilterName.bmd");
+        // DESVIACION 0.97.50: sin los filtros de palabras (Filter_%s.txt y
+        // FilterName_%s.txt).  Rama muerta: DAT_0055a7c4 vale 1, como en el
+        // binario, así que el convertidor Data2 -> .bmd no corre nunca.
     } else {
         Item_LoadBMD("Data/Local/Item.bmd");
         Skill_LoadBMD("Data/Local/Skill.bmd");
         Gate_LoadBMD("Data/Gate.bmd");
-        OpenFilterFile("Data/Local/Filter.bmd");
-        OpenNameFilterFile("Data/Local/FilterName.bmd");
+        // DESVIACION 0.97.50: Filter.bmd y FilterName.bmd (las listas de
+        // palabras del chat y de los nombres) ya no se cargan.
         // IDA abre "Data\\Local\\Dialog.bmd" (string en 0x560B4C), igual que
         // Text.bmd.  El comentario anterior decia que solo existian las
         // variantes Dialog_{Eng,Por,Spn}.bmd y no es cierto: Dialog.bmd esta en
@@ -60,14 +47,6 @@ void __cdecl Scene_LoadGameAssets(void) {
     }
     crt_sprintf(local_64, "Data/Local/NPCName.txt");   // cliente: archivo sin sufijo de locale
     NPCName_LoadTextData(local_64);
-    // DESVIACION (Fase 4, texto Unicode): las palabras de los filtros de chat y
-    // de nombres (Filter.bmd / FilterName.bmd, 1000 x 20 bytes) a UTF-8;
-    // lo que ya es UTF-8 se deja y el resto se
-    // toma como Windows-1252 (NormalizeTextFileInPlace).
-    for (int i = 0; i < 1000; ++i) {
-        TextEngine::NormalizeTextFileInPlace(DAT_07d73104 + i * 0x14, 0x14);
-        TextEngine::NormalizeTextFileInPlace(DAT_07d27610 + i * 0x14, 0x14);
-    }
     // Sound preloads (tail of OpenBasicData @ 0x00510F65-0x00510FC5).
     // IDs y filenames verificados contra IDA Hex-Rays 00510320_OpenBasicData.c
     // y los binary patches del companion project (Mu-linux-97K/Source/Client/

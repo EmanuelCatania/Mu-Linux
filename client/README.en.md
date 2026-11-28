@@ -490,8 +490,7 @@ alias has to be written by hand.
 The rest of `Content/`:
 
 - `text/<language>/` (`spn`, `eng`, `por`, `kor`): `Text.bmd`, `Dialog.bmd` and
-  `NPCName.txt` for each language, without a suffix in the name. `text/filter/`
-  holds the chat and character-name word filters.
+  `NPCName.txt` for each language, without a suffix in the name.
 - Tables live with their topic: `item/item.bmd`, `skill/skill.bmd`,
   `map/Gate.bmd` and `quest/quest.bmd`. The first three are also the fallback
   for what the server sends in the catalog.

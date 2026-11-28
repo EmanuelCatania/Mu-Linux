@@ -44,29 +44,6 @@ char __cdecl Connection_Check(void *ctx, int p1, int p2) {
 // STUB: SEH + unaff_ESI pattern prevent safe implementation.
 DWORD __cdecl FUN_00494520(void*, char) { return 0; } // STUB: sub_494520 (SEH+RC4, anti-tamper)
 
-// Chat_Validate @ 0x00513440 — Chat_Validate(buf)
-// Returns 1 if buf (after stripping spaces) matches any word in the
-// banned-keyword table at DAT_07d73104 (stride 0x14, count DAT_07d78070).
-// Returns 0 if buf starts with '/' or no match found.
-char __cdecl Chat_Validate(char *param_1) {
-    if (*param_1 == '/') return 0;
-    // strip spaces into local buf
-    int len = (int)strlen(param_1);
-    char local_100[256];
-    int out = 0;
-    for (int i = 0; i < len; i++) {
-        if (param_1[i] != ' ') local_100[out++] = param_1[i];
-    }
-    local_100[out] = '\0';
-    // search banned word table
-    int count = (int)DAT_07d78070;
-    char *entry = DAT_07d73104;
-    for (int i = 0; i < count; i++) {
-        if (FindTextA(local_100, entry, '\0')) return 1;
-        entry += 0x14;
-    }
-    return 0;
-}
 // 0x00497C70 no es un key schedule: es CheckChatText (gestos por texto del
 // chat). Portado en src/ui/Chat_Gestures.cpp.
 // SecondPassword_Shuffle @ 0x004E9250 — SecondPassword_Shuffle(mode)

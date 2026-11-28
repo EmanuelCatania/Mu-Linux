@@ -238,7 +238,6 @@ set(MU_SOURCES
     src/scenes/Scene_LegacyCleanup.cpp
     src/render/Terrain_LegacyRender.cpp
     src/ui/UI_LegacyText.cpp
-    src/render/BMD_FilterData.cpp
     src/ui/Quest_UIState.cpp
     src/game/physics/Cloth_Simulation.cpp
     src/render/BMD_LegacyEffects.cpp
@@ -328,7 +327,6 @@ set(MU_SOURCES
     src/assets/data/ContentCatalog.cpp
     src/assets/data/Skill_Data.cpp
     src/assets/data/Gate_Data.cpp
-    src/assets/data/Filter_Data.cpp
     src/assets/data/Dialog_Data.cpp
     src/assets/data/Quest_Data.cpp
     src/assets/data/NPC_Data.cpp
