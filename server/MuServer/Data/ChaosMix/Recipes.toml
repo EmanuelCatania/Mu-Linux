@@ -23,17 +23,19 @@
 # revisa con `mu-data validate <Data>` y se recarga con la configuración del
 # Chaos, sin reiniciar el server.
 #
-# Ejemplo (sacale los # para usarlo): 10 Jewel of Bless y una Jewel of Chaos
-# dan una Jewel of Soul.
-#
-# [[recipe]]
-# id = 20
-# name = { Eng = "Jewel of Soul Mix", Spn = "Crear Jewel of Soul", Por = "Criar Jewel of Soul" }
-# help = { Eng = ["10 Jewel of Bless and 1 Jewel of Chaos"], Spn = ["10 Jewel of Bless y 1 Jewel of Chaos"], Por = ["10 Jewel of Bless e 1 Jewel of Chaos"] }
-# rate = 80
-# money = 1000000
-# ingredients = [
-#   { item = [14, 13], count = 10 },
-#   { item = [12, 15] },
-# ]
-# result = { item = [14, 14] }
+# Ejemplo: el Pet Rudolph (el pet custom de Items/13-helpers.toml) sale de una
+# Uniria, una Jewel of Creation y una Jewel of Chaos. No pisa al Dinorant, que
+# lleva 10 Unirias, ni a las frutas, que llevan sólo la Creation y la Chaos.
+
+[[recipe]]
+id = 20
+name = { Eng = "Pet Rudolph Mix", Spn = "Crear Pet Rudolph", Por = "Criar Pet Rudolph" }
+help = { Eng = ["1 Uniria, 1 Jewel of Creation", "and 1 Jewel of Chaos"], Spn = ["1 Uniria, 1 Jewel of Creation", "y 1 Jewel of Chaos"], Por = ["1 Uniria, 1 Jewel of Creation", "e 1 Jewel of Chaos"] }
+rate = 70
+money = 1000000
+ingredients = [
+  { item = [13, 2] },
+  { item = [14, 22] },
+  { item = [12, 15] },
+]
+result = { item = [13, 400] }
