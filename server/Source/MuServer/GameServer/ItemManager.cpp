@@ -612,6 +612,87 @@ int CItemManager::GetItemRepairMoney(CItem* lpItem, int type)
 	return money;
 }
 
+// Los valores que muestra el cliente salen de acá, no de sus fórmulas: el item
+// se arma igual que al leerlo de la base (ConvertItemByte) y se responde lo que
+// calcula el server para él.
+void CItemManager::CGItemInfoQueryRecv(PMSG_ITEM_INFO_QUERY_RECV* lpMsg, int size, int aIndex)
+{
+	if (gObjIsConnectedGP(aIndex) == 0)
+	{
+		return;
+	}
+
+	const int header = (int)offsetof(PMSG_ITEM_INFO_QUERY_RECV, item);
+
+	if (size < header || lpMsg->count == 0 || lpMsg->count > MAX_ITEM_INFO_QUERY || size < header + (int)(lpMsg->count * sizeof(ITEM_INFO_QUERY)))
+	{
+		return;
+	}
+
+	PMSG_ITEM_INFO_ANSWER_SEND pMsg;
+
+	memset(&pMsg, 0, sizeof(pMsg));
+
+	pMsg.count = lpMsg->count;
+
+	for (int n = 0; n < lpMsg->count; n++)
+	{
+		const ITEM_INFO_QUERY& query = lpMsg->item[n];
+
+		ITEM_INFO_ANSWER& answer = pMsg.item[n];
+
+		answer.Item = query;
+
+		memset(answer.Item.Reserved, 0, sizeof(answer.Item.Reserved));
+
+		ITEM_INFO info;
+
+		if (this->GetInfo(query.Index, &info) == 0)
+		{
+			continue;
+		}
+
+		// Reserved[0] = 1: el server conoce el item y estos valores valen.
+		answer.Item.Reserved[0] = 1;
+
+		CItem item;
+
+		item.Clear();
+
+		item.m_Level = (query.Level / 8) & 15;
+
+		item.m_Durability = query.Durability;
+
+		item.Convert(query.Index, (query.Level / 128) & 1, (query.Level / 4) & 1, (query.Level & 3) + ((query.Option1 & 64) / 16), query.Option1 & 63);
+
+		answer.RequireStrength = (WORD)item.m_RequireStrength;
+
+		answer.RequireDexterity = (WORD)item.m_RequireDexterity;
+
+		answer.RequireVitality = (WORD)item.m_RequireVitality;
+
+		answer.RequireEnergy = (WORD)item.m_RequireEnergy;
+
+		answer.RequireLevel = (WORD)item.m_RequireLevel;
+
+		answer.MaxDurability = (WORD)item.m_BaseDurability;
+
+		answer.BuyMoney = item.m_BuyMoney;
+
+		answer.SellMoney = item.m_SellMoney;
+
+		answer.RepairMoney = (DWORD)this->GetItemRepairMoney(&item, 0);
+
+		answer.RepairMoneySelf = (DWORD)this->GetItemRepairMoney(&item, 1);
+	}
+
+	const BYTE length = (BYTE)(offsetof(PMSG_ITEM_INFO_ANSWER_SEND, item) + pMsg.count * sizeof(ITEM_INFO_ANSWER));
+
+	pMsg.header.set(0xF3, 0xEB, length);
+
+	DataSend(aIndex, (BYTE*)&pMsg, length);
+}
+
 int CItemManager::GetInventoryItemSlot(LPOBJ lpObj, int index, int level)
 {
 	int MaxValue = this->GetInventoryMaxValue(lpObj);

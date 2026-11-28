@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "game/item/ItemServerInfo.h"
 #include "assets/data/ContentCatalog.h"
 #include "game/item/ItemOptionTable.h"
 #include "globals.h"
@@ -180,7 +181,7 @@ int __cdecl Item_FindQuickSlotByCategory(int a1) {
 // ItemConvert @ 0x0047B910 — inventory/equipment item stat + option expansion.
 // Ported directly from IDA structure/logic instead of the old minimal stub.
 // IDA: ItemConvert (0x0047B910)
-void __cdecl ItemConvert(ITEM* ip, int Attribute1, int Attribute2) {
+static void ItemConvert_Local(ITEM* ip, int Attribute1, int Attribute2) {
     if (!ip) return;
 
     short wType = ip->Type;
@@ -566,6 +567,14 @@ void __cdecl ItemConvert(ITEM* ip, int Attribute1, int Attribute2) {
     if (partType >= 428 && partType < ITEM_POTION_BASE) { ip->Part = 9; ip->Color = bExtOption ? 4 : (itemExcel > 0 ? 3 : 0); return; }
     ip->Part = (BYTE)-1;
     ip->Color = bExtOption ? 4 : (itemExcel > 0 ? 3 : 0);
+}
+
+// DESVIACION 0.97.50: los requisitos son los que calcula el server para este
+// item (C1:F3:EB); hasta que responde, o con un server anterior, quedan los
+// del cálculo local.
+void __cdecl ItemConvert(ITEM* ip, int Attribute1, int Attribute2) {
+    ItemConvert_Local(ip, Attribute1, Attribute2);
+    if (ip && ip->Type >= 0) ItemServerInfo::Apply(ip);
 }
 
 // ItemValue delega en Item_CalculateValue (Item_Durability.cpp).

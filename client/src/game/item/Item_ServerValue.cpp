@@ -16,6 +16,7 @@
 // ItemValue_Vanilla / ConvertRepairGold_Vanilla.
 
 #include "stdafx.h"
+#include "game/item/ItemServerInfo.h"
 #include "assets/data/ContentCatalog.h"
 #include "game/item/ItemDefines.h"
 #include "globals.h"
@@ -77,6 +78,8 @@ bool ReadRecords(std::vector<T>& out, const BYTE* records, int recordSize, int c
 // CItem::myCalcMaxDurability del DLL.
 int CalcMaxDurability_MuEmu(const ITEM* ip, const ITEM_ATTRIBUTE* p, int level)
 {
+    // DESVIACION 0.97.50: la del server si ya respondió por este item.
+    if (const ItemServerValues* server = ItemServerInfo::Find(ip)) return server->MaxDurability;
     if (ip->Type == 14 * 32 + 21) return 1;                          // Rena
     if (ip->Type == 13 * 32 + 18 || ip->Type == 14 * 32 + 19) return 1;  // Capa / Invitacion
 
@@ -154,6 +157,9 @@ int __cdecl ItemValue_MuEmu(void* item, int goldType)
 {
     const ITEM* ip = (const ITEM*)item;
     if (!ip || ip->Type == -1 || ip->SpecialNum > MAX_SPECIAL_OPTION) return 0;
+    // DESVIACION 0.97.50: los precios del server si ya respondió por este item.
+    if (const ItemServerValues* server = ItemServerInfo::Find(ip))
+        return (int)(goldType == 1 ? server->SellMoney : server->BuyMoney);
     const std::uintptr_t attrBase = ItemAttribute_Base();
     if (!attrBase || ip->Type < 0 || ip->Type >= ITEM_MAX_EX) return 0;
     const ITEM_ATTRIBUTE* info = (const ITEM_ATTRIBUTE*)(uintptr_t)(attrBase + ip->Type * sizeof(ITEM_ATTRIBUTE));
@@ -261,6 +267,8 @@ int __cdecl ItemValue_MuEmu(void* item, int goldType)
 
 // CItem::ConvertRepairGold del DLL.  Gold llega como precio de compra.
 // IDA: ConvertRepairGold (0x004C3EF0).
+unsigned int __cdecl FormatRepairGold_MuEmu(int money, char* Text);
+
 unsigned int __cdecl ConvertRepairGold_MuEmu(int Gold, int Durability, int MaxDurability, short Type, char* Text)
 {
     (void)Type;
@@ -285,7 +293,12 @@ unsigned int __cdecl ConvertRepairGold_MuEmu(int Gold, int Durability, int MaxDu
     int money = (int)(RepairEnable == 1 ? value * 2.5f : value);   // RepairEnable
     money = money >= 100 ? money / 10 * 10 : money;
     money = money >= 1000 ? money / 100 * 100 : money;
+    return FormatRepairGold_MuEmu(money, Text);
+}
 
+// Escribe el costo con separadores de miles.
+unsigned int __cdecl FormatRepairGold_MuEmu(int money, char* Text)
+{
     if (Text) {
         if (money >= 1000000)
             sprintf(Text, "%d,%03d,%03d", money / 1000000, money / 1000 % 1000, money % 1000);

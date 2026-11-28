@@ -3,6 +3,7 @@
 // Ver Net/Recv/NetRecv.h.
 
 #include "stdafx.h"
+#include "game/item/ItemServerInfo.h"
 #include "game/combat/PlayerAttackSpeed.h"
 #include "net/Protocol/RejectReason.h"
 #include "assets/text/ClientText.h"
@@ -1323,6 +1324,8 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         case 0xFD: gContentCatalog.ReceiveItemOptions((const BYTE*)Msg, Size); break;
         case 0xFE: gContentCatalog.ReceiveCombatRates((const BYTE*)Msg, Size); break;
         case 0xFC: gContentCatalog.ReceiveSignature((const BYTE*)Msg, Size); break;
+        // DESVIACION 0.97.50: valores de items calculados por el server.
+        case 0xEB: ItemServerInfo::Receive((const BYTE*)Msg, Size); break;
         case 0xF6: gContentCatalog.ReceiveSync((const BYTE*)Msg, Size); break;
         case 0x30: {
             // ── ReceiveOption (IDA 0x436FB0) — PORT FIEL ─────────────────

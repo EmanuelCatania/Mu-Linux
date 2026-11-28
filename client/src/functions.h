@@ -461,6 +461,7 @@ void  __cdecl RenderHelpWindow(void);
 unsigned int __cdecl Item_CalculateMaxDurability(void* item, ITEM_ATTRIBUTE* attr, int level); // IDA: 0x004C45C0
 int          __cdecl Item_CalculateValue(void* item, int sellMode);                    // IDA: FUN_0047C690
 unsigned int __cdecl Item_CalculateRepairCost(int Gold, int Durability, int MaxDurability, short Type, char* Text); // IDA: FUN_004C3EF0
+unsigned int __cdecl Item_CalculateRepairCostFor(const void* item, int Gold, int Durability, int MaxDurability, short Type, char* Text);   // con el valor del server
 // GetScreenWidth — declared above as int(void) GetLoginAnimTime
 void  __cdecl RenderMonsterName(int, int, int, int);
 void  __cdecl CloseInventoryRelatedWindows(void); // IDA: CloseInventoryRelatedWindows (0x004CBA60)

@@ -1,6 +1,7 @@
 // Network.cpp — CNetwork. Ver Network.h.
 
 #include "stdafx.h"
+#include "game/item/ItemServerInfo.h"
 #include "ui/BuffBar.h"
 #include "net/NetText.h"
 #include "platform/Text.h"
@@ -39,6 +40,7 @@ void CNetwork::ResetCharacterData()
     gHeroVitals.Reset();
     gHealthBar.Clear();
     gChaosMixRates.Reset();
+    ItemServerInfo::Reset();
     GoldenArcher_ResetCharacter();
     // DSProtocol::DGCharacterInfoRecv reenvía M y las tablas para el personaje.
     gMoveList.ResetCharacter();
