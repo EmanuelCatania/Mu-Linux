@@ -57,9 +57,11 @@
 //
 //   mu-data validate <Data>
 //       Lee los Spawns.toml, los Map.toml, los Drops.toml, los Gates.toml, los
-//       Zones.toml y el Invasions.toml y avisa del primer error, con archivo y
+//       Zones.toml, el Invasions.toml y el ChaosMix/Recipes.toml y avisa del
+//       primer error, con archivo y
 //       lÃ­nea. TambiÃ©n avisa de las gates que llevan a una que no existe.
 
+#include "ChaosRecipes.h"
 #include "EventInvasions.h"
 #include "ItemDrops.h"
 #include "ItemExtras.h"
@@ -787,6 +789,20 @@ static int Validate(const std::string& dataDir)
 		}
 
 		std::printf("OK: %zu zonas seguras, %zu sin PK y %zu NPCs que mueven\n", zones.Safe.size(), zones.PkFree.size(), zones.NpcMove.size());
+	}
+
+	{
+		std::vector<ChaosRecipeDef> recipes;
+
+		if (!ChaosRecipes_Load(dataDir, recipes, error))
+		{
+			return Fail(error);
+		}
+
+		if (!recipes.empty())
+		{
+			std::printf("OK: %zu recetas del Chaos\n", recipes.size());
+		}
 	}
 
 	return 0;

@@ -1457,6 +1457,8 @@ extern char    DAT_07d73104[20000];  // word-filter table (1000 × 20 bytes, Fil
 #define GLOBALTEXT_ROWS        4000    // filas reservadas (el resto queda vacio)
 extern char    GlobalText[GLOBALTEXT_ROWS][300];
 void __cdecl OpenTextData(void);
+// Arma las etiquetas que dependen de GlobalText (On/Off del menú de opciones).
+void __cdecl ComposeGlobalTextLabels(void);
 int  __cdecl LoadTextData_Bin(const char *FileName);
 // DAT_07d4b4b0/5dc son GlobalText[457]/[458] (name-filter blocked words, cargados
 // de Text.bmd): `&DAT_07d4b4b0` = GlobalText[457].

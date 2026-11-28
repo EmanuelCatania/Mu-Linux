@@ -1,0 +1,6 @@
+//Textos de la interfaz traducidos al español (0.97.50). Reemplazan la fila del
+//Text.bmd del cliente con ese número en los clientes en español; lo que no esté
+//acá sale del Text.bmd. Las filas originales están en Data/Text/Reference/Spn/.
+//UTF-8 sin BOM. Hasta 299 bytes por texto, con los mismos %d/%s que el original.
+//Fila	Texto
+end

@@ -185,6 +185,12 @@ struct CATALOG_PET
 #define CATALOG_TEXT_SKILL   3
 #define CATALOG_TEXT_CLIENT  4   // textos propios del cliente (ClientTextId)
 #define CATALOG_TEXT_TOOLTIP 5   // línea del tooltip de un item: Index = item, Reserved = línea (0 a 5)
+#define CATALOG_TEXT_GLOBAL  6   // fila del Text.bmd del cliente (GlobalText): Index = fila
+
+// GlobalText del cliente: 4000 filas de 300 bytes (el Text.bmd trae las 1000
+// primeras).  Una fila guarda hasta 299 bytes y el 0.
+#define CATALOG_GLOBAL_TEXT_ROWS 4000
+#define CATALOG_GLOBAL_TEXT_SIZE 300
 
 // Un texto que no entra en Text[64] viaja en varios registros seguidos con este
 // bit en Table: cada uno lleva 64 bytes del texto y el último, el que tiene un

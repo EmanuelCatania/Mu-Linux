@@ -7,6 +7,8 @@
 #include "assets/data/ContentCatalog.h"
 #include "game/item/ItemDefines.h"
 #include "game/item/ChaosMixRates.h"
+#include "net/NetText.h"
+#include <algorithm>
 #include "net/Recv/NetRecv.h"
 
 // ── ShopInsertItem (PORT FIEL de IDA sub_4CC0E0) ──────────────────────────────
@@ -819,7 +821,31 @@ void NetRecv_88(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (Size < (int)sizeof(Proto::PMSG_CHAOS_MIX_RATE_SEND)) return;
     Proto::PMSG_CHAOS_MIX_RATE_SEND packet;
     memcpy(&packet, Msg, sizeof(packet));
-    gChaosMixRates.Receive(packet);
+    const bool hasType = Size >= Proto::CHAOS_MIX_RATE_TYPE_OFFSET + (int)sizeof(std::int32_t);
+    std::int32_t type = 0;
+    if (hasType) memcpy(&type, Msg + Proto::CHAOS_MIX_RATE_TYPE_OFFSET, sizeof(type));
+    if (Size < (int)sizeof(Proto::PMSG_CHAOS_MIX_RECIPE_SEND) ||
+        type < Proto::CHAOS_RECIPE_FIRST_ID || type > Proto::CHAOS_RECIPE_LAST_ID) {
+        gChaosMixRates.Receive(packet, hasType, type);
+        return;
+    }
+    // Receta agregada: nombre, ayuda y tamaño del resultado (los textos vienen
+    // del server, se sanean como el resto).
+    Proto::PMSG_CHAOS_MIX_RECIPE_SEND full;
+    memcpy(&full, Msg, sizeof(full));
+    CChaosMixRates::Recipe recipe;
+    recipe.Width = (std::min)((int)full.width, 8);
+    recipe.Height = (std::min)((int)full.height, 8);
+    char text[Proto::CHAOS_RECIPE_TEXT_SIZE];
+    NetText::FromServer(text, sizeof(text), full.name, strnlen(full.name, sizeof(full.name)));
+    recipe.Name = text;
+    recipe.Lines = (std::min)((int)full.lines, (int)Proto::CHAOS_RECIPE_HELP_LINES);
+    for (int i = 0; i < recipe.Lines; ++i) {
+        NetText::FromServer(text, sizeof(text), full.help[i], strnlen(full.help[i], sizeof(full.help[i])));
+        recipe.Help[i] = text;
+    }
+    if (recipe.Width <= 0 || recipe.Height <= 0) return;   // sin tamaño no hay cómo ver si entra
+    gChaosMixRates.Receive(packet, hasType, type, &recipe);
 }
 
 // 0x87

@@ -1422,14 +1422,17 @@ namespace
 				// máximo: el cliente los guarda enteros aparte de las tablas del
 				// 0.97k.  Los de monstruos sí (los copia al nombre de la entidad),
 				// y una línea de tooltip entra en el Text[60] de CATALOG_TOOLTIP
-				// (59 bytes y el 0).
+				// (59 bytes y el 0).  Una fila de GlobalText, 299 bytes: es el
+				// tamaño de la fila del cliente.
 				const bool unlimited = (table == CATALOG_TEXT_CLIENT || table == CATALOG_TEXT_ITEM || table == CATALOG_TEXT_SKILL);
 
-				const size_t maxText = unlimited ? (size_t)-1 : (table == CATALOG_TEXT_TOOLTIP) ? sizeof(CATALOG_TOOLTIP::Text) : sizeof(entry.Text);
+				const size_t maxText = unlimited ? (size_t)-1 : (table == CATALOG_TEXT_TOOLTIP) ? sizeof(CATALOG_TOOLTIP::Text) : (table == CATALOG_TEXT_GLOBAL) ? CATALOG_GLOBAL_TEXT_SIZE : sizeof(entry.Text);
 
 				const bool badLine = (table == CATALOG_TEXT_TOOLTIP && (line < 0 || line >= CATALOG_TOOLTIP_MAX_LINES));
 
-				if (index < 0 || index > 0xFFFF || badLine || text.empty() || text.size() >= maxText)
+				const bool badRow = (table == CATALOG_TEXT_GLOBAL && index >= CATALOG_GLOBAL_TEXT_ROWS);
+
+				if (index < 0 || index > 0xFFFF || badLine || badRow || text.empty() || text.size() >= maxText)
 				{
 					LogAdd(LOG_RED, "[ContentCatalog] %s: texto descartado (índice %d, línea %d, %d bytes; máximo %d)", path.c_str(), index, line, (int)strlen(raw), (int)maxText - 1);
 
@@ -1465,6 +1468,7 @@ void CContentCatalog::LoadTexts(const char* folder)
 		{ "Skill.txt", CATALOG_TEXT_SKILL },
 		{ "Client.txt", CATALOG_TEXT_CLIENT },
 		{ "Tooltip.txt", CATALOG_TEXT_TOOLTIP },
+		{ "GlobalText.txt", CATALOG_TEXT_GLOBAL },
 	};
 
 	for (int lang = 0; lang < MAX_LANGUAGE; lang++)

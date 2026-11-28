@@ -86,6 +86,8 @@ PendingSection s_PendingMoveList;
 constexpr int MAX_SKILL_NAME = 64;            // SkillAttribute: 64 entradas x 40
 constexpr int SKILL_NAME_SIZE = 32;
 char s_VanillaSkillNames[MAX_SKILL_NAME][SKILL_NAME_SIZE];
+// Filas de GlobalText (Text.bmd) que reemplazó el server, con su texto original.
+std::map<int, std::string> s_VanillaGlobalText;
 // Nombres del server que no entran en las tablas del 0.97k (Name[30] del item y
 // los 32 bytes del skill); la tabla queda con el nombre cortado para el resto.
 std::map<int, std::string> s_LongItemNames;
@@ -806,9 +808,58 @@ std::string LongName(const std::string& text)
     return std::string(clean.data());
 }
 
+// Los %d, %s, ... de un formato de printf, en orden (%% no cuenta).
+std::vector<std::string> FormatSpecifiers(const char* text)
+{
+    std::vector<std::string> specs;
+    static const char flags[] = "-+ #0123456789.*hlLzjt";
+    for (const char* p = text; *p; ++p) {
+        if (*p != '%') continue;
+        if (p[1] == '%') { ++p; continue; }
+        const char* q = p + 1;
+        while (*q && strchr(flags, *q)) ++q;
+        if (*q) ++q;
+        specs.emplace_back(p, q);
+        p = q - 1;
+    }
+    return specs;
+}
+
+// Vuelve a las filas de GlobalText del Text.bmd.
+void RestoreGlobalText()
+{
+    for (const auto& row : s_VanillaGlobalText)
+        Platform::TextCopySecure(GlobalText[row.first], sizeof(GlobalText[row.first]), row.second.c_str(), sizeof(GlobalText[row.first]) - 1);
+    const bool changed = !s_VanillaGlobalText.empty();
+    s_VanillaGlobalText.clear();
+    if (changed) ComposeGlobalTextLabels();
+}
+
+// Reemplaza una fila de GlobalText.  Muchas filas son formatos de printf: la
+// traducción tiene que traer los mismos %d/%s, en el mismo orden, que la fila
+// del Text.bmd de este idioma, o el printf leería argumentos que no existen.
+bool ApplyGlobalText(int index, const std::string& text)
+{
+    if (index < 0 || index >= GLOBALTEXT_ROWS) return false;
+    char row[sizeof(GlobalText[0])];
+    NetText::FromServer(row, sizeof(row), text.data(), text.size());
+    if (row[0] == 0) return false;
+    const char* original = GlobalText[index];
+    const auto saved = s_VanillaGlobalText.find(index);
+    if (saved != s_VanillaGlobalText.end()) original = saved->second.c_str();
+    if (FormatSpecifiers(row) != FormatSpecifiers(original)) {
+        Log("ContentCatalog: GlobalText %d descartado (los %% no coinciden con el Text.bmd)", index);
+        return false;
+    }
+    if (saved == s_VanillaGlobalText.end()) s_VanillaGlobalText.emplace(index, GlobalText[index]);
+    Platform::TextCopySecure(GlobalText[index], sizeof(GlobalText[index]), row, sizeof(GlobalText[index]) - 1);
+    return true;
+}
+
 // Vuelve a los nombres de item.bmd / skill.bmd y aplica los textos recibidos.
 void ApplyTexts(ITEM_ATTRIBUTE* attr)
 {
+    RestoreGlobalText();
     if (!s_HasVanillaSkillNames) {
         for (int i = 0; i < MAX_SKILL_NAME; ++i)
             memcpy(s_VanillaSkillNames[i], SkillName(SkillAttribute.Raw, i), SKILL_NAME_SIZE);
@@ -875,6 +926,9 @@ void ApplyTexts(ITEM_ATTRIBUTE* attr)
             if (!gClientText.SetServerText(row.Index, clean.data())) continue;
             break;
         }
+        case Proto::CATALOG_TEXT_GLOBAL:
+            if (!ApplyGlobalText(row.Index, text)) continue;
+            break;
         case Proto::CATALOG_TEXT_TOOLTIP: {
             // Reemplaza el texto de esa línea del tooltip (el color y el orden son los del JSON).
             if (row.Index >= ITEM_MAX_EX || row.Reserved >= TOOLTIP_TEXT_LINES) continue;
@@ -889,6 +943,7 @@ void ApplyTexts(ITEM_ATTRIBUTE* attr)
         }
         ++applied;
     }
+    if (!s_VanillaGlobalText.empty()) ComposeGlobalTextLabels();
     Log("ContentCatalog: %d textos traducidos", applied);
 }
 } // namespace
@@ -949,6 +1004,7 @@ void CContentCatalog::Clear()
     s_HasCombatRates = false;
     gMapManager.ClearServerMusic();
     gClientText.ClearServerTexts();
+    RestoreGlobalText();
     s_TooltipTexts.clear();
     memset(s_MonsterTexts, 0, sizeof(s_MonsterTexts));
     if (s_HasVanillaSkillNames) {

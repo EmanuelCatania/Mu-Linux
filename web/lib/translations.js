@@ -12,7 +12,8 @@
 //     skills y Client.txt no tienen máximo: el server parte los textos largos en
 //     varios registros del F3:F0 y el cliente los guarda enteros.
 //   - En Client.txt, los %d/%s/%u/%.0f tienen que ser los del inglés, en el mismo
-//     orden, porque el cliente los usa como formato de printf.
+//     orden, porque el cliente los usa como formato de printf.  En GlobalText.txt
+//     (filas del Text.bmd), los del Text.bmd de ese mismo idioma, hasta 299 bytes.
 
 const LANGS = ['Eng', 'Spn', 'Por'];
 
@@ -24,8 +25,12 @@ const TABLES = {
   client: { file: 'Client.txt', keyFields: 1, maxBytes: 0 },
   // Líneas del tooltip de los items custom: sección, índice y número de línea. Entran
   // en el Text[60] de la línea del JSON (59 bytes).
-  tooltips: { file: 'Tooltip.txt', keyFields: 3, maxBytes: 59 }
+  tooltips: { file: 'Tooltip.txt', keyFields: 3, maxBytes: 59 },
+  // Filas del Text.bmd del cliente (GlobalText, 300 bytes con el 0).
+  globaltext: { file: 'GlobalText.txt', keyFields: 1, maxBytes: 299 }
 };
+
+const MAX_GLOBAL_TEXT_ROW = 3999;
 
 const MAX_TOOLTIP_LINE = 5;
 
@@ -55,7 +60,8 @@ function detectEol(content) {
 // Encabezado de un archivo que se crea desde el editor.
 function defaultHeader(table, lang) {
   const columns = table === 'tooltips' ? 'Sección\tÍndice\tLínea\tTexto'
-    : TABLES[table].keyFields === 2 ? 'Sección\tÍndice\tNombre' : (table === 'client' ? 'Índice\tTexto' : 'Índice\tNombre');
+    : TABLES[table].keyFields === 2 ? 'Sección\tÍndice\tNombre'
+    : table === 'client' ? 'Índice\tTexto' : table === 'globaltext' ? 'Fila\tTexto' : 'Índice\tNombre';
   return [
     `//Textos traducidos (${lang}). Se mandan a los clientes con ese idioma; lo que no esté acá`,
     maxBytesFor(table) > 0
@@ -82,6 +88,7 @@ function validKey(table, key) {
   if (!key.every((n) => Number.isInteger(n) && n >= 0)) return false;
   if (table === 'items') return key[0] <= MAX_ITEM_SECTION && key[1] <= MAX_ITEM_INDEX;
   if (table === 'tooltips') return key[0] <= MAX_ITEM_SECTION && key[1] <= MAX_ITEM_INDEX && key[2] <= MAX_TOOLTIP_LINE;
+  if (table === 'globaltext') return key[0] <= MAX_GLOBAL_TEXT_ROW;
   return key[0] <= MAX_ID;
 }
 

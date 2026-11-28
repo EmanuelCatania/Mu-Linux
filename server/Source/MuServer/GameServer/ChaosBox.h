@@ -1,5 +1,9 @@
 #pragma once
 
+#include "ChaosRecipes.h"
+
+#include <vector>
+
 #include "ItemManager.h"
 #include "ProtocolDefines.h"
 #include "User.h"
@@ -33,6 +37,25 @@ struct PMSG_CHAOS_MIX_RATE_SEND
 	PBMSG_HEAD header; // C1:88
 	DWORD rate;
 	DWORD money;
+	// Desde la 0.97.50: la receta que reconoció el server (GetChaosMixType).
+	// Un cliente anterior lee sólo los 12 primeros bytes.
+	int type;
+};
+
+// La misma respuesta para una receta agregada (Data/ChaosMix/Recipes.toml):
+// agrega lo que el cliente no tiene en su Text.bmd, en el idioma del jugador.
+struct PMSG_CHAOS_MIX_RECIPE_SEND
+{
+	PBMSG_HEAD header; // C1:88
+	DWORD rate;
+	DWORD money;
+	int type;
+	BYTE width;		// tamaño del item que sale, para ver si entra en el inventario
+	BYTE height;
+	BYTE lines;		// líneas de ayuda
+	BYTE reserved;
+	char name[CHAOS_RECIPE_TEXT_SIZE];
+	char help[CHAOS_RECIPE_HELP_LINES][CHAOS_RECIPE_TEXT_SIZE];
 };
 
 //**********************************************//
@@ -81,6 +104,17 @@ public:
 
 	bool GetChaosMixRateAndMoney(int aIndex, int type, DWORD& rate, DWORD& money);
 
+	int GetChaosMixType(LPOBJ lpObj);
+
+	// Recetas agregadas (Data/ChaosMix/Recipes.toml).
+	void LoadRecipes(const char* dataDir);
+
+	const ChaosRecipeDef* FindRecipe(int id) const;
+
+	const ChaosRecipeDef* MatchRecipe(LPOBJ lpObj) const;
+
+	void RecipeMix(LPOBJ lpObj, const ChaosRecipeDef& recipe);
+
 	void ChaosItemMix(LPOBJ lpObj);
 	bool GetChaosItemMixRates(int aIndex, DWORD& rate, DWORD& money);
 
@@ -104,6 +138,10 @@ public:
 
 	void Wing2Mix(LPOBJ lpObj);
 	bool GetWing2MixRates(int aIndex, DWORD& rate, DWORD& money);
+
+private:
+
+	std::vector<ChaosRecipeDef> m_Recipes;
 };
 
 extern CChaosBox gChaosBox;
