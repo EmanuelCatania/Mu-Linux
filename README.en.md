@@ -299,15 +299,20 @@ language's translations along with the content catalog. They live in
 | `Skill.txt` | skill names | index from `Skill/Skill.txt` |
 | `Tooltip.txt` | tooltip lines of custom items | item and line number of the `Custom/Items` JSON |
 | `Client.txt` | the client's own texts (options, event panel, buff bar, window title) | each text's number; the comment above says which one it is |
+| `GlobalText.txt` | the original interface texts (the client's `Text.bmd`: windows, NPCs, Chaos, notices) | the `Text.bmd` row; the originals are in `Data/Text/Reference/<language>/GlobalText.txt` |
 
 Anything not translated is resolved by the client from its own files, so an
 empty file breaks nothing. Rules, which the server and the editor check:
 
 - UTF-8 without BOM, one line per text, no quotes or line breaks inside.
-- Up to 63 bytes per name (the client cuts item names to 29 and skill names to
-  31) and 59 per tooltip line.
+- Up to 63 bytes per monster name, 59 per tooltip line and 299 per
+  `GlobalText.txt` row. Item and skill names and `Client.txt` texts have no
+  limit.
 - In `Client.txt`, each line's `%d`/`%s`/`%u` must be the same as the English
-  ones and in the same order: otherwise the client discards the line.
+  ones and in the same order: otherwise the client discards the line. In
+  `GlobalText.txt`, those of the original row in the same language.
+- The texts shown before connecting (login, server select) always come from the
+  client's `Text.bmd`: the server only sends them once you enter.
 
 They can be edited by hand or from the web panel's **translation editor**,
 which shows the current name next to the translation and reloads the server on

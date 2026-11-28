@@ -1612,7 +1612,12 @@ extern "C" void __cdecl RenderChaosMix(void)
     const int recipeText = mixType == 11 ? 7 : (mixType < 0 ? 0 : mixType);
     m_dwTextColor = recipeText ? 0xFF30F0FFu : 0xFF2FF0FFu;
     m_dwBackColor = 0x80303030u;
-    Platform::TextFormatTruncated(text, sizeof(text), Platform::TruncateText, "%s", GlobalText[recipeText > 4 ? recipeText + 607 : recipeText + 601]);
+    // Una receta agregada del server trae su nombre; las del 0.97k salen del Text.bmd.
+    const CChaosMixRates::Recipe* serverRecipe = gChaosMixRates.GetRecipe();
+    if (serverRecipe) {
+        m_dwTextColor = 0xFF30F0FFu;
+        Platform::TextCopySecure(text, serverRecipe->Name.c_str());
+    } else Platform::TextFormatTruncated(text, sizeof(text), Platform::TruncateText, "%s", GlobalText[recipeText > 4 ? recipeText + 607 : recipeText + 601]);
     RenderText(dword_7EAA0C8 + 20, dword_7EAA0CC + 50, text, 0, 0, 0);
     m_dwTextColor = 0xFFFFFFD2u;
     if (pendingRate) Platform::TextCopySecure(text, gClientText.Get(ClientTextId::ChaosRatePending));
@@ -1623,9 +1628,18 @@ extern "C" void __cdecl RenderChaosMix(void)
     RenderText(dword_7EAA0C8 + 20, dword_7EAA0CC + 90, text, 0, 0, 0);
 
     m_dwTextColor = 0xFF1414FFu;
-    RenderText(dword_7EAA0C8 + 20, dword_7EAA0CC + 210, GlobalText[586], 0, 0, 0);
-    RenderText(dword_7EAA0C8 + 20, dword_7EAA0CC + 225, GlobalText[587], 0, 0, 0);
-    if (mixType == 3 || mixType == 4) {
+    if (serverRecipe) {
+        // La ayuda de la receta agregada reemplaza los avisos del 0.97k (que
+        // piden la Jewel of Chaos, y una receta nueva puede no llevarla).
+        for (int i = 0; i < serverRecipe->Lines; ++i)
+            RenderText(dword_7EAA0C8 + 20, dword_7EAA0CC + 210 + 15 * i, const_cast<char*>(serverRecipe->Help[i].c_str()), 0, 0, 0);
+    } else {
+        RenderText(dword_7EAA0C8 + 20, dword_7EAA0CC + 210, GlobalText[586], 0, 0, 0);
+        RenderText(dword_7EAA0C8 + 20, dword_7EAA0CC + 225, GlobalText[587], 0, 0, 0);
+    }
+    if (serverRecipe) {
+        // sin los avisos por receta del 0.97k
+    } else if (mixType == 3 || mixType == 4) {
         RenderText(dword_7EAA0C8 + 20, dword_7EAA0CC + 240, GlobalText[606], 0, 0, 0);
         RenderText(dword_7EAA0C8 + 20, dword_7EAA0CC + 255, GlobalText[607], 0, 0, 0);
         RenderText(dword_7EAA0C8 + 20, dword_7EAA0CC + 270, GlobalText[608], 0, 0, 0);

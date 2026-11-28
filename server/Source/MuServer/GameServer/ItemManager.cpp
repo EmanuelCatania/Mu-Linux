@@ -32,6 +32,8 @@ CItemManager gItemManager;
 CItemManager::CItemManager()
 {
 	this->m_ItemInfo.clear();
+
+	this->m_LongName.clear();
 }
 
 CItemManager::~CItemManager()
@@ -210,6 +212,8 @@ void CItemManager::Load(const char* path)
 
 	this->m_ItemInfo.clear();
 
+	this->m_LongName.clear();
+
 	try
 	{
 		eTokenResult token;
@@ -254,7 +258,9 @@ void CItemManager::Load(const char* path)
 
 				info.DropItem = lpReadScript->GetAsNumber();
 
-				strcpy_s(info.Name, lpReadScript->GetAsString());
+				const std::string fullName = lpReadScript->GetAsString();
+
+				strcpy_s(info.Name, fullName.c_str());
 
 				if (section >= 0 && section <= 5)
 				{
@@ -395,6 +401,11 @@ void CItemManager::Load(const char* path)
 				ReadItemDisplayColumns(lpReadScript, &info);
 
 				this->m_ItemInfo.insert(std::pair<int, ITEM_INFO>(info.Index, info));
+
+				if (fullName.size() >= sizeof(info.Name))
+				{
+					this->m_LongName[info.Index] = fullName;
+				}
 			}
 		}
 	}

@@ -125,6 +125,7 @@ const Entry kTable[] = {
 	{ "Sin ondulación", "No ripple", "Sem ondulação" },
 	{ "Completo", "Full", "Completo" },
 	{ "Agua mejorada", "Improved water", "Água melhorada" },
+	{ "Monturas como pet en zona segura", "Mounts as pets in safe zones", "Montarias como pet na zona segura" },
 	{ "Quitar sombras", "Remove shadows", "Remover sombras" },
 	{ "Quitar objetos", "Remove objects", "Remover objetos" },
 	{ "Quitar piso", "Remove floor", "Remover chão" },

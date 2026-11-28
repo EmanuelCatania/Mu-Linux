@@ -13,6 +13,7 @@
 #include "game/item/ItemOptionTable.h"
 #include "ui/MoveList.h"
 #include "game/core/MapManager.h"
+#include "app/config/UserSettings.h"
 #include "assets/text/ClientText.h"
 #include <array>
 #include "app/util/Sha256.h"
@@ -85,6 +86,12 @@ PendingSection s_PendingMoveList;
 constexpr int MAX_SKILL_NAME = 64;            // SkillAttribute: 64 entradas x 40
 constexpr int SKILL_NAME_SIZE = 32;
 char s_VanillaSkillNames[MAX_SKILL_NAME][SKILL_NAME_SIZE];
+// Filas de GlobalText (Text.bmd) que reemplazó el server, con su texto original.
+std::map<int, std::string> s_VanillaGlobalText;
+// Nombres del server que no entran en las tablas del 0.97k (Name[30] del item y
+// los 32 bytes del skill); la tabla queda con el nombre cortado para el resto.
+std::map<int, std::string> s_LongItemNames;
+std::map<int, std::string> s_LongSkillNames;
 bool s_HasVanillaSkillNames = false;
 char s_MonsterTexts[512][64];                 // índice de monstruo -> nombre
 std::map<int, std::vector<Proto::CATALOG_TOOLTIP>> s_Tooltips;   // item -> líneas
@@ -793,9 +800,66 @@ void CContentCatalog::ReceiveTexts(const BYTE* msg, int size)
 namespace {
 char* SkillName(char* table, int index) { return table + index * 0x28; }
 
+// Un texto del server saneado entero, sin el corte de las tablas del binario.
+std::string LongName(const std::string& text)
+{
+    std::vector<char> clean(text.size() + 1);
+    NetText::FromServer(clean.data(), clean.size(), text.data(), text.size());
+    return std::string(clean.data());
+}
+
+// Los %d, %s, ... de un formato de printf, en orden (%% no cuenta).
+std::vector<std::string> FormatSpecifiers(const char* text)
+{
+    std::vector<std::string> specs;
+    static const char flags[] = "-+ #0123456789.*hlLzjt";
+    for (const char* p = text; *p; ++p) {
+        if (*p != '%') continue;
+        if (p[1] == '%') { ++p; continue; }
+        const char* q = p + 1;
+        while (*q && strchr(flags, *q)) ++q;
+        if (*q) ++q;
+        specs.emplace_back(p, q);
+        p = q - 1;
+    }
+    return specs;
+}
+
+// Vuelve a las filas de GlobalText del Text.bmd.
+void RestoreGlobalText()
+{
+    for (const auto& row : s_VanillaGlobalText)
+        Platform::TextCopySecure(GlobalText[row.first], sizeof(GlobalText[row.first]), row.second.c_str(), sizeof(GlobalText[row.first]) - 1);
+    const bool changed = !s_VanillaGlobalText.empty();
+    s_VanillaGlobalText.clear();
+    if (changed) ComposeGlobalTextLabels();
+}
+
+// Reemplaza una fila de GlobalText.  Muchas filas son formatos de printf: la
+// traducción tiene que traer los mismos %d/%s, en el mismo orden, que la fila
+// del Text.bmd de este idioma, o el printf leería argumentos que no existen.
+bool ApplyGlobalText(int index, const std::string& text)
+{
+    if (index < 0 || index >= GLOBALTEXT_ROWS) return false;
+    char row[sizeof(GlobalText[0])];
+    NetText::FromServer(row, sizeof(row), text.data(), text.size());
+    if (row[0] == 0) return false;
+    const char* original = GlobalText[index];
+    const auto saved = s_VanillaGlobalText.find(index);
+    if (saved != s_VanillaGlobalText.end()) original = saved->second.c_str();
+    if (FormatSpecifiers(row) != FormatSpecifiers(original)) {
+        Log("ContentCatalog: GlobalText %d descartado (los %% no coinciden con el Text.bmd)", index);
+        return false;
+    }
+    if (saved == s_VanillaGlobalText.end()) s_VanillaGlobalText.emplace(index, GlobalText[index]);
+    Platform::TextCopySecure(GlobalText[index], sizeof(GlobalText[index]), row, sizeof(GlobalText[index]) - 1);
+    return true;
+}
+
 // Vuelve a los nombres de item.bmd / skill.bmd y aplica los textos recibidos.
 void ApplyTexts(ITEM_ATTRIBUTE* attr)
 {
+    RestoreGlobalText();
     if (!s_HasVanillaSkillNames) {
         for (int i = 0; i < MAX_SKILL_NAME; ++i)
             memcpy(s_VanillaSkillNames[i], SkillName(SkillAttribute.Raw, i), SKILL_NAME_SIZE);
@@ -810,37 +874,66 @@ void ApplyTexts(ITEM_ATTRIBUTE* attr)
         memcpy(attr[i].Name, vanilla[i].Name, sizeof(attr[i].Name));
     memset(s_MonsterTexts, 0, sizeof(s_MonsterTexts));
     s_TooltipTexts.clear();
+    s_LongItemNames.clear();
+    s_LongSkillNames.clear();
 
     const int textSize = s_PendingTexts.recordSize;
     if (!SectionComplete(s_PendingTexts) || textSize <= 0) return;
     int applied = 0;
+    std::string longText;        // texto partido (CATALOG_TEXT_CONTINUED) que se está juntando
+    std::uint32_t longKey = 0;   // 0 = ninguno (las claves llevan el bit 0x80 de Table)
     for (size_t off = 0; off + textSize <= s_PendingTexts.records.size(); off += textSize) {
         Proto::CATALOG_TEXT row = {};
         memcpy(&row, &s_PendingTexts.records[off], (std::min)((int)sizeof(row), textSize));
+        const size_t used = strnlen(row.Text, sizeof(row.Text));
+        std::string text(row.Text, used);
+        if (row.Table & Proto::CATALOG_TEXT_CONTINUED) {
+            // Los registros de un texto partido van seguidos y comparten tabla e índice.
+            const std::uint32_t key = ((std::uint32_t)row.Table << 24) | ((std::uint32_t)row.Reserved << 16) | row.Index;
+            if (key != longKey) { longText.clear(); longKey = key; }
+            longText.append(row.Text, used);
+            if (used == sizeof(row.Text)) continue;   // sigue en el registro siguiente
+            text.swap(longText);
+            longText.clear();
+            longKey = 0;
+            row.Table &= (std::uint8_t)~Proto::CATALOG_TEXT_CONTINUED;
+        } else {
+            longText.clear();
+            longKey = 0;
+        }
         // Los campos de las tablas del binario son más cortos que el texto:
         // FromServer corta sin partir un grapheme cluster.
         switch (row.Table) {
         case Proto::CATALOG_TEXT_ITEM:
             if (row.Index >= ITEM_MAX_EX) continue;
-            NetText::FromServer(attr[row.Index].Name, sizeof(attr[row.Index].Name), row.Text, sizeof(row.Text));
+            NetText::FromServer(attr[row.Index].Name, sizeof(attr[row.Index].Name), text.data(), text.size());
+            if (text.size() >= sizeof(attr[row.Index].Name)) s_LongItemNames[row.Index] = LongName(text);
             break;
         case Proto::CATALOG_TEXT_MONSTER:
             if (row.Index >= 512) continue;
-            NetText::FromServer(s_MonsterTexts[row.Index], sizeof(s_MonsterTexts[row.Index]), row.Text, sizeof(row.Text));
+            NetText::FromServer(s_MonsterTexts[row.Index], sizeof(s_MonsterTexts[row.Index]), text.data(), text.size());
             break;
         case Proto::CATALOG_TEXT_SKILL:
             if (row.Index >= MAX_SKILL_NAME) continue;
-            NetText::FromServer(SkillName(SkillAttribute.Raw, row.Index), SKILL_NAME_SIZE, row.Text, sizeof(row.Text));
-            NetText::FromServer(SkillName((char*)DAT_07cf1ff8, row.Index), SKILL_NAME_SIZE, row.Text, sizeof(row.Text));
+            NetText::FromServer(SkillName(SkillAttribute.Raw, row.Index), SKILL_NAME_SIZE, text.data(), text.size());
+            NetText::FromServer(SkillName((char*)DAT_07cf1ff8, row.Index), SKILL_NAME_SIZE, text.data(), text.size());
+            if (text.size() >= SKILL_NAME_SIZE) s_LongSkillNames[row.Index] = LongName(text);
             break;
-        case Proto::CATALOG_TEXT_CLIENT:
-            if (!gClientText.SetServerText(row.Index, row.Text)) continue;
+        case Proto::CATALOG_TEXT_CLIENT: {
+            // Sin máximo: se guarda en un std::string.
+            std::vector<char> clean(text.size() + 1);
+            NetText::FromServer(clean.data(), clean.size(), text.data(), text.size());
+            if (!gClientText.SetServerText(row.Index, clean.data())) continue;
+            break;
+        }
+        case Proto::CATALOG_TEXT_GLOBAL:
+            if (!ApplyGlobalText(row.Index, text)) continue;
             break;
         case Proto::CATALOG_TEXT_TOOLTIP: {
             // Reemplaza el texto de esa línea del tooltip (el color y el orden son los del JSON).
             if (row.Index >= ITEM_MAX_EX || row.Reserved >= TOOLTIP_TEXT_LINES) continue;
             char line[sizeof(Proto::CATALOG_TOOLTIP::Text)];
-            NetText::FromServer(line, sizeof(line), row.Text, sizeof(row.Text));
+            NetText::FromServer(line, sizeof(line), text.data(), text.size());
             if (line[0] == 0) continue;
             s_TooltipTexts[row.Index * TOOLTIP_TEXT_LINES + row.Reserved] = line;
             break;
@@ -850,6 +943,7 @@ void ApplyTexts(ITEM_ATTRIBUTE* attr)
         }
         ++applied;
     }
+    if (!s_VanillaGlobalText.empty()) ComposeGlobalTextLabels();
     Log("ContentCatalog: %d textos traducidos", applied);
 }
 } // namespace
@@ -891,6 +985,8 @@ void CContentCatalog::Clear()
     s_PendingTooltips = PendingSection();
     s_Tooltips.clear();
     s_PendingTexts = PendingSection();
+    s_LongItemNames.clear();
+    s_LongSkillNames.clear();
     s_SyncHash.clear();
     s_PendingGates = PendingSection();
     if (s_HasGates && s_HasVanillaGates && GateAttribute)
@@ -908,6 +1004,7 @@ void CContentCatalog::Clear()
     s_HasCombatRates = false;
     gMapManager.ClearServerMusic();
     gClientText.ClearServerTexts();
+    RestoreGlobalText();
     s_TooltipTexts.clear();
     memset(s_MonsterTexts, 0, sizeof(s_MonsterTexts));
     if (s_HasVanillaSkillNames) {
@@ -1218,17 +1315,26 @@ int CContentCatalog::LoadTexture(const char* path)
     return slot;
 }
 
-void CContentCatalog::RunEquippedEffects(const void* c, int model, void* modelPtr) const
+namespace {
+// Cómo sale cada efecto según dónde está el item.
+enum class EffectPlace { Equipped, Ground, Inventory };
+}
+
+static void RunItemEffects(const std::map<int, std::vector<ItemEffect>>& effects, int itemType,
+                           EffectPlace place, const void* c, void* modelPtr, float gridScale)
 {
-    if (s_Effects.empty() || !modelPtr) return;
-    const int itemType = GetModelItemType(model);
-    if (itemType < 0) return;
-    std::map<int, std::vector<ItemEffect>>::const_iterator it = s_Effects.find(itemType);
-    if (it == s_Effects.end()) return;
+    if (itemType < 0 || !modelPtr) return;
+    std::map<int, std::vector<ItemEffect>>::const_iterator it = effects.find(itemType);
+    if (it == effects.end()) return;
+    const std::uint8_t on = (place == EffectPlace::Equipped) ? Proto::CATALOG_EFFECT_ON_EQUIPPED
+                          : (place == EffectPlace::Ground)   ? Proto::CATALOG_EFFECT_ON_GROUND
+                                                             : Proto::CATALOG_EFFECT_ON_INVENTORY;
+    if (place == EffectPlace::Inventory && gUserSettings.GetAntilag(ANTILAG_STATIC_EFFECTS)) return;
+    bool blendSet = false;
 
     for (const ItemEffect& effect : it->second) {
         const Proto::CATALOG_EFFECT& data = effect.Data;
-        if (!(data.On & Proto::CATALOG_EFFECT_ON_EQUIPPED)) continue;
+        if (!(data.On & on)) continue;
         const float pulse = (data.PulseSpeed != 0.0f) ? fabsf(sinf(WorldTime * data.PulseSpeed)) : 0.0f;
         const float scale = data.Scale + pulse * data.PulseScale;
         float light[3] = { data.Color[0] + pulse * data.PulseColor,
@@ -1240,12 +1346,42 @@ void CContentCatalog::RunEquippedEffects(const void* c, int model, void* modelPt
             float position[3];
             BMD_TransformPosition(modelPtr, (float*)(g_BoneScratch + data.Bones[b] * 0x30), offset, position, '\x01');
             if (data.Type == Proto::CATALOG_EFFECT_SPRITE) {
-                Equipment_AddSprite((unsigned short)effect.Bitmap, position, scale, light, (intptr_t)c, 0.0f, 0);
-            } else if (data.Type == Proto::CATALOG_EFFECT_PARTICLE) {
+                if (place == EffectPlace::Equipped) {
+                    Equipment_AddSprite((unsigned short)effect.Bitmap, position, scale, light, (intptr_t)c, 0.0f, 0);
+                } else if (place == EffectPlace::Ground) {
+                    CreateSprite((unsigned short)effect.Bitmap, position, scale, light, (intptr_t)c, 0.0f, 0);
+                } else {
+                    // Como RenderSprite (0x479670), pero en el momento: el pool
+                    // de sprites se dibuja después, con la cámara del mundo.
+                    if (!blendSet) { GL_SetBlendAdditive(); blendSet = true; }
+                    const char* bitmap = (const char*)&DAT_083a7cc0 + effect.Bitmap * TEXTURE_STRIDE;
+                    const float size = scale * gridScale;
+                    RenderSprite_0(effect.Bitmap, position, size * *(const float*)bitmap,
+                                   size * *(const float*)(bitmap + 4), light, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+                }
+            } else if (data.Type == Proto::CATALOG_EFFECT_PARTICLE && place != EffectPlace::Inventory) {
                 Particle_Spawn(data.Particle, position, (float*)((BYTE*)c + 28), light, data.SubType, scale, 0);
             }
         }
     }
+}
+
+void CContentCatalog::RunEquippedEffects(const void* c, int model, void* modelPtr) const
+{
+    if (s_Effects.empty()) return;
+    RunItemEffects(s_Effects, GetModelItemType(model), EffectPlace::Equipped, c, modelPtr, 1.0f);
+}
+
+void CContentCatalog::RunGroundEffects(const void* object, int model, void* modelPtr) const
+{
+    if (s_Effects.empty()) return;
+    RunItemEffects(s_Effects, GetModelItemType(model), EffectPlace::Ground, object, modelPtr, 1.0f);
+}
+
+void CContentCatalog::RunInventoryEffects(int model, void* modelPtr, float scale) const
+{
+    if (s_Effects.empty()) return;
+    RunItemEffects(s_Effects, GetModelItemType(model), EffectPlace::Inventory, nullptr, modelPtr, scale);
 }
 
 int CContentCatalog::GetItemSkill(int type) const
@@ -1298,6 +1434,35 @@ const CatalogItemPose* CContentCatalog::GetItemPose(int type) const
 {
     if (type < 0 || type >= ITEM_MAX_EX || !s_Items[type].HasPose) return nullptr;
     return &s_Items[type].Pose;
+}
+
+const char* CContentCatalog::GetLongItemName(int type) const
+{
+    const std::map<int, std::string>::const_iterator it = s_LongItemNames.find(type);
+    return it != s_LongItemNames.end() ? it->second.c_str() : nullptr;
+}
+
+const char* CContentCatalog::GetLongSkillName(int index) const
+{
+    const std::map<int, std::string>::const_iterator it = s_LongSkillNames.find(index);
+    return it != s_LongSkillNames.end() ? it->second.c_str() : nullptr;
+}
+
+const char* CContentCatalog::GetItemName(int type) const
+{
+    if (const char* name = GetLongItemName(type)) return name;
+    const ITEM_ATTRIBUTE* attr = Attributes();
+    if (!attr || type < 0 || type >= ITEM_MAX_EX) return "";
+    // Name[30] puede venir sin el 0 de un item.bmd ajeno.
+    return memchr(attr[type].Name, 0, sizeof(attr[type].Name)) ? attr[type].Name : "";
+}
+
+const char* CContentCatalog::GetSkillName(int index) const
+{
+    if (const char* name = GetLongSkillName(index)) return name;
+    if (index < 0 || index >= MAX_SKILL_NAME) return "";
+    const char* name = SkillName(SkillAttribute.Raw, index);
+    return memchr(name, 0, SKILL_NAME_SIZE) ? name : "";
 }
 
 char* CContentCatalog::GetMonsterText(int index) const

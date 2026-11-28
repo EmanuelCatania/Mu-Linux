@@ -9,6 +9,7 @@
 #include "globals.h"
 #include "functions.h"
 #include "net/Net.h"
+#include "assets/data/ContentCatalog.h"
 
 extern "C" BYTE OffsetInventoryItems[];
 extern "C" BYTE Inventory[];
@@ -291,9 +292,10 @@ void __cdecl GetSkillInformation(int iType, int iLevel, char* lpszName, int* piM
     // its +0x26 field, so it must not drive combat costs/ranges.
     BYTE* const entry = (BYTE*)SkillAttribute.Raw + iType * 0x28;
 
+    // Los que piden el nombre le pasan un buffer de 256 (el del server puede
+    // ser más largo que los 31 bytes de la tabla).
     if (lpszName != NULL) {
-        Platform::TextCopySecure(lpszName, 256, (const char*)entry, 31);
-        lpszName[31] = '\0';
+        Platform::TextCopySecure(lpszName, 256, gContentCatalog.GetSkillName(iType), 255);
     }
     if (piMana != NULL) {
         *piMana = (int)*(WORD*)(entry + 0x22);

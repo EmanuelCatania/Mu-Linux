@@ -47,9 +47,12 @@
     if (/["\r\n\t]/.test(value)) return t('No puede llevar comillas, tabulaciones ni saltos de línea');
     if (/[\p{Cc}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}]/u.test(value)) return t('Lleva caracteres de control');
     const bytes = byteLength(value);
-    if (bytes > state.maxBytes) return t('Mide {bytes} bytes y el máximo es {max}', { bytes, max: state.maxBytes });
+    if (state.maxBytes > 0 && bytes > state.maxBytes) return t('Mide {bytes} bytes y el máximo es {max}', { bytes, max: state.maxBytes });
     if (state.table === 'client' && state.lang !== 'Eng' && !sameFormat(value, row.reference)) {
       return t('Los %d/%s del texto no coinciden con los del inglés');
+    }
+    if (state.table === 'globaltext' && row.reference && !sameFormat(value, row.reference)) {
+      return t('Los %d/%s del texto no coinciden con los del original');
     }
     return '';
   }
@@ -86,6 +89,7 @@
             <option value="skills">Skills</option>
             <option value="client">Textos del cliente</option>
             <option value="tooltips">Tooltips de items custom</option>
+            <option value="globaltext">Textos de la interfaz (Text.bmd)</option>
           </select>
         </div>
         <div class="spawn-toolbar-group">
@@ -128,7 +132,7 @@
     tr.classList.toggle('texts-dirty', isDirty(row));
     tr.classList.toggle('texts-invalid', msg !== '');
     const counter = tr.querySelector('.texts-bytes');
-    counter.textContent = row.value.trim() === '' ? '' : `${bytes}/${state.maxBytes}`;
+    counter.textContent = row.value.trim() === '' ? '' : state.maxBytes > 0 ? `${bytes}/${state.maxBytes}` : `${bytes}`;
     counter.title = msg;
     tr.querySelector('input').title = msg;
   }
@@ -168,7 +172,11 @@
     const hint = root.querySelector('#texts-hint');
     hint.textContent = state.table === 'client'
       ? t('Los %d, %s y similares tienen que ser los mismos que en inglés. Si no, el cliente descarta el texto.')
-      : t('Dejá vacío para usar el nombre que trae el cliente. Máximo {max} bytes (un acento o una letra no latina ocupan más de uno).', { max: state.maxBytes });
+      : state.table === 'globaltext'
+        ? t('Reemplaza el texto de esa fila del Text.bmd en los clientes de este idioma. Los %d, %s y similares tienen que ser los mismos que en el original. Máximo {max} bytes.', { max: state.maxBytes })
+      : state.maxBytes > 0
+        ? t('Dejá vacío para usar el nombre que trae el cliente. Máximo {max} bytes (un acento o una letra no latina ocupan más de uno).', { max: state.maxBytes })
+        : t('Dejá vacío para usar el nombre que trae el cliente.');
     if (state.parseErrors.length > 0) {
       hint.textContent += ' ' + t('Hay {n} líneas del archivo que no se entienden y no se van a reescribir (la primera es la {line}).',
         { n: state.parseErrors.length, line: state.parseErrors[0].line });
@@ -180,7 +188,7 @@
     const res = await fetch(`/admin/server-editor/api/texts?lang=${encodeURIComponent(state.lang)}&table=${encodeURIComponent(state.table)}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || t('No se pudo cargar'));
-    state.maxBytes = data.maxBytes || 63;
+    state.maxBytes = data.maxBytes ?? 63;   // 0 = sin máximo (Client.txt)
     state.parseErrors = data.errors || [];
     const saved = new Map(data.translations.map((entry) => [entry.key.join('\t'), entry.name]));
     const rows = data.reference.map((entry) => ({

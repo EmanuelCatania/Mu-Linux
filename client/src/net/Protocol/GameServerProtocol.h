@@ -88,6 +88,33 @@ struct PMSG_CHAOS_MIX_RATE_SEND
 static_assert(sizeof(PMSG_CHAOS_MIX_RATE_SEND) == 12, "C1:88");
 static_assert(offsetof(PMSG_CHAOS_MIX_RATE_SEND, rate) == 4, "C1:88 rate");
 static_assert(offsetof(PMSG_CHAOS_MIX_RATE_SEND, money) == 8, "C1:88 money");
+// Desde la 0.97.50 el server agrega la receta que reconoció (int con signo en
+// +12, ChaosBox.cpp GetChaosMixType); un server anterior manda 12 bytes.
+const std::int32_t CHAOS_MIX_RATE_TYPE_OFFSET = 12;
+
+// Recetas agregadas del server (Data/ChaosMix/Recipes.toml, números 20 a 127):
+// la misma respuesta trae lo que el cliente no tiene en su Text.bmd.
+// ChaosBox.h::PMSG_CHAOS_MIX_RECIPE_SEND.
+const std::int32_t CHAOS_RECIPE_FIRST_ID = 20;
+const std::int32_t CHAOS_RECIPE_LAST_ID = 127;
+const std::int32_t CHAOS_RECIPE_TEXT_SIZE = 48;
+const std::int32_t CHAOS_RECIPE_HELP_LINES = 3;
+struct PMSG_CHAOS_MIX_RECIPE_SEND
+{
+    PBMSG_HEAD header;      // C1:88
+    std::uint32_t rate;
+    std::uint32_t money;
+    std::int32_t type;
+    std::uint8_t width;     // tamaño del item que sale
+    std::uint8_t height;
+    std::uint8_t lines;     // líneas de ayuda
+    std::uint8_t reserved;
+    char name[CHAOS_RECIPE_TEXT_SIZE];
+    char help[CHAOS_RECIPE_HELP_LINES][CHAOS_RECIPE_TEXT_SIZE];
+};
+static_assert(sizeof(PMSG_CHAOS_MIX_RECIPE_SEND) == 212, "C1:88 receta");
+static_assert(offsetof(PMSG_CHAOS_MIX_RECIPE_SEND, type) == CHAOS_MIX_RATE_TYPE_OFFSET, "C1:88 receta type");
+static_assert(offsetof(PMSG_CHAOS_MIX_RECIPE_SEND, name) == 20, "C1:88 receta name");
 
 // ── C1:8E ─ niveles de Devil Square ── DevilSquare.h:37 ───────────────────────
 // Net/Net_Events.cpp Recv_DevilSquareRequiredLevels.
@@ -708,7 +735,9 @@ struct CATALOG_MAP_FOG
 static_assert(sizeof(CATALOG_MAP_FOG) == 12, "F3:E9 entrada");
 
 // F3:EC — efectos de un item (Data/Custom/Items/*.json del server).
-const std::uint8_t CATALOG_EFFECT_ON_EQUIPPED = 0x01;
+const std::uint8_t CATALOG_EFFECT_ON_EQUIPPED = 0x01;   // puesto en el personaje
+const std::uint8_t CATALOG_EFFECT_ON_GROUND = 0x02;     // tirado en el suelo
+const std::uint8_t CATALOG_EFFECT_ON_INVENTORY = 0x04;  // en una grilla; sólo sprites
 const std::uint8_t CATALOG_EFFECT_SPRITE = 1;      // sprite en huesos, cada frame
 const std::uint8_t CATALOG_EFFECT_PARTICLE = 2;    // partícula vanilla en huesos
 const std::int32_t  CATALOG_EFFECT_MAX_BONES = 32;
@@ -896,6 +925,10 @@ const std::uint8_t CATALOG_TEXT_MONSTER = 2;
 const std::uint8_t CATALOG_TEXT_SKILL = 3;
 const std::uint8_t CATALOG_TEXT_CLIENT = 4;   // textos propios del cliente (ClientTextId)
 const std::uint8_t CATALOG_TEXT_TOOLTIP = 5;  // línea de tooltip de un item: Index = item, Reserved = línea (0 a 5)
+const std::uint8_t CATALOG_TEXT_GLOBAL = 6;   // fila de GlobalText (Text.bmd): Index = fila
+// Texto partido en varios registros seguidos: cada uno lleva 64 bytes y el que
+// tiene un 0 adentro lo cierra.  Server: ContentCatalog.h.
+const std::uint8_t CATALOG_TEXT_CONTINUED = 0x80;
 
 struct CATALOG_TEXT
 {

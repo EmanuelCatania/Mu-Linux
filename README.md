@@ -301,16 +301,21 @@ traducciones de ese idioma junto con el catálogo de contenido. Están en
 | `Skill.txt` | nombres de skills | índice de `Skill/Skill.txt` |
 | `Tooltip.txt` | líneas del tooltip de los items custom | item y número de línea del JSON de `Custom/Items` |
 | `Client.txt` | textos propios del cliente (opciones, panel de eventos, barra de buffs, título de la ventana) | el número de cada texto; el comentario de arriba dice cuál es |
+| `GlobalText.txt` | textos de la interfaz original (los del `Text.bmd` del cliente: ventanas, NPCs, Chaos, avisos) | la fila del `Text.bmd`; las originales están en `Data/Text/Reference/<idioma>/GlobalText.txt` |
 
 Lo que no está traducido lo resuelve el cliente con sus propios archivos, así
 que un archivo vacío no rompe nada. Reglas, que el server y el editor
 verifican:
 
 - UTF-8 sin BOM, una línea por texto, sin comillas ni saltos de línea adentro.
-- Hasta 63 bytes por nombre (el cliente corta los de items a 29 y los de skills
-  a 31) y 59 por línea de tooltip.
+- Hasta 63 bytes por nombre de monstruo, 59 por línea de tooltip y 299 por fila
+  de `GlobalText.txt`. Los nombres de items y skills y los textos de
+  `Client.txt` no tienen máximo.
 - En `Client.txt`, los `%d`/`%s`/`%u` de cada línea tienen que ser los mismos que
-  los del inglés y en el mismo orden: si no, el cliente descarta la línea.
+  los del inglés y en el mismo orden: si no, el cliente descarta la línea. En
+  `GlobalText.txt`, los de la fila original del mismo idioma.
+- Los textos de antes de conectarse (login, selección de server) salen siempre
+  del `Text.bmd` del cliente: el server los manda recién al entrar.
 
 Se pueden editar a mano o desde el **editor de traducciones** del panel web,
 que muestra el nombre actual al lado de la traducción y recarga el server al

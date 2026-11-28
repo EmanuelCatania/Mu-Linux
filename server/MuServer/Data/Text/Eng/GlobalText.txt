@@ -1,0 +1,6 @@
+//Interface texts in English (0.97.50). They replace the client Text.bmd row with
+//that number for English clients; whatever is not here comes from the Text.bmd.
+//The original rows are in Data/Text/Reference/Eng/.
+//UTF-8 without BOM. Up to 299 bytes per text, with the same %d/%s as the original.
+//Row	Text
+end

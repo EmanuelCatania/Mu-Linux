@@ -17,6 +17,8 @@ using std::uintptr_t;
 ATTRIBUTE
 CONSTANTS
 void *CharacterMachine,*DAT_055c9e44,*DAT_07d78068;
+// Sin nombres largos del server (0.97.50): la tabla manda, como antes.
+struct{const char* GetLongItemName(int)const{return nullptr;}}gContentCatalog;
 char TradeOpened,PartyOpened;int PartyNumber;BYTE byte_7E11D6E;
 DWORD m_dwTextColor,m_dwBackColor;
 unsigned profile;bool readFails;int panel;std::vector<std::string> events;

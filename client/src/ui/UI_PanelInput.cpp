@@ -9,6 +9,7 @@ extern "C" const char* Guild_GetMarkName(int row);
 #include "game/party/Party.h"
 #include "game/entity/EntityName.h"
 #include "net/NetText.h"
+#include "game/item/ChaosMixRates.h"
 #include "render/TerrainDraw.h"
 void Terrain_BeginBufferedPass();
 #include "render/BufferedDraw.h"
@@ -781,17 +782,24 @@ void __cdecl ChaosMix_HitTest(void) {
         IsClickPushed()) {
 
         MouseLButtonPush = '\0';
-        switch ((int)MixType) {
+        // DESVIACION 0.97.50: una receta agregada del server (Recipes.toml)
+        // también se puede combinar, con el tamaño del item que sale.
+        const CChaosMixRates::Recipe* serverRecipe = gChaosMixRates.GetRecipe();
+        switch (serverRecipe ? 0x100 : (int)MixType) {
         case 0:
             UIChatLogWindow_AddText(&DAT_07eaa1a0, &DAT_07d544d4, 2);
             break;
-        case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8: case 0xb: {
+        case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8: case 0xb: case 0x100: {
             int iVar1 = 5, iVar3 = 4;
-            switch ((int)MixType) {
+            switch (serverRecipe ? 0x100 : (int)MixType) {
             case 1: case 7: case 0xb:
                 break; // iVar1=5, iVar3=4 (defaults)
             case 8:
                 iVar1 = 2; iVar3 = 2;
+                break;
+            case 0x100:
+                iVar1 = serverRecipe->Width;
+                iVar3 = serverRecipe->Height;
                 break;
             default:
                 iVar1 = DAT_0055a3f8;

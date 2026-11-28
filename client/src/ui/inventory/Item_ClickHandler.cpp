@@ -1166,9 +1166,14 @@ void __cdecl Inventory_DropDispatch(unsigned int a1, unsigned int /*a2*/)
         // evento recibidas en el talk packet; MuEmu no expone esa variante y
         // usa el enum normal, por lo que conservamos el resultado exacto del
         // reconocedor para el adaptador 0x86.
-        MixType = (DWORD)CheckMixRecipe((short*)OffsetMixItems, 8, 4);
+        const int localType = CheckMixRecipe((short*)OffsetMixItems, 8, 4);
         // DESVIACION DLL ChaosMix.cpp: consultar valores de la receta al server.
-        gChaosMixRates.Update((int)MixType, (const ITEM*)OffsetMixItems);
+        gChaosMixRates.Update(localType, (const ITEM*)OffsetMixItems);
+        // DESVIACION 0.97.50: la receta la reconoce el server (C1:88 trae el
+        // tipo); el reconocedor local queda hasta que responde y para un server
+        // anterior.  CheckMixRecipe sigue calculando los niveles y el tamaño del
+        // resultado que usan el panel y el chequeo de espacio.
+        MixType = (DWORD)gChaosMixRates.ResolveType(localType);
     }
 
     if (EquipmentItem != 0) return;   // EquipmentItem in-flight

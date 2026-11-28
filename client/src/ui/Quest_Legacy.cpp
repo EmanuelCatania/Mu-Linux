@@ -6,6 +6,7 @@
 #include "game/item/ItemDefines.h"
 #include "globals.h"
 #include "functions.h"
+#include "assets/data/ContentCatalog.h"
 
 namespace {
 int QuestX(int offset) { return gWindow.PanelOrigin(Ui::Quest) + offset; }
@@ -117,6 +118,7 @@ char __fastcall Quest_RenderRequiredItems(void *pThis, int /*edx*/, char a2, cha
             std::uintptr_t abase = ItemAttribute_Base();
             if (abase && nType >= 0 && nType < ITEM_MAX_EX)
                 name = (const char *)(uintptr_t)(abase + (unsigned int)nType * 64u);
+            if (const char* longName = gContentCatalog.GetLongItemName(nType)) name = longName;
             crt_sprintf(buf, "%s x %d", name, nCount);
             RenderText(QuestX(60), (int)sy, buf, 0, 0, nullptr);
         } else {

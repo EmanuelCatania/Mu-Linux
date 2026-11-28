@@ -451,9 +451,13 @@ int RenderEquipedHelperLife_(bool a2)
         const short helperItem = CharacterMachine ? *(const short*)((const BYTE*)CharacterMachine + 1080) : -1;
         if (helperItem >= ITEM_MAX_VANILLA && helperItem < ITEM_MAX_EX && ItemAttribute)
             text = ItemAttribute[helperItem].Name;
+            if (const char* longName = gContentCatalog.GetLongItemName(helperItem)) text = longName;
         else if (helperType == MODEL_HELPER_UNIRIA) text = GlobalText[355];
         else if (helperType == MODEL_HELPER_DINORANT) text = GlobalText[354];
-        else if (ItemAttribute)     text = ItemAttribute[helperType - ITEM_MODEL_BASE].Name;
+        else if (ItemAttribute) {
+            text = ItemAttribute[helperType - ITEM_MODEL_BASE].Name;
+            if (const char* longName = gContentCatalog.GetLongItemName(helperType - ITEM_MODEL_BASE)) text = longName;
+        }
         if (!text) text = "";
 
         gFont.SelectFont(gFont.GetTextDC(), gFont.GetFont(FONT_NORMAL));
@@ -611,7 +615,8 @@ void RenderBrokenItem_(int a1)
                 })) {
                     nameLocal[0] = '\0';
                 }
-                Platform::TextFormat(Buffer, "%s (%d/%d)", nameLocal, v21, v30);
+                const char* longName = gContentCatalog.GetLongItemName((int)v12);
+                Platform::TextFormat(Buffer, "%s (%d/%d)", longName ? longName : nameLocal, v21, v30);
                 byte_7E11D6E = 1;
                 Text_MeasureBox((int)v38, v34 + (int)v37, Buffer, 0, 0, 0);
                 v34 += 12;

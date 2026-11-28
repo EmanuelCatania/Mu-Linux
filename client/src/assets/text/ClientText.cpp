@@ -97,7 +97,8 @@ const char* const English[] = {
     "No wobble",
     "Improved water",
     "This server is played from the launcher, and it was not found in the game folder. Download it from the server website.",
-    "MU-Guard protection is not active. Close the game and open it again."
+    "MU-Guard protection is not active. Close the game and open it again.",
+    "Mounts as pets in safe zones"
 };
 constexpr size_t Count = (size_t)ClientTextId::Count;
 static_assert(sizeof(English) / sizeof(English[0]) == Count, "Faltan textos en inglés");
@@ -136,6 +137,7 @@ const char* MenuFallback(ClientTextId id, int language)
         { ClientTextId::Underwater, "Bajo el agua: %s", "Debaixo d'\xC3\xA1gua: %s" },
         { ClientTextId::UnderwaterNoWobble, "Sin ondulaci\xC3\xB3n", "Sem ondula\xC3\xA7\xC3\xA3o" },
         { ClientTextId::WorldWater, "Agua mejorada", "\xC3\x81gua melhorada" },
+        { ClientTextId::MountAsPet, "Monturas como pet en zona segura", "Montarias como pet na zona segura" },
         { ClientTextId::BuffTimeLeft, "Tiempo restante: %s", "Tempo restante: %s" },
         { ClientTextId::BuffCaster, "Lanzado por: %s", "Lan\xC3\xA7" "ado por: %s" },
         { ClientTextId::BuffDamage, "Da\xC3\xB1" "o +%d", "Dano +%d" },

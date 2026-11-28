@@ -10,6 +10,7 @@
 #include "platform/ITimer.h"
 #include <array>
 #include "assets/data/ContentCatalog.h"
+#include "app/config/UserSettings.h"
 #include "globals.h"
 #include "functions.h"
 
@@ -329,6 +330,56 @@ static void CustomPet_Move(char* e, const BYTE* owner, const Proto::CATALOG_PET&
     if (*(float*)(e + 0xCC) <= 0.0f) *(float*)(e + 0xCC) = 0.25f;
 }
 
+// DESVIACION (opción MountAsPet): en zona segura el 0.97k deja la montura
+// debajo del personaje, que camina sin montarla.  Con la opción, la montura va
+// al lado, en chico y por el piso, como un pet; al salir de la zona vuelve a
+// su tamaño y a ir debajo.
+static const float kMountScale = 0.9f;        // CreateBug: "fff?" para 195 y 267
+static const float kMountPetScale = 0.45f;
+
+static bool MountAsPet_Active(intptr_t owner)
+{
+    return owner && AsCharacter(owner)->SafeZone && gUserSettings.GetMountAsPet();
+}
+
+static void MountAsPet_Move(char* e, const BYTE* owner, int type)
+{
+    const float* ownerPos = (const float*)(owner + 0x10);
+    const float a = *(const float*)(owner + 0x24) * 0.017453292f;
+    // Detrás y a un costado del dueño, según para dónde mira.
+    const float back = 80.0f, side = 60.0f;
+    const float target[2] = {
+        ownerPos[0] - sinf(a) * back + cosf(a) * side,
+        ownerPos[1] + cosf(a) * back + sinf(a) * side,
+    };
+    float* pos = (float*)(e + 0x10);
+    const float dx = target[0] - pos[0], dy = target[1] - pos[1];
+    const float dist2 = dx * dx + dy * dy;
+    if (dist2 > 900.0f * 900.0f) {
+        pos[0] = target[0]; pos[1] = target[1];   // teleport o recién creada
+    } else {
+        pos[0] += dx * 0.15f;
+        pos[1] += dy * 0.15f;
+    }
+    pos[2] = RequestTerrainHeight(pos[0], pos[1]);
+
+    const bool moving = dist2 > 100.0f;
+    if (moving)
+        *(float*)(e + 0x24) = TurnAngle2(*(float*)(e + 0x24), CreateAngle(pos[0], pos[1], target[0], target[1]), 20.0f);
+    else
+        *(float*)(e + 0x24) = TurnAngle2(*(float*)(e + 0x24), *(const float*)(owner + 0x24), 10.0f);
+
+    // Las mismas acciones que montada: 0 quieta, 2 caminando; el Dinorant en
+    // Tarkan/Icarus usa las de vuelo (+1).
+    const int map = gMapManager.GetCurrentMap();
+    const int fly = (type == 267 && (map == 8 || map == 10)) ? 1 : 0;
+    SetAction(AsObject(e), (moving ? 2 : 0) + fly);
+    *(float*)(e + 0x0C) = kMountPetScale;
+    AsObject(e)->Alpha = 1.0f;
+    AsObject(e)->Velocity = 0.34f;
+    *(BYTE*)e = *owner;                      // Live = owner.Live
+}
+
 void __stdcall MoveBugs(void) {
 
     char*  base = (char*)reinterpret_cast<char*>(Butterfles);
@@ -378,8 +429,12 @@ void __stdcall MoveBugs(void) {
             }
             // else: v4 > 267 pero no 816/817 → cae a LABEL_72 con v36=0
         }
+        else if ((v4 == 267 || v4 == 195) && MountAsPet_Active(v2)) {
+            MountAsPet_Move(e, (const BYTE*)v2, v4);
+        }
         else if (v4 == 267 || v4 == 195) {
             // ── LABEL_16 — montura (195=Uniria / 267=Dinorant) ──────────────
+            *(float*)(e + 0x0C) = kMountScale;   // vuelve del modo pet (MountAsPet)
             int idx = (unsigned char)(int)(*(float*)(v2 + 16) * 0.0099999998f)
                     + (((unsigned char)(int)(*(float*)(v2 + 20) * 0.0099999998f)) << 8);
             if ((TerrainWall[idx] & 1) == 1) {

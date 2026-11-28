@@ -4,6 +4,7 @@
 #include "CustomWing.h"
 #include "DevilSquare.h"
 #include "DSProtocol.h"
+#include "ItemOption.h"
 #include "ItemOptionRate.h"
 #include "Log.h"
 #include "RandomManager.h"
@@ -189,7 +190,29 @@ void CChaosBox::CGChaosMixRecv(PMSG_CHAOS_MIX_RECV* lpMsg, int aIndex)
 
 	lpObj->IsChaosMixCompleted = true;
 
-	switch (lpMsg->type)
+	// La receta la decide el server por el contenido del chaos box; el tipo
+	// que manda el cliente queda sólo para el log.
+	const int type = this->GetChaosMixType(lpObj);
+
+	if (type != lpMsg->type)
+	{
+		gLog.Output(LOG_CHAOS_MIX, "[ChaosMix][%s][%s] - El cliente pidió la receta %d y el chaos box es la %d", lpObj->Account, lpObj->Name, lpMsg->type, type);
+	}
+
+	// Las mezclas no avisan cuando sus reglas rechazan el chaos box: sin esto
+	// quedaba puesto el ChaosLock y el cliente esperando la respuesta.
+	DWORD rate = 0;
+
+	DWORD money = 0;
+
+	if (type <= 0 || this->GetChaosMixRateAndMoney(aIndex, type, rate, money) == false)
+	{
+		this->GCChaosMixSend(lpObj->Index, 0, 0);
+
+		return;
+	}
+
+	switch (type)
 	{
 		case CHAOS_MIX_CHAOS_ITEM:
 		{
@@ -256,7 +279,16 @@ void CChaosBox::CGChaosMixRecv(PMSG_CHAOS_MIX_RECV* lpMsg, int aIndex)
 
 		default:
 		{
-			this->GCChaosMixSend(lpObj->Index, 0, 0);
+			const ChaosRecipeDef* recipe = this->FindRecipe(type);
+
+			if (recipe != nullptr)
+			{
+				this->RecipeMix(lpObj, *recipe);
+			}
+			else
+			{
+				this->GCChaosMixSend(lpObj->Index, 0, 0);
+			}
 
 			break;
 		}
@@ -287,6 +319,8 @@ void CChaosBox::GCChaosMixSend(int aIndex, BYTE result, CItem* lpItem)
 
 void CChaosBox::CGChaosMixRateRecv(PMSG_CHAOS_MIX_RATE_RECV* lpMsg, int aIndex)
 {
+	(void)lpMsg;   // el tipo que pide el cliente ya no decide nada
+
 	PMSG_CHAOS_MIX_RATE_SEND pMsg;
 
 	pMsg.header.set(0x88, sizeof(pMsg));
@@ -295,9 +329,397 @@ void CChaosBox::CGChaosMixRateRecv(PMSG_CHAOS_MIX_RATE_RECV* lpMsg, int aIndex)
 
 	pMsg.money = 0;
 
-	this->GetChaosMixRateAndMoney(aIndex, lpMsg->type, pMsg.rate, pMsg.money);
+	// El tipo que manda el cliente es el que reconoció él; el server responde
+	// con el suyo y el porcentaje de esa receta.
+	pMsg.type = this->GetChaosMixType(&gObj[aIndex]);
 
-	DataSend(aIndex, (BYTE*)&pMsg, pMsg.header.size);
+	if (pMsg.type > 0)
+	{
+		this->GetChaosMixRateAndMoney(aIndex, pMsg.type, pMsg.rate, pMsg.money);
+	}
+
+	const ChaosRecipeDef* recipe = this->FindRecipe(pMsg.type);
+
+	if (recipe == nullptr)
+	{
+		DataSend(aIndex, (BYTE*)&pMsg, pMsg.header.size);
+
+		return;
+	}
+
+	// Una receta agregada: el nombre, la ayuda y el tamaño del resultado, que
+	// el cliente no tiene.
+	PMSG_CHAOS_MIX_RECIPE_SEND pRecipe;
+
+	memset(&pRecipe, 0, sizeof(pRecipe));
+
+	pRecipe.header.set(0x88, sizeof(pRecipe));
+
+	pRecipe.rate = pMsg.rate;
+
+	pRecipe.money = pMsg.money;
+
+	pRecipe.type = pMsg.type;
+
+	ITEM_INFO info;
+
+	if (gItemManager.GetInfo(GET_ITEM(recipe->ResultSection, recipe->ResultIndex), &info))
+	{
+		pRecipe.width = (BYTE)info.Width;
+
+		pRecipe.height = (BYTE)info.Height;
+	}
+
+	const int lang = (gObj[aIndex].Lang >= 0 && gObj[aIndex].Lang < CHAOS_RECIPE_LANGUAGES) ? gObj[aIndex].Lang : 0;
+
+	strcpy_s(pRecipe.name, recipe->Name[lang].c_str());
+
+	for (size_t n = 0; n < recipe->Help[lang].size() && n < CHAOS_RECIPE_HELP_LINES; n++)
+	{
+		strcpy_s(pRecipe.help[n], recipe->Help[lang][n].c_str());
+
+		pRecipe.lines++;
+	}
+
+	DataSend(aIndex, (BYTE*)&pRecipe, pRecipe.header.size);
+}
+
+void CChaosBox::LoadRecipes(const char* dataDir)
+{
+	std::vector<ChaosRecipeDef> recipes;
+
+	std::string error;
+
+	if (!ChaosRecipes_Load(dataDir, recipes, error))
+	{
+		// Como las gates: en una recarga quedan las recetas de antes.
+		LogAdd(LOG_RED, "[ChaosMix] Recipes.toml no se cargó%s: %s", this->m_Recipes.empty() ? "" : " (quedan las recetas de antes)", error.c_str());
+
+		return;
+	}
+
+	// Sin Item.txt cargado (al arrancar, antes de ReadItemInfo) no hay contra
+	// qué revisar los items: se revisan en la carga siguiente.
+	const bool checkItems = !gItemManager.GetInfoMap().empty();
+
+	for (auto it = recipes.begin(); it != recipes.end() && checkItems;)
+	{
+		ITEM_INFO info;
+
+		bool ok = gItemManager.GetInfo(GET_ITEM(it->ResultSection, it->ResultIndex), &info);
+
+		for (const ChaosRecipeIngredient& ing : it->Ingredients)
+		{
+			ok = ok && gItemManager.GetInfo(GET_ITEM(ing.Section, ing.Index), &info);
+		}
+
+		if (!ok)
+		{
+			LogAdd(LOG_RED, "[ChaosMix] %s: la receta %d usa un item que no está en Item.txt; no se carga", it->Source.c_str(), it->Id);
+
+			it = recipes.erase(it);
+		}
+		else
+		{
+			++it;
+		}
+	}
+
+	this->m_Recipes = recipes;
+
+	if (checkItems)
+	{
+		LogAdd(LOG_BLUE, "[ChaosMix] %d recetas agregadas", (int)this->m_Recipes.size());
+	}
+}
+
+const ChaosRecipeDef* CChaosBox::FindRecipe(int id) const
+{
+	for (const ChaosRecipeDef& recipe : this->m_Recipes)
+	{
+		if (recipe.Id == id)
+		{
+			return &recipe;
+		}
+	}
+
+	return nullptr;
+}
+
+// La primera receta cuyos ingredientes son exactamente los items del chaos
+// box: cada item cuenta para el primer ingrediente de la lista que le sirve.
+const ChaosRecipeDef* CChaosBox::MatchRecipe(LPOBJ lpObj) const
+{
+	for (const ChaosRecipeDef& recipe : this->m_Recipes)
+	{
+		std::vector<int> missing;
+
+		for (const ChaosRecipeIngredient& ing : recipe.Ingredients)
+		{
+			missing.push_back(ing.Count);
+		}
+
+		bool ok = true;
+
+		for (int n = 0; n < CHAOS_BOX_SIZE && ok; n++)
+		{
+			CItem& item = lpObj->ChaosBox[n];
+
+			if (item.IsItem() == false)
+			{
+				continue;
+			}
+
+			ok = false;
+
+			for (size_t i = 0; i < recipe.Ingredients.size(); i++)
+			{
+				const ChaosRecipeIngredient& ing = recipe.Ingredients[i];
+
+				if (missing[i] > 0 && item.m_Index == GET_ITEM(ing.Section, ing.Index) && item.m_Level >= ing.MinLevel && item.m_Level <= ing.MaxLevel)
+				{
+					missing[i]--;
+
+					ok = true;
+
+					break;
+				}
+			}
+		}
+
+		for (int count : missing)
+		{
+			ok = ok && count == 0;
+		}
+
+		if (ok)
+		{
+			return &recipe;
+		}
+	}
+
+	return nullptr;
+}
+
+void CChaosBox::RecipeMix(LPOBJ lpObj, const ChaosRecipeDef& recipe)
+{
+	lpObj->ChaosSuccessRate = recipe.Rate;
+
+	lpObj->ChaosMoney = recipe.Money;
+
+	if (lpObj->Money < ((DWORD)lpObj->ChaosMoney))
+	{
+		this->GCChaosMixSend(lpObj->Index, 2, 0);
+
+		return;
+	}
+
+	lpObj->Money -= lpObj->ChaosMoney;
+
+	GCMoneySend(lpObj->Index, lpObj->Money);
+
+	if ((GetLargeRand() % 100) < lpObj->ChaosSuccessRate)
+	{
+		// La DataServer crea el item y lo pone en el chaos box (DGCreateItemRecv
+		// con mapa 0xFF), que manda el resultado al cliente.
+		GDCreateItemSend(lpObj->Index, 0xFF, 0, 0, GET_ITEM(recipe.ResultSection, recipe.ResultIndex), (BYTE)recipe.ResultLevel, 0, 0, 0, 0, -1, 0);
+
+		gLog.Output(LOG_CHAOS_MIX, "[RecipeMix][Success][%s][%s] - (Recipe: %d, ChaosSuccessRate: %d, ChaosMoney: %d)", lpObj->Account, lpObj->Name, recipe.Id, lpObj->ChaosSuccessRate, lpObj->ChaosMoney);
+	}
+	else
+	{
+		this->ChaosBoxInit(lpObj);
+
+		this->GCChaosBoxSend(lpObj);
+
+		this->GCChaosMixSend(lpObj->Index, 0, 0);
+
+		gLog.Output(LOG_CHAOS_MIX, "[RecipeMix][Failure][%s][%s] - (Recipe: %d, ChaosSuccessRate: %d, ChaosMoney: %d)", lpObj->Account, lpObj->Name, recipe.Id, lpObj->ChaosSuccessRate, lpObj->ChaosMoney);
+	}
+}
+
+// Reconoce la receta por lo que hay en el chaos box, con las reglas del
+// cliente 0.97k (CheckMixRecipe, 0x004E40F0).  Devuelve el CHAOS_MIX_* de la
+// receta, 0 si no hay ninguna, o -CHAOS_MIX_DEVIL_SQUARE / -CHAOS_MIX_BLOOD_CASTLE
+// si están los dos ingredientes pero de distinto nivel.  Las Get*MixRates
+// después validan la receta con sus propias reglas.
+int CChaosBox::GetChaosMixType(LPOBJ lpObj)
+{
+	int total = 0, chaos = 0, optionItems = 0, plainItems = 0, excellentItems = 0, chaosWeapons = 0;
+
+	int level9 = 0, level10 = 0, bless = 0, soul = 0, creation = 0, uniria = 0, feather = 0, wing1 = 0;
+
+	int eye = 0, key = 0, scroll = 0, bone = 0;
+
+	int eyeLevel = 0, keyLevel = 0, scrollLevel = 0, boneLevel = 0;
+
+	for (int n = 0; n < CHAOS_BOX_SIZE; n++)
+	{
+		CItem& item = lpObj->ChaosBox[n];
+
+		if (item.IsItem() == false)
+		{
+			continue;
+		}
+
+		total++;
+
+		const int kind = item.GetKind();
+
+		const int level = item.m_Level;
+
+		// Armas, armaduras y alas.
+		if (kind <= GET_ITEM(12, 6))
+		{
+			if (level == 9)
+			{
+				level9++;
+			}
+			else if (level == 10)
+			{
+				level10++;
+			}
+		}
+
+		switch (kind)
+		{
+			case GET_ITEM(12, 0):
+			case GET_ITEM(12, 1):
+			case GET_ITEM(12, 2):
+				wing1++;
+				break;
+
+			case GET_ITEM(12, 15):
+				chaos++;
+				break;
+
+			case GET_ITEM(13, 2): // Uniria; sólo cuenta con la vida llena
+				if (item.m_Durability == 255.0f)
+				{
+					uniria++;
+				}
+				break;
+
+			case GET_ITEM(13, 14):
+				feather++;
+				break;
+
+			case GET_ITEM(13, 16):
+				scrollLevel = level;
+				scroll++;
+				break;
+
+			case GET_ITEM(13, 17):
+				boneLevel = level;
+				bone++;
+				break;
+
+			case GET_ITEM(14, 13):
+				bless++;
+				break;
+
+			case GET_ITEM(14, 14):
+				soul++;
+				break;
+
+			case GET_ITEM(14, 17):
+				eyeLevel = level;
+				eye++;
+				break;
+
+			case GET_ITEM(14, 18):
+				keyLevel = level;
+				key++;
+				break;
+
+			case GET_ITEM(14, 22):
+				creation++;
+				break;
+
+			default:
+			{
+				// La opción adicional (+4/+8/+12 de daño, magia o defensa).
+				bool hasOption = false;
+
+				for (int i = 0; i < item.m_OptionsQuant && i < MAX_SPECIAL_OPTION; i++)
+				{
+					if (item.m_SpecialIndex[i] >= ITEM_OPTION_ADD_PHYSI_DAMAGE && item.m_SpecialIndex[i] <= ITEM_OPTION_ADD_DEFENSE)
+					{
+						hasOption = true;
+					}
+				}
+
+				if (hasOption)
+				{
+					optionItems++;
+
+					if (kind == GET_ITEM(2, 6) || kind == GET_ITEM(4, 6) || kind == GET_ITEM(5, 7)) // armas de Chaos
+					{
+						chaosWeapons++;
+					}
+				}
+				else
+				{
+					plainItems++;
+				}
+
+				if ((item.m_ExceOption & 0x3F) != 0 && level >= 4)
+				{
+					excellentItems++;
+				}
+
+				break;
+			}
+		}
+	}
+
+	if (total == 3 && chaos == 1)
+	{
+		if (eye == 1 && key == 1)
+		{
+			return (eyeLevel == keyLevel) ? CHAOS_MIX_DEVIL_SQUARE : -CHAOS_MIX_DEVIL_SQUARE;
+		}
+
+		if (scroll == 1 && bone == 1)
+		{
+			return (scrollLevel == boneLevel) ? CHAOS_MIX_BLOOD_CASTLE : -CHAOS_MIX_BLOOD_CASTLE;
+		}
+	}
+
+	if (chaos == 1 && feather == 1 && wing1 == 1 && total == excellentItems + 3)
+	{
+		return CHAOS_MIX_WING2;
+	}
+
+	if (total == 4 && chaos == 1 && level9 == 1 && bless == 1 && soul == 1)
+	{
+		return CHAOS_MIX_PLUS_ITEM_LEVEL1;
+	}
+
+	if (total == 6 && chaos == 1 && level10 == 1 && bless == 2 && soul == 2)
+	{
+		return CHAOS_MIX_PLUS_ITEM_LEVEL2;
+	}
+
+	if (total == 11 && uniria == 10 && chaos == 1)
+	{
+		return CHAOS_MIX_DINORANT;
+	}
+
+	if (total == 2 && creation == 1 && chaos == 1)
+	{
+		return CHAOS_MIX_FRUIT;
+	}
+
+	if (chaos > 0 && optionItems > 0 && eye == 0 && key == 0 && uniria == 0 && plainItems == 0 && creation == 0 && feather == 0 && wing1 == 0 && scroll == 0 && bone == 0)
+	{
+		return (chaosWeapons > 0) ? CHAOS_MIX_WING1 : CHAOS_MIX_CHAOS_ITEM;
+	}
+
+	// Ninguna del 0.97k: las agregadas de Recipes.toml.
+	const ChaosRecipeDef* recipe = this->MatchRecipe(lpObj);
+
+	return (recipe != nullptr) ? recipe->Id : 0;
 }
 
 bool CChaosBox::GetChaosMixRateAndMoney(int aIndex, int type, DWORD& rate, DWORD& money)
@@ -377,7 +799,19 @@ bool CChaosBox::GetChaosMixRateAndMoney(int aIndex, int type, DWORD& rate, DWORD
 
 		default:
 		{
-			return false;
+			// Una receta agregada, si el chaos box todavía es esa receta.
+			const ChaosRecipeDef* recipe = this->FindRecipe(type);
+
+			if (recipe == nullptr || this->MatchRecipe(&gObj[aIndex]) != recipe)
+			{
+				return false;
+			}
+
+			rate = recipe->Rate;
+
+			money = recipe->Money;
+
+			break;
 		}
 	}
 

@@ -154,6 +154,10 @@ public:
     // [Window] Sky: cielo en los mapas abiertos, con la cámara 3D (F10).
     bool GetSky() const { return m_Sky; }
     void SetSky(bool enabled);
+    // [Window] MountAsPet: en zona segura la montura sigue al personaje como
+    // un pet chico en vez de quedar debajo de él.
+    bool GetMountAsPet() const { return m_MountAsPet; }
+    void SetMountAsPet(bool enabled);
     // [Window] Underwater: efectos bajo el agua en Atlans. 0 apagados, 1 sin
     // ondulación de la imagen (a algunos marea), 2 completos.
     int GetUnderwater() const { return m_Underwater; }
@@ -238,6 +242,7 @@ private:
     int m_DynamicLights = 1;
     int m_Bloom = 1;
     bool m_Sky = true;
+    bool m_MountAsPet = true;
     int m_Underwater = 2;
     bool m_WorldWater = true;
     int m_DrawDistance = 0;

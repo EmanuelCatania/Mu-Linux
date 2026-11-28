@@ -38,6 +38,8 @@ constexpr IntOption kBloom{ "Window", "Bloom", 0, 2, 1 };
 constexpr IntOption kSky{ "Window", "Sky", 0, 1, 1 };
 constexpr IntOption kUnderwater{ "Window", "Underwater", 0, 2, 2 };
 constexpr IntOption kWorldWater{ "Window", "WorldWater", 0, 1, 1 };
+// Monturas (Uniria, Dinorant y las del catálogo) como pet chico en zona segura.
+constexpr IntOption kMountAsPet{ "Window", "MountAsPet", 0, 1, 1 };
 constexpr IntOption kDrawDistance{ "Window", "DrawDistance", 0, 3, 0 };
 // 0: sin límite.
 constexpr IntOption kFpsLimit{ "Window", "FpsLimit", 0, 2147483647, 60 };

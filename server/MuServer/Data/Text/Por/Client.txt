@@ -188,4 +188,6 @@
 92	"Sem ondulação"
 //WorldWater
 93	"Água melhorada"
+//MountAsPet
+96	"Montarias como pet na zona segura"
 end
