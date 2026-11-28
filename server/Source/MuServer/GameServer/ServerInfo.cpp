@@ -1718,6 +1718,11 @@ void CServerInfo::ReadCommonInfo(const char* section, const char* path)
 
 	this->m_ShopItemBlockExc = GetPrivateProfileInt(section, "ShopItemBlockExc", 0, path);
 
+	// Sin las claves queda el impuesto del 0.97k.
+	this->m_WarehouseTaxRate = GetPrivateProfileInt(section, "WarehouseTaxRate", 40, path);
+
+	this->m_WarehouseLockTax = GetPrivateProfileInt(section, "WarehouseLockTax", 2, path);
+
 	this->m_MaxCharacterLevel = GetPrivateProfileInt(section, "MaxCharacterLevel", 400, path);
 
 	this->m_MaxCharacterLevel = ((this->m_MaxCharacterLevel < 1) ? 1 : ((this->m_MaxCharacterLevel > MAX_CHARACTER_LEVEL) ? MAX_CHARACTER_LEVEL : this->m_MaxCharacterLevel));

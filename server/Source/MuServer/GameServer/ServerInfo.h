@@ -159,6 +159,8 @@ public:
 	int m_TradeItemBlockExc;
 	int m_ShopItemBlockExc;
 	int m_ShopItemBlockSellOnMaxMoney;
+	int m_WarehouseTaxRate;
+	int m_WarehouseLockTax;
 	int m_MaxCharacterLevel;
 	double m_ExperienceExponent;
 	int m_MaxLevelUp;
