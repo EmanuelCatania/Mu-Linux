@@ -331,6 +331,9 @@ void CWarehouse::GCWarehouseMoneySend(int aIndex, BYTE result, int InventoryMone
 	pMsg.InventoryMoney = InventoryMoney;
 
 	DataSend(aIndex, (BYTE*)&pMsg, pMsg.header.size);
+
+	// El impuesto depende del nivel: va cada vez que cambia el zen del baúl.
+	this->GCWarehouseTaxSend(aIndex);
 }
 
 void CWarehouse::GCWarehouseStateSend(int aIndex, BYTE state)
@@ -340,6 +343,25 @@ void CWarehouse::GCWarehouseStateSend(int aIndex, BYTE state)
 	pMsg.header.set(0x83, sizeof(pMsg));
 
 	pMsg.state = state;
+
+	DataSend(aIndex, (BYTE*)&pMsg, pMsg.header.size);
+
+	// Con el candado puesto el impuesto sube.
+	this->GCWarehouseTaxSend(aIndex);
+}
+
+void CWarehouse::GCWarehouseTaxSend(int aIndex)
+{
+	if (OBJECT_RANGE(aIndex) == 0)
+	{
+		return;
+	}
+
+	PMSG_WAREHOUSE_TAX_SEND pMsg;
+
+	pMsg.header.set(0xF3, 0xE3, sizeof(pMsg));
+
+	pMsg.tax = (DWORD)this->GetWarehouseTaxMoney(gObj[aIndex].Level, gObj[aIndex].WarehousePW);
 
 	DataSend(aIndex, (BYTE*)&pMsg, pMsg.header.size);
 }

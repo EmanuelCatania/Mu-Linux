@@ -42,6 +42,15 @@ struct PMSG_WAREHOUSE_STATE_SEND
 	BYTE state;
 };
 
+// C1:F3:E3 — lo que cobra el server por sacar zen del baúl (GetWarehouseTaxMoney).
+// Va junto con el zen del baúl y con el estado del candado: el cliente lo
+// muestra en vez de calcularlo.
+struct PMSG_WAREHOUSE_TAX_SEND
+{
+	PSBMSG_HEAD header; // C1:F3:E3
+	DWORD tax;
+};
+
 //**********************************************//
 //********** DataServer -> GameServer **********//
 //**********************************************//
@@ -111,6 +120,8 @@ public:
 	void GCWarehouseMoneySend(int aIndex, BYTE result, int InventoryMoney, int WarehouseMoney);
 
 	void GCWarehouseStateSend(int aIndex, BYTE state);
+
+	void GCWarehouseTaxSend(int aIndex);
 
 	void DGWarehouseItemRecv(SDHP_WAREHOUSE_ITEM_RECV* lpMsg);
 

@@ -1323,6 +1323,8 @@ void NetRecv_F3(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
         case 0xFD: gContentCatalog.ReceiveItemOptions((const BYTE*)Msg, Size); break;
         case 0xFE: gContentCatalog.ReceiveCombatRates((const BYTE*)Msg, Size); break;
         case 0xFC: gContentCatalog.ReceiveSignature((const BYTE*)Msg, Size); break;
+        // DESVIACION 0.97.50: impuesto del baúl calculado por el server.
+        case 0xE3: WarehouseTax_Receive((const BYTE*)Msg, Size); break;
         case 0xF6: gContentCatalog.ReceiveSync((const BYTE*)Msg, Size); break;
         case 0x30: {
             // ── ReceiveOption (IDA 0x436FB0) — PORT FIEL ─────────────────
