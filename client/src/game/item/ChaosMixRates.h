@@ -7,8 +7,12 @@ class CChaosMixRates
 public:
     void Reset();
     void Update(int type, const ITEM* items);
-    void Receive(const Proto::PMSG_CHAOS_MIX_RATE_SEND& packet);
+    // hasType: el server mandó la receta que reconoció (0.97.50 en adelante).
+    void Receive(const Proto::PMSG_CHAOS_MIX_RATE_SEND& packet, bool hasType, int type);
     bool Get(int& rate, int& money) const;
+    // La receta de la grilla: la del server si ya respondió por este contenido,
+    // si no la que reconoció el cliente.
+    int ResolveType(int localType) const;
     static bool Supports(int type) { return (type >= 1 && type <= 8) || type == 11; }
 
 private:
@@ -28,6 +32,8 @@ private:
     unsigned int m_Attempts = 0;
     int m_Rate = 0;
     int m_Money = 0;
+    bool m_HasServerType = false;
+    int m_ServerType = 0;
 };
 
 extern CChaosMixRates gChaosMixRates;

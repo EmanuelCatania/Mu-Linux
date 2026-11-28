@@ -819,7 +819,10 @@ void NetRecv_88(BYTE* Msg, int Size, BYTE hdr, BYTE sub, bool bEncrypted)
     if (Size < (int)sizeof(Proto::PMSG_CHAOS_MIX_RATE_SEND)) return;
     Proto::PMSG_CHAOS_MIX_RATE_SEND packet;
     memcpy(&packet, Msg, sizeof(packet));
-    gChaosMixRates.Receive(packet);
+    const bool hasType = Size >= Proto::CHAOS_MIX_RATE_TYPE_OFFSET + (int)sizeof(std::int32_t);
+    std::int32_t type = 0;
+    if (hasType) memcpy(&type, Msg + Proto::CHAOS_MIX_RATE_TYPE_OFFSET, sizeof(type));
+    gChaosMixRates.Receive(packet, hasType, type);
 }
 
 // 0x87

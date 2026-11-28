@@ -88,6 +88,9 @@ struct PMSG_CHAOS_MIX_RATE_SEND
 static_assert(sizeof(PMSG_CHAOS_MIX_RATE_SEND) == 12, "C1:88");
 static_assert(offsetof(PMSG_CHAOS_MIX_RATE_SEND, rate) == 4, "C1:88 rate");
 static_assert(offsetof(PMSG_CHAOS_MIX_RATE_SEND, money) == 8, "C1:88 money");
+// Desde la 0.97.50 el server agrega la receta que reconoció (int con signo en
+// +12, ChaosBox.cpp GetChaosMixType); un server anterior manda 12 bytes.
+const std::int32_t CHAOS_MIX_RATE_TYPE_OFFSET = 12;
 
 // ── C1:8E ─ niveles de Devil Square ── DevilSquare.h:37 ───────────────────────
 // Net/Net_Events.cpp Recv_DevilSquareRequiredLevels.
